@@ -1,5 +1,6 @@
 #include <iostream>
 #include <thread>
+#include <bitset>
 template<typename T>
 concept UnsignedNumeric = std::is_arithmetic_v<T>;
 
@@ -13,8 +14,10 @@ void byte_visualizer(long long msec) {
         std::cout << "A address:" <<  static_cast<void*>(&a) << std::endl;
         std::cout << "A value:" << a << std::endl;
         std::cout << "Bytes value:" << std::endl;
-        for (size_t j = 0;j<sza;++j) {
-            std::cout << "res["<<j<<"]:" <<static_cast<void*>(res+j) <<" value:    " <<static_cast<unsigned int>(res[j]) << std::endl;
+        for (size_t j = 0; j < sza; ++j) {
+            auto value = static_cast<unsigned int>(res[j]);
+            std::bitset<8> bits(value);
+            std::cout << "res["<<j<<"]:" <<static_cast<void*>(res+j) <<"    value: " << value << "     bit_value: "<< bits<<std::endl;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(msec));
         std::cout << "\x1B[2J\x1B[H";
