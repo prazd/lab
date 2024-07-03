@@ -9,7 +9,7 @@ void byte_visualizer(long long msec) {
     T a = 0;
     unsigned char* res = reinterpret_cast<unsigned char*>(&a);
     size_t sza = sizeof(a);
-    for (size_t i = 0; i < counter; ++i) {
+    for (size_t i = 0; i <= counter; ++i) {
         std::cout << "A address:" <<  static_cast<void*>(&a) << std::endl;
         std::cout << "A value:" << a << std::endl;
         std::cout << "Bytes value:" << std::endl;
