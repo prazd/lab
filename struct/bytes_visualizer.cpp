@@ -14,7 +14,7 @@ void byte_visualizer(long long msec) {
         std::cout << "A address:" <<  static_cast<void*>(&a) << std::endl;
         std::cout << "A value:" << a << std::endl;
         std::cout << "Bytes value:" << std::endl;
-        for (size_t j = 0; j < sza; ++j) {
+        for (int j = (sza-1); j >= 0; --j) {
             auto value = static_cast<unsigned int>(res[j]);
             std::bitset<8> bits(value);
             std::cout << "res["<<j<<"]:" <<static_cast<void*>(res+j) <<"    value: " << value << "     bit_value: "<< bits<<std::endl;
