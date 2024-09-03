@@ -33,12 +33,26 @@ struct Point{
     constexpr double y_value() const noexcept {
         return y;
     }
-    void set_x(double new_x) noexcept {
+
+    // В С++11 два ограничения предотвращают объявление функций-членов Poiпt setX и setY как constexpr. 
+    // Во-первых, они модифицируют объект, с которым работают, а в С++11 функции-члены constexpr неявно являются const. 
+    // Во-вторых, они имеют возвращаемый тип void, а void не является литеральным типом в С++11. 
+
+    //  void set_x(double new_x) noexcept {
+    //     x = new_x;
+    //  }
+    //  void set_y(double new_y) noexcept {
+    //     y = new_y;
+    //  }
+
+    // Оба эти ограничения сняты в С++14, так что в С++14 даже функции установки полей Point могут быть объ­ явлены как constexpr:
+    constexpr void set_x(double new_x) noexcept {
         x = new_x;
     }
-    void set_y(double new_y) noexcept {
+    constexpr void set_y(double new_y) noexcept {
         y = new_y;
     }
+
 private:
     double x;
     double y;    
@@ -53,6 +67,18 @@ return {(p1.x_value()+p2.x_value())/2, // Вьзов constexpr
       (p1.y_value()+p2.y_value())/2}; // функции-члена
 }
 
+// ...  Оба эти ограничения сняты в С++14, так что в С++14 даже функции установки полей Point могут быть объ­ явлены как constexpr
+// Это делает возможным написание функций наподобие следующей:
+
+// Возвращает отражение точки р
+// относительно начала координат (С++14 )
+constexpr Point reflection(const Point& p) noexcept {
+    Point result;
+    result.set_x(-p.x_value());
+    result.set_y(-p.y_value());
+    return result;
+} 
+
 
 int main() {
     std::array<int, pow11(2, 3)> arr{};
@@ -66,4 +92,5 @@ int main() {
     constexpr Point p1(10,20);
     constexpr Point p2(30,40);
     constexpr auto mid = midpoint(p1, p2);
+    constexpr auto ref = reflection(p1);
 }
