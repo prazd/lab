@@ -20,6 +20,39 @@ constexpr int pow14(int base, int exp) noexcept {
     return result;
 }
 
+struct Point{
+    // Здесь конструктор Point может быть объявлен как constexpr, поскольку, если пере­ данные ему аргументы известны во время компиляции,
+    //  значения членов-данных создан­ ного Point также могут быть известны во время компиляции.
+    constexpr Point(double x = 0, double y = 0): x(x), y(y) {}
+    
+    // Аналогично функции доступа xValue и yValue могут быть constexpr, поскольку если они вызываются для объекта Point со значением, 
+    // известным во время компиляции (на­ пример, объект constexpr Point), значения членов-данных х и у могут быть известны во время компиляции
+    constexpr double x_value() const noexcept {
+        return x;
+    }
+    constexpr double y_value() const noexcept {
+        return y;
+    }
+    void set_x(double new_x) noexcept {
+        x = new_x;
+    }
+    void set_y(double new_y) noexcept {
+        y = new_y;
+    }
+private:
+    double x;
+    double y;    
+};
+
+
+// Это делает возможным написать соnstехрr-функции, которые вызывают функции доступа Point и инициализируют 
+// соnstехрr-объекты результатами вызовов этих функций:
+constexpr
+Point midpoint(const Point& p1, const Point& p2) noexcept {
+return {(p1.x_value()+p2.x_value())/2, // Вьзов constexpr
+      (p1.y_value()+p2.y_value())/2}; // функции-члена
+}
+
 
 int main() {
     std::array<int, pow11(2, 3)> arr{};
@@ -27,4 +60,10 @@ int main() {
 
     std::array<int, pow14(2, 2)> arr2{};
     static_assert(arr2.size() == 4);
+
+
+
+    constexpr Point p1(10,20);
+    constexpr Point p2(30,40);
+    constexpr auto mid = midpoint(p1, p2);
 }
