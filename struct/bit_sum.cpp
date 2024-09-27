@@ -1,5 +1,6 @@
 #include <iostream>
 #include <bit>
+#include <limits>
 
 void print_bin_sum(int x, int y) {
     constexpr auto sz = sizeof(x)*CHAR_BIT;
@@ -19,6 +20,26 @@ void print_bin_sum(int x, int y) {
     std::cout << "Y:" << y_b << std::endl;
     std::cout << "R:" << result << std::endl;
     std::cout << result.to_ulong() << std::endl;
+}
+
+void print_bin_sum256(unsigned x, unsigned y) {
+    constexpr auto sz = 256;
+    std::bitset<sz> x_b(x);
+    std::bitset<sz> y_b(y);
+    std::bitset<sz> result(0);
+
+    bool carry = false;
+    for(unsigned long i = 0;i < sz; ++i) {
+      bool x_b_v = x_b[i];
+      bool y_b_v = y_b[i];
+
+      result[i] = x_b_v ^ y_b_v ^ carry;
+      carry = (x_b_v && y_b_v) || (x_b_v && carry) || (y_b_v && carry);
+    }
+    std::cout << "X:" << x_b << std::endl;
+    std::cout << "Y:" << y_b << std::endl;
+    std::cout << "R:" << result << std::endl;
+    std::cout << result.to_ullong() << std::endl;
 }
 
 
