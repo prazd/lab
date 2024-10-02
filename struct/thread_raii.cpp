@@ -14,6 +14,8 @@ public:
             }
         }
     }
+    ThreadRaII(ThreadRaII&&) = default;
+    ThreadRaII& operator=(ThreadRaII&&) = default;
     std::thread& get() {
         return t;
     }
