@@ -29,13 +29,13 @@ public:
         return &bit_values[0];
     }
     const char* end() const {
-        return &bit_values[sz];
+        return &bit_values[bit_values.size()];
     }
     const char* cbegin() const {
         return &bit_values[0];
     }
     const char* cend() const {
-        return &bit_values[sz];
+        return &bit_values[bit_values.size()];
     }
 };
 
