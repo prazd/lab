@@ -3,6 +3,10 @@
 #include <bit>
 
 constexpr const char* filename = "test.bin";
+std::unordered_map<char, char> codes {
+    {'a', 1},
+    {'b', 0},
+};
 
 unsigned char to_bin(const std::string& d) {
     unsigned char result = 0;
