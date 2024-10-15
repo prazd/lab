@@ -2,7 +2,7 @@
 #include <fstream>
 #include <bit>
 
-constexpr const char* filename = "test.txt";
+constexpr const char* filename = "test.bin";
 
 unsigned char to_bin(const std::string& d) {
     unsigned char result = 0;
