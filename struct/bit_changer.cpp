@@ -3,10 +3,12 @@
 class BitChanger{
 public:    
     char x{0};
-    void set_one(size_t index) {
-        char tmp = 1;
-        tmp<<=index;
-        x|=tmp;
+    void set(size_t index, bool value) {
+        if (value) {
+            x |= (1 << index);
+        } else {
+            x &= ~(1 << index);
+        }
     }
     std::string get_string() {
         return std::bitset<8>(x).to_string();
@@ -15,8 +17,12 @@ public:
 
 int main() {
     BitChanger b;
-    b.set_one(7);
+    b.set(4, true);
     std::cout << b.get_string() << std::endl;
-    b.set_one(0);
+    b.set(1, true);
+    std::cout << b.get_string() << std::endl;
+    b.set(1, false);
+    std::cout << b.get_string() << std::endl;
+    b.set(4, false);
     std::cout << b.get_string() << std::endl;
 }
