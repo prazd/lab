@@ -1,12 +1,28 @@
 #include <iostream>
 #include <fstream>
 #include <bit>
+#include <algorithm>
+#include <map>
+
+struct Node {
+    Node* left;
+    Node* right;
+    char  value;
+    bool weight;
+};
+
+struct Tree {
+    Node* root;
+};
+
+std::map<char, size_t> get_syms_count_map(const std::string& val) {
+    std::map<char, size_t> mres;
+    for (const auto& ch : val) ++mres[ch];
+    std::for_each(mres.begin(), mres.end(), [](const auto& el){std::cout << el.first << " " << el.second << " ";});
+    return mres;
+}
 
 constexpr const char* filename = "test.bin";
-std::unordered_map<char, char> codes {
-    {'a', 1},
-    {'b', 0},
-};
 
 unsigned char to_bin(const std::string& d) {
     unsigned char result = 0;
@@ -62,9 +78,11 @@ std::string dunzip() {
 }
 
 int main() {
-    auto data = "aaabbaab";
-    dzip(data);
-    if (dunzip() == data) {
-        std::cout << "OK!";
-    }
+    get_syms_count_map("abcaa");
+    // std::cout << sizeof(Node) << std::endl;
+    // auto data = "aaabbaab";
+    // dzip(data);
+    // if (dunzip() == data) {
+    //     std::cout << "OK!";
+    // }
 }
