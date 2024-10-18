@@ -35,9 +35,13 @@ class BitArray {
         return this == &rhs;
     }
     
-    struct BitRef {
+    class BitIter; // decl for friend
+
+    class BitRef {
         size_t index;
         BitArray& ba;
+    public:
+        friend BitIter;
         BitRef(size_t index, BitArray& ba): index(index), ba(ba){}
         BitRef& operator=(bool value) {
             ba.set(index, value);
@@ -60,9 +64,11 @@ class BitArray {
         bool operator!=(const BitRef& rhs) {
             return index != rhs.index;
         }
-     };
-    struct BitIter {
+    };
+
+    class BitIter {
         BitRef br;
+    public:        
         BitIter(BitRef&& br): br(br) {}
         BitIter& operator++() {
             br = BitRef(++br.index, br.ba);
@@ -94,23 +100,19 @@ public:
         }
     }
     BitRef operator[](size_t index) {
-        return BitRef(index, *this);;
+        return BitRef(index, *this);
     }
     BitIter begin() {
-        auto res = BitIter(BitRef(0, *this));
-        return res;
+        return BitIter(BitRef(0, *this));
     }
     BitIter end() {
-        auto res = BitIter(BitRef(n, *this));
-        return res;
+        return BitIter(BitRef(n, *this));
     }
     const BitIter cbegin() {
-        auto res = BitIter(BitRef(0, *this));
-        return res;
+        return BitIter(BitRef(0, *this));
     }
     const BitIter cend() {
-        auto res = BitIter(BitRef(n, *this));
-        return res;
+        return BitIter(BitRef(n, *this));
     }
 };
 
