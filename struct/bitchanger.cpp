@@ -120,12 +120,6 @@ public:
     BitIter end() & {
         return BitIter(BitRef(sizeof(T)*CHAR_BIT, *this));
     }
-    const BitIter cbegin() const& {
-        return BitIter(BitRef(0, *this));
-    }
-    const BitIter cend() const& {
-        return BitIter(BitRef(sizeof(T)*CHAR_BIT, *this));
-    }
 };
 
 struct TestStruct {
