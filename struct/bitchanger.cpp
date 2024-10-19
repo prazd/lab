@@ -7,33 +7,17 @@
 
 template <typename T>
 class BitChanger{
-    struct Data {
-        size_t index;
-        unsigned char* ptr;
-    };
-    Data buffer[sizeof(T)];
+    unsigned char* buffer[sizeof(T)];
 
-    unsigned char* get_ptr(size_t index) {
-        auto iter = std::cbegin(buffer);
-        auto r = iter->index;
-        while(index >= r) {
-            ++iter;
-            r = iter->index;
-        }
-        return iter->ptr;
+    unsigned char* get_ptr(size_t index) & {
+        return buffer[index / CHAR_BIT];
     }
 
-    const unsigned char* get_ptr(size_t index) const {
-        auto iter = std::cbegin(buffer);
-        auto r = iter->index;
-        while(index >= r) {
-            ++iter;
-            r = iter->index;
-        }
-        return iter->ptr;
+    const unsigned char* get_ptr(size_t index) const& {
+       return buffer[index / CHAR_BIT];
     }
 
-    void set(size_t index, bool value) {
+    void set(size_t index, bool value) & {
         auto x = get_ptr(index);
         index %= CHAR_BIT;
         if (value) {
@@ -43,7 +27,7 @@ class BitChanger{
         }
     }
 
-    bool get(size_t index) const {
+    bool get(size_t index) const& {
         auto x = get_ptr(index);
         index %= CHAR_BIT;
         unsigned char res = 1 << index;
@@ -55,24 +39,23 @@ class BitChanger{
     class BitRef {
         size_t index;
         BitChanger& bc;
-        BitRef& operator++() {
+        BitRef& operator++() & {
             ++index;
             return *this;
         }
     public:
         friend BitIter;
         BitRef(size_t index, BitChanger& bc): bc{bc}, index{index}{}
-        BitRef& operator=(bool value) {
+        BitRef& operator=(bool value) & {
             bc.set(index, value);
             return *this;
         }
         BitRef(const BitRef& rhs): index(rhs.index), bc(rhs.bc){}
-        BitRef& operator=(const BitRef& rhs) {
-            BitRef tmp(rhs.index, rhs.bc);
-            std::swap(*this, tmp);
+        BitRef& operator=(const BitRef& rhs) & {
+            bc.set(static_cast<bool>(rhs));
             return *this;
         }
-        BitRef& operator=(BitRef&& rhs) {
+        BitRef& operator=(BitRef&& rhs) & {
             std::swap(*this, rhs);
             return *this;
         }
@@ -101,21 +84,20 @@ class BitChanger{
             return br.index == bi.br.index;
         }
         bool operator!=(const BitIter& bi) {
-            return br.index != bi.br.index;
+            return !(*this == bi);
         }
         BitRef& operator*() {
             return br;
         }
     };
   
-
 public:
     BitChanger(T& val) {
         size_t r = 0;
         auto val_ptr = reinterpret_cast<unsigned char*>(&val);
         for(unsigned long i = 0;i < sizeof(val); ++i) {
             r+=CHAR_BIT;
-            buffer[i] = Data{.ptr = val_ptr+i, .index = r};
+            buffer[i] = val_ptr+i;
         }
     }
 
@@ -126,22 +108,22 @@ public:
     std::string get_string() {
         std::string res;
         for(auto begin = std::begin(buffer), end = std::end(buffer);begin!=end;++begin) {
-            auto tmp = std::bitset<8>(*(*begin).ptr).to_string();
+            auto tmp = std::bitset<8>(**begin).to_string();
             std::reverse(tmp.begin(), tmp.end());
             res += tmp;
         }
         return res;
     }
-    BitIter begin() {
+    BitIter begin() & {
         return BitIter(BitRef(0, *this));
     }
-    BitIter end() {
+    BitIter end() & {
         return BitIter(BitRef(sizeof(T)*CHAR_BIT, *this));
     }
-    const BitIter cbegin() {
+    const BitIter cbegin() const& {
         return BitIter(BitRef(0, *this));
     }
-    const BitIter cend() {
+    const BitIter cend() const& {
         return BitIter(BitRef(sizeof(T)*CHAR_BIT, *this));
     }
 };
@@ -156,7 +138,7 @@ int main() {
     BitChanger<TestStruct> bc(t);
 
     std::cout << "BitChanger size:" << sizeof(bc) << std::endl;
-    assert(sizeof(TestStruct)*(CHAR_BIT*2) == sizeof(bc));
+    assert(sizeof(TestStruct)*(CHAR_BIT) == sizeof(bc));
     auto bc_string = bc.get_string();
     std::string res;
     std::for_each(std::begin(bc), std::end(bc), [&res](const auto& val){res += (std::string)val;});
