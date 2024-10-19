@@ -30,10 +30,6 @@ class BitArray {
             *x &= ~(1 << index);
         }
     }
-
-    bool operator==(const BitArray& rhs) {
-        return this == &rhs;
-    }
     
     class BitIter; // decl for friend
 
@@ -58,12 +54,6 @@ class BitArray {
             unsigned char res = (1 << l_index);
             return res & *x;
         }
-        bool operator==(const BitRef& rhs) {
-            return index == rhs.index;
-        }
-        bool operator!=(const BitRef& rhs) {
-            return index != rhs.index;
-        }
     };
 
     class BitIter {
@@ -76,14 +66,14 @@ class BitArray {
         }
         BitIter operator++(int) {
             auto tmp = *this;
-            ++(*this);
+            this->operator++();
             return tmp;
         }
         bool operator==(const BitIter& rhs) {
-            return br == rhs.br;
+            return br.index == rhs.br.index;
         }
         bool operator!=(const BitIter& rhs) {
-            return br != rhs.br;
+            return br.index != rhs.br.index;
         }
         BitRef& operator*() {
             return br;

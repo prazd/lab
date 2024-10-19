@@ -66,7 +66,6 @@ class BitChanger{
             bc.set(index, value);
             return *this;
         }
-        BitRef(BitRef&& rhs): index(rhs.index), bc(rhs.bc){}
         BitRef(const BitRef& rhs): index(rhs.index), bc(rhs.bc){}
         BitRef& operator=(const BitRef& rhs) {
             BitRef tmp(rhs.index, rhs.bc);
@@ -88,8 +87,7 @@ class BitChanger{
     class BitIter{
         BitRef br;
     public:        
-        BitIter(BitRef&& br): br{std::move(br)} {}
-        BitIter(const BitRef& br): br{br} {}
+        BitIter(BitRef&& br): br{br} {}
         BitIter& operator++() {
             ++br;
             return *this;
