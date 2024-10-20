@@ -1,88 +1,176 @@
 #include <iostream>
 #include <fstream>
-#include <bit>
 #include <algorithm>
 #include <map>
-
-struct Node {
-    Node* left;
-    Node* right;
-    char  value;
-    bool weight;
-};
-
-struct Tree {
-    Node* root;
-};
-
-std::map<char, size_t> get_syms_count_map(const std::string& val) {
-    std::map<char, size_t> mres;
-    for (const auto& ch : val) ++mres[ch];
-    std::for_each(mres.begin(), mres.end(), [](const auto& el){std::cout << el.first << " " << el.second << " ";});
-    return mres;
-}
+#include <set>
+#include <queue>
+#include <vector>
+#include <memory>
 
 constexpr const char* filename = "test.bin";
 
-unsigned char to_bin(const std::string& d) {
-    unsigned char result = 0;
-    for(auto el: d) {
-        if (el == 'a') {
-            result<<=1;
-            result|=1;
-        } else if (el == 'b') {
-            result<<= 1;
-        }
+struct Key{
+    char sym;
+    size_t value;
+    Key(char sym, size_t value): sym{sym}, value{value}{}
+    Key(const Key& k): sym(k.sym), value(k.value) {}
+    bool operator==(const Key& k) const {
+        return sym == k.sym && value == k.value;
     }
-    return result;
-}
+    bool operator<(const Key& k) const {
+        return value <= k.value;
+    }
+};
 
-std::string from_bin(const std::string& d) {
-    std::string res;
-    for(auto el: d) {
-        if (el == '0') {
-            res+="b";
-        } else if (el == '1') {
-            res+="a";
-        }
+struct Node {
+    size_t value;
+    bool sum_node;
+    std::unique_ptr<Key> k;
+    std::unique_ptr<Node> left;
+    std::unique_ptr<Node> right;
+
+    Node(size_t value, bool sum_node, std::unique_ptr<Node> left, std::unique_ptr<Node> right, std::unique_ptr<Key> key)
+            : value(value), sum_node(sum_node), left(std::move(left)), right(std::move(right)), k(std::move(key)) {}
+
+    Node(size_t value, bool sum_node, Key* k = nullptr)
+            : value(value), sum_node(sum_node), k(k ? std::make_unique<Key>(*k) : nullptr) {}
+    Node(const Node&) = delete;
+    Node& operator=(const Node&) = delete;
+    Node(Node&& rhs) noexcept
+            : value(rhs.value), sum_node(rhs.sum_node), k(std::move(rhs.k)), left(std::move(rhs.left)), right(std::move(rhs.right)) {}
+
+    bool operator>(const Node& n) const {
+        return value > n.value;
     }
+};
+
+struct Tree {
+    std::unique_ptr<Node> root;
+    void print_codes(const Node* node, std::map<char, std::string>& res_m, const std::string& prefix = "") const {
+        if (!node) return;
+        if (!node->sum_node) {
+            std::cout << node->k->sym << ": " << prefix << "\n";
+            res_m[node->k->sym] = prefix;
+        }
+        print_codes(node->left.get(), res_m, prefix + "0");
+        print_codes(node->right.get(), res_m, prefix + "1");
+    }
+};
+
+Tree create_tree(const std::set<Key>& s) {
+    auto compare = [](const std::unique_ptr<Node>& a, const std::unique_ptr<Node>& b) {
+        return a->value >= b->value;
+    };
+
+    std::priority_queue<std::unique_ptr<Node>, std::vector<std::unique_ptr<Node>>, decltype(compare)> pq;
+
+    for (const auto& el : s) {
+        pq.push(std::make_unique<Node>(el.value, false, new Key(el.sym, el.value)));
+    }
+
+    Tree res;
+    while (pq.size() > 1) {
+        auto left = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
+        pq.pop();
+
+        auto right = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
+        pq.pop();
+
+        auto k = std::make_unique<Key>(Key(0,0));
+
+        auto new_node = std::make_unique<Node>(left->value + right->value, true, std::move(left), std::move(right), std::move(k));
+
+        pq.push(std::move(new_node));
+    }
+    auto tmp = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
+    res.root = std::move(tmp);
+    pq.pop();
     return res;
 }
 
-void dzip(const char* val) {
+std::set<Key> get_syms_count_map(const std::string& val) {
+    std::set<Key> sres;
+    std::map<char, size_t> mres;
+    for (const auto& ch : val) {
+        ++mres[ch];
+    }
+    std::for_each(mres.begin(), mres.end(),[&sres](const auto& p){sres.insert(Key(p.first, p.second));});
+    return sres;
+}
+
+size_t get_sz(size_t sz) {
+    double dsz = double(sz)/double(CHAR_BIT);
+    if (dsz > static_cast<double>(static_cast<size_t>(dsz))) {
+        return static_cast<size_t>(dsz) + 1;
+    } else {
+        return static_cast<size_t>(dsz);
+    }
+}
+
+void save_bin(std::string str) {
+    std::cout << "String size:" << str.size() << std::endl;;
+    const size_t sz = get_sz(str.size());
+    std::cout << "Buffer size:" << sz << std::endl;
+    unsigned char buffer[sz];
+    size_t count = 0;
+    unsigned char l_res = 0;
+    for(size_t i = 0; i < sz; ++i) {
+        unsigned char l_res = 0;
+        std::string tmp = str.substr(0, 8);
+        size_t count = 0;
+        std::for_each(tmp.begin(), tmp.end(), [&l_res, &count](const auto& val){
+            if (val == '1') {
+                l_res<<=1;
+                l_res|=1;
+            } else if (val == '0') {
+                l_res<<= 1;
+            }
+            ++count;
+        });
+        if (8 - count > 0) {
+            for(int i = 0;i<8-count;++i) {
+                l_res <<= 1;
+            }
+        }
+        buffer[i] = l_res;
+        if (!(i == sz - 1)) {
+            str = str.substr(8, str.size());
+        }
+    }
+    std::string res_str;
+    std::for_each(buffer, buffer+sz, [&res_str](const auto& el){ res_str+=std::bitset<8>(el).to_string();});
+    std::cout << "Result data:" << "\n" << res_str << std::endl;
     std::fstream file(filename, std::ios::out);
     if (!file) {
         std::abort();
     }
-    file << to_bin(val);
+    file << buffer;
     file.close();
 }
 
-std::string dunzip() {
-    const int bufferSize = 1;
-    char buffer[bufferSize];
-
-    std::ifstream file(filename, std::ios::binary);
-
-    if (!file) {
-        std::abort();
-    }
-
-    file.read(buffer, bufferSize);
-
-    if (!file) {
-        std::abort();
-    }
-    file.close();
-    return from_bin(std::bitset<8>(buffer[0]).to_string());
+void test() {
+    std::string str = "Try it out with your own content.";
+    auto res = get_syms_count_map(str);
+    std::for_each(res.begin(), res.end(), [](auto& p){ std::cout << p.sym << " " << p.value;});
+    std::cout << "\n";
+    auto tree = create_tree(res);
+    std::map<char, std::string> mres;
+    tree.print_codes(tree.root.get(), mres);
+    std::string strres;
+    std::for_each(str.begin(), str.end(), [&mres, &strres](const auto sym){strres += mres[char(sym)];});
+    std::cout << strres << std::endl;
 }
 
 int main() {
-    get_syms_count_map("abcaa");
-    // std::cout << sizeof(Node) << std::endl;
-    // auto data = "aaabbaab";
-    // dzip(data);
-    // if (dunzip() == data) {
-    //     std::cout << "OK!";
-    // }
+    std::string str = "Try it out with your own content.";
+    auto res = get_syms_count_map(str);
+    std::for_each(res.begin(), res.end(), [](auto& p){ std::cout << p.sym << " " << p.value;});
+    std::cout << "\n";
+    auto tree = create_tree(res);
+    std::map<char, std::string> mres;
+    tree.print_codes(tree.root.get(), mres);
+    std::string strres;
+    std::for_each(str.begin(), str.end(), [&mres, &strres](const auto sym){strres += mres[char(sym)];});
+    std::cout << strres << std::endl;
+    save_bin(strres);
 }
