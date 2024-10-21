@@ -46,7 +46,8 @@ class BitChanger{
     public:
         friend BitIter;
         BitRef(size_t index, BitChanger& bc): bc{bc}, index{index}{}
-        BitRef& operator=(bool value) & {
+       
+       BitRef& operator=(bool value) {
             bc.set(index, value);
             return *this;
         }
@@ -102,7 +103,7 @@ public:
     }
 
     BitRef operator[](size_t index) {
-        return BitRef(*this, index);
+        return BitRef(index, *this);
     }
 
     std::string get_string() {
@@ -130,7 +131,6 @@ struct TestStruct {
 int main() {
     TestStruct t;
     BitChanger<TestStruct> bc(t);
-
     std::cout << "BitChanger size:" << sizeof(bc) << std::endl;
     assert(sizeof(TestStruct)*(CHAR_BIT) == sizeof(bc));
     auto bc_string = bc.get_string();
@@ -139,7 +139,6 @@ int main() {
     std::cout << bc_string << std::endl;
     std::cout << res << std::endl;
     assert(std::equal(res.begin(), res.end(), bc_string.begin(), bc_string.end()));
-
     std::for_each(std::begin(bc), std::end(bc), [](auto& val){val = 0;});
     assert((t.x == 0) && (t.y == 0));
     std::cout << "Zero check:" << bc.get_string() << std::endl;

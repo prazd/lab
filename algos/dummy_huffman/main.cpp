@@ -55,6 +55,31 @@ struct Tree {
         print_codes(node->left.get(), res_m, prefix + "0");
         print_codes(node->right.get(), res_m, prefix + "1");
     }
+
+    std::string find_node(const Node* node, std::map<char, std::string>& res_m,std::string& current, std::string& input) {
+        char curr = input[0];
+        current += input[0];
+        input = input.substr(1, input.size());
+        if (!node->sum_node) {
+            for(auto begin = std::begin(res_m), end = std::end(res_m); begin!=end; ++begin) {
+                if (begin->second == current){
+                    std::string res;
+                    res = begin->first;
+                    return res;
+                }
+            }
+        }
+        if (curr == '0') {
+            find_node(node->left.get(), res_m,  current, input);
+        } else {
+            find_node(node->right.get(), res_m, current, input);
+        }
+    }
+    void decode_result(const Node* node, std::map<char, std::string>& res_m, std::string& encoded_str) {
+        std::string current;
+        auto test = find_node(root.get(), res_m, current, encoded_str);
+        std::cout << test << std::endl;
+    }
 };
 
 Tree create_tree(const std::set<Key>& s) {
@@ -79,7 +104,6 @@ Tree create_tree(const std::set<Key>& s) {
         auto k = std::make_unique<Key>(Key(0,0));
 
         auto new_node = std::make_unique<Node>(left->value + right->value, true, std::move(left), std::move(right), std::move(k));
-
         pq.push(std::move(new_node));
     }
     auto tmp = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));

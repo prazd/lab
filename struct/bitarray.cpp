@@ -1,4 +1,5 @@
 #include <iostream>
+#include <array>
 
 template <size_t n>
 class BitArray {
@@ -12,13 +13,7 @@ class BitArray {
     }
     unsigned char buffer[get_size()];
     unsigned char* get_ptr(size_t index) {
-        auto iter = std::begin(buffer);
-        auto r = n/CHAR_BIT;
-        while(index >= r) {
-            ++iter;
-            r+=n/CHAR_BIT;
-        }
-        return iter;
+        return &buffer[index / CHAR_BIT];
     }
 
     void set(size_t index, bool value) {
@@ -96,12 +91,6 @@ public:
         return BitIter(BitRef(0, *this));
     }
     BitIter end() {
-        return BitIter(BitRef(n, *this));
-    }
-    const BitIter cbegin() {
-        return BitIter(BitRef(0, *this));
-    }
-    const BitIter cend() {
         return BitIter(BitRef(n, *this));
     }
 };
