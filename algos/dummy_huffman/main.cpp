@@ -45,16 +45,49 @@ struct Node {
     }
 };
 
-struct Tree {
+struct HuffmanTree {
     std::unique_ptr<Node> root;
-    void print_codes(const Node* node, std::map<char, std::string>& res_m, const std::string& prefix = "") const {
+    HuffmanTree(std::set<Key>& s) {
+        auto compare = [](const std::unique_ptr<Node>& a, const std::unique_ptr<Node>& b) {
+            return a->value >= b->value;
+        };
+
+        std::priority_queue<std::unique_ptr<Node>, std::vector<std::unique_ptr<Node>>, decltype(compare)> pq;
+
+        for (const auto& el : s) {
+            pq.push(std::make_unique<Node>(el.value, false, new Key(el.sym, el.value)));
+        }
+
+        while (pq.size() > 1) {
+            auto left = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
+            pq.pop();
+
+            auto right = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
+            pq.pop();
+
+            auto k = std::make_unique<Key>(Key(0,0));
+
+            auto new_node = std::make_unique<Node>(left->value + right->value, true, std::move(left), std::move(right), std::move(k));
+            pq.push(std::move(new_node));
+        }
+        auto tmp = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
+        root = std::move(tmp);
+        pq.pop();
+    }
+
+    std::map<char, std::string> construct_map_sym_bin() const {
+        std::map<char, std::string> result;
+        fill_sym_bin_map(root.get(), result);
+        return result;
+    }
+
+    void fill_sym_bin_map(const Node* node, std::map<char, std::string>& res_m, const std::string& prefix = "") const {
         if (!node) return;
         if (!node->sum_node) {
-            // std::cout << node->k->sym << ": " << prefix << "\n";
             res_m[node->k->sym] = prefix;
         }
-        print_codes(node->left.get(), res_m, prefix + "0");
-        print_codes(node->right.get(), res_m, prefix + "1");
+        fill_sym_bin_map(node->left.get(), res_m, prefix + "0");
+        fill_sym_bin_map(node->right.get(), res_m, prefix + "1");
     }
 
     char find_node(const Node* node, std::map<char, std::string>& mres,std::string& current, std::stack<char>& s) {
@@ -69,46 +102,21 @@ struct Tree {
             node = s_top == '0' ? node->left.get() : node->right.get();
         }
     }
-    void decode_result(const Node* node, std::map<char, std::string>& res_m, std::stack<char>& s) {
+    void decode_result(std::map<char, std::string>& res_m, std::string& encoded_str) {
+        std::stack<char> sym_stack;
+        std::for_each(encoded_str.begin(), encoded_str.end(), [&sym_stack](auto& el){sym_stack.push(el);});
+
         std::string result;
-        while(!s.empty()) {
+        auto node = root.get();
+
+        while(!sym_stack.empty()) {
             std::string current;
-            auto symbol = find_node(node, res_m, current, s);
+            auto symbol = find_node(node, res_m, current, sym_stack);
             result += symbol;
         }
         std::cout << "Decode result:" << result;
     }
 };
-
-Tree create_tree(const std::set<Key>& s) {
-    auto compare = [](const std::unique_ptr<Node>& a, const std::unique_ptr<Node>& b) {
-        return a->value >= b->value;
-    };
-
-    std::priority_queue<std::unique_ptr<Node>, std::vector<std::unique_ptr<Node>>, decltype(compare)> pq;
-
-    for (const auto& el : s) {
-        pq.push(std::make_unique<Node>(el.value, false, new Key(el.sym, el.value)));
-    }
-
-    Tree res;
-    while (pq.size() > 1) {
-        auto left = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
-        pq.pop();
-
-        auto right = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
-        pq.pop();
-
-        auto k = std::make_unique<Key>(Key(0,0));
-
-        auto new_node = std::make_unique<Node>(left->value + right->value, true, std::move(left), std::move(right), std::move(k));
-        pq.push(std::move(new_node));
-    }
-    auto tmp = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
-    res.root = std::move(tmp);
-    pq.pop();
-    return res;
-}
 
 std::set<Key> get_syms_count_map(const std::string& val) {
     std::set<Key> sres;
@@ -150,7 +158,7 @@ void save_bin(std::string str) {
             ++count;
         });
         if (8 - count > 0) {
-            for(int i = 0;i<8-count;++i) {
+            for(int i = 0;i < 8-count;++i) {
                 l_res <<= 1;
             }
         }
@@ -173,22 +181,17 @@ void save_bin(std::string str) {
 
 int main() {
     std::string str = "Try it out with your own content.";
-    auto res = get_syms_count_map(str);
+    auto syms_count_map = get_syms_count_map(str);
 
-    auto tree = create_tree(res);
-    std::map<char, std::string> mres;
-    tree.print_codes(tree.root.get(), mres);
+    HuffmanTree tree(syms_count_map);
+    auto mres = tree.construct_map_sym_bin();
+
     std::string result_string;
     std::for_each(str.begin(), str.end(), [&mres, &result_string](const auto sym){result_string += mres[char(sym)];});
-
     std::cout << "Result string:" << result_string << std::endl;
 
     std::string result_string_cp(result_string);
     std::reverse(result_string_cp.begin(), result_string_cp.end());
 
-
-    std::stack<char> res_stack;
-    std::for_each(result_string_cp.begin(), result_string_cp.end(), [&res_stack](auto& el){res_stack.push(el);});
-
-    tree.decode_result(tree.root.get(), mres, res_stack);
+    tree.decode_result(mres, result_string_cp);
 }
