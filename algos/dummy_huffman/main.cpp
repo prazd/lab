@@ -8,6 +8,7 @@
 #include <vector>
 #include <memory>
 #include <stack>
+#include <cassert>
 
 constexpr const char* filename = "test.bin";
 
@@ -48,6 +49,7 @@ struct Node {
 
 struct HuffmanTree {
     std::unique_ptr<Node> root;
+    
     HuffmanTree(std::set<Key>& s) {
         auto compare = [](const std::unique_ptr<Node>& a, const std::unique_ptr<Node>& b) {
             return a->value >= b->value;
@@ -85,6 +87,7 @@ struct HuffmanTree {
     void fill_sym_bin_map(const Node* node, std::map<char, std::string>& res_m, const std::string& prefix = "") const {
         if (!node) return;
         if (!node->sum_node) {
+            std::cout << node->k->sym << ": " << prefix << "\n";
             res_m[node->k->sym] = prefix;
         }
         fill_sym_bin_map(node->left.get(), res_m, prefix + "0");
@@ -103,19 +106,22 @@ struct HuffmanTree {
             node = s_top == '0' ? node->left.get() : node->right.get();
         }
     }
-    void decode_result(std::map<char, std::string>& res_m, std::string& encoded_str) {
+    std::string decode_result(std::map<char, std::string>& res_m, std::string encoded_str, size_t input_string_size) {
         std::stack<char> sym_stack;
+        std::reverse(encoded_str.begin(), encoded_str.end());
         std::for_each(encoded_str.begin(), encoded_str.end(), [&sym_stack](auto& el){sym_stack.push(el);});
 
         std::string result;
         auto node = root.get();
 
-        while(!sym_stack.empty()) {
+        size_t counter = 0;
+        while(counter != input_string_size) {
             std::string current;
             auto symbol = find_node(node, res_m, current, sym_stack);
             result += symbol;
+            ++counter;
         }
-        std::cout << "Decode result:" << result;
+        return result;
     }
 };
 
@@ -145,9 +151,16 @@ void save_bin(std::string str) {
     unsigned char buffer[sz];
     size_t count = 0;
     unsigned char l_res = 0;
+    
     for(size_t i = 0; i < sz; ++i) {
         unsigned char l_res = 0;
-        std::string tmp = str.substr(0, 8);
+        std::string tmp;
+        if (str.size() >= 8) {
+            tmp = str.substr(0, 8);
+        } else {
+            tmp = str.substr(0, str.size());
+        }
+        
         size_t count = 0;
         std::for_each(tmp.begin(), tmp.end(), [&l_res, &count](const auto& val){
             if (val == '1') {
@@ -158,23 +171,30 @@ void save_bin(std::string str) {
             }
             ++count;
         });
-        if (8 - count > 0) {
-            for(int i = 0;i < 8-count;++i) {
-                l_res <<= 1;
+
+
+        if (count < 8) {
+            size_t diff = 8 - count;
+            for(size_t i = 0;i != diff;++i) {
+                l_res<<=1;
             }
         }
+
         buffer[i] = l_res;
+
         if (!(i == sz - 1)) {
             str = str.substr(8, str.size());
         }
     }
     std::string res_str;
-    std::for_each(buffer, buffer+sz, [&res_str](const auto& el){ res_str+=std::bitset<8>(el).to_string();});
-    std::fstream file(filename, std::ios::out);
+    std::for_each(buffer, buffer + sz, [&res_str](const auto& el){ res_str+=std::bitset<8>(el).to_string();});
+    std::cout << "Encoded data:        " << res_str;
+
+    std::ofstream file(filename, std::ios::binary);
     if (!file) {
         std::abort();
     }
-    file << buffer;
+    file.write(reinterpret_cast<const char*>(buffer), sizeof(buffer));
     file.close();
 }
 
@@ -191,13 +211,12 @@ std::string read_bin() {
     std::for_each(buffer, buffer+file_size,[&result](const auto el){
         result += std::bitset<8>(el).to_string();
     });
-    std::reverse(result.begin(), result.end());
     return result;
 }
 
 
 int main() {
-    std::string input_str = "Try it out with your own content.";
+    std::string input_str = "In computer science and information theory, a Huffman code is a particular type of optimal prefix code that is commonly used for lossless data compression. The process of finding or using such a code is Huffman coding, an algorithm developed by David A. Huffman while he was a Sc.D. student at MIT, and published in the 1952 paper \"A Method for the Construction of Minimum-Redundancy Codes\".";
     std::cout << "Input string:" << input_str << std::endl;
     std::cout << "Input string size:" << input_str.size() << std::endl;
     auto syms_count_map = get_syms_count_map(input_str);
@@ -207,13 +226,16 @@ int main() {
 
     std::string bin_string;
     std::for_each(input_str.begin(), input_str.end(), [&mres, &bin_string](const auto sym){bin_string += mres[char(sym)];});
-    std::cout << "Result string:" << bin_string << std::endl;
     
-    // save to file
+    std::cout << "Data to save:        " << bin_string << std::endl;
     save_bin(bin_string);
-    
-    // get from file
-    auto file_data = read_bin();
+    std::cout << "\n" << std::endl;
 
-    tree.decode_result(mres, file_data);
+    auto file_data = read_bin();
+    std::cout << "Read data from file: " << file_data << std::endl;
+    std::cout << "\n" << std::endl;
+
+    auto result = tree.decode_result(mres, file_data, input_str.size());
+    assert(result == input_str);
+    std::cout << "Decode result:" << result;
 }
