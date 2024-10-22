@@ -1,4 +1,5 @@
 #include <iostream>
+#include <filesystem>
 #include <fstream>
 #include <algorithm>
 #include <map>
@@ -169,7 +170,6 @@ void save_bin(std::string str) {
     }
     std::string res_str;
     std::for_each(buffer, buffer+sz, [&res_str](const auto& el){ res_str+=std::bitset<8>(el).to_string();});
-    std::cout << "Result data:" << "\n" << res_str << std::endl;
     std::fstream file(filename, std::ios::out);
     if (!file) {
         std::abort();
@@ -178,20 +178,42 @@ void save_bin(std::string str) {
     file.close();
 }
 
+std::string read_bin() {
+    std::ifstream file(filename, std::ios::binary);
+    if (!file) {
+        std::abort();
+    }
+    const size_t file_size = static_cast<size_t>(std::filesystem::file_size(filename));
+    char buffer[file_size];
+    file.read(buffer, file_size);
+
+    std::string result;
+    std::for_each(buffer, buffer+file_size,[&result](const auto el){
+        result += std::bitset<8>(el).to_string();
+    });
+    std::reverse(result.begin(), result.end());
+    return result;
+}
+
 
 int main() {
-    std::string str = "Try it out with your own content.";
-    auto syms_count_map = get_syms_count_map(str);
+    std::string input_str = "Try it out with your own content.";
+    std::cout << "Input string:" << input_str << std::endl;
+    std::cout << "Input string size:" << input_str.size() << std::endl;
+    auto syms_count_map = get_syms_count_map(input_str);
 
     HuffmanTree tree(syms_count_map);
     auto mres = tree.construct_map_sym_bin();
 
-    std::string result_string;
-    std::for_each(str.begin(), str.end(), [&mres, &result_string](const auto sym){result_string += mres[char(sym)];});
-    std::cout << "Result string:" << result_string << std::endl;
+    std::string bin_string;
+    std::for_each(input_str.begin(), input_str.end(), [&mres, &bin_string](const auto sym){bin_string += mres[char(sym)];});
+    std::cout << "Result string:" << bin_string << std::endl;
+    
+    // save to file
+    save_bin(bin_string);
+    
+    // get from file
+    auto file_data = read_bin();
 
-    std::string result_string_cp(result_string);
-    std::reverse(result_string_cp.begin(), result_string_cp.end());
-
-    tree.decode_result(mres, result_string_cp);
+    tree.decode_result(mres, file_data);
 }
