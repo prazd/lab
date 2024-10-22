@@ -6,6 +6,7 @@
 #include <queue>
 #include <vector>
 #include <memory>
+#include <stack>
 
 constexpr const char* filename = "test.bin";
 
@@ -49,36 +50,33 @@ struct Tree {
     void print_codes(const Node* node, std::map<char, std::string>& res_m, const std::string& prefix = "") const {
         if (!node) return;
         if (!node->sum_node) {
-            std::cout << node->k->sym << ": " << prefix << "\n";
+            // std::cout << node->k->sym << ": " << prefix << "\n";
             res_m[node->k->sym] = prefix;
         }
         print_codes(node->left.get(), res_m, prefix + "0");
         print_codes(node->right.get(), res_m, prefix + "1");
     }
 
-    std::string find_node(const Node* node, std::map<char, std::string>& res_m,std::string& current, std::string& input) {
-        char curr = input[0];
-        current += input[0];
-        input = input.substr(1, input.size());
-        if (!node->sum_node) {
-            for(auto begin = std::begin(res_m), end = std::end(res_m); begin!=end; ++begin) {
-                if (begin->second == current){
-                    std::string res;
-                    res = begin->first;
-                    return res;
-                }
+    char find_node(const Node* node, std::map<char, std::string>& mres,std::string& current, std::stack<char>& s) {
+        while(true) {
+            auto s_top = s.top();
+            current += s_top;
+            s.pop();
+            auto res = std::find_if(mres.begin(), mres.end(), [&current](auto& el){return el.second == current;});
+            if (res != mres.end()) {
+                return res->first;
             }
-        }
-        if (curr == '0') {
-            find_node(node->left.get(), res_m,  current, input);
-        } else {
-            find_node(node->right.get(), res_m, current, input);
+            node = s_top == '0' ? node->left.get() : node->right.get();
         }
     }
-    void decode_result(const Node* node, std::map<char, std::string>& res_m, std::string& encoded_str) {
-        std::string current;
-        auto test = find_node(root.get(), res_m, current, encoded_str);
-        std::cout << test << std::endl;
+    void decode_result(const Node* node, std::map<char, std::string>& res_m, std::stack<char>& s) {
+        std::string result;
+        while(!s.empty()) {
+            std::string current;
+            auto symbol = find_node(node, res_m, current, s);
+            result += symbol;
+        }
+        std::cout << "Decode result:" << result;
     }
 };
 
@@ -172,29 +170,25 @@ void save_bin(std::string str) {
     file.close();
 }
 
-void test() {
-    std::string str = "Try it out with your own content.";
-    auto res = get_syms_count_map(str);
-    std::for_each(res.begin(), res.end(), [](auto& p){ std::cout << p.sym << " " << p.value;});
-    std::cout << "\n";
-    auto tree = create_tree(res);
-    std::map<char, std::string> mres;
-    tree.print_codes(tree.root.get(), mres);
-    std::string strres;
-    std::for_each(str.begin(), str.end(), [&mres, &strres](const auto sym){strres += mres[char(sym)];});
-    std::cout << strres << std::endl;
-}
 
 int main() {
     std::string str = "Try it out with your own content.";
     auto res = get_syms_count_map(str);
-    std::for_each(res.begin(), res.end(), [](auto& p){ std::cout << p.sym << " " << p.value;});
-    std::cout << "\n";
+
     auto tree = create_tree(res);
     std::map<char, std::string> mres;
     tree.print_codes(tree.root.get(), mres);
-    std::string strres;
-    std::for_each(str.begin(), str.end(), [&mres, &strres](const auto sym){strres += mres[char(sym)];});
-    std::cout << strres << std::endl;
-    save_bin(strres);
+    std::string result_string;
+    std::for_each(str.begin(), str.end(), [&mres, &result_string](const auto sym){result_string += mres[char(sym)];});
+
+    std::cout << "Result string:" << result_string << std::endl;
+
+    std::string result_string_cp(result_string);
+    std::reverse(result_string_cp.begin(), result_string_cp.end());
+
+
+    std::stack<char> res_stack;
+    std::for_each(result_string_cp.begin(), result_string_cp.end(), [&res_stack](auto& el){res_stack.push(el);});
+
+    tree.decode_result(tree.root.get(), mres, res_stack);
 }
