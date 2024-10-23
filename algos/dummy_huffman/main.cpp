@@ -10,7 +10,7 @@
 #include <stack>
 #include <cassert>
 
-constexpr const char* filename = "test.bin";
+constexpr const char* bin_output_filename = "out.bin";
 
 struct Key{
     char sym;
@@ -190,7 +190,7 @@ void save_bin(std::string str) {
     std::for_each(buffer, buffer + sz, [&res_str](const auto& el){ res_str+=std::bitset<8>(el).to_string();});
     std::cout << "Encoded data:        " << res_str;
 
-    std::ofstream file(filename, std::ios::binary);
+    std::ofstream file(bin_output_filename, std::ios::binary);
     if (!file) {
         std::abort();
     }
@@ -199,11 +199,11 @@ void save_bin(std::string str) {
 }
 
 std::string read_bin() {
-    std::ifstream file(filename, std::ios::binary);
+    std::ifstream file(bin_output_filename, std::ios::binary);
     if (!file) {
         std::abort();
     }
-    const size_t file_size = static_cast<size_t>(std::filesystem::file_size(filename));
+    const size_t file_size = static_cast<size_t>(std::filesystem::file_size(bin_output_filename));
     char buffer[file_size];
     file.read(buffer, file_size);
 
