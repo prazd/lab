@@ -9,6 +9,7 @@
 #include <memory>
 #include <stack>
 #include <cassert>
+#include <nlohmann/json.hpp>
 
 constexpr const char* bin_output_filename = "out.bin";
 
@@ -48,8 +49,15 @@ struct Node {
 };
 
 struct HuffmanTree {
+    using json = nlohmann::json;
+
     std::unique_ptr<Node> root;
-    
+    std::map<char, std::string> sym_table;
+
+    HuffmanTree(std::string json_file_name) {
+        // todo: from json
+    }
+
     HuffmanTree(std::set<Key>& s) {
         auto compare = [](const std::unique_ptr<Node>& a, const std::unique_ptr<Node>& b) {
             return a->value >= b->value;
@@ -76,37 +84,33 @@ struct HuffmanTree {
         auto tmp = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
         root = std::move(tmp);
         pq.pop();
+        fill_sym_bin_map(root.get());
     }
 
-    std::map<char, std::string> construct_map_sym_bin() const {
-        std::map<char, std::string> result;
-        fill_sym_bin_map(root.get(), result);
-        return result;
-    }
-
-    void fill_sym_bin_map(const Node* node, std::map<char, std::string>& res_m, const std::string& prefix = "") const {
+    void fill_sym_bin_map(const Node* node, const std::string& prefix = "") {
         if (!node) return;
         if (!node->sum_node) {
             std::cout << node->k->sym << ": " << prefix << "\n";
-            res_m[node->k->sym] = prefix;
+            sym_table[node->k->sym] = prefix;
         }
-        fill_sym_bin_map(node->left.get(), res_m, prefix + "0");
-        fill_sym_bin_map(node->right.get(), res_m, prefix + "1");
+        fill_sym_bin_map(node->left.get(), prefix + "0");
+        fill_sym_bin_map(node->right.get(), prefix + "1");
     }
 
-    char find_node(const Node* node, std::map<char, std::string>& mres,std::string& current, std::stack<char>& s) {
+    char find_node(const Node* node, std::string& current, std::stack<char>& s) {
         while(true) {
             auto s_top = s.top();
             current += s_top;
             s.pop();
-            auto res = std::find_if(mres.begin(), mres.end(), [&current](auto& el){return el.second == current;});
-            if (res != mres.end()) {
+            auto res = std::find_if(sym_table.begin(), sym_table.end(), [&current](auto& el){return el.second == current;});
+            if (res != sym_table.end()) {
                 return res->first;
             }
             node = s_top == '0' ? node->left.get() : node->right.get();
         }
     }
-    std::string decode_result(std::map<char, std::string>& res_m, std::string encoded_str, size_t input_string_size) {
+
+    std::string decode_result(std::string encoded_str, size_t input_string_size) {
         std::stack<char> sym_stack;
         std::reverse(encoded_str.begin(), encoded_str.end());
         std::for_each(encoded_str.begin(), encoded_str.end(), [&sym_stack](auto& el){sym_stack.push(el);});
@@ -117,11 +121,18 @@ struct HuffmanTree {
         size_t counter = 0;
         while(counter != input_string_size) {
             std::string current;
-            auto symbol = find_node(node, res_m, current, sym_stack);
+            auto symbol = find_node(node, current, sym_stack);
             result += symbol;
             ++counter;
         }
         return result;
+    }
+
+    void table_to_json() {
+        json myJson = sym_table;
+        std::ofstream file("sym_table.json");
+        file << myJson.dump(4);
+        file.close();
     }
 };
 
@@ -222,20 +233,20 @@ int main() {
     auto syms_count_map = get_syms_count_map(input_str);
 
     HuffmanTree tree(syms_count_map);
-    auto mres = tree.construct_map_sym_bin();
 
     std::string bin_string;
-    std::for_each(input_str.begin(), input_str.end(), [&mres, &bin_string](const auto sym){bin_string += mres[char(sym)];});
+    std::for_each(input_str.begin(), input_str.end(), [&bin_string, &tree](const auto sym){bin_string += tree.sym_table[char(sym)];});
     
     std::cout << "Data to save:        " << bin_string << std::endl;
     save_bin(bin_string);
     std::cout << "\n" << std::endl;
+    tree.table_to_json();
 
     auto file_data = read_bin();
     std::cout << "Read data from file: " << file_data << std::endl;
     std::cout << "\n" << std::endl;
 
-    auto result = tree.decode_result(mres, file_data, input_str.size());
+    auto result = tree.decode_result(file_data, input_str.size());
     assert(result == input_str);
     std::cout << "Decode result:" << result;
 }
