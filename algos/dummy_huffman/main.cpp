@@ -51,7 +51,6 @@ struct Node {
 struct HuffmanTree {
     using json = nlohmann::json;
 
-    std::unique_ptr<Node> root;
     std::map<char, std::string> sym_table;
 
     HuffmanTree(std::string&& filename) {
@@ -59,27 +58,16 @@ struct HuffmanTree {
         json loaded_json;
         input_file >> loaded_json;
         sym_table = loaded_json.get<std::map<char, std::string>>();
-        tree_from_sym_table();
     }
 
-    void tree_from_sym_table() {
+    std::unique_ptr<Node> tree_from_sym_table() {
         std::vector<std::pair<char, std::string>> vec(sym_table.begin(), sym_table.end());
-        std::sort(vec.begin(), vec.end(), [](const auto& lhs, const auto& rhs)->bool{
-            return lhs.second.size() < rhs.second.size();
-        });
-        std::reverse(vec.begin(), vec.end());
-        std::stack<std::pair<char, std::string>> s;
-        std::for_each(vec.begin(), vec.end(),[&s](const auto& el){
-            s.push(el);
-        });
-        auto new_node = std::make_unique<Node>(0, true);
-        root = std::move(new_node);
+        auto root = std::make_unique<Node>(0, true);
         
-        while(!s.empty()) {
-            auto curr = s.top();
+        while(!vec.empty()) {
+            auto& curr = vec.back();
             auto node = root.get();
             std::for_each(curr.second.begin(), curr.second.end()-1, [&node](const auto& el){
-                std::cout << "Sym:" << el << std::endl;
                 if (el == '0') {
                     if (!node->left.get()) {
                         node->left = std::make_unique<Node>(0, true);
@@ -91,17 +79,17 @@ struct HuffmanTree {
                     }
                     node = node->right.get();
                 }
-                
             });
             Key k(curr.first, 0);
-            if (*(curr.second.end()-1) == '0') {
+            if (curr.second.back() == '0') {
                 node->left = std::make_unique<Node>(0, false, &k);
             } else {
                 node->right = std::make_unique<Node>(0, false, &k);
             }
-            s.pop();
             node = root.get();
+            vec.pop_back();
         }
+        return root;
     }
 
     HuffmanTree(std::set<Key>& s) {
@@ -127,8 +115,7 @@ struct HuffmanTree {
             pq.push(std::move(new_node));
         }
         
-        auto tmp = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
-        root = std::move(tmp);
+        auto root = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
         pq.pop();
         fill_sym_bin_map(root.get());
     }
@@ -136,7 +123,6 @@ struct HuffmanTree {
     void fill_sym_bin_map(const Node* node, const std::string& prefix = "") {
         if (!node) return;
         if (!node->sum_node) {
-            std::cout << node->k->sym << ": " << prefix << "\n";
             sym_table[node->k->sym] = prefix;
         }
         fill_sym_bin_map(node->left.get(), prefix + "0");
@@ -147,37 +133,31 @@ struct HuffmanTree {
         if (!node) return;
         if (!node->sum_node) {
             std::cout << node->k->sym << ": " << prefix << "\n";
-            // sym_table[node->k->sym] = prefix;
         }
-        fill_sym_bin_map(node->left.get(), prefix + "0");
-        fill_sym_bin_map(node->right.get(), prefix + "1");
+        print_sym_bin_map(node->left.get(), prefix + "0");
+        print_sym_bin_map(node->right.get(), prefix + "1");
     }
 
-    char find_node(const Node* node, std::string& current, std::stack<char>& s) {
-        while(true) {
-            auto s_top = s.top();
-            current += s_top;
+    char find_node(std::string& current, std::stack<char>& s) {
+        auto res = sym_table.end();
+        while(res == sym_table.end()) {
+            current += s.top();
+            res = std::find_if(sym_table.begin(), sym_table.end(), [&current](auto& el){return el.second == current;});
             s.pop();
-            auto res = std::find_if(sym_table.begin(), sym_table.end(), [&current](auto& el){return el.second == current;});
-            if (res != sym_table.end()) {
-                return res->first;
-            }
-            node = s_top == '0' ? node->left.get() : node->right.get();
         }
+        return res->first;
     }
 
     std::string decode_result(std::string encoded_str, size_t input_string_size) {
         std::stack<char> sym_stack;
         std::reverse(encoded_str.begin(), encoded_str.end());
         std::for_each(encoded_str.begin(), encoded_str.end(), [&sym_stack](auto& el){sym_stack.push(el);});
-
         std::string result;
-        auto node = root.get();
 
         size_t counter = 0;
         while(counter != input_string_size) {
             std::string current;
-            auto symbol = find_node(node, current, sym_stack);
+            auto symbol = find_node(current, sym_stack);
             result += symbol;
             ++counter;
         }
@@ -288,24 +268,31 @@ int main() {
     std::cout << "Input string size:" << input_str.size() << std::endl;
     auto syms_count_map = get_syms_count_map(input_str);
 
-    HuffmanTree tree(syms_count_map);
+    HuffmanTree ht(syms_count_map);
+    std::cout << "Tree result:" << std::endl;
+    auto tree = ht.tree_from_sym_table();
+    ht.print_sym_bin_map(tree.get());
 
     std::string bin_string;
-    std::for_each(input_str.begin(), input_str.end(), [&bin_string, &tree](const auto sym){bin_string += tree.sym_table[char(sym)];});
+    std::for_each(input_str.begin(), input_str.end(), [&bin_string, &ht](const auto sym){bin_string += ht.sym_table[char(sym)];});
     
     std::cout << "Data to save:        " << bin_string << std::endl;
     save_bin(bin_string);
     std::cout << "\n" << std::endl;
-    tree.table_to_json("sym_table.json");
+    ht.table_to_json("sym_table.json");
 
 
     // decoding
-    HuffmanTree decode_tree("sym_table.json");
+    HuffmanTree htd("sym_table.json");
     auto file_data = read_bin();
     std::cout << "Read data from file: " << file_data << std::endl;
     std::cout << "\n" << std::endl;
 
-    auto result = decode_tree.decode_result(file_data, input_str.size());
+    std::cout << "Decoded Tree result:" << std::endl;
+    auto stree = htd.tree_from_sym_table();
+    htd.print_sym_bin_map(stree.get());
+
+    auto result = htd.decode_result(file_data, input_str.size());
     assert(result == input_str);
     std::cout << "Decode result:" << result;
 }
