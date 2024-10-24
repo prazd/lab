@@ -54,8 +54,54 @@ struct HuffmanTree {
     std::unique_ptr<Node> root;
     std::map<char, std::string> sym_table;
 
-    HuffmanTree(std::string json_file_name) {
-        // todo: from json
+    HuffmanTree(std::string&& filename) {
+        std::ifstream input_file(filename);
+        json loaded_json;
+        input_file >> loaded_json;
+        sym_table = loaded_json.get<std::map<char, std::string>>();
+        tree_from_sym_table();
+    }
+
+    void tree_from_sym_table() {
+        std::vector<std::pair<char, std::string>> vec(sym_table.begin(), sym_table.end());
+        std::sort(vec.begin(), vec.end(), [](const auto& lhs, const auto& rhs)->bool{
+            return lhs.second.size() < rhs.second.size();
+        });
+        std::reverse(vec.begin(), vec.end());
+        std::stack<std::pair<char, std::string>> s;
+        std::for_each(vec.begin(), vec.end(),[&s](const auto& el){
+            s.push(el);
+        });
+        auto new_node = std::make_unique<Node>(0, true);
+        root = std::move(new_node);
+        
+        while(!s.empty()) {
+            auto curr = s.top();
+            auto node = root.get();
+            std::for_each(curr.second.begin(), curr.second.end()-1, [&node](const auto& el){
+                std::cout << "Sym:" << el << std::endl;
+                if (el == '0') {
+                    if (!node->left.get()) {
+                        node->left = std::make_unique<Node>(0, true);
+                    }
+                    node = node->left.get();
+                } else if (el == '1'){
+                    if (!node->right.get()) {
+                        node->right = std::make_unique<Node>(0, true);
+                    }
+                    node = node->right.get();
+                }
+                
+            });
+            Key k(curr.first, 0);
+            if (*(curr.second.end()-1) == '0') {
+                node->left = std::make_unique<Node>(0, false, &k);
+            } else {
+                node->right = std::make_unique<Node>(0, false, &k);
+            }
+            s.pop();
+            node = root.get();
+        }
     }
 
     HuffmanTree(std::set<Key>& s) {
@@ -64,7 +110,6 @@ struct HuffmanTree {
         };
 
         std::priority_queue<std::unique_ptr<Node>, std::vector<std::unique_ptr<Node>>, decltype(compare)> pq;
-
         for (const auto& el : s) {
             pq.push(std::make_unique<Node>(el.value, false, new Key(el.sym, el.value)));
         }
@@ -81,6 +126,7 @@ struct HuffmanTree {
             auto new_node = std::make_unique<Node>(left->value + right->value, true, std::move(left), std::move(right), std::move(k));
             pq.push(std::move(new_node));
         }
+        
         auto tmp = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
         root = std::move(tmp);
         pq.pop();
@@ -92,6 +138,16 @@ struct HuffmanTree {
         if (!node->sum_node) {
             std::cout << node->k->sym << ": " << prefix << "\n";
             sym_table[node->k->sym] = prefix;
+        }
+        fill_sym_bin_map(node->left.get(), prefix + "0");
+        fill_sym_bin_map(node->right.get(), prefix + "1");
+    }
+
+    void print_sym_bin_map(const Node* node, const std::string& prefix = "") {
+        if (!node) return;
+        if (!node->sum_node) {
+            std::cout << node->k->sym << ": " << prefix << "\n";
+            // sym_table[node->k->sym] = prefix;
         }
         fill_sym_bin_map(node->left.get(), prefix + "0");
         fill_sym_bin_map(node->right.get(), prefix + "1");
@@ -128,10 +184,10 @@ struct HuffmanTree {
         return result;
     }
 
-    void table_to_json() {
-        json myJson = sym_table;
-        std::ofstream file("sym_table.json");
-        file << myJson.dump(4);
+    void table_to_json(std::string&& filename) {
+        json my_json = sym_table;
+        std::ofstream file(filename);
+        file << my_json.dump(4);
         file.close();
     }
 };
@@ -240,13 +296,16 @@ int main() {
     std::cout << "Data to save:        " << bin_string << std::endl;
     save_bin(bin_string);
     std::cout << "\n" << std::endl;
-    tree.table_to_json();
+    tree.table_to_json("sym_table.json");
 
+
+    // decoding
+    HuffmanTree decode_tree("sym_table.json");
     auto file_data = read_bin();
     std::cout << "Read data from file: " << file_data << std::endl;
     std::cout << "\n" << std::endl;
 
-    auto result = tree.decode_result(file_data, input_str.size());
+    auto result = decode_tree.decode_result(file_data, input_str.size());
     assert(result == input_str);
     std::cout << "Decode result:" << result;
 }
