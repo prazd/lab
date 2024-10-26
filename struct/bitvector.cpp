@@ -50,6 +50,16 @@ class BitVector {
         BitRef br;
     public:        
         BitIter(BitRef&& br): br(br) {}
+        // todo: finish
+        // BitIter& operator--() {
+        //     br = BitRef(--br.index, br.ba);
+        //     return *this;
+        // }
+        // BitIter operator--(int) {
+        //     auto tmp = *this;
+        //     this->operator--();
+        //     return tmp;
+        // }
         BitIter& operator++() {
             br = BitRef(++br.index, br.ba);
             return *this;
@@ -74,7 +84,12 @@ class BitVector {
     };
 
 public:        
-    BitVector(): ptr(new unsigned char[default_sz]), cap(0), sz(0){}
+    BitVector(): ptr(new unsigned char[default_sz]), cap(default_sz), sz(0){}
+    BitVector(const std::initializer_list<bool>& il): ptr(new unsigned char[il.size()]), cap(il.size()), sz(0) {
+        for (auto el: il) {
+            push_back(el);
+        }
+    }
     BitVector(const BitVector& rhs): ptr(new unsigned char[rhs.cap]), cap(rhs.cap), sz(rhs.sz){
         std::copy(rhs.ptr, rhs.ptr+sz, ptr);
     }
@@ -112,6 +127,14 @@ public:
     BitIter end() {
         return BitIter(BitRef(sz, *this));
     }
+
+    // BitIter rbegin() {
+    //     return BitIter(BitRef(sz-1, *this));
+    // }
+
+    // BitIter rend() {
+    //     return BitIter(BitRef(0, *this));
+    // }
     ~BitVector() {
         delete[] ptr;
     }
@@ -120,15 +143,10 @@ public:
 
 
 int main() {
-    BitVector bv;
-    // todo: initializer list + 
-    bv.push_back(1);
-    bv.push_back(0);
-    bv.push_back(1);
-    bv.push_back(0);
-    bv.push_back(1);
+    BitVector bv{1,0,1,0,1,1};
     bv.push_back(1);
     std::for_each(bv.begin(), bv.end(), [](const auto& el){
-        std::cout << el << std::endl;
+        std::cout << el;
     });
+    std::cout << std::endl;
 }
