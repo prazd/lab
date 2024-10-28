@@ -248,4 +248,29 @@ int main() {
     std::for_each(bv4.begin(), bv4.end(), [](const auto& el){
         assert(el == 1);
     });
+
+
+    // copy ctr
+    BitVector bv5{1,1,1,1,1,1,1,1};
+    bv5.push_back(0);
+    BitVector bv6 = bv5;
+    std::array<bool, 9> arr3 = {1,1,1,1,1,1,1,1,0};
+    auto arr3_index = 0;
+    std::for_each(bv5.begin(), bv5.end(), [&arr3, &arr3_index, &bv6](const auto& el){
+       assert(arr3[arr3_index] == el && arr3[arr3_index] == bv6[arr3_index]);
+       ++arr3_index;
+    });
+
+    // move ctr
+    BitVector bv7{1,1,1,1,1,1,1,1};
+    BitVector bv8 = std::move(bv7);
+    assert(bv7.size() == 0);
+
+    std::array<bool, 9> arr4 = {1,1,1,1,1,1,1,1};
+    auto arr4_index = 0;
+
+    std::for_each(bv8.begin(), bv8.end(), [&arr4, &arr4_index](const auto& el){
+       assert(arr4[arr4_index++] == el);
+    });
+
 }
