@@ -168,13 +168,6 @@ public:
         set(sz, value);
         ++sz;
     }
-    
-    BitIter begin() {
-        return BitIter(BitRef(0, *this));
-    }
-    BitIter end() {
-        return BitIter(BitRef(sz, *this));
-    }
 
     size_t size() const {
         return sz;
@@ -182,6 +175,13 @@ public:
 
     size_t capacity() const {
         return cap;
+    }
+    
+    BitIter begin() {
+        return BitIter(BitRef(0, *this));
+    }
+    BitIter end() {
+        return BitIter(BitRef(sz, *this));
     }
 
     RBitIter rbegin() {
@@ -225,7 +225,7 @@ int main() {
     std::for_each(bv1.rbegin(), bv1.rend(), [&arr1, &arr1_index](const auto& el){
         assert(arr1[arr1_index++] == el);
     });
-    
+
     // BitIter
     BitVector bv2{1,0,1,1,1,1};
     std::array<bool, 6> arr2 = {1,0,1,1,1,1};
