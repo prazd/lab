@@ -204,13 +204,7 @@ void* operator new(size_t size) {
 }
 
 int main() {
-    BitVector bv1{1,0,1,1,1,1};
-    std::array<bool, 6> bvec1 = {1,1,1,1,0,1};
-    auto bvec1_index = 0;
-    std::for_each(bv1.rbegin(), bv1.rend(), [&bvec1, &bvec1_index](const auto& el){
-        assert(bvec1[bvec1_index++] == el);
-    });
-
+    // push_back
     BitVector bv{1,0,1,0,1,1};
     bv.push_back(1);
     assert(bv[bv.size()-1] == 1);
@@ -223,18 +217,35 @@ int main() {
     std::for_each(bv.begin(), bv.end(), [&sarr, &counter](const auto& el){
         assert(el == sarr[counter++]);
     });
+
+    //  RBitIter
+    BitVector bv1{1,0,1,1,1,1};
+    std::array<bool, 6> arr1 = {1,1,1,1,0,1};
+    auto arr1_index = 0;
+    std::for_each(bv1.rbegin(), bv1.rend(), [&arr1, &arr1_index](const auto& el){
+        assert(arr1[arr1_index++] == el);
+    });
     
-    //
-    BitVector bv2{1,0,1};
+    // BitIter
+    BitVector bv2{1,0,1,1,1,1};
+    std::array<bool, 6> arr2 = {1,0,1,1,1,1};
+    auto arr2_index = 0;
+    std::for_each(bv2.begin(), bv2.end(), [&arr2, &arr2_index](const auto& el){
+        assert(arr2[arr2_index++] == el);
+    });
+
+    // operator==(copy)
+    BitVector bv3{1,0,1};
     BitVector tmp{0,0,0,0};
-    bv2 = tmp;
-    std::for_each(bv2.begin(), bv2.end(), [](const auto& el){
+    bv3 = tmp;
+    std::for_each(bv3.begin(), bv3.end(), [](const auto& el){
         assert(el == 0);
     });
 
-    BitVector bv3{1,0,1};
-    bv3 = BitVector{1,1,1,1};
-    std::for_each(bv3.begin(), bv3.end(), [](const auto& el){
+    // operator==(move)
+    BitVector bv4{1,0,1};
+    bv4 = BitVector{1,1,1,1};
+    std::for_each(bv4.begin(), bv4.end(), [](const auto& el){
         assert(el == 1);
     });
 }
