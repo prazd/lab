@@ -115,7 +115,6 @@ class BitVector {
         }
     };
 public:
-    // todo: fix memory alloc
     BitVector(): ptr(new unsigned char[get_size(CHAR_BIT)]), cap(CHAR_BIT), sz(0){}
     BitVector(const std::initializer_list<bool>& il): ptr(new unsigned char[get_size(il.size())]), cap(get_size(il.size())*CHAR_BIT), sz(0) {
         for (auto el: il) {
@@ -206,7 +205,7 @@ void* operator new(size_t size) {
 
 int main() {
     BitVector bv1{1,0,1,1,1,1};
-    std::vector<bool> bvec1 = {1,1,1,1,0,1};
+    std::array<bool, 6> bvec1 = {1,1,1,1,0,1};
     auto bvec1_index = 0;
     std::for_each(bv1.rbegin(), bv1.rend(), [&bvec1, &bvec1_index](const auto& el){
         assert(bvec1[bvec1_index++] == el);
