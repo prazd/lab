@@ -1,5 +1,6 @@
 #include <iostream>
 #include <array>
+#include <cassert>
 
 template <size_t n>
 class BitArray {
@@ -12,6 +13,7 @@ class BitArray {
         }
     }
     unsigned char buffer[get_size()];
+
     unsigned char* get_ptr(size_t index) {
         return &buffer[index / CHAR_BIT];
     }
@@ -98,10 +100,17 @@ public:
 
 int main() {
     BitArray<9> barr{1,1,0,0,1,1,1,1,1};
-    std::cout << "Size:" << sizeof(barr) << std::endl;
+    static_assert(sizeof(barr) == 2);
+    
     std::for_each(barr.begin(), barr.end(), [](auto& el){el=1;});
-    std::for_each(barr.begin(), barr.end(), [](const auto& el){std::cout << el;});
-    std::cout << "\n";
+    std::for_each(barr.begin(), barr.end(), [](const auto& el){assert(el==1);});
     std::for_each(barr.begin(), barr.end(), [](auto& el){el=0;});
-    std::for_each(barr.begin(), barr.end(), [](const auto& el){std::cout << el;});
+    std::for_each(barr.begin(), barr.end(), [](const auto& el){assert(el==0);});
+
+    barr[0] = 1;
+    barr[3] = 1;
+    barr[6] = 1;
+    std::array<bool, 9> arr{1,0,0,1,0,0,1,0,0};
+    assert(std::equal(arr.begin(), arr.end(), barr.begin()));
+
 }
