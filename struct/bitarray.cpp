@@ -1,6 +1,8 @@
 #include <iostream>
 #include <array>
 #include <cassert>
+#include <climits>
+#include <algorithm>
 
 template <size_t n>
 class BitArray {
@@ -14,17 +16,15 @@ class BitArray {
     }
     unsigned char buffer[get_size()];
 
-    unsigned char* get_ptr(size_t index) {
-        return &buffer[index / CHAR_BIT];
+    unsigned char get(size_t index) const {
+        return buffer[index/CHAR_BIT];
     }
 
     void set(size_t index, bool value) {
-        auto x = get_ptr(index);
-        index %= CHAR_BIT;
         if (value) {
-            *x |= (1 << index);
+            buffer[index/CHAR_BIT] |= (1 << index % CHAR_BIT);
         } else {
-            *x &= ~(1 << index);
+            buffer[index/CHAR_BIT] &= ~(1 << index % CHAR_BIT);
         }
     }
     
@@ -40,16 +40,8 @@ class BitArray {
             ba.set(index, value);
             return *this;
         }
-        BitRef& operator=(BitRef& rhs) {
-            BitRef tmp(rhs.index, rhs.ba);
-            std::swap(*this, tmp);
-            return *this;
-        }
         operator bool() const {
-            auto x = ba.get_ptr(index);
-            auto l_index = index%CHAR_BIT;
-            unsigned char res = (1 << l_index);
-            return res & *x;
+            return ba.get(index) & (1 << index%CHAR_BIT);
         }
     };
 
@@ -58,7 +50,7 @@ class BitArray {
     public:        
         BitIter(BitRef&& br): br(br) {}
         BitIter& operator++() {
-            br = BitRef(++br.index, br.ba);
+            ++br.index;
             return *this;
         }
         BitIter operator++(int) {
@@ -101,7 +93,6 @@ public:
 int main() {
     BitArray<9> barr{1,1,0,0,1,1,1,1,1};
     static_assert(sizeof(barr) == 2);
-    
     std::for_each(barr.begin(), barr.end(), [](auto& el){el=1;});
     std::for_each(barr.begin(), barr.end(), [](const auto& el){assert(el==1);});
     std::for_each(barr.begin(), barr.end(), [](auto& el){el=0;});
