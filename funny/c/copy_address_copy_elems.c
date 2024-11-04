@@ -16,7 +16,7 @@ void* copy_elements(void* ele_src[], int ele_cnt, size_t ele_size)
 {
     if (!tmult_ok(ele_cnt, ele_size))
         return NULL;
-    printf("size: %d\n", ele_cnt * ele_size);
+    printf("size: %zu\n", ele_cnt * ele_size);
 
     void* result = malloc(ele_cnt * ele_size);
     if (result == NULL)
@@ -38,25 +38,16 @@ void* copy_elements(void* ele_src[], int ele_cnt, size_t ele_size)
 void* copy_addresses(void* ele_src[], int ele_cnt)
 {
     int ele_size = sizeof(void*);
-
+    int sz = ele_cnt * ele_size;
     if (!tmult_ok(ele_cnt, ele_size))
         return NULL;
-    printf("size: %d\n", ele_cnt * ele_size);
+    printf("size: %d\n", sz);
 
-    void* result = malloc(ele_cnt * ele_size);
+    void* result = malloc(sz);
     if (result == NULL)
         return NULL;
-
-    void* next = result;
-    void* ptr = ele_src;
     
-    for (int i = 0; i < ele_cnt; i++)
-    {
-        memcpy(next, ptr, ele_size);
-        next += ele_size;
-        ptr += ele_size;
-    }
-
+    memcpy(result, ele_src, sz);
     return result;
 }
 
