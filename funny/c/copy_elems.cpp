@@ -1,7 +1,7 @@
 #include <iostream>
 
 template <typename T, size_t N>
-T* copy_elements(T* arr[N]) {
+T* copy_elements(T* (&arr)[N]) {
     T* result = new T[N];
     auto next = result;
     for(size_t i = 0; i < N;++i) 
@@ -25,7 +25,7 @@ int main() {
     int z = 30;
 
     int* arr[3] = {&x, &y, &z};
-    auto int_elems = copy_elements<int, 3>(arr);
+    auto int_elems = copy_elements(arr);
     for(int i = 0;i < 3; ++i) {
         std::cout << "Int elems: " << int_elems[i] << std::endl;
     }
@@ -38,7 +38,7 @@ int main() {
 
     Base* arr2[3] = {&b1, &b2, &b3};
 
-    auto base_elems = copy_elements<Base, 3>(arr2);
+    auto base_elems = copy_elements(arr2);
     for(int i = 0;i < 3; ++i) {
         std::cout << "Base elems: " << base_elems[i] << std::endl;
     }
