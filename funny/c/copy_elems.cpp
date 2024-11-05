@@ -1,4 +1,5 @@
 #include <iostream>
+#include <tuple>
 
 template <typename T, size_t N>
 T* copy_elements(T* (&arr)[N]) {
@@ -10,8 +11,8 @@ T* copy_elements(T* (&arr)[N]) {
 }
 
 struct Base {
-    int x;
-    int y;
+    short x;
+    short y;
 };
 
 std::ostream& operator<<(std::ostream& os, const Base& b) {
@@ -19,29 +20,51 @@ std::ostream& operator<<(std::ostream& os, const Base& b) {
     return os;
 }
 
+template <typename... Args>
+struct CopyElems{
+    std::tuple<Args...>* data;
+
+    template <typename... U>
+    CopyElems(U&&... args): data(new std::tuple<Args...>(std::forward<U>(args)...)) {}
+
+    template <typename T>
+    decltype(auto) get() const {
+        return std::get<T>(*data);
+    }
+
+    template <size_t N>
+    decltype(auto) get() const {
+        return std::get<N>(*data);
+    }
+
+    ~CopyElems(){
+        delete data;
+    }
+};
+
+struct Mega {
+    long x;
+    long y;
+};
+
+std::ostream& operator<<(std::ostream& os, const Mega& m) {
+    os << "x:" << m.x << " y:" << m.y;
+    return os;
+}
+
+
 int main() {
     int x = 10;
-    int y = 20;
-    int z = 30;
-
-    int* arr[3] = {&x, &y, &z};
-    auto int_elems = copy_elements(arr);
-    for(int i = 0;i < 3; ++i) {
-        std::cout << "Int elems: " << int_elems[i] << std::endl;
-    }
-    delete[] int_elems;
-
-
     Base b1{10,20};
-    Base b2{30,40};
-    Base b3{50,60};
+    Mega m1{20000,3000};
 
-    Base* arr2[3] = {&b1, &b2, &b3};
+    CopyElems<int, Base, Mega> data(x, b1, m1);
 
-    auto base_elems = copy_elements(arr2);
-    for(int i = 0;i < 3; ++i) {
-        std::cout << "Base elems: " << base_elems[i] << std::endl;
-    }
-
-    delete[] base_elems;
+    std::cout << "Data0:" << data.get<0>() << std::endl;
+    std::cout << "Data1:" << data.get<1>() << std::endl;
+    std::cout << "Data2:" << data.get<2>() << std::endl;
+    std::cout << std::endl;
+    std::cout << "Data_Int:" << data.get<int>() << std::endl;
+    std::cout << "Data_Base:" << data.get<Base>() << std::endl;
+    std::cout << "Data_Mega:" << data.get<Mega>() << std::endl;
 }
