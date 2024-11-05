@@ -20,9 +20,17 @@ std::ostream& operator<<(std::ostream& os, const Base& b) {
     return os;
 }
 
-template <typename... Args>
+template <typename T>
+struct LogDeleter {
+    void operator()(T* el) {
+        std::cout << "Deleted";
+        delete el;
+    }
+};
+
+template < typename... Args>
 struct CopyElems{
-    std::tuple<Args...>* data;
+    std::unique_ptr<std::tuple<Args...>, LogDeleter<std::tuple<Args...>>> data;
 
     template <typename... U>
     CopyElems(U&&... args): data(new std::tuple<Args...>(std::forward<U>(args)...)) {}
@@ -35,10 +43,6 @@ struct CopyElems{
     template <size_t N>
     decltype(auto) get() const {
         return std::get<N>(*data);
-    }
-
-    ~CopyElems(){
-        delete data;
     }
 };
 
@@ -59,7 +63,6 @@ int main() {
     Mega m1{20000,3000};
 
     CopyElems<int, Base, Mega> data(x, b1, m1);
-
     std::cout << "Data0:" << data.get<0>() << std::endl;
     std::cout << "Data1:" << data.get<1>() << std::endl;
     std::cout << "Data2:" << data.get<2>() << std::endl;
