@@ -51,12 +51,20 @@ void* copy_addresses(void* ele_src[], int ele_cnt)
     return result;
 }
 
+struct Data {
+    short x;
+    short y;
+};
+
 int main() {
 
     int a = 4;
-    int b = 7;
-    int c = 8;
-
+    float b = 7.2f;
+    struct Data c;
+    printf("%zu", sizeof(c));
+    
+    c.x = 10;
+    c.y = 20;
     void* array[3] = {&a, &b, &c};
 
     int len = sizeof(array) / sizeof(array[0]);
@@ -69,33 +77,37 @@ int main() {
     printf("c:%p\n", array[2]);
 
     printf("COPY ELEMENTS (int*): \n");
-    int* array_2 = copy_elements(array, len, ele_size);
-    printf("array_2[0]: %d\n", array_2[0]);
-    printf("array_2[1]: %d\n", array_2[1]);
-    printf("array_2[2]: %d\n\n\n", array_2[2]);
+    void* array_2 = copy_elements(array, len, ele_size);
+    printf("array_2[0]: %d\n",    ((int*)(array_2))[0]);
+    printf("array_2[1]: %f\n",    ((float*)(array_2))[1]);
+    printf("array_2.x[2]: %d\n",  ((struct Data*)(array_2))[2].x);
+    printf("array_2.y[2]: %d\n",  ((struct Data*)(array_2))[2].y);
     free(array_2);
     printf("\n");
 
 
     printf("COPY ADDRESSES (int**): \n");
-    int** array_3 = copy_addresses(array, len);
-    printf("array_3[0]: %p\n", array_3[0]);
-    printf("array_3[1]: %p\n", array_3[1]);
-    printf("array_3[2]: %p\n", array_3[2]);
+    void** array_3 = copy_addresses(array, len);
+    printf("array_3[0]: %p\n", (int**)array_3[0]);
+    printf("array_3[1]: %p\n", (float**)array_3[1]);
+    printf("array_3[2]: %p\n", (int**)array_3[2]);
 
-    printf("*(array_3[0]):  %d\n",  *(array_3[0]));
-    printf("*(array_3[1]):  %d\n",  *(array_3[1]));
-    printf("*(array_3[2]):  %d\n\n",  *(array_3[2]));
+    printf("*(array_3[0]):  %d\n",    *(((int**)(array_3))[0]));
+    printf("*(array_3[1]):  %f\n",    *(((float**)(array_3))[1]));
+    printf("*(array_3[2].x):  %d\n",  ((((struct Data**)(array_3))[2])->x));
+    printf("*(array_3[2].y):  %d\n",  ((((struct Data**)(array_3))[2])->y));
 
     // change a b c
     a = 42;
-    b = 777;
-    c = 1024;
+    b = 777.7f;
+    c.x = 100;
+    c.y = 200;
 
     printf("AFTER CHANGING: \n\n");
-    printf("*(array_3[0]):  %d\n",  *(array_3[0]));
-    printf("*(array_3[1]):  %d\n",  *(array_3[1]));
-    printf("*(array_3[2]):  %d\n",  *(array_3[2]));
+   printf("*(array_3[0]):  %d\n",    *(((int**)(array_3))[0]));
+    printf("*(array_3[1]):  %f\n",    *(((float**)(array_3))[1]));
+    printf("*(array_3[2].x):  %d\n",  ((((struct Data**)(array_3))[2])->x));
+    printf("*(array_3[2].y):  %d\n",  ((((struct Data**)(array_3))[2])->y));
     free(array_3);
 
 
