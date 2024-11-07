@@ -1,16 +1,7 @@
 #include <iostream>
 #include <cassert>
 
-class any;
-
-template <typename T>
-T any_cast(const any& rhs);
-
 class any {
-    template <typename T>
-    friend T any_cast(const any& rhs);
-
-
     struct Base {
         virtual Base& get_value() = 0;
         virtual ~Base(){};
@@ -49,8 +40,12 @@ public:
     }
 
     template <typename T>
-    T get_value() {
-        return static_cast<T>(dynamic_cast<any::Derived<T>&>(base->get_value()));
+    T get_value() const {
+        auto derived = dynamic_cast<any::Derived<T>&>(base->get_value());
+        if (!derived) {
+            throw std::bad_cast();
+        }
+        return static_cast<T>(derived);
     }
 
     ~any() {
@@ -60,7 +55,7 @@ public:
 
 template <typename T>
 T any_cast(const any& rhs) {
-    return static_cast<T>(dynamic_cast<any::Derived<T>&>(rhs.base->get_value()));
+    return rhs.get_value<T>();
 }
 
 void* operator new(size_t sz) {
