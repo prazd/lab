@@ -3,13 +3,26 @@
 #include <memory>
 
 class any {
+public:    
     struct Base {
         virtual ~Base(){};
     };
+    static inline constexpr size_t small_type_sz_limit = 8;
 
-    char buffer[16];
-    Base* stack_base;
-    std::unique_ptr<Base> heap_base;
+    // 8 bytes - vtable ptr 
+    // 8 bytes - small type size limit
+    char buffer[small_type_sz_limit + sizeof(Base*)];
+
+    static void stack_deleter(Base* value) {
+        value->~Base();
+    }
+
+    static void heap_deleter(Base* value) {
+        delete value;
+    }
+    
+    using deleter_func = void(*)(Base*);
+    std::unique_ptr<Base, deleter_func> base;
     
     template <typename T>
     struct Derived: public Base {
@@ -19,56 +32,35 @@ class any {
         ~Derived() = default;
     };
 
-public:
     template <typename T>
-    void stack_alloc(const T& value) {
+    Derived<T>* stack_alloc(const T& value) {
         new (buffer) Derived<T>(value);
-        stack_base = reinterpret_cast<Derived<T>*>(buffer);
+        return reinterpret_cast<Derived<T>*>(buffer);
     }
+    
+public:
 
     template <typename T>
-    any(const T& value): stack_base(nullptr), heap_base(nullptr) {
-        if (sizeof(value) <= sizeof(buffer)) {
-            stack_alloc<T>(value);
-        } else {
-            heap_base = std::make_unique<Derived<T>>(value);
-        }
-    }
+    any(const T& value): base(sizeof(value) <= small_type_sz_limit ? 
+    std::unique_ptr<Base, deleter_func>(stack_alloc<T>(value), &stack_deleter) : 
+    std::unique_ptr<Base, deleter_func>(new Derived<T>(value), &heap_deleter)) {}
 
     template <typename T>
     any& operator=(const T& value) {
-        Base* current;
-        if (heap_base) {
-            current = heap_base.get();
-        } else {
-            current = stack_base;
-        }
-        if (auto derived = dynamic_cast<Derived<T>*>(current)) {
+        if (auto derived = dynamic_cast<Derived<T>*>(base.get())) {
             derived->value = value;
             return *this;
-        } else if (sizeof(value) <= sizeof(buffer)){
-            if (heap_base){
-                heap_base = nullptr;
-            } else if (stack_base) {
-                stack_base->~Base();
-            }
-            stack_alloc<T>(value);
+        } else if (sizeof(value) <= small_type_sz_limit){
+            base = std::unique_ptr<Base, deleter_func>(stack_alloc<T>(value), &stack_deleter);
             return *this;
         }
-        stack_base->~Base();
-        heap_base = std::make_unique<Derived<T>>(value);
+        base = std::unique_ptr<Base, deleter_func>(new Derived<T>(value), &heap_deleter);
         return *this;
     }
 
     template <typename T>
     T get_value() const {
-        Base* current;
-        if (heap_base) {
-            current = heap_base.get();
-        } else {
-            current = stack_base;
-        }
-        auto derived = dynamic_cast<any::Derived<T>*>(current);
+        auto derived = dynamic_cast<any::Derived<T>*>(base.get());
         if (!derived) {
             throw std::bad_cast();
         }
@@ -93,6 +85,11 @@ struct Custom {
     long d{40};
 };
 
+struct Custom1 {
+    long x{10};
+    long y{20};
+};
+
 int main() {
     any x = 10;
     assert(any_cast<int>(x) == 10);
@@ -110,4 +107,8 @@ int main() {
     assert(x.get_value<Custom>().y == 20);
     assert(x.get_value<Custom>().z == 30);
     assert(x.get_value<Custom>().d == 40);
+
+    x = Custom1{};
+    assert(x.get_value<Custom1>().x == 10);
+    assert(x.get_value<Custom1>().y == 20);
 }
