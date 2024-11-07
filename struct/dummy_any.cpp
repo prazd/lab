@@ -1,55 +1,43 @@
 #include <iostream>
 #include <cassert>
+#include <memory>
 
 class any {
     struct Base {
-        virtual Base& get_value() = 0;
         virtual ~Base(){};
     };
 
-    Base* base;
+    std::unique_ptr<Base> base;
 
     template <typename T>
     struct Derived: public Base {
         T value;
         Derived(const T& value): value(value) {}
         Derived(T&& value): value(std::move(value)) {}
-        Derived& get_value() override {
-            return *this;
-        }
-        operator T() {
-            return value;
-        }
         ~Derived() = default;
     };
 
 public:
     template <typename T>
-    any(const T& value): base(new Derived<T>(value)) {}
+    any(const T& value): base(std::make_unique<Derived<T>>(value)) {}
 
     template <typename T>
     any& operator=(const T& value) {
-        if (sizeof(value) == sizeof(*base)) {
-            base->~Base();
-            new (base) Derived<T>(value);
-            return *this;
+        if (auto derived = dynamic_cast<Derived<T>*>(base.get())) {
+            derived->value = value;
+        } else {
+            base = std::make_unique<Derived<T>>(value);
         }
-        delete base;
-        base = new Derived<T>(value);
         return *this;
     }
 
     template <typename T>
     T get_value() const {
-        auto derived = dynamic_cast<any::Derived<T>&>(base->get_value());
+        auto derived = dynamic_cast<any::Derived<T>*>(base.get());
         if (!derived) {
             throw std::bad_cast();
         }
-        return static_cast<T>(derived);
-    }
-
-    ~any() {
-       delete base;
+        return derived->value;
     }
 };
 
