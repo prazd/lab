@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.25)
 project(SierpinskiTriangle)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 20)
 
 # include_directories(include)
 
 # Установка флагов компилятора и компоновщика для санитайзеров и отладочной информации
 # set(SANITIZER_FLAGS "-fsanitize=address -fsanitize=undefined -g -O0")
-#set(SANITIZER_FLAGS "-fsanitize=undefined -fsanitize=thread -g -O0")
+set(SANITIZER_FLAGS "-fsanitize=undefined -fsanitize=thread -g -O0")
 # Применение флагов компилятора и компоновщика
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZER_FLAGS}")
