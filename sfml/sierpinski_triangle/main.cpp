@@ -7,8 +7,9 @@
 #include <thread>
 #include <numeric>
 
-auto PointColor = sf::Color::Red;
-auto BackgroundColor = sf::Color::Black;
+const auto POINT_COLOR = sf::Color::Red;
+const auto BACKGROUND_COLOR = sf::Color::Black;
+constexpr float CIRCLE_RADIUS = 2.f;
 
 class Random6Cube {
     static inline std::random_device rd;
@@ -30,8 +31,8 @@ public:
     ShapeGenerator(const sf::CircleShape& p1, const sf::CircleShape& p2, const sf::CircleShape& p3): p1(p1), p2(p2), p3(p3){}
 
     sf::CircleShape gen(const sf::CircleShape& last) {
-        sf::CircleShape result(2.f);
-        result.setFillColor(PointColor);
+        sf::CircleShape result(CIRCLE_RADIUS);
+        result.setFillColor(POINT_COLOR);
 
         const sf::CircleShape* cp = nullptr;
         
@@ -66,7 +67,7 @@ void update_sf_text(std::stringstream& ss, sf::Text& t, Args... args) {
 int main() {
     sf::RenderWindow window(sf::VideoMode(1024, 800), "SierpinskiTriangle");
     sf::RectangleShape background(sf::Vector2f(window.getSize().x, window.getSize().y));
-    background.setFillColor(BackgroundColor);
+    background.setFillColor(BACKGROUND_COLOR);
 
     sf::Font font;
     const std::string font_path = "/Users/prazd/Desktop/books/cpp/TimberSFML/fonts/KOMIKAP_.ttf";
@@ -80,43 +81,43 @@ int main() {
     cube_number_text.setCharacterSize(24);
     cube_number_text.setString("Cube: 0");
     cube_number_text.setPosition(0.f, 0.f);
-    cube_number_text.setFillColor(PointColor);
+    cube_number_text.setFillColor(POINT_COLOR);
 
     sf::Text point_count_text;
     point_count_text.setFont(font);
     point_count_text.setCharacterSize(24);
     point_count_text.setPosition(window.getSize().x - 300.f, 0.f);
-    point_count_text.setFillColor(PointColor);
+    point_count_text.setFillColor(POINT_COLOR);
 
     sf::Text mode_text;
     mode_text.setFont(font);
     mode_text.setCharacterSize(24);
     mode_text.setPosition(window.getSize().x - 600.f, 0.f);
-    mode_text.setFillColor(PointColor);
+    mode_text.setFillColor(POINT_COLOR);
 
     sf::Text fps_text;
     fps_text.setFont(font);
     fps_text.setCharacterSize(24);
-    fps_text.setFillColor(PointColor);
+    fps_text.setFillColor(POINT_COLOR);
     fps_text.setPosition(window.getSize().x/2, window.getSize().y/2 + 200.f);
     
 
     // triangle
-    sf::CircleShape p1(2.f);
-    p1.setFillColor(PointColor);
+    sf::CircleShape p1(CIRCLE_RADIUS);
+    p1.setFillColor(POINT_COLOR);
     p1.setPosition(window.getSize().x/2, 50.f);
 
-    sf::CircleShape p2(2.f);
-    p2.setFillColor(PointColor);
+    sf::CircleShape p2(CIRCLE_RADIUS);
+    p2.setFillColor(POINT_COLOR);
     p2.setPosition(50.f, (window.getSize().y/2)+100.f);
 
-    sf::CircleShape p3(2.f);
-    p3.setFillColor(PointColor);
+    sf::CircleShape p3(CIRCLE_RADIUS);
+    p3.setFillColor(POINT_COLOR);
     p3.setPosition((window.getSize().x)-50.f, (window.getSize().y/2)+100.f);
 
     // init point
-    sf::CircleShape init_point(2.f);
-    init_point.setFillColor(PointColor);
+    sf::CircleShape init_point(CIRCLE_RADIUS);
+    init_point.setFillColor(POINT_COLOR);
     init_point.setPosition(window.getSize().x / 2, window.getSize().y / 2);
 
     std::vector<sf::CircleShape> vec_shapes{p1,p2,p3,init_point};
@@ -163,7 +164,7 @@ int main() {
         window.draw(mode_text);
         window.draw(fps_text);
 
-        for(auto& el: vec_shapes)
+        for(const auto& el: vec_shapes)
             window.draw(el);
        
         window.display();
