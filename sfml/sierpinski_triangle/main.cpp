@@ -7,18 +7,16 @@
 #include <numeric>
 
 class Random6Cube {
-    std::random_device rd;
-    std::mt19937 gen;
-    std::uniform_int_distribution<int> dis;
+    static inline std::random_device rd;
+    static inline std::mt19937 gen;
+    static inline std::uniform_int_distribution<int> dis = std::uniform_int_distribution<int>(1,6);
 public:
-    Random6Cube(): dis(1,6) {}
-    int get() {
+    static int get() {
         return dis(gen);
     }
 };
 
 class ShapeGenerator {
-    Random6Cube rc;
     sf::CircleShape p1;
     sf::CircleShape p2;
     sf::CircleShape p3;
@@ -27,7 +25,7 @@ public:
     ShapeGenerator(const sf::CircleShape& p1, const sf::CircleShape& p2, const sf::CircleShape& p3): 
     p1(p1), p2(p2), p3(p3){}
     sf::CircleShape gen(const sf::CircleShape& last) {
-        current_num = rc.get();
+        current_num = Random6Cube::get();
         sf::CircleShape result(2.f);
         result.setFillColor(sf::Color::Red);
         if (current_num == 1 || current_num == 2) {
@@ -43,10 +41,6 @@ public:
         return current_num;
     }
 };
-
-void update_cube_text(sf::Text& s, Random6Cube& rc) {
-    
-}
 
 int main() {
     sf::RenderWindow window(sf::VideoMode(1024, 800), "SierpinskiTriangle");
@@ -119,8 +113,6 @@ int main() {
         for(auto& el: vec_shapes)
             window.draw(el);
 
-        // debug only
-        // std::this_thread::sleep_for(std::chrono::milliseco   nds(1000));
         window.draw(current_number_text);
         std::cout << "Vec size:" << vec_shapes.size() << std::endl;
         window.display();
