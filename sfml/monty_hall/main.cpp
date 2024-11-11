@@ -8,9 +8,9 @@
 const auto P1_COLOR = sf::Color::Blue;
 const auto P2_COLOR = sf::Color::Red;
 const auto BACKGROUND_COLOR = sf::Color::Black;
-constexpr size_t round_counts = 1000'000;
+constexpr size_t round_counts = 100'000;
 constexpr size_t scale = 150;
-constexpr bool graphic_mode = false;
+constexpr bool graphic_mode = true;
 
 class MontyHall {
     std::random_device rd;
