@@ -34,5 +34,10 @@ int main() {
     is.read(buffer.data(), file_size);
     auto it = find_byte(buffer.begin(), 0xff, 0xc4);
     auto ite = find_byte(it+2, 0xff, 0xc4);
-    print_bytes(it, ite+2);
+
+    short res = 0;
+    auto ptr = reinterpret_cast<unsigned char*>(&res);
+    ptr[0] = *(it + 3);
+    ptr[1] = *(it + 2);
+    std::cout << res;
 }
