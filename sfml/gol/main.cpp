@@ -1,7 +1,9 @@
 #include <vector>
 #include <iostream>
 #include <SFML/Graphics.hpp>
+#include <SFML/Window/Mouse.hpp>
 #include <thread>
+#include <algorithm>
 
 class Cell {
 private:
@@ -59,6 +61,26 @@ public:
             }
             current_x = 0;
             current_y += 10.f;
+        }
+    }
+
+    Cell* getCellByPos(float x, float y) {
+        for(auto l: cells) {
+            auto res = std::find_if(l, l+width, [x, y](auto& cell){
+                return cell.rs.getGlobalBounds().contains(x,y);
+            });
+            if (res != l+width) {
+                return res;
+            }
+        }
+        return nullptr;
+    }
+
+    void flush() {
+        for(auto l: cells) {
+            for(auto it = l, ite = l+width;it!=ite;++it) {
+                (*it).set_is_alive(false);
+            }
         }
     }
 
@@ -213,77 +235,6 @@ public:
         board.update_state(4, 35, true);
         board.update_state(4, 36, true);
     }
-
-    void chaos() {
-        board.update_state(1, 36, true);
-        board.update_state(2, 36, true);
-        board.update_state(3, 36, true);
-        board.update_state(4, 36, true);
-        board.update_state(5, 36, true);
-        board.update_state(6, 36, true);
-        board.update_state(7, 36, true);
-        board.update_state(8, 36, true);
-        board.update_state(9, 36, true);
-        board.update_state(10, 36, true);
-
-        board.update_state(1, 24, true);
-        board.update_state(2, 24, true);
-        board.update_state(3, 24, true);
-        board.update_state(4, 24, true);
-        board.update_state(5, 24, true);
-        board.update_state(6, 24, true);
-        board.update_state(7, 24, true);
-        board.update_state(8, 24, true);
-        board.update_state(9, 24, true);
-        board.update_state(10, 24, true);
-
-        board.update_state(3, 12, true);
-        board.update_state(4, 12, true);
-        board.update_state(5, 12, true);
-        board.update_state(6, 12, true);
-        board.update_state(7, 12, true);
-        board.update_state(8, 12, true);
-        board.update_state(9, 12, true);
-        board.update_state(10, 12, true);
-
-        board.update_state(5, 0, true);
-        board.update_state(6, 0, true);
-        board.update_state(7, 0, true);
-        board.update_state(8, 0, true);
-        board.update_state(9, 0, true);
-        board.update_state(10, 0, true);
-
-        board.update_state(1, 22, true);
-        board.update_state(2, 22, true);
-        board.update_state(6, 22, true);
-        board.update_state(7, 22, true);
-
-        board.update_state(2, 12, true);
-        board.update_state(6, 12, true);
-
-        board.update_state(3, 13, true);
-        board.update_state(4, 13, true);
-        board.update_state(5, 13, true);
-        board.update_state(6, 13, true);
-        board.update_state(7, 13, true);
-    }
-
-
-    void next_gen() {
-        board.next_gen();
-    }
-
-    void start() {
-        chaos();
-        std::cout << "\x1B[2J\x1B[H";
-        while(board.count_alive_cells() != 0){
-            board.next_gen();
-            board.print();
-            std::this_thread::sleep_for(std::chrono::milliseconds (60));
-        }
-        std::cout << "------------------------\n";
-        std::cout << "All cells is dead";
-    }
 };
 
 const auto POINT_COLOR = sf::Color::Red;
@@ -295,15 +246,45 @@ void graphic() {
     background.setFillColor(BACKGROUND_COLOR);
 
     Game<80, 150, true> g;
-    g.glider_gun();
+    // g.glider_gun();
+
+    window.setFramerateLimit(50);
+
+    bool running = false;
+
     while(window.isOpen()) {
         sf::Event event;
         while(window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) {
                 window.close();
             }
+            if (event.type == sf::Event::KeyReleased) {
+                if (event.key.code == sf::Keyboard::Num1) {
+                    window.setFramerateLimit(1);
+                } else if (event.key.code == sf::Keyboard::Num2) {
+                    window.setFramerateLimit(10);
+                } else if (event.key.code == sf::Keyboard::Num3) {
+                    window.setFramerateLimit(60);
+                } else if (event.key.code == sf::Keyboard::P) {
+                    running = running ? false : true;
+                } else if (event.key.code == sf::Keyboard::F) {
+                   g.board.flush();  
+                }
+            }
         }
-        g.next_gen();
+
+        if (running){
+            g.board.next_gen();         
+        }
+
+        if (sf::Mouse::isButtonPressed(sf::Mouse::Left)){
+            auto m_pos = sf::Mouse::getPosition(window);
+            auto cell = g.board.getCellByPos(m_pos.x, m_pos.y);
+            if (cell) {
+                cell->set_is_alive(true);
+            }
+        }
+
         window.clear();
         window.draw(background);
         for(int i = 0;i < 80;++i){
