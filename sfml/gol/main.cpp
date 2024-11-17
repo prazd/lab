@@ -96,7 +96,7 @@ public:
     }
 
     void update_state(int hIndex, int wIndex, bool state) {
-        if (hIndex >= 0 && hIndex <= height && wIndex >= 0 && wIndex <= width){
+        if (hIndex >= 0 && hIndex < height && wIndex >= 0 && wIndex < width){
             cells[hIndex][wIndex].set_is_alive(state);
         } else {
             std::cout << "update_state failed" << std::endl;
@@ -159,16 +159,14 @@ void Cell::check_for_life() {
     // в пустой (мёртвой) клетке, с которой соседствуют три живые клетки, зарождается жизнь;
     // если у живой клетки есть две или три живые соседки, то эта клетка продолжает жить; в противном случае (если живых соседей меньше двух или больше трёх) клетка умирает («от одиночества» или «от перенаселённости»)
     if (!alive && alive_neighbors == 3) {
-        alive = true;
-        rs.setFillColor(sf::Color::White);
+        set_is_alive(true);
         return;
     }
     if (alive && (alive_neighbors == 3 || alive_neighbors == 2)) {
         return;
     }
     if (alive && (alive_neighbors < 2 || alive_neighbors > 3)){
-        rs.setFillColor(sf::Color::Black);
-        alive = false;
+        set_is_alive(false);
         return;
     }
 }
