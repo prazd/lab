@@ -5,6 +5,8 @@
 #include <thread>
 #include <algorithm>
 
+constexpr float cell_size = 10.f;
+
 class Cell {
 private:
     bool alive;
@@ -30,11 +32,11 @@ public:
     Cell* last_cell = nullptr;
     size_t index = 0;
 
-    constexpr BoardStatic() {
+    BoardStatic() {
         seed();
     }
 
-    constexpr void seed() {
+    void seed() {
         
         float current_x = 0.f;
         float current_y = 0.f;
@@ -51,7 +53,7 @@ public:
                 cells[i][j].rs.setOutlineThickness(1.f);
                 cells[i][j].rs.setOutlineColor(sf::Color::White);
 
-                current_x += 10.f;
+                current_x += cell_size;
                 cells[i][j].neighbours[0] = &cells[i][(j - 1 + width) % width];
                 cells[i][j].neighbours[1] = &cells[i][(j + 1) % width];
                 cells[i][j].neighbours[2] = &cells[(i - 1 + height) % height][j];
@@ -63,9 +65,10 @@ public:
                 cells[i][j].neighbours[7] = &cells[(i + 1) % height][(j + 1) % width];
             }
             current_x = 0;
-            current_y += 10.f;
+            current_y += cell_size;
         }
     }
+    
 
     Cell* getCellByPos(float x, float y) {
         // cache
@@ -225,16 +228,20 @@ public:
 const auto BACKGROUND_COLOR = sf::Color::White;
 
 void graphic() {
-    sf::RenderWindow window(sf::VideoMode(1024, 800), "GoL");
+    constexpr size_t height = 80;
+    constexpr size_t width = 150;
+    Game<height, width> g;
+
+    sf::RenderWindow window(sf::VideoMode(width*cell_size, height*cell_size), "GoL");
     sf::RectangleShape background(sf::Vector2f(window.getSize().x, window.getSize().y));
     background.setFillColor(BACKGROUND_COLOR);
-
-    Game<80, 150> g;
 
     window.setFramerateLimit(50);
 
     bool running = false;
     bool set_alive = true;
+
+    size_t last_fps = 1;
 
     while(window.isOpen()) {
         sf::Event event;
@@ -245,12 +252,15 @@ void graphic() {
             if (event.type == sf::Event::KeyReleased) {
                 if (event.key.code == sf::Keyboard::Num1) {
                     window.setFramerateLimit(1);
+                    last_fps = 1;
                 } else if (event.key.code == sf::Keyboard::Num2) {
                     window.setFramerateLimit(10);
+                    last_fps = 10;
                 } else if (event.key.code == sf::Keyboard::Num3) {
                     window.setFramerateLimit(60);
+                    last_fps = 60;
                 } else if (event.key.code == sf::Keyboard::P) {
-                    running = running ? false : true;
+                    running = running ? (window.setFramerateLimit(60), false) : (window.setFramerateLimit(last_fps), true);
                 } else if (event.key.code == sf::Keyboard::F) {
                    g.board.flush();  
                 } else if (event.key.code == sf::Keyboard::M) {
