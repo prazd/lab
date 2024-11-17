@@ -22,20 +22,23 @@ public:
 };
 
 
-template <size_t height, size_t width, bool infinite>
+template <size_t height, size_t width>
 class BoardStatic {
 public:    
     static inline Cell cells[height][width];
+    static inline std::array<Cell*, 20> cache;
+    Cell* last_cell = nullptr;
+    size_t index = 0;
 
     constexpr BoardStatic() {
-        if constexpr (infinite) {
-            seed_infinite();
-        }
+        seed();
     }
-    constexpr void seed_infinite() {
+
+    constexpr void seed() {
+        
         float current_x = 0.f;
         float current_y = 0.f;
-        // auto current_color = sf::Color::Green;
+
         for (int i = 0; i < height; i++) {
             for (int j = 0; j < width; j++) {
                 // [ [ 0 § 0 0 0 0 0 ] ]
@@ -65,56 +68,31 @@ public:
     }
 
     Cell* getCellByPos(float x, float y) {
-        for(auto l: cells) {
-            auto res = std::find_if(l, l+width, [x, y](auto& cell){
-                return cell.rs.getGlobalBounds().contains(x,y);
-            });
-            if (res != l+width) {
-                return res;
-            }
+        // cache
+        if (last_cell && last_cell->rs.getGlobalBounds().contains(x, y)) {
+            return last_cell;
         }
-        return nullptr;
-    }
+        auto c_cell = std::find_if(cache.begin(), cache.end(), [x, y](auto value){
+            return value != nullptr ? value->rs.getGlobalBounds().contains(x, y) : false;
+        });
 
-    void flush() {
-        for(auto l: cells) {
-            for(auto it = l, ite = l+width;it!=ite;++it) {
-                (*it).set_is_alive(false);
-            }
-        }
-    }
-
-    // constexpr void seed() {
-    //     for (int i = 0; i < height; i++) {
-    //         for (int j = 0; j < width; j++) {
-    //             // [ [ 0 § 0 0 0 0 0 ] ]
-    //             // [ [ 0 0 0 0 0 0 0 ] ]
-    //             // [ [ 0 0 0 0 0 0 0 ] ]
-
-    //             cells[i][j].neighbours[0] = j > 0 ? &cells[i][j - 1] : nullptr;
-    //             cells[i][j].neighbours[1] = j < width - 1 ? &cells[i][j + 1] : nullptr;
-    //             cells[i][j].neighbours[2] = i > 0 ? &cells[i - 1][j] : nullptr;
-    //             cells[i][j].neighbours[3] = i < height - 1 ? &cells[i + 1][j] : nullptr;
-
-
-    //             cells[i][j].neighbours[4] = i > 0 && j > 0 ? &cells[i - 1][j - 1] : nullptr;
-    //             cells[i][j].neighbours[5] = i > 0 && j < width - 1 ? &cells[i - 1][j + 1] : nullptr;
-    //             cells[i][j].neighbours[6] = i < height - 1 && j > 0 ? &cells[i + 1][j - 1] : nullptr;
-    //             cells[i][j].neighbours[7] = i < height - 1 && j < width - 1 ? &cells[i + 1][j + 1] : nullptr;
-    //         }
-    //     }
-    // }
-
-    int count_alive_cells() {
-        int counter = 0;
-        for (int i = 0; i < height; i++) {
-            for (int j = 0; j < width; j++) {
-                if (cells[i][j].is_alive()) {
-                    ++counter;
+        if (c_cell != cache.end()) {
+            last_cell = *c_cell;
+            return last_cell;
+        } else {
+            for(auto l: cells) {
+                auto res = std::find_if(l, l+width, [x, y](auto& cell){
+                    return cell.rs.getGlobalBounds().contains(x,y);
+                });
+                if (res != l+width) {
+                    index %= cache.size();
+                    cache[index++] = res;
+                    last_cell = res;
+                    return res;
                 }
             }
-        }
-        return counter;
+        } 
+        return nullptr;
     }
 
     void update_state(int hIndex, int wIndex, bool state) {
@@ -138,6 +116,22 @@ public:
             }
         }
     }
+
+    void flush() {
+        for(auto l: cells) {
+            for(auto it = l, ite = l+width;it!=ite;++it) {
+                it->set_is_alive(false);
+            }
+        }
+    }
+
+    constexpr size_t get_height() const {
+        return height;
+    }
+
+    constexpr size_t get_width() const {
+        return width;
+    }
 };
 
 void Cell::set_is_alive(bool s) {
@@ -160,6 +154,7 @@ void Cell::count_alive_neighbors() {
     }
     alive_neighbors = res;
 }
+
 void Cell::check_for_life() {
     // в пустой (мёртвой) клетке, с которой соседствуют три живые клетки, зарождается жизнь;
     // если у живой клетки есть две или три живые соседки, то эта клетка продолжает жить; в противном случае (если живых соседей меньше двух или больше трёх) клетка умирает («от одиночества» или «от перенаселённости»)
@@ -179,20 +174,12 @@ void Cell::check_for_life() {
 }
 
 
-template <size_t height, size_t width, bool infinite>
+template <size_t height, size_t width>
 class Game {
 public:
-    BoardStatic<height, width, infinite> board;
+    BoardStatic<height, width> board;
 
-    void glider() {
-        board.update_state(1, 2, true);
-        board.update_state(2, 3, true);
-        board.update_state(3, 1, true);
-        board.update_state(3, 2, true);
-        board.update_state(3, 3, true);
-    }
     void glider_gun() {
-        // Устанавливаем начальное состояние для глайдер-пушки
         board.update_state(5, 1, true);
         board.update_state(5, 2, true);
         board.update_state(6, 1, true);
@@ -237,7 +224,6 @@ public:
     }
 };
 
-const auto POINT_COLOR = sf::Color::Red;
 const auto BACKGROUND_COLOR = sf::Color::White;
 
 void graphic() {
@@ -245,12 +231,12 @@ void graphic() {
     sf::RectangleShape background(sf::Vector2f(window.getSize().x, window.getSize().y));
     background.setFillColor(BACKGROUND_COLOR);
 
-    Game<80, 150, true> g;
-    // g.glider_gun();
+    Game<80, 150> g;
 
     window.setFramerateLimit(50);
 
     bool running = false;
+    bool set_alive = true;
 
     while(window.isOpen()) {
         sf::Event event;
@@ -269,6 +255,8 @@ void graphic() {
                     running = running ? false : true;
                 } else if (event.key.code == sf::Keyboard::F) {
                    g.board.flush();  
+                } else if (event.key.code == sf::Keyboard::M) {
+                   set_alive = set_alive ? false : true;
                 }
             }
         }
@@ -279,23 +267,24 @@ void graphic() {
 
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)){
             auto m_pos = sf::Mouse::getPosition(window);
-            auto cell = g.board.getCellByPos(m_pos.x, m_pos.y);
-            if (cell) {
-                cell->set_is_alive(true);
+            if (background.getGlobalBounds().contains(m_pos.x, m_pos.y)) {
+                auto cell = g.board.getCellByPos(m_pos.x, m_pos.y);
+                if (cell) {
+                    cell->set_is_alive(set_alive);
+                }
             }
         }
 
         window.clear();
         window.draw(background);
-        for(int i = 0;i < 80;++i){
-            for(int j = 0; j < 150; ++j) {
+        for(int i = 0;i < g.board.get_height(); ++i){
+            for(int j = 0; j < g.board.get_width(); ++j) {
                 window.draw(g.board.cells[i][j].rs);
             }
         }
         window.display();
     }
 }
-
 
 int main() {
     graphic();
