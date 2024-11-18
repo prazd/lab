@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(GoL)
+project(HighLife)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -14,10 +14,11 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZER_FLAGS}")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${SANITIZER_FLAGS}")
 find_package(SFML 2.6.1 COMPONENTS system window graphics network audio REQUIRED)
 
-add_executable(GoL
+include_directories(../automata)
+add_executable(HighLife
         main.cpp)
 
-target_include_directories(GoL PRIVATE /System/Library/Frameworks/OpenGL.framework/Headers)
+target_include_directories(HighLife PRIVATE /System/Library/Frameworks/OpenGL.framework/Headers)
 
-target_link_libraries(GoL sfml-system sfml-window sfml-graphics sfml-network sfml-audio)
-target_link_libraries(GoL "-framework OpenGL" "-framework GLUT")
+target_link_libraries(HighLife sfml-system sfml-window sfml-graphics sfml-network sfml-audio)
+target_link_libraries(HighLife "-framework OpenGL" "-framework GLUT")
