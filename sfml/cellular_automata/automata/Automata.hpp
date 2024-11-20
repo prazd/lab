@@ -4,19 +4,8 @@
 #include <SFML/Window/Mouse.hpp>
 #include <algorithm>
 
-
 // TODO: refactor (generalize)
 namespace automata {
-    template <typename T>
-    concept CellNeighbourhood = requires(T cell) {
-        { cell.neighbours } -> std::convertible_to<std::array<T*, 8>>;
-    };
-
-    template <typename T>
-    concept CellDrawable = requires(T cell) {
-        { cell.rs } -> std::convertible_to<sf::RectangleShape>;
-    };
-
     template <typename T>
     concept CellLifecycle = requires(T cell) {
         { cell.prepare() } -> std::same_as<void>;
@@ -27,36 +16,40 @@ namespace automata {
         { T::get_default_state() } -> std::same_as<typename T::State>;
     };
 
-    template <typename T>
-    concept CellConcept = CellNeighbourhood<T> && CellDrawable<T> && CellLifecycle<T>;
+    struct N8Init{
+        template <size_t width, size_t height>
+        void operator()(auto(&cells)[height][width]){
+          for (int i = 0; i < height; i++) {
+            for (int j = 0; j < width; j++) {
+                // [ [ 0 § 0 0 0 0 0 ] ]
+                // [ [ 0 0 0 0 0 0 0 ] ]
+                // [ [ 0 0 0 0 0 0 0 ] ]
+                cells[i][j].neighbours[0] = &cells[i][(j - 1 + width) % width];
+                cells[i][j].neighbours[1] = &cells[i][(j + 1) % width];
+                cells[i][j].neighbours[2] = &cells[(i - 1 + height) % height][j];
+                cells[i][j].neighbours[3] = &cells[(i + 1) % height][j];
 
-    template <size_t height, size_t width, typename Cell>
+                cells[i][j].neighbours[4] = &cells[(i - 1 + height) % height][(j - 1 + width) % width];
+                cells[i][j].neighbours[5] = &cells[(i - 1 + height) % height][(j + 1) % width];
+                cells[i][j].neighbours[6] = &cells[(i + 1) % height][(j - 1 + width) % width];
+                cells[i][j].neighbours[7] = &cells[(i + 1) % height][(j + 1) % width];
+            }
+         }
+        }
+    };
+
+    template <size_t height, size_t width, CellLifecycle Cell, typename InitFuncObj>
     class Field {
     public:
+        [[no_unique_address]] InitFuncObj init;
         static inline Cell cells[height][width];
         static inline std::array<Cell*, 20> cache;
-        
         Cell* last_cell = nullptr;
-        
         size_t index = 0;
+        
 
         Field() {
-            for (int i = 0; i < height; i++) {
-                for (int j = 0; j < width; j++) {
-                    // [ [ 0 § 0 0 0 0 0 ] ]
-                    // [ [ 0 0 0 0 0 0 0 ] ]
-                    // [ [ 0 0 0 0 0 0 0 ] ]
-                    cells[i][j].neighbours[0] = &cells[i][(j - 1 + width) % width];
-                    cells[i][j].neighbours[1] = &cells[i][(j + 1) % width];
-                    cells[i][j].neighbours[2] = &cells[(i - 1 + height) % height][j];
-                    cells[i][j].neighbours[3] = &cells[(i + 1) % height][j];
-
-                    cells[i][j].neighbours[4] = &cells[(i - 1 + height) % height][(j - 1 + width) % width];
-                    cells[i][j].neighbours[5] = &cells[(i - 1 + height) % height][(j + 1) % width];
-                    cells[i][j].neighbours[6] = &cells[(i + 1) % height][(j - 1 + width) % width];
-                    cells[i][j].neighbours[7] = &cells[(i + 1) % height][(j + 1) % width];
-                }
-            }
+            init(cells);
         }
 
         Cell* getCellByPos(float x, float y) {
@@ -121,6 +114,7 @@ namespace automata {
         static inline const float cell_size = 10.f;
         
         Field field;
+        [[no_unique_address]] SwitchStateFunc switch_func;
 
         SFMLVisualizer() {
             float current_x = 0.f;
@@ -139,7 +133,7 @@ namespace automata {
             }
         }
 
-        void display(SwitchStateFunc switch_func) {
+        void display() {
             sf::RenderWindow window(sf::VideoMode(field.get_width()*cell_size, field.get_height()*cell_size), "GoL");
             sf::RectangleShape background(sf::Vector2f(window.getSize().x, window.getSize().y));
             background.setFillColor(BACKGROUND_COLOR);
@@ -150,55 +144,55 @@ namespace automata {
             auto state_to_set = field.get_default_state();
             size_t last_fps = 1;
 
-                while(window.isOpen()) {
-                sf::Event event;
-                while(window.pollEvent(event)) {
-                    if (event.type == sf::Event::Closed) {
-                        window.close();
-                    }
-                    if (event.type == sf::Event::KeyReleased) {
-                        if (event.key.code == sf::Keyboard::Num1) {
-                            window.setFramerateLimit(1);
-                            last_fps = 1;
-                        } else if (event.key.code == sf::Keyboard::Num2) {
-                            window.setFramerateLimit(10);
-                            last_fps = 10;
-                        } else if (event.key.code == sf::Keyboard::Num3) {
-                            window.setFramerateLimit(60);
-                            last_fps = 60;
-                        } else if (event.key.code == sf::Keyboard::P) {
-                            running = running ? (window.setFramerateLimit(100), false) : (window.setFramerateLimit(last_fps), true);
-                        } else if (event.key.code == sf::Keyboard::F) {
-                            field.flush();
-                        } else if (event.key.code == sf::Keyboard::M) {
-                            state_to_set = switch_func(state_to_set);
-                        }
-                    }
+            while(window.isOpen()) {
+            sf::Event event;
+            while(window.pollEvent(event)) {
+                if (event.type == sf::Event::Closed) {
+                    window.close();
                 }
-
-                if (running){
-                    field.next_gen();
-                }
-
-                if (sf::Mouse::isButtonPressed(sf::Mouse::Left)){
-                    auto m_pos = sf::Mouse::getPosition(window);
-                    if (background.getGlobalBounds().contains(m_pos.x, m_pos.y)) {
-                        auto cell = field.getCellByPos(m_pos.x, m_pos.y);
-                        if (cell) {
-                            cell->set_state(state_to_set);
-                        }
+                if (event.type == sf::Event::KeyReleased) {
+                    if (event.key.code == sf::Keyboard::Num1) {
+                        window.setFramerateLimit(1);
+                        last_fps = 1;
+                    } else if (event.key.code == sf::Keyboard::Num2) {
+                        window.setFramerateLimit(10);
+                        last_fps = 10;
+                    } else if (event.key.code == sf::Keyboard::Num3) {
+                        window.setFramerateLimit(60);
+                        last_fps = 60;
+                    } else if (event.key.code == sf::Keyboard::P) {
+                        running = running ? (window.setFramerateLimit(100), false) : (window.setFramerateLimit(last_fps), true);
+                    } else if (event.key.code == sf::Keyboard::F) {
+                        field.flush();
+                    } else if (event.key.code == sf::Keyboard::M) {
+                        state_to_set = switch_func(state_to_set);
                     }
                 }
-
-                window.clear();
-                window.draw(background);
-                
-                for(auto& row: field.cells)
-                    for(auto& cell: row)
-                        window.draw(cell.rs);
-
-                window.display();
             }
+
+            if (running){
+                field.next_gen();
+            }
+
+            if (sf::Mouse::isButtonPressed(sf::Mouse::Left)){
+                auto m_pos = sf::Mouse::getPosition(window);
+                if (background.getGlobalBounds().contains(m_pos.x, m_pos.y)) {
+                    auto cell = field.getCellByPos(m_pos.x, m_pos.y);
+                    if (cell) {
+                        cell->set_state(state_to_set);
+                    }
+                }
+            }
+
+            window.clear();
+            window.draw(background);
+            
+            for(auto& row: field.cells)
+                for(auto& cell: row)
+                    window.draw(cell.rs);
+
+            window.display();
+        }
         }
         };
 };

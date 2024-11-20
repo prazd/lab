@@ -51,7 +51,6 @@ void HLCell::next() {
     // Правила HighLife:
     // Клетка остаётся живой, если у неё 2 или 3 живых соседа (то же, что в Game of Life).
     // Пустая клетка становится живой (рождается), если у неё 6 живых соседей (в Game of Life рождение происходит при 3 живых соседях).
-
     if (state == State::Dead && (alive_neighbors == 6 || alive_neighbors == 3)) {
         set_state(State::Alive);
         return;
@@ -68,9 +67,10 @@ void HighLife() {
     constexpr size_t width = 150;
     auto custom_func = [](HLCell::State s){return s == HLCell::State::Alive ? HLCell::State::Dead : HLCell::State::Alive;};
     automata::SFMLVisualizer<
-        automata::Field<height, width, HLCell>, 
+        automata::Field<height, width, HLCell, automata::N8Init>,
         decltype(custom_func)> v;    
-    v.display(custom_func);
+    
+    v.display();
 }
 
 int main() {

@@ -33,6 +33,7 @@ void GoLCell::set_state(State s) {
         rs.setFillColor(sf::Color::Black);
     }
 }
+
 GoLCell::State GoLCell::get_state() const {
     return state;
 }
@@ -65,9 +66,10 @@ void GameOfLife() {
     constexpr size_t width = 150;
     auto custom_func = [](GoLCell::State s){return s == GoLCell::State::Alive ? GoLCell::State::Dead : GoLCell::State::Alive;};
     automata::SFMLVisualizer<
-        automata::Field<height, width, GoLCell>, 
-        decltype(custom_func)> v;    
-    v.display(custom_func);
+        automata::Field<height, width, GoLCell, automata::N8Init>,
+        decltype(custom_func)> v;
+        
+    v.display();
 }
 
 int main() {

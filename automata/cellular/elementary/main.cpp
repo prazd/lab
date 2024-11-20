@@ -1,28 +1,27 @@
 #include <iostream>
 #include <map>
 
-// Rule90 : 01011010
-//  1       1      1   ->    0
-//  1       1      0   ->    1
-//  1       0      1   ->    0
-//  1       0      0   ->    1
-//  0       1      1   ->    1
-//  0       1      0   ->    0
-//  0       0      1   ->    1
-//  0       0      0   ->    0
+// Rule 90  : 01011010
+// Rule 30  : 00011110
+// Rule 54  : 00111010
+// Rule 110 : 00111010
 
-std::unordered_map<std::string, char> r90 = {
-    {"111", '0'},
-    {"110", '1'},
-    {"101", '0'},
-    {"100", '1'},
-    {"011", '1'},
-    {"010", '0'},
-    {"001", '1'},
-    {"000", '0'},
-};
+std::unordered_map<std::string, char> mgen(unsigned char rule) {
+    auto binval = std::bitset<8>(rule).to_string();
+    return {
+        {"111", binval[0]},
+        {"110", binval[1]},
+        {"101", binval[2]},
+        {"100", binval[3]},
+        {"011", binval[4]},
+        {"010", binval[5]},
+        {"001", binval[6]},
+        {"000", binval[7]},
+    }; 
+}
 
-void drawR90(size_t field, size_t itercount) {
+template <typename CellMap>
+void draw(CellMap&& cm, size_t field, size_t itercount) {
     std::string gen;
 
     // init
@@ -46,12 +45,12 @@ void drawR90(size_t field, size_t itercount) {
             key += gen[j];
             key += gen[(j + gen.size() + 1) % gen.size()]; // right n
 
-            tmp += r90[key];
+            tmp += cm[key];
         }
         gen = std::move(tmp);
     }
 }
 
 int main() {
-    drawR90(200, 300);
+    draw(mgen(30), 200, 300);
 }
