@@ -16,9 +16,51 @@ namespace automata {
         { T::get_default_state() } -> std::same_as<typename T::State>;
     };
 
+    template <size_t n, typename Cell>
+    struct BaseCell {
+        std::array<Cell*, n> neighbours;
+    };
+
+    template <size_t n, typename Cell>
+    struct VisualSFMLCell: BaseCell<n, Cell> {
+        sf::RectangleShape rs;
+    };
+
+    struct GoLCell: automata::VisualSFMLCell<8, GoLCell> {
+    size_t alive_neighbors;
+    enum class State: char {
+        Alive,
+        Dead
+    } state = State::Dead;
+    public:
+        void set_state(State s){state = s; rs.setFillColor(state == State::Alive ? (sf::Color::White):(sf::Color::Black));};
+        State get_state(){ return state; };
+        void off(){ set_state(State::Dead);};
+        static State get_default_state(){return State::Alive;};
+        void prepare(){
+            size_t res{};
+                for (auto el: neighbours) {
+                    if (el != nullptr && el->get_state() == State::Alive){
+                    ++res;
+                }
+            }
+            alive_neighbors = res;
+        }
+        void next(){
+            if (state == State::Dead && alive_neighbors == 3) {
+                set_state(State::Alive);
+                return;
+            }
+            if (state == State::Alive && (alive_neighbors < 2 || alive_neighbors > 3)){
+                set_state(State::Dead);
+                return;
+            }
+        }
+    };
+
     struct N8Init{
         template <size_t width, size_t height>
-        void operator()(auto(&cells)[height][width]){
+        void operator()(auto (&cells) [height][width]){
           for (int i = 0; i < height; i++) {
             for (int j = 0; j < width; j++) {
                 // [ [ 0 § 0 0 0 0 0 ] ]
@@ -34,49 +76,20 @@ namespace automata {
                 cells[i][j].neighbours[6] = &cells[(i + 1) % height][(j - 1 + width) % width];
                 cells[i][j].neighbours[7] = &cells[(i + 1) % height][(j + 1) % width];
             }
-         }
+          }
         }
     };
+
+
 
     template <size_t height, size_t width, CellLifecycle Cell, typename InitFuncObj>
     class Field {
     public:
         [[no_unique_address]] InitFuncObj init;
         static inline Cell cells[height][width];
-        static inline std::array<Cell*, 20> cache;
-        Cell* last_cell = nullptr;
-        size_t index = 0;
-        
 
         Field() {
             init(cells);
-        }
-
-        Cell* getCellByPos(float x, float y) {
-            if (last_cell && last_cell->rs.getGlobalBounds().contains(x, y)) {
-                return last_cell;
-            }
-            auto c_cell = std::find_if(cache.begin(), cache.end(), [x, y](auto value){
-                return value != nullptr ? value->rs.getGlobalBounds().contains(x, y) : false;
-            });
-
-            if (c_cell != cache.end()) {
-                last_cell = *c_cell;
-                return last_cell;
-            } else {
-                for(auto l: cells) {
-                    auto res = std::find_if(l, l+width, [x, y](auto& cell){
-                        return cell.rs.getGlobalBounds().contains(x, y);
-                    });
-                    if (res != l+width) {
-                        index %= cache.size();
-                        cache[index++] = res;
-                        last_cell = res;
-                        return res;
-                    }
-                }
-            } 
-            return nullptr;
         }
 
         void next_gen() {
@@ -108,10 +121,16 @@ namespace automata {
         }
     };
 
-    template <typename Field, typename SwitchStateFunc>
+    template <typename Field,  typename SwitchStateFunc>
     struct SFMLVisualizer{
         static inline auto BACKGROUND_COLOR = sf::Color::White;
         static inline const float cell_size = 10.f;
+
+        using Cell = typename std::remove_extent<typename std::remove_extent<decltype(Field::cells)>::type>::type;
+
+        static inline std::array<Cell*, 20> cache;
+        Cell* last_cell = nullptr;
+        size_t index = 0;
         
         Field field;
         [[no_unique_address]] SwitchStateFunc switch_func;
@@ -133,8 +152,35 @@ namespace automata {
             }
         }
 
+        Cell* get_cell_by_pos(float x, float y) {
+            if (last_cell && last_cell->rs.getGlobalBounds().contains(x, y)) {
+                return last_cell;
+            }
+            auto c_cell = std::find_if(cache.begin(), cache.end(), [x, y](auto value){
+                return value != nullptr ? value->rs.getGlobalBounds().contains(x, y) : false;
+            });
+
+            if (c_cell != cache.end()) {
+                last_cell = *c_cell;
+                return last_cell;
+            } else {
+                for(auto& row: field.cells) {
+                    auto res = std::find_if(std::begin(row), std::end(row), [x, y](auto& cell){
+                        return cell.rs.getGlobalBounds().contains(x, y);
+                    });
+                    if (res != std::end(row)) {
+                        index %= cache.size();
+                        cache[index++] = res;
+                        last_cell = res;
+                        return res;
+                    }
+                }
+            } 
+            return nullptr;
+        }
+
         void display() {
-            sf::RenderWindow window(sf::VideoMode(field.get_width()*cell_size, field.get_height()*cell_size), "GoL");
+            sf::RenderWindow window(sf::VideoMode(field.get_width()*cell_size, field.get_height()*cell_size), "Automaton");
             sf::RectangleShape background(sf::Vector2f(window.getSize().x, window.getSize().y));
             background.setFillColor(BACKGROUND_COLOR);
 
@@ -174,10 +220,10 @@ namespace automata {
                 field.next_gen();
             }
 
-            if (sf::Mouse::isButtonPressed(sf::Mouse::Left)){
+            if (sf::Mouse::isButtonPressed(sf::Mouse::Left) && window.hasFocus()){
                 auto m_pos = sf::Mouse::getPosition(window);
                 if (background.getGlobalBounds().contains(m_pos.x, m_pos.y)) {
-                    auto cell = field.getCellByPos(m_pos.x, m_pos.y);
+                    auto cell = get_cell_by_pos(m_pos.x, m_pos.y);
                     if (cell) {
                         cell->set_state(state_to_set);
                     }
@@ -192,8 +238,8 @@ namespace automata {
                     window.draw(cell.rs);
 
             window.display();
-        }
-        }
+           }
+         }
         };
 };
 #endif
