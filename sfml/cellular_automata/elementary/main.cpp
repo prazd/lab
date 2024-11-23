@@ -1,35 +1,30 @@
 #include <Automata.hpp>
 #include <iostream>
 
-
-
-enum class State: char {
-    One,       
-    Zero        
-} state = State::Zero;
-
-
-struct ElementaryCell: automata::VisualSFMLCell<2, ElementaryCell> {
+template <unsigned char rule = 90>
+struct ElementaryCell: automata::VisualSFMLCell<2, ElementaryCell<rule>> {
+    
     enum class State: char {
         One,       
         Zero        
     } state = State::Zero;
 
-    static std::unordered_map<std::string, State> mgen(unsigned char rule) {
-    auto binval = std::bitset<8>(rule).to_string();
-    return {
-        // 0b01011010
-        {"111", binval[0] == '0' ? State::Zero : State::One}, // 0
-        {"110", binval[1] == '0' ? State::Zero : State::One}, // 0
-        {"101", binval[2] == '0' ? State::Zero : State::One}, // 0
-        {"100", binval[3] == '0' ? State::Zero : State::One}, // 0
-        {"011", binval[4] == '0' ? State::Zero : State::One}, // 0
-        {"010", binval[5] == '0' ? State::Zero : State::One}, // 0
-        {"001", binval[6] == '0' ? State::Zero : State::One}, // 0
-        {"000", binval[7] == '0' ? State::Zero : State::One}, // 0
-    }; 
+    static std::unordered_map<std::string, State> mgen() {
+        auto binval = std::bitset<CHAR_BIT>(rule).to_string();
+        auto set_state = [](char s){return s == '0' ? State::Zero : State:: One;};
+        return {
+            {"111", set_state(binval[0])},
+            {"110", set_state(binval[1])},
+            {"101", set_state(binval[2])},
+            {"100", set_state(binval[3])},
+            {"011", set_state(binval[4])},
+            {"010", set_state(binval[5])},
+            {"001", set_state(binval[6])},
+            {"000", set_state(binval[7])},
+        }; 
     }
-    static inline std::unordered_map<std::string, State> rule = mgen(88);
+
+    static inline std::unordered_map<std::string, State> rmap = mgen();
 
     State next_state = State::Zero;
     
@@ -43,11 +38,11 @@ struct ElementaryCell: automata::VisualSFMLCell<2, ElementaryCell> {
     void set_state(State s) {
         state = s;
         if (state == State::Zero) {
-            rs.setFillColor(sf::Color::Black);
-            rs.setOutlineColor(sf::Color::White);
+            this->rs.setFillColor(sf::Color::Black);
+            this->rs.setOutlineColor(sf::Color::White);
         } else {
-            rs.setFillColor(sf::Color::White);
-            rs.setOutlineColor(sf::Color::Black);
+            this->rs.setFillColor(sf::Color::White);
+            this->rs.setOutlineColor(sf::Color::Black);
         }
     }
 
@@ -57,17 +52,16 @@ struct ElementaryCell: automata::VisualSFMLCell<2, ElementaryCell> {
 
     void prepare() {
         std::string key;
-        key += std::to_string(static_cast<char>(neighbours[0]->state));
+        key += std::to_string(static_cast<char>(this->neighbours[0]->state));
         key += std::to_string(static_cast<char>(state)); 
-        key += std::to_string(static_cast<char>(neighbours[1]->state));
-        next_state = rule[key];
+        key += std::to_string(static_cast<char>(this->neighbours[1]->state));
+        this->next_state = rmap[key];
     }
 
     void next() {
         if (state == State::Zero){
             set_state(next_state);
         }
-        
     }
 
 };
@@ -87,9 +81,13 @@ struct N2Init{
 void Elementary() {
     constexpr size_t height = 80;
     constexpr size_t width = 150;
-    auto custom_func = [](ElementaryCell::State s){return s == ElementaryCell::State::One ? ElementaryCell::State::Zero : ElementaryCell::State::One;};
+    constexpr unsigned char rule = 90;
+
+    using ECell = ElementaryCell<rule>;
+
+    auto custom_func = [](ECell::State s){return s == ECell::State::One ? ECell::State::Zero : ECell::State::One;};
     automata::SFMLVisualizer<
-        automata::Field<height, width, ElementaryCell, N2Init>,
+        automata::Field<height, width, ECell, N2Init>,
         decltype(custom_func)> v;
     v.display();
 }
