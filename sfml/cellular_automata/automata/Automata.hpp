@@ -121,10 +121,10 @@ namespace automata {
         }
     };
 
-    template <typename Field,  typename SwitchStateFunc>
+    template <typename Field,  typename SwitchStateFunc, unsigned int cell_sz = 10>
     struct SFMLVisualizer{
         static inline auto BACKGROUND_COLOR = sf::Color::White;
-        static inline const float cell_size = 10.f;
+        static inline const float cell_size = static_cast<float>(cell_sz);
 
         using Cell = typename std::remove_extent<typename std::remove_extent<decltype(Field::cells)>::type>::type;
 
