@@ -135,16 +135,16 @@ namespace automata {
         Field field;
         [[no_unique_address]] SwitchStateFunc switch_func;
 
-        SFMLVisualizer() {
+        SFMLVisualizer(sf::Color fill = sf::Color::Black, sf::Color outline = sf::Color::White) {
             float current_x = 0.f;
             float current_y = 0.f;
             for(auto& row: field.cells){
                 for(auto& cell: row){
                     cell.rs.setSize(sf::Vector2f(cell_size, cell_size));
                     cell.rs.setPosition(current_x, current_y);
-                    cell.rs.setFillColor(sf::Color::Black);
+                    cell.rs.setFillColor(fill);
                     cell.rs.setOutlineThickness(1.f);
-                    cell.rs.setOutlineColor(sf::Color::White);
+                    cell.rs.setOutlineColor(outline);
                     current_x += cell_size;
                 }
                 current_x = 0;
