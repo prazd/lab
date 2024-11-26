@@ -180,6 +180,6 @@ void run_default() {
 }
 
 int main() {
-    run_sync();
+    run_default();
     return 0;
 }

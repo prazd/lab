@@ -1,5 +1,4 @@
 #include <Automata.hpp>
-#include <iostream>
 
 struct AntCell: automata::VisualSFMLCell<4, AntCell>{
      enum class State: char {
@@ -62,7 +61,6 @@ struct AntCell: automata::VisualSFMLCell<4, AntCell>{
         } else if (prev_state == State::Black) {
             ant_dir = (ant_dir + 4 - 1) % 4;
         }
-        std::cout << "AndDir" << (int) ant_dir << "\n";
 
         auto tmp = neighbours[ant_dir]->state;
         neighbours[ant_dir]->prev_state = tmp;

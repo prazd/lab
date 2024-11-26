@@ -4,7 +4,6 @@
 #include <SFML/Window/Mouse.hpp>
 #include <algorithm>
 
-// TODO: refactor (generalize)
 namespace automata {
     template <typename T>
     concept CellLifecycle = requires(T cell) {
@@ -128,9 +127,101 @@ namespace automata {
 
         using Cell = typename std::remove_extent<typename std::remove_extent<decltype(Field::cells)>::type>::type;
 
-        static inline std::array<Cell*, 20> cache;
-        Cell* last_cell = nullptr;
-        size_t index = 0;
+        struct Selector {
+            void handle_single(Field& field, float x, float y, Cell::State state_to_set) {
+                if (last_cell && last_cell->rs.getGlobalBounds().contains(x, y)) {
+                    last_cell->set_state(state_to_set);
+                    return;
+                }
+
+                auto c_cell = std::find_if(cache.begin(), cache.end(), [x, y](auto value){
+                    return value != nullptr ? value->rs.getGlobalBounds().contains(x, y) : false;
+                });
+
+                if (c_cell != cache.end()) {
+                    last_cell = *c_cell;
+                    last_cell->set_state(state_to_set);
+                } else {
+                    for(auto& row: field.cells) {
+                        auto res = std::find_if(std::begin(row), std::end(row), [x, y](auto& cell){
+                            return cell.rs.getGlobalBounds().contains(x, y);
+                        });
+                        if (res != std::end(row)) {
+                            index %= cache.size();
+                            cache[index++] = res;
+                            last_cell = res;
+                            last_cell->set_state(state_to_set);
+                            return;
+                        }
+                    }
+                } 
+            }
+
+            
+            void handle_multiple(Field& f,  size_t x, size_t y, Cell::State state_to_set) {
+                    for(size_t i = 0; i < f.get_height(); ++i) {
+                        for(size_t j = 0; j < f.get_width(); ++j) {
+                            auto& cell = f.cells[i][j];
+                            std::pair<size_t, size_t> current_pos(i,j);
+
+                            if (cell.rs.getGlobalBounds().contains(x, y)) {
+                                if (!pbegin && current_pos != pcur && &cell != last_cell) {
+                                    pbegin = current_pos;
+                                    cell.set_state(state_to_set);
+                                    pcur = pbegin;
+                                    last_cell = &cell;
+                                } else if (pcur != current_pos && pbegin == pcur && !pend && &cell != last_cell) {
+                                    pend = current_pos;
+                                    last_cell = &cell;
+        
+                                    cell.set_state(state_to_set);
+                                    
+                                    auto [bfirst, bsecond] = pbegin.value();
+                                    auto [efirst, esecond] = pend.value();
+
+                                    if (bfirst > efirst && esecond == bsecond) {
+                                        for(auto i = bfirst; i > efirst; --i) {
+                                            f.cells[i][bsecond].set_state(state_to_set);
+                                        }
+                                    } else if (bfirst < efirst && esecond == bsecond) {
+                                        for(auto i = bfirst; i < efirst; ++i) {
+                                            f.cells[i][bsecond].set_state(state_to_set);
+                                        }
+                                    } else if (bfirst == efirst && bsecond < esecond) {
+                                        for(auto i = bsecond; i < esecond; ++i) {
+                                            f.cells[bfirst][i].set_state(state_to_set);
+                                        }
+                                    } else if (bfirst == efirst && bsecond > esecond) {
+                                        for(auto i = bsecond; i > esecond; --i) {
+                                            f.cells[bfirst][i].set_state(state_to_set);
+                                        }
+                                    }
+
+                                    reset();
+                            }
+                            if (pcur != current_pos) {
+                                pcur.reset();
+                                reset();
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+
+            void reset() {
+                pbegin.reset();
+                pend.reset();
+            }
+
+        private:
+            std::array<Cell*, 20> cache{};
+            size_t index{};
+            std::optional<std::pair<size_t, size_t>> pbegin{};
+            std::optional<std::pair<size_t, size_t>> pend{};
+            std::optional<std::pair<size_t, size_t>> pcur{};
+            Cell* last_cell = nullptr;
+        } selector;
         
         Field field;
         [[no_unique_address]] SwitchStateFunc switch_func;
@@ -150,33 +241,6 @@ namespace automata {
                 current_x = 0;
                 current_y += cell_size;
             }
-        }
-
-        Cell* get_cell_by_pos(float x, float y) {
-            if (last_cell && last_cell->rs.getGlobalBounds().contains(x, y)) {
-                return last_cell;
-            }
-            auto c_cell = std::find_if(cache.begin(), cache.end(), [x, y](auto value){
-                return value != nullptr ? value->rs.getGlobalBounds().contains(x, y) : false;
-            });
-
-            if (c_cell != cache.end()) {
-                last_cell = *c_cell;
-                return last_cell;
-            } else {
-                for(auto& row: field.cells) {
-                    auto res = std::find_if(std::begin(row), std::end(row), [x, y](auto& cell){
-                        return cell.rs.getGlobalBounds().contains(x, y);
-                    });
-                    if (res != std::end(row)) {
-                        index %= cache.size();
-                        cache[index++] = res;
-                        last_cell = res;
-                        return res;
-                    }
-                }
-            } 
-            return nullptr;
         }
 
         void display() {
@@ -210,8 +274,10 @@ namespace automata {
                         running = running ? (window.setFramerateLimit(100), false) : (window.setFramerateLimit(last_fps), true);
                     } else if (event.key.code == sf::Keyboard::F) {
                         field.flush();
+                        selector.reset();
                     } else if (event.key.code == sf::Keyboard::M) {
                         state_to_set = switch_func(state_to_set);
+                        selector.reset();
                     }
                 }
             }
@@ -223,12 +289,17 @@ namespace automata {
             if (sf::Mouse::isButtonPressed(sf::Mouse::Left) && window.hasFocus()){
                 auto m_pos = sf::Mouse::getPosition(window);
                 if (background.getGlobalBounds().contains(m_pos.x, m_pos.y)) {
-                    auto cell = get_cell_by_pos(m_pos.x, m_pos.y);
-                    if (cell) {
-                        cell->set_state(state_to_set);
-                    }
+                    selector.handle_single(field, m_pos.x, m_pos.y, state_to_set);
                 }
             }
+
+            if (sf::Mouse::isButtonPressed(sf::Mouse::Right) && window.hasFocus()){
+                auto m_pos = sf::Mouse::getPosition(window);
+                if (background.getGlobalBounds().contains(m_pos.x, m_pos.y)) {
+                    selector.handle_multiple(field, m_pos.x, m_pos.y, state_to_set);
+                }
+            }
+
 
             window.clear();
             window.draw(background);
@@ -237,9 +308,11 @@ namespace automata {
                 for(auto& cell: row)
                     window.draw(cell.rs);
 
+            
             window.display();
-           }
-         }
+            
+            }
+          }
         };
 };
 #endif
