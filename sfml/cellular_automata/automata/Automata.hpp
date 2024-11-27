@@ -165,7 +165,7 @@ namespace automata {
                             std::pair<size_t, size_t> current_pos(i,j);
 
                             if (cell.rs.getGlobalBounds().contains(x, y)) {
-                                if (!pbegin && current_pos != pcur && &cell != last_cell) {
+                                if (!pbegin && current_pos != pcur) {
                                     pbegin = current_pos;
                                     cell.set_state(state_to_set);
                                     pcur = pbegin;
@@ -197,10 +197,9 @@ namespace automata {
                                         }
                                     }
 
-                                    reset();
+                                    begin_and_reset();
                             }
                             if (pcur != current_pos) {
-                                pcur.reset();
                                 reset();
                             }
                             return;
@@ -209,9 +208,14 @@ namespace automata {
                 }
             }
 
-            void reset() {
+            void begin_and_reset() {
                 pbegin.reset();
                 pend.reset();
+            }
+
+            void reset() {
+                begin_and_reset();
+                pcur.reset();
             }
 
         private:
@@ -272,6 +276,7 @@ namespace automata {
                         last_fps = 60;
                     } else if (event.key.code == sf::Keyboard::P) {
                         running = running ? (window.setFramerateLimit(100), false) : (window.setFramerateLimit(last_fps), true);
+                        selector.reset();
                     } else if (event.key.code == sf::Keyboard::F) {
                         field.flush();
                         selector.reset();
