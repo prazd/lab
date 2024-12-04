@@ -20,7 +20,7 @@ size_t get_factorial(size_t n) {
 auto fac_s_m(const std::vector<int>& elems) {
     std::vector<int> local = elems;
     std::vector<int> cpy = elems;
-    auto n = local.size();
+    int n = local.size();
     auto f = get_factorial(n);
     auto fm1 = get_factorial(n-1);
 
@@ -43,8 +43,10 @@ auto fac_s_m(const std::vector<int>& elems) {
 
     auto tt = local[1];
 
+    auto cc = n <= 3 ? 1 : (size_t)std::pow((double)(n-3), 2);
+
     while(1) {
-    for (size_t k = 0; k < (size_t)std::pow((double)(n-3), 2); ++k ){
+    for (size_t k = 0; k < cc; ++k ){
         auto nc = res.back();
         size_t b = 1;
         for (size_t i = 0; i < 3; ++i) {
@@ -54,21 +56,23 @@ auto fac_s_m(const std::vector<int>& elems) {
             swap_last(tmp2);
             res.push_back(tmp2);
 
-            shift(tmp3, tmp3.size()-(n-1), tmp3.size());
+            shift(tmp3, tmp3.size()-3, tmp3.size());
             auto c = tmp3[tmp3.size()-3+b];
-            if (tmp3[tmp3.size()-(n-1)] == tt){
+            if (tmp3[tmp3.size()-3] == tt){
                 break;
             }
             res.push_back(tmp3);
         }
-        auto next = nc;
-        shift(next, b, next.size());
-        ++b;
-        if (k + 1 != n-3) {
-            res.push_back(next);
+        if (n-3 > 0) {
+            auto next = nc;
+            shift(next, b, next.size());
+            ++b;
+            if (k + 1 != n-3) {
+                res.push_back(next);
+            }
+            tt = next[1];
         }
-        tt = next[1];
-    }    
+    }
        
         std::vector<int> tmp3 = cpy;
         shift(tmp3, 0, tmp3.size());
@@ -175,5 +179,5 @@ void calculate_print() {
 
 int main() {
     // calculate_print();
-    fac_s_m(std::vector<int>{0,1,2,3,4});
+    fac_s_m(std::vector<int>{0,1});
 }
