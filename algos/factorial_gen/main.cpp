@@ -1,7 +1,6 @@
 #include <iostream>
 #include <numeric>
 #include <map>
-#include <chrono>
 #include <thread>
 
 template <typename T>
@@ -26,11 +25,9 @@ auto fac_s_m(const std::vector<int>& elems) {
     auto fm1 = get_factorial(n-1);
 
     std::vector<std::vector<int>> res;
-    // initial 
-    res.push_back(local);
 
-    auto curr = local[0];
-    auto m = 0;
+    // initial
+    res.push_back(local);
 
     auto shift = [](auto& vec, size_t begin, size_t end){
         auto x = vec[begin];
@@ -43,12 +40,13 @@ auto fac_s_m(const std::vector<int>& elems) {
     auto swap_last = [](auto& vec) {
         std::swap(*(vec.end()-1), *(vec.end()-2));
     };
-    
-    size_t i = 0;
+
     auto tt = local[1];
 
     while(1) {
-    for (size_t k = 0; k < n; ++k ){
+    for (size_t k = 0; k < (size_t)std::pow((double)(n-3), 2); ++k ){
+        auto nc = res.back();
+        size_t b = 1;
         for (size_t i = 0; i < 3; ++i) {
             std::vector<int> tmp2 = res.back();
             std::vector<int> tmp3 = res.back();
@@ -56,15 +54,19 @@ auto fac_s_m(const std::vector<int>& elems) {
             swap_last(tmp2);
             res.push_back(tmp2);
 
-            shift(tmp3, tmp3.size()-3, tmp3.size());
-            if (tmp3[tmp3.size()-3] == tt){
+            shift(tmp3, tmp3.size()-(n-1), tmp3.size());
+            auto c = tmp3[tmp3.size()-3+b];
+            if (tmp3[tmp3.size()-(n-1)] == tt){
                 break;
             }
             res.push_back(tmp3);
         }
-        auto next = res.back();
-        shift(next, 1, next.size());
-        res.push_back(next);
+        auto next = nc;
+        shift(next, b, next.size());
+        ++b;
+        if (k + 1 != n-3) {
+            res.push_back(next);
+        }
         tt = next[1];
     }    
        
@@ -102,19 +104,16 @@ auto factorial_print(const std::vector<int>& els) {
     for (size_t e = 0; e < n; ++e){
         std::vector<int> tmp = vec;
         tmp.erase(std::remove(tmp.begin(), tmp.end(), tmp[e]), tmp.end());
-        for (size_t k = 0;k < fm1; ++k){
+        for (size_t k = 0;k < fm1; ++k) {
             std::vector<int> tmp2;
             tmp2.push_back(vec[e]);
             size_t m = 1;
-            for (size_t i = 1; i < n; ++i){
-               tmp2.push_back(tmp[((e+i)%(n-1)+m)%(n-1)]);
+            for (size_t i = 1; i < n; ++i) {
+                tmp2.push_back(tmp[((e + i) % (n - 1) + m) % (n - 1)]);
             }
             res.push_back(tmp2);
         }
-       
-        
     }
-
        // res.push_back(std::vector<int>{vec[e], tmp[((e)%(n-1)+m)%(n-1)], tmp[((e+1)%(n-1)+m)%(n-1)], tmp[((e+2)%(n-1)+m)%(n-1)]});
        // res.push_back(std::vector<int>{vec[e], tmp[((e)%(n-1)+m)%(n-1)], tmp[((e+2))%(n-1)+m)%(n-1)], tmp[((e+1)%(n-1)+m)%(n-1)]});
    
@@ -168,21 +167,11 @@ void calculate_print() {
                 std::cout << m1 <<  ops_str[opi[(i+2)%4]] << n4 << "=" << m2 << "\n";
                 std::cout << "Res:" << m2 << "\n";
                 std::cout << "------------" << "\n";
-                // std::cout << "(("<< n1 << ops_str[opi[i]] << n2 <<")" << ops_str[opi[(i+1)%4]] << n3 << ")" << ops_str[opi[(i+2)%4]] << n4 << "=" << m2 << "\n";
             }
    
         }
     }
 }
-
-
-// 0 1 2 3 4
-// 0 1 2 4 3
-// 0 1 3 4 2
-// 0 1 3 2 4
-// 0 1 4 2 3
-// 0 1 4 3 2
-
 
 int main() {
     // calculate_print();
