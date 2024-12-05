@@ -41,8 +41,21 @@ auto fac_s_m(const std::vector<int>& elems) {
         std::swap(*(vec.end()-1), *(vec.end()-2));
     };
 
-    auto tt = local[1];
+    if (n == 2){
+        auto next = res.back();
+        swap_last(next);
+        res.push_back(next);
 
+        for(auto&& row: res){
+            for(auto el: row){
+                std::cout << el << " ";
+            }
+            std::cout << "\n";
+        }
+        return res;
+    }
+
+    auto tt = local[1];
     auto cc = n <= 3 ? 1 : (size_t)std::pow((double)(n-3), 2);
 
     while(1) {
@@ -92,6 +105,8 @@ auto fac_s_m(const std::vector<int>& elems) {
         }
         std::cout << "\n";
     }
+
+    return res;
 }
 
 // todo: generalize
@@ -100,6 +115,8 @@ auto factorial_print(const std::vector<int>& els) {
     auto n = vec.size();
     auto f = get_factorial(n);
     auto fm1 = get_factorial(n-1);
+
+    
 
     std::vector<std::vector<int>> res;
 
@@ -179,5 +196,5 @@ void calculate_print() {
 
 int main() {
     // calculate_print();
-    fac_s_m(std::vector<int>{0,1});
+    fac_s_m(std::vector<int>{0,1,2,3,4});
 }
