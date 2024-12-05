@@ -43,10 +43,6 @@ struct Tree {
         std::cout << "\n";
 
         for(auto& c: root.childs) {
-            add_child(c.get());
-        }
-
-        for(auto& c: root.childs) {
             generate(c.get());
         }
     }
@@ -93,6 +89,6 @@ private:
 
 
 int main() {
-    Tree<int> tree(std::vector<int>{1,2,3});
+    Tree<int> tree(std::vector<int>{1,2,3,4});
     tree.print();
 }
