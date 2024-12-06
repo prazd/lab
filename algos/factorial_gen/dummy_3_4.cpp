@@ -3,13 +3,6 @@
 #include <map>
 #include <thread>
 
-template <typename T>
-std::vector<T> generate_vec(size_t n){
-    std::vector<T> res(n);
-    std::iota(res.begin(), res.end(), 0);
-    return res;
-}
-
 size_t get_factorial(size_t n) {
     size_t res = 1;
     for(size_t i = 1; i <= n;++i)
@@ -89,12 +82,6 @@ auto fac_s_m(const std::vector<int>& elems) {
     return res;
 }
 
-void test() {
-    std::vector<int> next{0,2,3,4,1};
-    shift(next, 1, next.size());
-    for(auto el: next)
-        std::cout << el << " ";
-}
 
 int main() {
     auto res = fac_s_m(std::vector<int>{0,1,2,3,4});
