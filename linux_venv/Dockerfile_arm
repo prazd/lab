@@ -1,0 +1,14 @@
+FROM --platform=linux/arm64 ubuntu:rolling
+
+RUN apt-get update && apt-get install -y build-essential gdb vim g++ valgrind man sudo
+
+# disable root pass
+RUN echo "prazd ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+RUN useradd -ms /bin/bash prazd
+
+USER prazd
+
+WORKDIR /home/prazd
+
+COPY --chown=prazd:prazd src .
