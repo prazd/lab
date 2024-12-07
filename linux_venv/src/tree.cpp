@@ -3,10 +3,11 @@
 #include <vector>
 #include <algorithm>
 
+
 template <typename T>
 struct Node {
     std::vector<T> elems;
-    std::vector<std::unique_ptr<Node<T>>> childs;
+    std::vector<Node<T>> childs;
 
     Node() = default;
     Node(const std::vector<T>& elems): elems(elems) {}
@@ -16,7 +17,7 @@ struct Node {
     }
 
     void add_child(Node<T>&& c){
-        childs.push_back(std::unique_ptr<Node<T>>(new Node<T>(std::move(c))));
+        childs.push_back(std::move(c));
     }
 
     void print_elems() const {
@@ -28,7 +29,7 @@ struct Node {
 
     void print_child() const {
         for (const auto& c: childs)
-            c->print_elems();
+            c.print_elems();
     }
 
 };
@@ -46,7 +47,7 @@ struct Tree {
         std::cout << "\n";
 
         for(auto& c: root.childs) {
-            generate(c.get());
+            generate(&c);
         }
     }
 
@@ -73,7 +74,7 @@ private:
         }
         add_child(node);
         for(auto& c: node->childs){
-            generate(c.get());
+            generate(&c);
         }
     }
 
@@ -92,6 +93,6 @@ private:
 
 
 int main() {
-    Tree<int> tree(std::vector<int>{1,2,3,4});
+    Tree<int> tree(std::vector<int>{1,2,3,4,5});
     tree.print();
 }
