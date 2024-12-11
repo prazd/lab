@@ -1,16 +1,21 @@
 #include <iostream>
 
+template <typename It>
+void print(It it, It ite){
+    for(;it!=ite;++it)
+        std::cout << *it << " ";
+    std::cout << "\n";
+}
+
+
+void* operator new(size_t sz){
+    std::cout << "Alloc:" << sz << "\n";
+    return malloc(sz);
+}
 
 int main() {
-    std::vector<int> x {1,2,3,4,5,6};
-    for(auto el: x)
-        std::cout << el << " ";
-    std::cout << "\n";
-    size_t count = 1;
-    while(std::next_permutation(x.begin(), x.end())){
-        for(auto el: x)
-            std::cout << el << " ";
-        std::cout << "\n";
-        ++count;
-    }
+    std::array<int, 5> vec{1,2,3,4,5};
+    print(vec.begin(), vec.end());
+    while(std::next_permutation(vec.begin(), vec.end()))
+        print(vec.begin(), vec.end());
 }
