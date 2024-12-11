@@ -1,16 +1,4 @@
 #include <Automata.hpp>
-#include <random>
-
-template <int begin, int end>
-class Random {
-    static inline std::random_device rd;
-    static inline std::mt19937 gen{rd()};
-    static inline std::uniform_int_distribution<int> dis = std::uniform_int_distribution<int>(begin, end);
-public:
-    static int roll() {
-        return dis(gen);
-    }
-};
 
 struct FireAutomataCell: automata::VisualSFMLCell<8, FireAutomataCell> {
     size_t fired_neighbours{};
@@ -58,13 +46,13 @@ struct FireAutomataCell: automata::VisualSFMLCell<8, FireAutomataCell> {
 
     void next() {
     if (state == State::Tree && fired_neighbours > 0) {
-        if (Random<0,100>::roll() < 70) { // 70% вероятность возгорания
+        if (automata::Random<0,100>::roll() < 70) { // 70% вероятность возгорания
             set_state(State::Fire);
         }
     } else if (state == State::Fire) {
         set_state(State::Ash);
     } else if (state == State::Empty) {
-        if (Random<0,100>::roll() < 5) { // 5% вероятность роста дерева
+        if (automata::Random<0,100>::roll() < 5) { // 5% вероятность роста дерева
             set_state(State::Tree);
         }
     }

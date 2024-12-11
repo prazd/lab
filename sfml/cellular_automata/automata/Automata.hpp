@@ -3,8 +3,21 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Window/Mouse.hpp>
 #include <algorithm>
+#include <random>
 
 namespace automata {
+    
+    template <int begin, int end>
+    class Random {
+        static inline std::random_device rd;
+        static inline std::mt19937 gen{rd()};
+        static inline std::uniform_int_distribution<int> dis = std::uniform_int_distribution<int>(begin, end);
+    public:
+        static int roll() {
+            return dis(gen);
+        }
+    };
+
     template <typename T>
     concept CellLifecycle = requires(T cell) {
         { cell.prepare() } -> std::same_as<void>;

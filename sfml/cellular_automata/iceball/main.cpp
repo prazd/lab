@@ -1,16 +1,4 @@
 #include <Automata.hpp>
-#include <random>
-
-template <int begin, int end>
-class Random {
-    static inline std::random_device rd;
-    static inline std::mt19937 gen{rd()};
-    static inline std::uniform_int_distribution<int> dis = std::uniform_int_distribution<int>(begin, end);
-public:
-    static int roll() {
-        return dis(gen);
-    }
-};
 
 struct IceBallCell: automata::VisualSFMLCell<8, IceBallCell> {
     size_t iced_neighbours{};
@@ -52,13 +40,10 @@ struct IceBallCell: automata::VisualSFMLCell<8, IceBallCell> {
 
     void next() {
         if (state == State::Empty && iced_neighbours > 0 && iced_neighbours <= 3) {
-            if (Random<0,100>::roll() < iced_neighbours * 13) { 
+            if (automata::Random<0,100>::roll() < iced_neighbours * 13) { 
                 set_state(State::Ice);
             }
         }
-        // if (state == State::Ice && Random<0, 100>::roll() < 5) {
-        //     set_state(State::Empty);
-        // }
     }
 
 };
