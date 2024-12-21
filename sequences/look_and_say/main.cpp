@@ -1,6 +1,6 @@
 #include <iostream>
 
-std::string conway_seq_next(std::string value) {
+std::string conway_seq_next(const std::string& value) {
     std::string res;
     res.reserve(value.size() * 2);
     auto current = *value.begin();
