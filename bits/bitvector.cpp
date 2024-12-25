@@ -50,6 +50,7 @@ class BitVector {
             std::swap(*this, tmp);
             return *this;
         }
+        
         operator bool() const {
             auto x = ba.get_ptr(index);
             auto l_index = index%CHAR_BIT;
@@ -134,11 +135,10 @@ public:
     }
 
     BitVector& operator=(const BitVector& rhs) {
-        if (this == &rhs) {
-            return *this;
+        if (this != &rhs) {
+            BitVector tmp(rhs);
+            tmp.swap(*this);
         }
-        BitVector tmp(rhs);
-        tmp.swap(*this);
         return *this;
     };
 
@@ -198,11 +198,6 @@ public:
 };
 
 
-void* operator new(size_t size) {
-    std::cout << "Alloc size:" << size << std::endl;
-    return malloc(size);
-}
-
 int main() {
     // push_back
     BitVector bv{1,0,1,0,1,1};
@@ -214,41 +209,35 @@ int main() {
 
     std::array<bool, 8> sarr = {1,0,1,0,1,1,1,0};
     size_t counter = 0;
-    std::for_each(bv.begin(), bv.end(), [&sarr, &counter](const auto& el){
+    for(auto& el: bv)
         assert(el == sarr[counter++]);
-    });
 
     //  RBitIter
     BitVector bv1{1,0,1,1,1,1};
     std::array<bool, 6> arr1 = {1,1,1,1,0,1};
     auto arr1_index = 0;
-    std::for_each(bv1.rbegin(), bv1.rend(), [&arr1, &arr1_index](const auto& el){
-        assert(arr1[arr1_index++] == el);
-    });
+    for(auto it = bv1.rbegin(), ite = bv1.rend(); it != ite; ++it)
+        assert(arr1[arr1_index++] == *it);
 
     // BitIter
     BitVector bv2{1,0,1,1,1,1};
     std::array<bool, 6> arr2 = {1,0,1,1,1,1};
     auto arr2_index = 0;
-    std::for_each(bv2.begin(), bv2.end(), [&arr2, &arr2_index](const auto& el){
+    for(auto& el: bv2)
         assert(arr2[arr2_index++] == el);
-    });
 
     // operator==(copy)
     BitVector bv3{1,0,1};
     BitVector tmp{0,0,0,0};
     bv3 = tmp;
-    std::for_each(bv3.begin(), bv3.end(), [](const auto& el){
+    for(auto& el: bv3)
         assert(el == 0);
-    });
 
     // operator==(move)
     BitVector bv4{1,0,1};
     bv4 = BitVector{1,1,1,1};
-    std::for_each(bv4.begin(), bv4.end(), [](const auto& el){
+    for(auto& el: bv4)
         assert(el == 1);
-    });
-
 
     // copy ctr
     BitVector bv5{1,1,1,1,1,1,1,1};
@@ -256,10 +245,10 @@ int main() {
     BitVector bv6 = bv5;
     std::array<bool, 9> arr3 = {1,1,1,1,1,1,1,1,0};
     auto arr3_index = 0;
-    std::for_each(bv5.begin(), bv5.end(), [&arr3, &arr3_index, &bv6](const auto& el){
+    for(auto& el: bv5) {
        assert(arr3[arr3_index] == el && arr3[arr3_index] == bv6[arr3_index]);
        ++arr3_index;
-    });
+    }
 
     // move ctr
     BitVector bv7{1,1,1,1,1,1,1,1};
@@ -268,9 +257,6 @@ int main() {
 
     std::array<bool, 9> arr4 = {1,1,1,1,1,1,1,1};
     auto arr4_index = 0;
-
-    std::for_each(bv8.begin(), bv8.end(), [&arr4, &arr4_index](const auto& el){
-       assert(arr4[arr4_index++] == el);
-    });
-
+    for(auto& el: bv8)
+        assert(arr4[arr4_index++] == el);
 }
