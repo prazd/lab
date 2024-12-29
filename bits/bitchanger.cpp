@@ -94,10 +94,8 @@ class BitChanger{
   
 public:
     BitChanger(T& val) {
-        size_t r = 0;
         auto val_ptr = reinterpret_cast<unsigned char*>(&val);
         for(unsigned long i = 0;i < sizeof(val); ++i) {
-            r+=CHAR_BIT;
             buffer[i] = val_ptr+i;
         }
     }
@@ -108,8 +106,8 @@ public:
 
     std::string get_string() {
         std::string res;
-        for(auto begin = std::begin(buffer), end = std::end(buffer);begin!=end;++begin) {
-            auto tmp = std::bitset<8>(**begin).to_string();
+        for(auto it = std::begin(buffer), ite = std::end(buffer);it!=ite;++it) {
+            auto tmp = std::bitset<8>(**it).to_string();
             std::reverse(tmp.begin(), tmp.end());
             res += tmp;
         }
@@ -135,15 +133,18 @@ int main() {
     assert(sizeof(TestStruct)*(CHAR_BIT) == sizeof(bc));
     auto bc_string = bc.get_string();
     std::string res;
-    std::for_each(std::begin(bc), std::end(bc), [&res](const auto& val){res += (std::string)val;});
+    for(auto& val: bc)
+        res+= std::to_string(val);
     std::cout << bc_string << std::endl;
     std::cout << res << std::endl;
+
     assert(std::equal(res.begin(), res.end(), bc_string.begin(), bc_string.end()));
-    std::for_each(std::begin(bc), std::end(bc), [](auto& val){val = 0;});
+
+    std::transform(std::begin(bc), std::end(bc), std::begin(bc), [](auto& val){return 0;});
     assert((t.x == 0) && (t.y == 0));
     std::cout << "Zero check:" << bc.get_string() << std::endl;
 
-    std::for_each(std::begin(bc), std::end(bc), [](auto& val){val = 1;});
+    std::transform(std::begin(bc), std::end(bc), std::begin(bc), [](auto& val){return 1;});
     assert((t.x == std::numeric_limits<unsigned>::max()) && (t.y == std::numeric_limits<unsigned>::max()));
     std::cout << "Max uint32 check:" << bc.get_string() << std::endl;
     
