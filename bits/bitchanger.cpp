@@ -140,11 +140,11 @@ int main() {
 
     assert(std::equal(res.begin(), res.end(), bc_string.begin(), bc_string.end()));
 
-    std::transform(std::begin(bc), std::end(bc), std::begin(bc), [](auto& val){return 0;});
+    std::transform(std::begin(bc), std::end(bc), std::begin(bc), [](auto&){return 0;});
     assert((t.x == 0) && (t.y == 0));
     std::cout << "Zero check:" << bc.get_string() << std::endl;
 
-    std::transform(std::begin(bc), std::end(bc), std::begin(bc), [](auto& val){return 1;});
+    std::transform(std::begin(bc), std::end(bc), std::begin(bc), [](auto&){return 1;});
     assert((t.x == std::numeric_limits<unsigned>::max()) && (t.y == std::numeric_limits<unsigned>::max()));
     std::cout << "Max uint32 check:" << bc.get_string() << std::endl;
     
