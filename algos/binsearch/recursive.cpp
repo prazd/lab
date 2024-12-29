@@ -27,12 +27,11 @@ auto rec_bin_search(Iter begin, Iter end, U val) -> std::optional<Iter>{
 int main() {
     int arr[5]{1,2,3,4,5};
     auto res = rec_bin_search(std::begin(arr), std::end(arr), 3);  
-
-    std::for_each(std::begin(arr), std::end(arr),[&arr](const auto& el) {
+    for (auto el: arr) {
         if (!rec_bin_search(std::begin(arr), std::end(arr), el)) {
             std::abort();
         }
-    });
+    }
     
     if (rec_bin_search(std::begin(arr), std::end(arr), -10)) {
         std::abort();
@@ -42,9 +41,9 @@ int main() {
         std::abort();
     }
     std::vector<int> vec{10,20,30,40,50,60,70,80};    
-    std::for_each(vec.begin(), vec.end(),[&vec](const auto& el) {
+    for(auto el: vec){
         if (!rec_bin_search(vec.begin(), vec.end(), el)) {
             std::abort();
         }
-    });
+    }
 }
