@@ -21,7 +21,7 @@ std::unordered_map<std::string, char> mgen(unsigned char rule) {
 }
 
 template <typename CellMap>
-void draw(CellMap&& cm, size_t field, size_t itercount) {
+void draw(CellMap&& cm, size_t field, size_t itercount, std::string onesym = "1", std::string zerosym = ".") {
     std::string gen;
 
     // init
@@ -35,7 +35,7 @@ void draw(CellMap&& cm, size_t field, size_t itercount) {
     
     for(int i = 0; i < itercount; ++i) {
         for(auto& el: gen) {
-            std::cout << (el == '1' ? "1" : ".");
+            std::cout << (el == '1' ? onesym : zerosym);
         }
         std::cout << "\n";
         std::string tmp;
@@ -52,5 +52,5 @@ void draw(CellMap&& cm, size_t field, size_t itercount) {
 }
 
 int main() {
-    draw(mgen(30), 200, 300);
+    draw(mgen(90), 250, 300, "0");
 }

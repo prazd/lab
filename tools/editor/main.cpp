@@ -6,23 +6,53 @@
 #include <string>
 #include <fstream>
 #include <atomic>
+#include <shared_mutex>
+
 
 class Buffer {
-protected:    
-    std::string syms;
+private:
+    mutable std::shared_mutex mt;
+protected:
+    // start line
+    size_t current = 0;
+    std::vector<std::string> lines;
 public:    
     Buffer(){
-        syms.reserve(100);
+        lines.reserve(2);
+    }
+    void new_line() {
+        std::unique_lock ul(mt);
+        lines.push_back({});
+        ++current;
     }
     void add(char sym) {
-        syms+=sym;
+        std::unique_lock ul(mt);
+        lines[current] += sym;
+    }
+    size_t get_current() const {
+        std::shared_lock sl(mt);
+        return current;
+    }
+    size_t size() const {
+        std::shared_lock sl(mt);
+        return lines.size();
     }
     void pop() {
-        if (!syms.empty())
-            syms.pop_back();
+        std::unique_lock ul(mt);
+        if (!lines[current].empty()){
+            lines[current].pop_back();
+        } else {
+            if (lines.size() > 1){
+                lines.pop_back();
+                --current;
+            }
+        }
     }
-    const std::string& get() const {
-        return syms;
+
+    template <typename Printer>
+    void print(Printer& printer) {
+        std::shared_lock sl(mt);
+        printer(lines.cbegin(), lines.cend());
     }
 };
 
@@ -36,13 +66,20 @@ public:
         }
         std::string line;
         while (std::getline(file, line)) {
-            syms+=line + '\n';
+            ++current;
+            lines.push_back(line + '\n');
         };
+        if (lines.empty()) {
+            lines.push_back({});
+        } else {
+            --current;
+        }
         file.close();
     }
     void save_and_close() {
         std::ofstream file(filename);
-        file << syms;
+        for (auto& s: lines)
+            file << s;
         file.close();
     }
 };
@@ -89,16 +126,21 @@ char input_checker(int timeout_ms, int& state) {
 
 std::atomic_uint16_t del_count;
 std::atomic_uint16_t update_count;
+std::atomic_uint16_t new_line_count;
 std::atomic<bool> buffer_save = false;
 
 void command_handler(Buffer& buff) {
-    std::thread([](Buffer& buff, std::atomic_uint16_t& del_count, std::atomic_uint16_t& update_count, std::atomic<bool>& buffer_save){
+    std::thread([](Buffer& buff, std::atomic_uint16_t& del_count, std::atomic_uint16_t& update_count, std::atomic<bool>& buffer_save, std::atomic_uint16_t& new_line_count){
         int state; // 0 - empty, 1 - error, 2 - add data, 3 - del data
         for (;;) {
             auto val = input_checker(5, state);
             if (state == 2) {
                 {
-                    if (val == 27) {
+                    if (val == '\n') {
+                        buff.add(val);
+                        buff.new_line();
+                        ++new_line_count;
+                    } else if (val == 27) {
                         buffer_save.store(true);
                     } else {
                         buff.add(val);
@@ -112,8 +154,19 @@ void command_handler(Buffer& buff) {
                 }
             }
         }
-    }, std::ref(buff),std::ref(del_count), std::ref(update_count), std::ref(buffer_save)).detach();
+    }, std::ref(buff),std::ref(del_count), std::ref(update_count), std::ref(buffer_save), std::ref(new_line_count)).detach();
 }
+
+
+struct Printer {
+    template <typename Iter>
+    void operator()(Iter it, Iter ite) {
+        size_t counter = 1;
+        for (; it != ite; ++it) {
+            std::cout<< "|" << counter++ << "| " << *it;
+        }
+    }
+};
 
 int main(int argc, char *argv[]){
     if (argc != 2) {
@@ -129,21 +182,28 @@ int main(int argc, char *argv[]){
 
     // clear screen before start
     std::cout << "\x1B[2J\x1B[H";
-    auto& data = b.get();
+
+    Printer printer;
 
     for(;;) {
+        // std::cout << "\x1B[2J\x1B[H";
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         {
             if (buffer_save.load() == true) {
                 b.save_and_close();
                 break;
             }
+            if (new_line_count.load() > 0) {
+                std::cout << "\x1B[2J\x1B[H";
+                --new_line_count;
+            }
             if (del_count.load() > 0) {
                 std::cout << "\x1B[2J\x1B[H";
-                del_count--;
+                --del_count;
             }
             std::cout << "\x1B[H";
-            std::cout << data;
+            b.print(printer);
+            std::cout << "\n\n------------------------\n\nCurrent:" << b.get_current() << "\nLines:" << b.size() << "\n";
             std::cout << std::flush;
         }
     }
