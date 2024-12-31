@@ -109,13 +109,9 @@ public:
 
     void add(char sym) {
         std::unique_lock ul(mt);
-        b.add(row++, sym);
-    }
-
-    template <typename Printer>
-    void print(Printer& printer) {
-        std::shared_lock sl(mt);
-        printer(b.cbegin(), b.cend());
+        // todo: insert
+        b.add(row, sym);
+        ++col;
     }
 
     size_t get_row() const {
@@ -129,6 +125,7 @@ public:
     }
 
     void save_and_close() {
+        std::unique_lock ul(mt);
         b.save_and_close();
     }
 
@@ -136,29 +133,59 @@ public:
         std::shared_lock sl(mt);
         return {row, col};
     }
+
+    template <typename Printer>
+    void print(Printer& p) {
+        std::shared_lock sl(mt);
+        p.print(b.cbegin(), b.cend());
+    }
+
+    template <typename Printer>
+    void print_current(Printer& p) {
+        std::shared_lock sl(mt);
+        p.print(b.cbegin()+row-1, b.cbegin()+row);
+    }
+
 };
 
 class RenderManager {
     std::mutex mt;
-    size_t rcount;
-public:    
+public:
+    RenderManager() {
+        std::lock_guard lg(mt);
+        std::cout << "\x1B[2J\x1B[H";
+    }
     struct LinePrinter {
         template <typename Iter>
         void operator()(Iter it, Iter ite) {
             for (; it != ite; ++it) {
-                std::cout<< "|" << ++rcount << "| " << *it;
+                std::cout<< "|*| " << *it;
             }
         }
     } printer;
 
     void set_cursor(std::pair<size_t, size_t> coord) {
         std::lock_guard lg(mt);
-        std::cout << "\x1B[<" coord.first << ">;<"<< coord.second <<">H";
+        std::cout << "\x1B[<" << coord.first << ">;<"<< coord.second <<">H";
+    }
+
+    void clear_current() {
+        std::cout << "\x1B[2K";
     }
 
     template <typename Iter>
     void print(Iter it, Iter ite) {
+        std::lock_guard lg(mt);
+        std::cout << "\x1B[H";
         printer(it, ite);
+        std::cout << std::flush;
+    }
+
+    template <typename... Info>
+    void print_info(Info&&... info) {
+        std::lock_guard lg(mt);
+       (std::cout << ... << info) << "\n";
+       std::cout << std::flush;
     }
 };
 
@@ -249,13 +276,9 @@ int main(int argc, char *argv[]){
     set_buffered_input(false);
     command_handler(b);
 
-    // clear screen before start
-    std::cout << "\x1B[2J\x1B[H";
-
-    Printer printer;
-
+    RenderManager rm;
+    b.print(rm); // print full
     for(;;) {
-        // std::cout << "\x1B[2J\x1B[H";
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         {
             if (buffer_save.load() == true) {
@@ -263,17 +286,17 @@ int main(int argc, char *argv[]){
                 break;
             }
             if (new_line_count.load() > 0) {
-                std::cout << "\x1B[2J\x1B[H";
+                rm.set_cursor({b.get_row() + 1, 1});
+                rm.clear_current();
                 --new_line_count;
             }
             if (del_count.load() > 0) {
-                std::cout << "\x1B[2J\x1B[H";
+                rm.set_cursor({b.get_row() + 1, b.get_col() + 1});
+                rm.clear_current();
                 --del_count;
             }
-            std::cout << "\x1B[H";
-            b.print(printer);
-            std::cout << "\n\n------------------------\n\nLines:" << b.get_row() << "\nCol:" << b.get_col() << "\n";
-            std::cout << std::flush;
+            b.print(rm);
+            rm.print_info("\nLines:", b.get_row(), "\nCol:", b.get_col());
         }
     }
 }
