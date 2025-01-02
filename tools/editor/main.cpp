@@ -289,8 +289,8 @@ char input_checker(int timeout_ms, int& state) {
     if (fds[0].revents & POLLIN) {
         char buffer[4];
         std::cin.read(buffer, 1);
-        if (buffer[0] == '\x1B') { // Если это ESC
-            std::cin.read(buffer + 1, 2); // Читаем ещё два символа
+        if (buffer[0] == '\x1B') {         // Если это ESC
+            std::cin.read(buffer + 1, 2);  // Читаем ещё два символа
             if (buffer[1] == '[') {
                 switch (buffer[2]) {
                         case 'A': {state = 4; return buffer[2];} // Стрелка вверх
@@ -316,10 +316,13 @@ char input_checker(int timeout_ms, int& state) {
 
 std::atomic<bool> buffer_save = false;
 std::atomic<bool> update_screen = false;
+std::atomic<bool> terminate_flag = false;
+std::condition_variable render_cv;
+std::mutex render_mutex;
 
 template <typename BM = BufferManager<FileBuffer>>
 void command_handler(BM& bm) {
-    std::thread([](BM& bm, std::atomic<bool>& buffer_save, std::atomic<bool>& update_screen){
+    std::thread([](BM& bm, std::atomic<bool>& buffer_save, std::atomic<bool>& update_screen, std::condition_variable& render_cv){
         int state; // 0 - empty, 1 - error, 2 - add data, 3 - del data, 4 - up, 5 - down, 6 - right, 7 - left, 8 - save and exit
         for (;;) {
             auto val = input_checker(5, state);
@@ -333,25 +336,29 @@ void command_handler(BM& bm) {
                         bm.add(val);
                         update_screen.store(true);
                     }
+                    render_cv.notify_one();
                     break;
                 }
                 case 3:{
                     bm.pop();
                     update_screen.store(true);
+                    render_cv.notify_one();
                     break;
                 }
-                case 4: {bm.up();    update_screen.store(true); break;}
-                case 5: {bm.down();  update_screen.store(true); break;}
-                case 6: {bm.right(); update_screen.store(true); break;}
-                case 7: {bm.left();  update_screen.store(true); break;}
-                case 8: {buffer_save.store(true); return;}
+                case 4: {bm.up();    update_screen.store(true); render_cv.notify_one(); break;}
+                case 5: {bm.down();  update_screen.store(true); render_cv.notify_one(); break;}
+                case 6: {bm.right(); update_screen.store(true); render_cv.notify_one(); break;}
+                case 7: {bm.left();  update_screen.store(true); render_cv.notify_one(); break;}
+                case 8: {buffer_save.store(true); render_cv.notify_one(); return;}
             }
         }
-    }, std::ref(bm), std::ref(buffer_save), std::ref(update_screen)).detach();
+    }, std::ref(bm), std::ref(buffer_save), std::ref(update_screen), std::ref(render_cv)).detach();
 }
 
 void handle_signal(int signal) {
     std::cout << "\x1B[?25h"; // show apparat cursor;
+    terminate_flag.store(true);
+    render_cv.notify_one();
     exit(0);
 }
 
@@ -371,18 +378,21 @@ int main(int argc, char *argv[]){
 
     RenderManager rm;
     
+    
     b.print(rm); // print full
     for(;;) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
         {
+            std::unique_lock ul(render_mutex);
+            render_cv.wait(ul, [&]{return update_screen.load() || buffer_save.load() || terminate_flag.load();});
             if (buffer_save.load() == true) {
                 b.save_and_close();
                 break;
+            } else if (terminate_flag.load()) {
+                break;
             }
-            if (update_screen.exchange(false)) {
-                b.print(rm);
-                rm.print_info("\nLines:", b.get_row(), "\nCol:", b.get_col());
-            }
+            b.print(rm);
+            rm.print_info("\nLines:", b.get_row(), "\nCol:", b.get_col());
+            update_screen.store(false);
         }
     }
 }
