@@ -7,6 +7,7 @@
 #include <fstream>
 #include <atomic>
 #include <shared_mutex>
+#include <csignal>
 
 class Buffer {
 protected:
@@ -17,11 +18,16 @@ public:
     }
 
     void new_line() {
+        lines[lines.size()-1]+='\n';
         lines.push_back({});
     }
 
     void add(size_t index, char sym) {
         lines[index] += sym;
+    }
+
+    void insert(size_t row, size_t col, char sym) {
+        lines[row].insert(lines[row].begin() + col, sym);
     }
 
     size_t size() const {
@@ -31,7 +37,9 @@ public:
     void pop_line() {
         lines.pop_back();
     }
-
+    void del_sym(size_t row, size_t col) {
+        lines[row].erase(lines[row].begin() + col);
+    }
     void pop_sym_by_index(size_t index) {
         lines[index].pop_back();
     }
@@ -89,8 +97,14 @@ public:
     void pop() {
         std::unique_lock ul(mt);
         if (!b.empty_line(row)) {
-            b.pop_sym_by_index(row);
-            col--;
+            if (col == b.size_by_index(row)) {
+                b.pop_sym_by_index(row);
+                --col;
+            } else if (col > 0) {
+                b.del_sym(row, col-1);
+                --col;
+            }
+      
         } else {
             if (b.size() > 1){
                 b.pop_line();
@@ -109,8 +123,11 @@ public:
 
     void add(char sym) {
         std::unique_lock ul(mt);
-        // todo: insert
-        b.add(row, sym);
+        if (col == b.size_by_index(row)) {
+            b.add(row, sym);
+        } else {
+            b.insert(row, col, sym);
+        }
         ++col;
     }
 
@@ -137,55 +154,110 @@ public:
     template <typename Printer>
     void print(Printer& p) {
         std::shared_lock sl(mt);
-        p.print(b.cbegin(), b.cend());
+        auto copy = b;
+        sl.unlock();
+        p.print(copy.cbegin(), copy.cend(), row, col);
     }
 
-    template <typename Printer>
-    void print_current(Printer& p) {
-        std::shared_lock sl(mt);
-        p.print(b.cbegin()+row-1, b.cbegin()+row);
+    void left() {
+        if (col > 0) {
+            {
+                std::unique_lock ul(mt);
+                --col;
+            }
+        }
+    }
+
+    void right() {
+        if (col < b.size_by_index(row)) {
+            {
+                std::unique_lock ul(mt);
+                ++col;
+            }
+        }
+    }
+
+    void up() {
+        if (row > 0) {
+            {
+               std::unique_lock ul(mt);
+                --row;
+                if (col >= b.size_by_index(row)) {
+                    col = b.size_by_index(row)-1; 
+                }
+            }
+        }
+    }
+    
+    void down() {
+        if (row < b.size()-1) {
+            {
+                std::unique_lock ul(mt);
+                ++row;
+                if (col >= b.size_by_index(row)) {
+                    col = b.size_by_index(row)-1; 
+                }
+            }
+        }
     }
 
 };
 
 class RenderManager {
-    std::mutex mt;
-public:
+public:    
     RenderManager() {
-        std::lock_guard lg(mt);
         std::cout << "\x1B[2J\x1B[H";
+        std::cout << "\x1B[?25l"; // hide apparat cursor
     }
     struct LinePrinter {
         template <typename Iter>
-        void operator()(Iter it, Iter ite) {
-            for (; it != ite; ++it) {
-                std::cout<< "|*| " << *it;
+        void operator()(Iter it, Iter ite, size_t row, size_t col) {
+            size_t counter{};
+            for (; it != ite; ++it, ++counter) {
+                std::cout << "\x1B[2K";
+                if (counter == row) {
+                    print_cursor(*it, col);
+                } else {
+                   std::cout<< "|*| " << *it;
+                }
             }
+        }
+        void print_cursor(const std::string& str, size_t pos) {
+            std::cout << "\x1B[2K";
+            auto sub1 = str.substr(0, pos);
+            auto sub2 = str.substr(pos);
+            std::cout<< "|*| ";
+            std::cout << sub1;
+            std::cout << "\x1B[31m"; // set red color
+            std::cout << "|";
+            std::cout << "\x1B[0m";  // set default
+            std::cout << sub2;
         }
     } printer;
 
-    void set_cursor(std::pair<size_t, size_t> coord) {
-        std::lock_guard lg(mt);
-        std::cout << "\x1B[<" << coord.first << ">;<"<< coord.second <<">H";
-    }
+    // void set_cursor(std::pair<size_t, size_t> coord) {
+    //     std::cout << "\x1B[" << coord.first << ";" << coord.second << "H";
+    // }
 
     void clear_current() {
         std::cout << "\x1B[2K";
     }
 
     template <typename Iter>
-    void print(Iter it, Iter ite) {
-        std::lock_guard lg(mt);
+    void print(Iter it, Iter ite, size_t row, size_t col) {
         std::cout << "\x1B[H";
-        printer(it, ite);
+        printer(it, ite, row, col);
+        std::cout << "\x1B[0J";
         std::cout << std::flush;
     }
 
     template <typename... Info>
     void print_info(Info&&... info) {
-        std::lock_guard lg(mt);
        (std::cout << ... << info) << "\n";
        std::cout << std::flush;
+    }
+    ~RenderManager() {
+        std::cout << "\x1B[?25h"; // show apparat cursor;
     }
 };
 
@@ -215,9 +287,22 @@ char input_checker(int timeout_ms, int& state) {
         return ret;
     }
     if (fds[0].revents & POLLIN) {
-        char buffer[2];
+        char buffer[4];
         std::cin.read(buffer, 1);
-        buffer[1] = '\0';
+        if (buffer[0] == '\x1B') { // Если это ESC
+            std::cin.read(buffer + 1, 2); // Читаем ещё два символа
+            if (buffer[1] == '[') {
+                switch (buffer[2]) {
+                        case 'A': {state = 4; return buffer[2];} // Стрелка вверх
+                        case 'B': {state = 5; return buffer[2];} // Стрелка вниз
+                        case 'C': {state = 6; return buffer[2];} // Стрелка вправо
+                        case 'D': {state = 7; return buffer[2];} // Стрелка влево
+                    }
+            } else {
+                state = 8;
+                return buffer[0];
+            }
+        }
         if (buffer[0] == 127) {
             state = 3; // del
         } else {
@@ -229,45 +314,53 @@ char input_checker(int timeout_ms, int& state) {
     return ret;
 }
 
-std::atomic_uint16_t del_count;
-std::atomic_uint16_t update_count;
-std::atomic_uint16_t new_line_count;
 std::atomic<bool> buffer_save = false;
+std::atomic<bool> update_screen = false;
 
 template <typename BM = BufferManager<FileBuffer>>
-void command_handler(BM& buff) {
-    std::thread([](BM& buff, std::atomic_uint16_t& del_count, std::atomic_uint16_t& update_count, std::atomic<bool>& buffer_save, std::atomic_uint16_t& new_line_count){
-        int state; // 0 - empty, 1 - error, 2 - add data, 3 - del data
+void command_handler(BM& bm) {
+    std::thread([](BM& bm, std::atomic<bool>& buffer_save, std::atomic<bool>& update_screen){
+        int state; // 0 - empty, 1 - error, 2 - add data, 3 - del data, 4 - up, 5 - down, 6 - right, 7 - left, 8 - save and exit
         for (;;) {
             auto val = input_checker(5, state);
-            if (state == 2) {
-                {
+            switch (state) {
+                case 0: continue;
+                case 2: {
                     if (val == '\n') {
-                        buff.add(val);
-                        buff.new_line();
-                        ++new_line_count;
-                    } else if (val == 27) {
-                        buffer_save.store(true);
+                        bm.new_line();
+                        update_screen.store(true);
                     } else {
-                        buff.add(val);
-                        ++update_count;
+                        bm.add(val);
+                        update_screen.store(true);
                     }
+                    break;
                 }
-            } else if (state == 3) {
-                {
-                    buff.pop();
-                    ++del_count;
+                case 3:{
+                    bm.pop();
+                    update_screen.store(true);
+                    break;
                 }
+                case 4: {bm.up();    update_screen.store(true); break;}
+                case 5: {bm.down();  update_screen.store(true); break;}
+                case 6: {bm.right(); update_screen.store(true); break;}
+                case 7: {bm.left();  update_screen.store(true); break;}
+                case 8: {buffer_save.store(true); return;}
             }
         }
-    }, std::ref(buff),std::ref(del_count), std::ref(update_count), std::ref(buffer_save), std::ref(new_line_count)).detach();
+    }, std::ref(bm), std::ref(buffer_save), std::ref(update_screen)).detach();
 }
 
+void handle_signal(int signal) {
+    std::cout << "\x1B[?25h"; // show apparat cursor;
+    exit(0);
+}
 
 int main(int argc, char *argv[]){
     if (argc != 2) {
         std::abort();
     }
+
+    std::signal(SIGINT, handle_signal);
     
     const char* filename = argv[1];
     BufferManager<FileBuffer> b(filename);
@@ -277,26 +370,19 @@ int main(int argc, char *argv[]){
     command_handler(b);
 
     RenderManager rm;
+    
     b.print(rm); // print full
     for(;;) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
         {
             if (buffer_save.load() == true) {
                 b.save_and_close();
                 break;
             }
-            if (new_line_count.load() > 0) {
-                rm.set_cursor({b.get_row() + 1, 1});
-                rm.clear_current();
-                --new_line_count;
+            if (update_screen.exchange(false)) {
+                b.print(rm);
+                rm.print_info("\nLines:", b.get_row(), "\nCol:", b.get_col());
             }
-            if (del_count.load() > 0) {
-                rm.set_cursor({b.get_row() + 1, b.get_col() + 1});
-                rm.clear_current();
-                --del_count;
-            }
-            b.print(rm);
-            rm.print_info("\nLines:", b.get_row(), "\nCol:", b.get_col());
         }
     }
 }
