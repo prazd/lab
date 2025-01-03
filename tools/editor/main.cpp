@@ -8,15 +8,12 @@
 #include <atomic>
 #include <shared_mutex>
 #include <csignal>
+#include <tuple>
 
 class Buffer {
 protected:
     std::vector<std::string> lines;
-public:    
-    Buffer(){
-        lines.reserve(2);
-    }
-
+public:
     void new_line() {
         lines[lines.size()-1]+='\n';
         lines.push_back({});
@@ -37,9 +34,21 @@ public:
     void pop_line() {
         lines.pop_back();
     }
+
     void del_sym(size_t row, size_t col) {
         lines[row].erase(lines[row].begin() + col);
     }
+
+    void pop_end_by(size_t row, const char* s) {
+        auto& cur = lines[row];
+        auto n = cur.find_last_of(s);
+        if (n != std::string::npos) {
+            cur.erase(cur.begin() + n, cur.end());
+        } else if (!cur.empty()) {
+            cur.erase(0);
+        }
+    }
+
     void pop_sym_by_index(size_t index) {
         lines[index].pop_back();
     }
@@ -114,6 +123,20 @@ public:
         }
     }
 
+    void pop_word() {
+        std::unique_lock ul(mt);
+        if (!b.empty_line(row)) {
+            b.pop_end_by(row, " ");
+            col = b.size_by_index(row);
+        } else {
+            if (b.size() > 1){
+                b.pop_line();
+                --row;
+                col = b.size_by_index(row);
+            }
+        }
+    }
+
     void new_line() {
         std::unique_lock ul(mt);
         b.new_line();
@@ -144,11 +167,6 @@ public:
     void save_and_close() {
         std::unique_lock ul(mt);
         b.save_and_close();
-    }
-
-    std::pair<size_t, size_t> get_current() const {
-        std::shared_lock sl(mt);
-        return {row, col};
     }
 
     template <typename Printer>
@@ -226,6 +244,7 @@ public:
             std::cout << "\x1B[2K";
             auto sub1 = str.substr(0, pos);
             auto sub2 = str.substr(pos);
+            std::cout << str.size();
             std::cout<< "|*| ";
             std::cout << sub1;
             std::cout << "\x1B[31m"; // set red color
@@ -234,10 +253,6 @@ public:
             std::cout << sub2;
         }
     } printer;
-
-    void clear_current() {
-        std::cout << "\x1B[2K";
-    }
 
     template <typename Iter>
     void print(Iter it, Iter ite, size_t row, size_t col) {
@@ -257,99 +272,116 @@ public:
     }
 };
 
-void set_buffered_input(bool enable) {
-    static struct termios oldt, newt;
-    if (!enable) {
-        tcgetattr(STDIN_FILENO, &oldt); 
-        newt = oldt;
-        newt.c_lflag &= ~(ICANON | ECHO);
-        tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    } else {
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    }
-}
-
-char input_checker(int timeout_ms, int& state) {
-    struct pollfd fds[1];
-    fds[0].fd = 0;
-    fds[0].events = POLLIN;
-
-    int ret = poll(fds, 1, timeout_ms);
-    if (ret == -1) {
-        state = 1; // error
-        return ret;
-    } else if (ret == 0) {
-        state = 0; // empty
-        return ret;
-    }
-    if (fds[0].revents & POLLIN) {
-        char buffer[4];
-        std::cin.read(buffer, 1);
-        if (buffer[0] == '\x1B') {         // ESC
-            std::cin.read(buffer + 1, 2);  // Read 2 syms
-            if (buffer[1] == '[') {
-                switch (buffer[2]) {
-                        case 'A': {state = 4; return buffer[2];} // Up
-                        case 'B': {state = 5; return buffer[2];} // Down
-                        case 'C': {state = 6; return buffer[2];} // Right
-                        case 'D': {state = 7; return buffer[2];} // Left
-                    }
-            } else {
-                state = 8;
-                return buffer[0];
-            }
-        }
-        if (buffer[0] == 127) {
-            state = 3; // del
-        } else {
-            state = 2; // add
-        }
-        return buffer[0];
-    }
-    state = 2;
-    return ret;
-}
 
 std::atomic<bool> buffer_save = false;
 std::atomic<bool> update_screen = false;
 std::atomic<bool> terminate_flag = false;
 std::condition_variable render_cv;
-std::mutex render_mutex;
+std::mutex render_mutex;    
 
 template <typename BM = BufferManager<FileBuffer>>
-void command_handler(BM& bm) {
-    std::thread([](BM& bm, std::atomic<bool>& buffer_save, std::atomic<bool>& update_screen, std::condition_variable& render_cv){
-        int state; // 0 - empty, 1 - error, 2 - add data, 3 - del data, 4 - up, 5 - down, 6 - right, 7 - left, 8 - save and exit
+struct CommandHandler {
+    enum class Command: char {
+        Empty, Error, Add, Del, Up, Down, Right, Left, SaveExit,
+        // ShortCuts
+        DelWord // Ctrl + W
+    };
+
+    CommandHandler() {
+        set_buffered_input(false);
+    }
+
+    std::tuple<int, Command> input(int timeout_ms) {
+        struct pollfd fds[1];
+        fds[0].fd = 0;
+        fds[0].events = POLLIN;
+
+        int ret = poll(fds, 1, timeout_ms);
+        if (ret == -1) {
+            return {ret, Command::Error};
+        } else if (ret == 0) {
+            return {ret, Command::Empty};
+        }
+        if (fds[0].revents & POLLIN) {
+            char buffer[4];
+            std::cin.read(buffer, 1);
+            auto fsym = buffer[0];
+            if (fsym == '\x1B') {              // ESC
+                std::cin.read(buffer + 1, 2);  // Read 2 syms
+                if (buffer[1] == '[') {
+                    switch (buffer[2]) {
+                            case 'A': {return {buffer[2], Command::Up     };} 
+                            case 'B': {return {buffer[2], Command::Down   };}
+                            case 'C': {return {buffer[2], Command::Right  };}
+                            case 'D': {return {buffer[2], Command::Left   };}
+                            default:  {return {buffer[2], Command::Empty  };}
+                        }
+                } else {
+                    return  {fsym, Command::SaveExit};
+                }
+            } else if (fsym == 0x17) { // ctrl + w
+                return {buffer[1], Command::DelWord};
+            } 
+
+            if (fsym == 127) {
+                return {fsym, Command::Del}; // del
+            } else {
+                return {fsym, Command::Add}; // add
+            }
+        }
+        return {ret, Command::Add};
+   }
+
+   void set_buffered_input(bool enable) {
+        static struct termios oldt, newt;
+        if (!enable) {
+            tcgetattr(STDIN_FILENO, &oldt); 
+            newt = oldt;
+            newt.c_lflag &= ~(ICANON | ECHO);
+            tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+        } else {
+            tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+        }
+    }
+
+    void operator()(BM& bm) {
         for (;;) {
-            auto val = input_checker(5, state);
-            switch (state) {
-                case 0: continue;
-                case 2: {
-                    if (val == '\n') {
+            auto [sym, cmd] = input(5);
+            switch (cmd) {
+                case Command::Empty: continue;
+                case Command::Add: {
+                    if (sym == '\n') {
                         bm.new_line();
                         update_screen.store(true);
                     } else {
-                        bm.add(val);
+                        bm.add(sym);
                         update_screen.store(true);
                     }
                     render_cv.notify_one();
                     break;
                 }
-                case 3:{
+                case Command::Del:{
                     bm.pop();
                     update_screen.store(true);
                     render_cv.notify_one();
                     break;
                 }
-                case 4: {bm.up();    update_screen.store(true); render_cv.notify_one(); break;}
-                case 5: {bm.down();  update_screen.store(true); render_cv.notify_one(); break;}
-                case 6: {bm.right(); update_screen.store(true); render_cv.notify_one(); break;}
-                case 7: {bm.left();  update_screen.store(true); render_cv.notify_one(); break;}
-                case 8: {buffer_save.store(true); render_cv.notify_one(); return;}
+                case Command::DelWord: {
+                    bm.pop_word();
+                    update_screen.store(true);
+                    render_cv.notify_one();
+                    break;
+                }
+                case Command::Up: {bm.up();    update_screen.store(true); render_cv.notify_one(); break;}
+                case Command::Down: {bm.down();  update_screen.store(true); render_cv.notify_one(); break;}
+                case Command::Right: {bm.right(); update_screen.store(true); render_cv.notify_one(); break;}
+                case Command::Left: {bm.left();  update_screen.store(true); render_cv.notify_one(); break;}
+                case Command::SaveExit: {buffer_save.store(true); render_cv.notify_one(); return;}
+                case Command::Error: {break;} // 
             }
         }
-    }, std::ref(bm), std::ref(buffer_save), std::ref(update_screen), std::ref(render_cv)).detach();
-}
+    }
+};
 
 void handle_signal(int signal) {
     std::cout << "\x1B[?25h"; // show apparat cursor;
@@ -369,18 +401,16 @@ int main(int argc, char *argv[]){
     BufferManager<FileBuffer> b(filename);
     
     // run command handler thread
-    set_buffered_input(false);
-    command_handler(b);
-
+    std::thread(CommandHandler{}, std::ref(b)).detach();
+    
     RenderManager rm;
-    
-    
     b.print(rm); // print full
+
     for(;;) {
         {
             std::unique_lock ul(render_mutex);
             render_cv.wait(ul, [&]{return update_screen.load() || buffer_save.load() || terminate_flag.load();});
-            if (buffer_save.load() == true) {
+            if (buffer_save.load()) {
                 b.save_and_close();
                 break;
             } else if (terminate_flag.load()) {

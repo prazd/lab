@@ -6,3 +6,4 @@ build
 main
 *.dsYM
 lua-5.4.7
+cmake-build-debug
