@@ -285,14 +285,14 @@ char input_checker(int timeout_ms, int& state) {
     if (fds[0].revents & POLLIN) {
         char buffer[4];
         std::cin.read(buffer, 1);
-        if (buffer[0] == '\x1B') {         // Если это ESC
-            std::cin.read(buffer + 1, 2);  // Читаем ещё два символа
+        if (buffer[0] == '\x1B') {         // ESC
+            std::cin.read(buffer + 1, 2);  // Read 2 syms
             if (buffer[1] == '[') {
                 switch (buffer[2]) {
-                        case 'A': {state = 4; return buffer[2];} // Стрелка вверх
-                        case 'B': {state = 5; return buffer[2];} // Стрелка вниз
-                        case 'C': {state = 6; return buffer[2];} // Стрелка вправо
-                        case 'D': {state = 7; return buffer[2];} // Стрелка влево
+                        case 'A': {state = 4; return buffer[2];} // Up
+                        case 'B': {state = 5; return buffer[2];} // Down
+                        case 'C': {state = 6; return buffer[2];} // Right
+                        case 'D': {state = 7; return buffer[2];} // Left
                     }
             } else {
                 state = 8;
