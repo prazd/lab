@@ -235,10 +235,6 @@ public:
         }
     } printer;
 
-    // void set_cursor(std::pair<size_t, size_t> coord) {
-    //     std::cout << "\x1B[" << coord.first << ";" << coord.second << "H";
-    // }
-
     void clear_current() {
         std::cout << "\x1B[2K";
     }
