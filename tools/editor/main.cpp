@@ -10,6 +10,27 @@
 #include <csignal>
 #include <tuple>
 
+constexpr char CTRL_W = 0x17;
+constexpr char CTRL_U = 0x15;
+constexpr char DELETE = 127;
+constexpr char ESC = '\x1B';
+constexpr char SPACE = ' ';
+
+constexpr const char* SHOW_CURSOR_CMD = "\x1B[?25h";
+constexpr const char* HIDE_CURSOR_CMD = "\x1B[?25l";
+constexpr const char* FULL_CLEAN_SCREEN_CMD = "\x1B[2J\x1B[H";
+constexpr const char* RED_COLOR_CMD = "\x1B[31m";
+constexpr const char* DEFAULT_COLOR_CMD = "\x1B[0m";
+constexpr const char* SET_CURSOR_TO_BEGIN_CMD = "\x1B[H";
+constexpr const char* CLEAN_CURRENT_LINE_CMD = "\x1B[2K";
+constexpr const char* CLEAN_BELOW_CMD = "\x1B[0J";
+
+std::atomic<bool> buffer_save = false;
+std::atomic<bool> update_screen = false;
+std::atomic<bool> terminate_flag = false;
+std::condition_variable render_cv;
+std::mutex render_mutex;
+
 class Buffer {
 protected:
     std::vector<std::string> lines;
@@ -39,29 +60,16 @@ public:
         lines[row].erase(lines[row].begin() + col);
     }
 
-    size_t pop_end_by(size_t row, size_t col, const char* s) {
+    size_t pop_to_space(size_t row, size_t col) {
         auto& cur = lines[row];
         auto sz = cur.size();
-        auto end = col == sz ? sz : cur.find_last_of(" ", col);
-        auto begin = cur.find_last_of(" ", end-1);
-        if (begin != std::string::npos && end != std::string::npos) {
-            if (end == begin) {
-                if (col == sz) {
-                    end = sz-1;
-                }
-            }
+        auto begin = cur.find_last_of(SPACE, col);
+        auto end = col;
+        if (begin != std::string::npos) {
             cur.erase(cur.begin() + begin, cur.begin() + end);
             return end - begin;
-            // todo: fix
-        } else if (begin != std::string::npos && end == std::string::npos) {
-            end = begin;
-            begin = 0;
-            cur.erase(begin, end);
-            return end;
-        } else if (!cur.empty()) {
-            cur.erase(0);
-            return col;
         }
+        cur.erase(0, end);
         return col;
     }
 
@@ -146,7 +154,7 @@ public:
     void pop_word() {
         std::unique_lock ul(mt);
         if (!b.empty_line(row)) {
-            col -= b.pop_end_by(row, col, " ");
+            col -= b.pop_to_space(row, col);
         } else {
             if (b.size() > 1){
                 b.pop_line();
@@ -251,15 +259,15 @@ public:
 class RenderManager {
 public:    
     RenderManager() {
-        std::cout << "\x1B[2J\x1B[H";
-        std::cout << "\x1B[?25l"; // hide apparat cursor
+        std::cout << FULL_CLEAN_SCREEN_CMD;
+        std::cout << HIDE_CURSOR_CMD;
     }
     struct LinePrinter {
         template <typename Iter>
         void operator()(Iter it, Iter ite, size_t row, size_t col) {
             size_t counter{};
             for (; it != ite; ++it, ++counter) {
-                std::cout << "\x1B[2K";
+                std::cout << CLEAN_CURRENT_LINE_CMD;
                 if (counter == row) {
                     print_cursor(*it, col);
                 } else {
@@ -268,24 +276,24 @@ public:
             }
         }
         void print_cursor(const std::string& str, size_t pos) {
-            std::cout << "\x1B[2K";
+            std::cout << CLEAN_CURRENT_LINE_CMD;
             auto sub1 = str.substr(0, pos);
             auto sub2 = str.substr(pos);
             std::cout << str.size();
             std::cout<< "|*| ";
             std::cout << sub1;
-            std::cout << "\x1B[31m"; // set red color
-            std::cout << "|";
-            std::cout << "\x1B[0m";  // set default
+            std::cout << RED_COLOR_CMD;
+            std::cout << "|"; // cursor
+            std::cout << DEFAULT_COLOR_CMD;
             std::cout << sub2;
         }
     } printer;
 
     template <typename Iter>
     void print(Iter it, Iter ite, size_t row, size_t col) {
-        std::cout << "\x1B[H";
+        std::cout << SET_CURSOR_TO_BEGIN_CMD;
         printer(it, ite, row, col);
-        std::cout << "\x1B[0J";
+        std::cout << CLEAN_BELOW_CMD;
         std::cout << std::flush;
     }
 
@@ -295,16 +303,10 @@ public:
        std::cout << std::flush;
     }
     ~RenderManager() {
-        std::cout << "\x1B[?25h"; // show apparat cursor;
+        std::cout << SHOW_CURSOR_CMD;
     }
 };
 
-
-std::atomic<bool> buffer_save = false;
-std::atomic<bool> update_screen = false;
-std::atomic<bool> terminate_flag = false;
-std::condition_variable render_cv;
-std::mutex render_mutex;    
 
 template <typename BM = BufferManager<FileBuffer>>
 struct CommandHandler {
@@ -342,7 +344,7 @@ struct CommandHandler {
             char buffer[4];
             std::cin.read(buffer, 1);
             auto fsym = buffer[0];
-            if (fsym == '\x1B') {              // ESC
+            if (fsym == ESC) {              // ESC
                 std::cin.read(buffer + 1, 2);  // Read 2 syms
                 if (buffer[1] == '[') {
                     switch (buffer[2]) {
@@ -355,13 +357,13 @@ struct CommandHandler {
                 } else {
                     return  {fsym, Command::SaveExit};
                 }
-            } else if (fsym == 0x17) { // ctrl + w
+            } else if (fsym == CTRL_W) {
                 return {buffer[1], Command::PopWord};
-            } else if (fsym == 0x15) { // ctrl + u
+            } else if (fsym == CTRL_U) {
                 return {buffer[1], Command::PopToBegin};
             }
 
-            if (fsym == 127) {
+            if (fsym == DELETE) {
                 return {fsym, Command::Del}; // del
             } else {
                 return {fsym, Command::Add}; // add
@@ -423,7 +425,7 @@ struct CommandHandler {
 };
 
 void handle_signal(int signal) {
-    std::cout << "\x1B[?25h"; // show apparat cursor;
+    std::cout << SHOW_CURSOR_CMD;
     terminate_flag.store(true);
     render_cv.notify_one();
     exit(0);
