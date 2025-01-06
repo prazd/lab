@@ -39,14 +39,34 @@ public:
         lines[row].erase(lines[row].begin() + col);
     }
 
-    void pop_end_by(size_t row, const char* s) {
+    size_t pop_end_by(size_t row, size_t col, const char* s) {
         auto& cur = lines[row];
-        auto n = cur.find_last_of(s);
-        if (n != std::string::npos) {
-            cur.erase(cur.begin() + n, cur.end());
+        auto sz = cur.size();
+        auto end = col == sz ? sz : cur.find_last_of(" ", col);
+        auto begin = cur.find_last_of(" ", end-1);
+        if (begin != std::string::npos && end != std::string::npos) {
+            if (end == begin) {
+                if (col == sz) {
+                    end = sz-1;
+                }
+            }
+            cur.erase(cur.begin() + begin, cur.begin() + end);
+            return end - begin;
+            // todo: fix
+        } else if (begin != std::string::npos && end == std::string::npos) {
+            end = begin;
+            begin = 0;
+            cur.erase(begin, end);
+            return end;
         } else if (!cur.empty()) {
             cur.erase(0);
+            return col;
         }
+        return col;
+    }
+
+    void pop_to_begin(size_t row, size_t col) {
+        lines[row].erase(0, col);
     }
 
     void pop_sym_by_index(size_t index) {
@@ -126,14 +146,21 @@ public:
     void pop_word() {
         std::unique_lock ul(mt);
         if (!b.empty_line(row)) {
-            b.pop_end_by(row, " ");
-            col = b.size_by_index(row);
+            col -= b.pop_end_by(row, col, " ");
         } else {
             if (b.size() > 1){
                 b.pop_line();
                 --row;
                 col = b.size_by_index(row);
             }
+        }
+    }
+
+    void pop_to_begin() {
+        std::unique_lock ul(mt);
+        if (col > 0) {
+            b.pop_to_begin(row, col);
+            col = 0;
         }
     }
 
@@ -284,7 +311,16 @@ struct CommandHandler {
     enum class Command: char {
         Empty, Error, Add, Del, Up, Down, Right, Left, SaveExit,
         // ShortCuts
-        DelWord // Ctrl + W
+        PopWord,   // Ctrl + W
+        PopToBegin // Ctrl + U
+    };
+
+    struct RenderNotifier {
+        RenderNotifier() = default;
+        ~RenderNotifier(){
+            update_screen.store(true);
+            render_cv.notify_one();
+        }
     };
 
     CommandHandler() {
@@ -320,8 +356,10 @@ struct CommandHandler {
                     return  {fsym, Command::SaveExit};
                 }
             } else if (fsym == 0x17) { // ctrl + w
-                return {buffer[1], Command::DelWord};
-            } 
+                return {buffer[1], Command::PopWord};
+            } else if (fsym == 0x15) { // ctrl + u
+                return {buffer[1], Command::PopToBegin};
+            }
 
             if (fsym == 127) {
                 return {fsym, Command::Del}; // del
@@ -350,34 +388,35 @@ struct CommandHandler {
             switch (cmd) {
                 case Command::Empty: continue;
                 case Command::Add: {
+                    RenderNotifier rn;
                     if (sym == '\n') {
                         bm.new_line();
-                        update_screen.store(true);
                     } else {
                         bm.add(sym);
-                        update_screen.store(true);
                     }
-                    render_cv.notify_one();
                     break;
                 }
                 case Command::Del:{
+                    RenderNotifier rn;
                     bm.pop();
-                    update_screen.store(true);
-                    render_cv.notify_one();
                     break;
                 }
-                case Command::DelWord: {
+                case Command::PopWord: {
+                    RenderNotifier rn;
                     bm.pop_word();
-                    update_screen.store(true);
-                    render_cv.notify_one();
                     break;
                 }
-                case Command::Up: {bm.up();    update_screen.store(true); render_cv.notify_one(); break;}
-                case Command::Down: {bm.down();  update_screen.store(true); render_cv.notify_one(); break;}
-                case Command::Right: {bm.right(); update_screen.store(true); render_cv.notify_one(); break;}
-                case Command::Left: {bm.left();  update_screen.store(true); render_cv.notify_one(); break;}
-                case Command::SaveExit: {buffer_save.store(true); render_cv.notify_one(); return;}
-                case Command::Error: {break;} // 
+                case Command::PopToBegin: {
+                    RenderNotifier rn;
+                    bm.pop_to_begin();
+                    break;
+                }
+                case Command::Up:       {RenderNotifier rn; bm.up();    break;}
+                case Command::Down:     {RenderNotifier rn; bm.down();  break;}
+                case Command::Right:    {RenderNotifier rn; bm.right(); break;}
+                case Command::Left:     {RenderNotifier rn; bm.left();  break;}
+                case Command::SaveExit: {buffer_save.store(true);       return;}
+                case Command::Error:    {break;} // 
             }
         }
     }
