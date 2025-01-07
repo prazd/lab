@@ -12,6 +12,7 @@
 
 constexpr char CTRL_W = 0x17;
 constexpr char CTRL_U = 0x15;
+constexpr char CTRL_F = 0x06;
 constexpr char DELETE = 127;
 constexpr char ESC = '\x1B';
 constexpr char SPACE = ' ';
@@ -35,9 +36,12 @@ class Buffer {
 protected:
     std::vector<std::string> lines;
 public:
-    void new_line() {
-        lines[lines.size()-1]+='\n';
-        lines.push_back({});
+    void new_line(size_t row) {
+        if (row == lines.size()-1) {
+            lines.push_back({});
+        } else {
+            lines.insert(lines.begin()+(row+1), "");
+        }
     }
 
     void add(size_t index, char sym) {
@@ -52,8 +56,12 @@ public:
         return lines.size();
     }
 
-    void pop_line() {
-        lines.pop_back();
+    void pop_line(size_t row) {
+        if (row == lines.size()-1)
+            lines.pop_back();
+        else {
+            lines.erase(lines.begin()+row);
+        }
     }
 
     void del_sym(size_t row, size_t col) {
@@ -62,7 +70,6 @@ public:
 
     size_t pop_to_space(size_t row, size_t col) {
         auto& cur = lines[row];
-        auto sz = cur.size();
         auto begin = cur.find_last_of(SPACE, col);
         auto end = col;
         if (begin != std::string::npos) {
@@ -108,7 +115,7 @@ public:
         }
         std::string line;
         while (std::getline(file, line)) {
-            lines.push_back(line + '\n');
+            lines.push_back(line);
         };
         if (lines.empty()) {
             lines.push_back({});
@@ -118,7 +125,7 @@ public:
     void save_and_close() {
         std::ofstream file(filename);
         for (auto& s: lines)
-            file << s;
+            file << s << "\n";
         file.close();
     }
 };
@@ -131,6 +138,13 @@ class BufferManager {
     size_t col;
 public:
     BufferManager(const char* filename): b(filename), row(b.size()-1), col(b.size_by_index(row)){}
+    void pop_line() {
+        if (b.size() > 1){
+            b.pop_line(row);
+            if (row) --row;
+            col = b.size_by_index(row);
+        }
+    }
     void pop() {
         std::unique_lock ul(mt);
         if (!b.empty_line(row)) {
@@ -141,13 +155,8 @@ public:
                 b.del_sym(row, col-1);
                 --col;
             }
-      
         } else {
-            if (b.size() > 1){
-                b.pop_line();
-                --row;
-                col = b.size_by_index(row);
-            }
+            pop_line();
         }
     }
 
@@ -156,11 +165,7 @@ public:
         if (!b.empty_line(row)) {
             col -= b.pop_to_space(row, col);
         } else {
-            if (b.size() > 1){
-                b.pop_line();
-                --row;
-                col = b.size_by_index(row);
-            }
+            pop_line();
         }
     }
 
@@ -169,12 +174,14 @@ public:
         if (col > 0) {
             b.pop_to_begin(row, col);
             col = 0;
+        } else {
+            pop_line();
         }
     }
 
     void new_line() {
         std::unique_lock ul(mt);
-        b.new_line();
+        b.new_line(row);
         ++row;
         col = 0;
     }
@@ -236,7 +243,7 @@ public:
                std::unique_lock ul(mt);
                 --row;
                 if (col >= b.size_by_index(row)) {
-                    col = b.size_by_index(row)-1; 
+                    col = b.size_by_index(row); 
                 }
             }
         }
@@ -248,7 +255,7 @@ public:
                 std::unique_lock ul(mt);
                 ++row;
                 if (col >= b.size_by_index(row)) {
-                    col = b.size_by_index(row)-1; 
+                    col = b.size_by_index(row); 
                 }
             }
         }
@@ -273,6 +280,7 @@ public:
                 } else {
                    std::cout<< "|*| " << *it;
                 }
+                std::cout << "\n";
             }
         }
         void print_cursor(const std::string& str, size_t pos) {
@@ -283,7 +291,7 @@ public:
             std::cout<< "|*| ";
             std::cout << sub1;
             std::cout << RED_COLOR_CMD;
-            std::cout << "|"; // cursor
+            std::cout << "|"; 
             std::cout << DEFAULT_COLOR_CMD;
             std::cout << sub2;
         }
@@ -344,32 +352,33 @@ struct CommandHandler {
             char buffer[4];
             std::cin.read(buffer, 1);
             auto fsym = buffer[0];
-            if (fsym == ESC) {              // ESC
-                std::cin.read(buffer + 1, 2);  // Read 2 syms
-                if (buffer[1] == '[') {
-                    switch (buffer[2]) {
-                            case 'A': {return {buffer[2], Command::Up     };} 
+            switch (fsym) {
+                case ESC: {
+                    std::cin.read(buffer + 1, 2);  // Read 2 syms
+                    if (buffer[1] == '[') {
+                        switch (buffer[2]) {
+                            case 'A': {return {buffer[2], Command::Up     };}
                             case 'B': {return {buffer[2], Command::Down   };}
                             case 'C': {return {buffer[2], Command::Right  };}
                             case 'D': {return {buffer[2], Command::Left   };}
                             default:  {return {buffer[2], Command::Empty  };}
                         }
-                } else {
-                    return  {fsym, Command::SaveExit};
+                    }
+                    break;
                 }
-            } else if (fsym == CTRL_W) {
-                return {buffer[1], Command::PopWord};
-            } else if (fsym == CTRL_U) {
-                return {buffer[1], Command::PopToBegin};
-            }
-
-            if (fsym == DELETE) {
-                return {fsym, Command::Del}; // del
-            } else {
-                return {fsym, Command::Add}; // add
+                case CTRL_W:
+                    return  {buffer[1], Command::PopWord};
+                case CTRL_U:
+                    return  {buffer[1], Command::PopToBegin};
+                case CTRL_F:
+                    return  {buffer[1], Command::SaveExit};
+                case DELETE:
+                    return  {fsym,      Command::Del};
+                default:
+                    return {fsym, Command::Add};
             }
         }
-        return {ret, Command::Add};
+        return {ret, Command::Error};
    }
 
    void set_buffered_input(bool enable) {
@@ -389,36 +398,18 @@ struct CommandHandler {
             auto [sym, cmd] = input(5);
             switch (cmd) {
                 case Command::Empty: continue;
-                case Command::Add: {
-                    RenderNotifier rn;
-                    if (sym == '\n') {
-                        bm.new_line();
-                    } else {
-                        bm.add(sym);
-                    }
-                    break;
-                }
-                case Command::Del:{
-                    RenderNotifier rn;
-                    bm.pop();
-                    break;
-                }
-                case Command::PopWord: {
-                    RenderNotifier rn;
-                    bm.pop_word();
-                    break;
-                }
-                case Command::PopToBegin: {
-                    RenderNotifier rn;
-                    bm.pop_to_begin();
-                    break;
-                }
-                case Command::Up:       {RenderNotifier rn; bm.up();    break;}
-                case Command::Down:     {RenderNotifier rn; bm.down();  break;}
-                case Command::Right:    {RenderNotifier rn; bm.right(); break;}
-                case Command::Left:     {RenderNotifier rn; bm.left();  break;}
-                case Command::SaveExit: {buffer_save.store(true);       return;}
-                case Command::Error:    {break;} // 
+                case Command::Add:        { RenderNotifier rn; sym == '\n' ? (bm.new_line()) : (bm.add(sym)); break;}
+
+                case Command::Del:        { RenderNotifier rn; bm.pop();          break;}
+                case Command::PopWord:    { RenderNotifier rn; bm.pop_word();     break;}
+                case Command::PopToBegin: { RenderNotifier rn; bm.pop_to_begin(); break;}
+                case Command::Up:         { RenderNotifier rn; bm.up();           break;}
+                case Command::Down:       { RenderNotifier rn; bm.down();         break;}
+                case Command::Right:      { RenderNotifier rn; bm.right();        break;}
+                case Command::Left:       { RenderNotifier rn; bm.left();         break;}
+                
+                case Command::SaveExit:   { buffer_save.store(true); render_cv.notify_one(); return;}
+                case Command::Error:      { break;} // 
             }
         }
     }
@@ -441,11 +432,11 @@ int main(int argc, char *argv[]){
     const char* filename = argv[1];
     BufferManager<FileBuffer> b(filename);
     
-    // run command handler thread
+    
     std::thread(CommandHandler{}, std::ref(b)).detach();
     
     RenderManager rm;
-    b.print(rm); // print full
+    b.print(rm);
 
     for(;;) {
         {
