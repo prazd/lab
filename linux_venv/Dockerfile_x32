@@ -14,4 +14,4 @@ USER prazd
 
 WORKDIR /home/prazd
 
-COPY --chown=prazd:prazd src .
+COPY --chown=prazd:prazd null .

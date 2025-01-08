@@ -1,6 +1,6 @@
 FROM amd64/ubuntu:rolling
 
-RUN apt-get update && apt-get install -y build-essential gdb vim g++ valgrind man sudo
+RUN apt-get update && apt-get install -y build-essential gdb vim g++ valgrind man sudo cmake
 
 # disable root pass
 RUN echo "prazd ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
@@ -11,4 +11,4 @@ USER prazd
 
 WORKDIR /home/prazd
 
-COPY --chown=prazd:prazd src .
+COPY --chown=prazd:prazd null .
