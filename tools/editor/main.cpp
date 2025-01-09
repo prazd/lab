@@ -9,6 +9,10 @@
 #include <shared_mutex>
 #include <csignal>
 #include <tuple>
+#include <mutex>
+#include <vector>
+#include <condition_variable>
+#include <memory_resource>
 
 constexpr char CTRL_W = 0x17;
 constexpr char CTRL_U = 0x15;
@@ -34,8 +38,13 @@ std::mutex render_mutex;
 
 class Buffer {
 protected:
-    std::vector<std::string> lines;
+    // todo: test
+    // char buffer[4096];
+    // std::pmr::monotonic_buffer_resource mb;
+    std::pmr::unsynchronized_pool_resource upr;
+    std::pmr::vector<std::pmr::string> lines;
 public:
+    Buffer(): upr(std::pmr::pool_options{.max_blocks_per_chunk = 16, .largest_required_pool_block = 512}), lines{&upr}{}
     void new_line(size_t row) {
         if (row == lines.size()-1) {
             lines.push_back({});
@@ -115,7 +124,7 @@ public:
         }
         std::string line;
         while (std::getline(file, line)) {
-            lines.push_back(line);
+            lines.push_back(std::pmr::string(line));
         };
         if (lines.empty()) {
             lines.push_back({});
@@ -214,9 +223,9 @@ public:
     template <typename Printer>
     void print(Printer& p) {
         std::shared_lock sl(mt);
-        auto copy = b;
-        sl.unlock();
-        p.print(copy.cbegin(), copy.cend(), row, col);
+        // auto copy = b;
+        // sl.unlock();
+        p.print(b.cbegin(), b.cend(), row, col);
     }
 
     void left() {
@@ -280,10 +289,10 @@ public:
                 } else {
                    std::cout<< "|*| " << *it;
                 }
-                std::cout << "\n";
+                std::cout << "\n" << std::flush;
             }
         }
-        void print_cursor(const std::string& str, size_t pos) {
+        void print_cursor(const std::string_view& str, size_t pos) {
             std::cout << CLEAN_CURRENT_LINE_CMD;
             auto sub1 = str.substr(0, pos);
             auto sub2 = str.substr(pos);
@@ -312,6 +321,7 @@ public:
     }
     ~RenderManager() {
         std::cout << SHOW_CURSOR_CMD;
+        std::cout.flush();
     }
 };
 
@@ -416,9 +426,13 @@ struct CommandHandler {
 };
 
 void handle_signal(int signal) {
-    std::cout << SHOW_CURSOR_CMD;
+    std::cout << SHOW_CURSOR_CMD << std::flush;
     terminate_flag.store(true);
     render_cv.notify_one();
+    #ifdef __linux__
+        system("stty echo");
+        system("stty sane");
+    #endif
     exit(0);
 }
 
@@ -453,4 +467,9 @@ int main(int argc, char *argv[]){
             update_screen.store(false);
         }
     }
+    
+    #ifdef __linux__
+        system("stty echo");
+        system("stty sane");
+    #endif
 }
