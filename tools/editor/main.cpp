@@ -17,6 +17,8 @@
 constexpr char CTRL_W = 0x17;
 constexpr char CTRL_U = 0x15;
 constexpr char CTRL_F = 0x06;
+constexpr char CTRL_A = 0x01;
+constexpr char CTRL_E = 0x05;
 constexpr char DELETE = 127;
 constexpr char ESC = '\x1B';
 constexpr char SPACE = ' ';
@@ -145,8 +147,7 @@ class BufferManager {
     B b;
     size_t row;
     size_t col;
-public:
-    BufferManager(const char* filename): b(filename), row(b.size()-1), col(b.size_by_index(row)){}
+    
     void pop_line() {
         if (b.size() > 1){
             b.pop_line(row);
@@ -154,6 +155,9 @@ public:
             col = b.size_by_index(row);
         }
     }
+public:
+    BufferManager(const char* filename): b(filename), row(b.size()-1), col(b.size_by_index(row)){}
+
     void pop() {
         std::unique_lock ul(mt);
         if (!b.empty_line(row)) {
@@ -184,7 +188,9 @@ public:
             b.pop_to_begin(row, col);
             col = 0;
         } else {
-            pop_line();
+            if (b.empty_line(row)){
+                pop_line();
+            }
         }
     }
 
@@ -225,8 +231,23 @@ public:
         std::shared_lock sl(mt);
         // auto copy = b;
         // sl.unlock();
-        p.print(b.cbegin(), b.cend(), row, col);
+        p.print(b.cbegin(), b.cend(), row, col, 10);
     }
+
+    void move_to_begin() {
+        if (col > 0) {
+            col = 0;
+        }
+    }
+
+    void move_to_end() {
+        std::unique_lock ul(mt);
+        auto sz = b.size_by_index(row);
+        if (col < sz) {
+            col = sz;
+        }
+    }
+
 
     void left() {
         if (col > 0) {
@@ -280,8 +301,22 @@ public:
     }
     struct LinePrinter {
         template <typename Iter>
-        void operator()(Iter it, Iter ite, size_t row, size_t col) {
+        void operator()(Iter begin, Iter end, size_t row, size_t col, size_t page) {
             size_t counter{};
+            auto it = begin;
+            auto ite = end;
+            auto sz = std::distance(it, ite);
+            // todo: finish pagination (unstable)
+            if (sz > page) {
+                if (sz - page <= row && row >= page) {
+                    it = end - page;
+                } else if (sz - page > row && row >= page){
+                    it += row-page;
+                    ite = it + page;
+                } else if (row < page) {
+                    ite = it + page;
+                }
+            }
             for (; it != ite; ++it, ++counter) {
                 std::cout << CLEAN_CURRENT_LINE_CMD;
                 if (counter == row) {
@@ -307,9 +342,9 @@ public:
     } printer;
 
     template <typename Iter>
-    void print(Iter it, Iter ite, size_t row, size_t col) {
+    void print(Iter it, Iter ite, size_t row, size_t col, size_t page) {
         std::cout << SET_CURSOR_TO_BEGIN_CMD;
-        printer(it, ite, row, col);
+        printer(it, ite, row, col, page);
         std::cout << CLEAN_BELOW_CMD;
         std::cout << std::flush;
     }
@@ -331,8 +366,10 @@ struct CommandHandler {
     enum class Command: char {
         Empty, Error, Add, Del, Up, Down, Right, Left, SaveExit,
         // ShortCuts
-        PopWord,   // Ctrl + W
-        PopToBegin // Ctrl + U
+        PopWord,     // Ctrl + W
+        PopToBegin,  // Ctrl + U
+        MoveToBegin, // Ctrl + A
+        MoveToEnd    // Ctrl + D
     };
 
     struct RenderNotifier {
@@ -376,16 +413,13 @@ struct CommandHandler {
                     }
                     break;
                 }
-                case CTRL_W:
-                    return  {buffer[1], Command::PopWord};
-                case CTRL_U:
-                    return  {buffer[1], Command::PopToBegin};
-                case CTRL_F:
-                    return  {buffer[1], Command::SaveExit};
-                case DELETE:
-                    return  {fsym,      Command::Del};
-                default:
-                    return {fsym, Command::Add};
+                case CTRL_W: {return  {buffer[1], Command::PopWord     };}
+                case CTRL_U: {return  {buffer[1], Command::PopToBegin  };}
+                case CTRL_F: {return  {buffer[1], Command::SaveExit    };}
+                case CTRL_A: {return  {buffer[1], Command::MoveToBegin };}
+                case CTRL_E: {return  {buffer[1], Command::MoveToEnd   };}
+                case DELETE: {return  {fsym,      Command::Del};}
+                default:     {return {fsym, Command::Add};}
             }
         }
         return {ret, Command::Error};
@@ -410,13 +444,15 @@ struct CommandHandler {
                 case Command::Empty: continue;
                 case Command::Add:        { RenderNotifier rn; sym == '\n' ? (bm.new_line()) : (bm.add(sym)); break;}
 
-                case Command::Del:        { RenderNotifier rn; bm.pop();          break;}
-                case Command::PopWord:    { RenderNotifier rn; bm.pop_word();     break;}
-                case Command::PopToBegin: { RenderNotifier rn; bm.pop_to_begin(); break;}
-                case Command::Up:         { RenderNotifier rn; bm.up();           break;}
-                case Command::Down:       { RenderNotifier rn; bm.down();         break;}
-                case Command::Right:      { RenderNotifier rn; bm.right();        break;}
-                case Command::Left:       { RenderNotifier rn; bm.left();         break;}
+                case Command::Del:             { RenderNotifier rn; bm.pop();           break;}
+                case Command::PopWord:         { RenderNotifier rn; bm.pop_word();      break;}
+                case Command::PopToBegin:      { RenderNotifier rn; bm.pop_to_begin();  break;}
+                case Command::Up:              { RenderNotifier rn; bm.up();            break;}
+                case Command::Down:            { RenderNotifier rn; bm.down();          break;}
+                case Command::Right:           { RenderNotifier rn; bm.right();         break;}
+                case Command::Left:            { RenderNotifier rn; bm.left();          break;}
+                case Command::MoveToBegin:     { RenderNotifier rn; bm.move_to_begin(); break;}
+                case Command::MoveToEnd:       { RenderNotifier rn; bm.move_to_end();   break;}
                 
                 case Command::SaveExit:   { buffer_save.store(true); render_cv.notify_one(); return;}
                 case Command::Error:      { break;} // 
