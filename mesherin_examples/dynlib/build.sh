@@ -1,4 +1,4 @@
 #!/bin/bash
 
-g++ -shared myfunc.cpp -o libmyfunc.dylib
-g++ main.cpp -lmyfunc -L.
+g++ -std=c++20 -shared myfunc.cpp -o libmyfunc.dylib
+g++ -std=c++20 main.cpp -lmyfunc -L.

@@ -2,7 +2,8 @@
 
 int func(int);
 
-int main() {
-    int x = 10;
-    std::cout << func(x) << "\n";
+
+int main() { 
+   extern int z;
+   std::cout << func(z) << "\n";
 }
