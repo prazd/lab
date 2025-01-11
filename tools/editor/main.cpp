@@ -141,12 +141,15 @@ public:
     }
 };
 
-template <typename B = FileBuffer>
+template <typename B = FileBuffer, size_t chunk_sz = 15>
 class BufferManager {
     mutable std::shared_mutex mt;
     B b;
     size_t row;
     size_t col;
+
+    size_t chunk_start;
+    size_t chunk_end;
     
     void pop_line() {
         if (b.size() > 1){
@@ -155,8 +158,24 @@ class BufferManager {
             col = b.size_by_index(row);
         }
     }
+
+    void move_up_chunk() {
+        if (row <= chunk_start){
+            if (chunk_start) chunk_start = row;
+        } else if (chunk_end > b.size()) {
+            if (chunk_start) --chunk_start;
+        }
+        chunk_end = b.size() >= chunk_sz ? chunk_start + chunk_sz : b.size();
+    }
+
+    void move_down_chunk() {
+        if (row >= chunk_end && b.size() > chunk_sz) {
+            ++chunk_start;
+        }
+        chunk_end = b.size() >= chunk_sz ? chunk_start + chunk_sz : b.size();
+    }
 public:
-    BufferManager(const char* filename): b(filename), row(b.size()-1), col(b.size_by_index(row)){}
+    BufferManager(const char* filename): b(filename), row(0), col(b.size_by_index(row)), chunk_start(0), chunk_end(std::min(b.size(), chunk_sz)){}
 
     void pop() {
         std::unique_lock ul(mt);
@@ -170,6 +189,7 @@ public:
             }
         } else {
             pop_line();
+            move_up_chunk();
         }
     }
 
@@ -179,6 +199,7 @@ public:
             col -= b.pop_to_space(row, col);
         } else {
             pop_line();
+            move_up_chunk();
         }
     }
 
@@ -190,6 +211,7 @@ public:
         } else {
             if (b.empty_line(row)){
                 pop_line();
+                move_up_chunk();
             }
         }
     }
@@ -199,6 +221,7 @@ public:
         b.new_line(row);
         ++row;
         col = 0;
+        move_down_chunk();
     }
 
     void add(char sym) {
@@ -231,7 +254,7 @@ public:
         std::shared_lock sl(mt);
         // auto copy = b;
         // sl.unlock();
-        p.print(b.cbegin(), b.cend(), row, col, 10);
+        p.print(b.cbegin() + chunk_start, b.cbegin() + chunk_end, b.cbegin() + row, col);
     }
 
     void move_to_begin() {
@@ -275,6 +298,7 @@ public:
                 if (col >= b.size_by_index(row)) {
                     col = b.size_by_index(row); 
                 }
+                move_up_chunk();
             }
         }
     }
@@ -287,6 +311,7 @@ public:
                 if (col >= b.size_by_index(row)) {
                     col = b.size_by_index(row); 
                 }
+                move_down_chunk();
             }
         }
     }
@@ -301,29 +326,14 @@ public:
     }
     struct LinePrinter {
         template <typename Iter>
-        void operator()(Iter begin, Iter end, size_t row, size_t col, size_t page) {
-            size_t counter{};
-            auto it = begin;
-            auto ite = end;
-            auto sz = std::distance(it, ite);
-            // todo: finish pagination (unstable)
-            if (sz > page) {
-                if (sz - page <= row && row >= page) {
-                    it = end - page;
-                } else if (sz - page > row && row >= page){
-                    it += row-page;
-                    ite = it + page;
-                } else if (row < page) {
-                    ite = it + page;
-                }
-            }
-            for (; it != ite; ++it, ++counter) {
+        void operator()(Iter it, Iter ite, Iter row, size_t col) {
+            for (; it != ite; ++it) {
                 std::cout << CLEAN_CURRENT_LINE_CMD;
-                if (counter == row) {
+                if (it == row)
                     print_cursor(*it, col);
-                } else {
+                else 
                    std::cout<< "|*| " << *it;
-                }
+
                 std::cout << "\n" << std::flush;
             }
         }
@@ -342,9 +352,9 @@ public:
     } printer;
 
     template <typename Iter>
-    void print(Iter it, Iter ite, size_t row, size_t col, size_t page) {
+    void print(Iter it, Iter ite, Iter row, size_t col) {
         std::cout << SET_CURSOR_TO_BEGIN_CMD;
-        printer(it, ite, row, col, page);
+        printer(it, ite, row, col);
         std::cout << CLEAN_BELOW_CMD;
         std::cout << std::flush;
     }
