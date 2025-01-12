@@ -13,6 +13,7 @@
 #include <vector>
 #include <condition_variable>
 #include <memory_resource>
+#include <queue>
 
 constexpr char CTRL_W = 0x17;
 constexpr char CTRL_U = 0x15;
@@ -32,11 +33,16 @@ constexpr const char* SET_CURSOR_TO_BEGIN_CMD = "\x1B[H";
 constexpr const char* CLEAN_CURRENT_LINE_CMD = "\x1B[2K";
 constexpr const char* CLEAN_BELOW_CMD = "\x1B[0J";
 
-std::atomic<bool> buffer_save = false;
-std::atomic<bool> update_screen = false;
-std::atomic<bool> terminate_flag = false;
+
 std::condition_variable render_cv;
 std::mutex render_mutex;
+
+enum class Events: char {
+    Print,
+    Terminate,
+    Save
+};
+std::queue<Events> events;
 
 class Buffer {
 protected:
@@ -143,7 +149,6 @@ public:
 
 template <typename B = FileBuffer, size_t chunk_sz = 15>
 class BufferManager {
-    mutable std::shared_mutex mt;
     B b;
     size_t row;
     size_t col;
@@ -178,7 +183,6 @@ public:
     BufferManager(const char* filename): b(filename), row(0), col(b.size_by_index(row)), chunk_start(0), chunk_end(std::min(b.size(), chunk_sz)){}
 
     void pop() {
-        std::unique_lock ul(mt);
         if (!b.empty_line(row)) {
             if (col == b.size_by_index(row)) {
                 b.pop_sym_by_index(row);
@@ -194,7 +198,6 @@ public:
     }
 
     void pop_word() {
-        std::unique_lock ul(mt);
         if (!b.empty_line(row)) {
             col -= b.pop_to_space(row, col);
         } else {
@@ -204,7 +207,6 @@ public:
     }
 
     void pop_to_begin() {
-        std::unique_lock ul(mt);
         if (col > 0) {
             b.pop_to_begin(row, col);
             col = 0;
@@ -217,7 +219,6 @@ public:
     }
 
     void new_line() {
-        std::unique_lock ul(mt);
         b.new_line(row);
         ++row;
         col = 0;
@@ -225,7 +226,6 @@ public:
     }
 
     void add(char sym) {
-        std::unique_lock ul(mt);
         if (col == b.size_by_index(row)) {
             b.add(row, sym);
         } else {
@@ -235,84 +235,55 @@ public:
     }
 
     size_t get_row() const {
-        std::shared_lock sl(mt);
         return row;
     }
 
     size_t get_col() const {
-        std::shared_lock sl(mt);
         return col;
     }
 
     void save_and_close() {
-        std::unique_lock ul(mt);
         b.save_and_close();
     }
 
     template <typename Printer>
     void print(Printer& p) {
-        std::shared_lock sl(mt);
-        // auto copy = b;
-        // sl.unlock();
         p.print(b.cbegin() + chunk_start, b.cbegin() + chunk_end, b.cbegin() + row, col);
     }
 
     void move_to_begin() {
-        if (col > 0) {
-            col = 0;
-        }
+        if (col > 0) col = 0;
     }
 
     void move_to_end() {
-        std::unique_lock ul(mt);
         auto sz = b.size_by_index(row);
-        if (col < sz) {
-            col = sz;
-        }
+        if (col < sz) col = sz;
     }
 
-
     void left() {
-        if (col > 0) {
-            {
-                std::unique_lock ul(mt);
-                --col;
-            }
-        }
+        if (col > 0) --col;
     }
 
     void right() {
-        if (col < b.size_by_index(row)) {
-            {
-                std::unique_lock ul(mt);
-                ++col;
-            }
-        }
+        if (col < b.size_by_index(row)) ++col;
     }
 
     void up() {
         if (row > 0) {
-            {
-               std::unique_lock ul(mt);
-                --row;
-                if (col >= b.size_by_index(row)) {
-                    col = b.size_by_index(row); 
-                }
-                move_up_chunk();
-            }
+            --row;
+            if (col >= b.size_by_index(row)) 
+                col = b.size_by_index(row); 
+            move_up_chunk();
         }
+        
     }
     
     void down() {
         if (row < b.size()-1) {
-            {
-                std::unique_lock ul(mt);
-                ++row;
-                if (col >= b.size_by_index(row)) {
-                    col = b.size_by_index(row); 
-                }
-                move_down_chunk();
-            }
+            ++row;
+            if (col >= b.size_by_index(row)) 
+                col = b.size_by_index(row); 
+            move_down_chunk();
         }
     }
 
@@ -385,7 +356,10 @@ struct CommandHandler {
     struct RenderNotifier {
         RenderNotifier() = default;
         ~RenderNotifier(){
-            update_screen.store(true);
+            {
+                std::lock_guard lg(render_mutex);
+                events.push(Events::Print);
+            }
             render_cv.notify_one();
         }
     };
@@ -464,7 +438,7 @@ struct CommandHandler {
                 case Command::MoveToBegin:     { RenderNotifier rn; bm.move_to_begin(); break;}
                 case Command::MoveToEnd:       { RenderNotifier rn; bm.move_to_end();   break;}
                 
-                case Command::SaveExit:   { buffer_save.store(true); render_cv.notify_one(); return;}
+                case Command::SaveExit:   {  {std::lock_guard lg(render_mutex); events.push(Events::Save);} render_cv.notify_one(); return;}
                 case Command::Error:      { break;} // 
             }
         }
@@ -473,7 +447,10 @@ struct CommandHandler {
 
 void handle_signal(int signal) {
     std::cout << SHOW_CURSOR_CMD << std::flush;
-    terminate_flag.store(true);
+    {
+        std::lock_guard lg(render_mutex);
+        events.push(Events::Terminate);
+    }
     render_cv.notify_one();
     #ifdef __linux__
         system("stty echo");
@@ -501,16 +478,18 @@ int main(int argc, char *argv[]){
     for(;;) {
         {
             std::unique_lock ul(render_mutex);
-            render_cv.wait(ul, [&]{return update_screen.load() || buffer_save.load() || terminate_flag.load();});
-            if (buffer_save.load()) {
-                b.save_and_close();
-                break;
-            } else if (terminate_flag.load()) {
-                break;
+            render_cv.wait(ul, [&]{return !events.empty();});
+            while (!events.empty()){
+                auto el = events.front();
+                events.pop();
+                ul.unlock();
+                switch(el){
+                    case Events::Save: {b.save_and_close(); return 0;}
+                    case Events::Terminate: {return 0;}
+                    case Events::Print: {b.print(rm); rm.print_info("\nLines:", b.get_row(), "\nCol:", b.get_col());}
+                }
+                ul.lock();
             }
-            b.print(rm);
-            rm.print_info("\nLines:", b.get_row(), "\nCol:", b.get_col());
-            update_screen.store(false);
         }
     }
     
