@@ -9,7 +9,7 @@
 #include <array>
 
 template <typename T>
-constexpr int rec_bin_search(const T& arr, int value, int begin = 0, int end = (sizeof(arr)/sizeof(arr[0]))) {
+consteval int rec_bin_search(const T& arr, int value, int begin = 0, int end = (sizeof(arr)/sizeof(arr[0]))) {
     if (begin >= end) {
         return -1;
     }
