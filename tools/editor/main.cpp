@@ -20,6 +20,7 @@ constexpr char CTRL_U = 0x15;
 constexpr char CTRL_F = 0x06;
 constexpr char CTRL_A = 0x01;
 constexpr char CTRL_E = 0x05;
+constexpr char CTRL_K = '\v';
 constexpr char DELETE = 127;
 constexpr char ESC = '\x1B';
 constexpr char SPACE = ' ';
@@ -66,7 +67,8 @@ public:
     }
 
     void insert(size_t row, size_t col, char sym) {
-        lines[row].insert(lines[row].begin() + col, sym);
+        auto& curr = lines[row];
+        curr.insert(curr.begin() + col, sym);
     }
 
     size_t size() const {
@@ -82,7 +84,8 @@ public:
     }
 
     void del_sym(size_t row, size_t col) {
-        lines[row].erase(lines[row].begin() + col);
+        auto& curr = lines[row];
+        curr.erase(curr.begin() + col);
     }
 
     size_t pop_to_space(size_t row, size_t col) {
@@ -99,6 +102,11 @@ public:
 
     void pop_to_begin(size_t row, size_t col) {
         lines[row].erase(0, col);
+    }
+
+    void pop_to_end(size_t row, size_t col) {
+        auto& curr = lines[row];
+        curr.erase(curr.begin() + col, curr.end());
     }
 
     void pop_sym_by_index(size_t index) {
@@ -180,7 +188,7 @@ class BufferManager {
         chunk_end = b.size() >= chunk_sz ? chunk_start + chunk_sz : b.size();
     }
 public:
-    BufferManager(const char* filename): b(filename), row(0), col(b.size_by_index(row)), chunk_start(0), chunk_end(std::min(b.size(), chunk_sz)){}
+    explicit BufferManager(const char* filename): b(filename), row(0), col(b.size_by_index(row)), chunk_start(0), chunk_end(std::min(b.size(), chunk_sz)){}
 
     void pop() {
         if (!b.empty_line(row)) {
@@ -215,6 +223,12 @@ public:
                 pop_line();
                 move_up_chunk();
             }
+        }
+    }
+
+    void pop_to_end() {
+        if (col < b.size_by_index(row)) {
+            b.pop_to_end(row, col);
         }
     }
 
@@ -347,10 +361,11 @@ struct CommandHandler {
     enum class Command: char {
         Empty, Error, Add, Del, Up, Down, Right, Left, SaveExit,
         // ShortCuts
-        PopWord,     // Ctrl + W
-        PopToBegin,  // Ctrl + U
-        MoveToBegin, // Ctrl + A
-        MoveToEnd    // Ctrl + D
+        PopWord,      // Ctrl + W
+        PopToBegin,   // Ctrl + U
+        MoveToBegin,  // Ctrl + A
+        MoveToEnd,    // Ctrl + D
+        PopToEnd      // Ctrl + K
     };
 
     struct RenderNotifier {
@@ -402,8 +417,9 @@ struct CommandHandler {
                 case CTRL_F: {return  {buffer[1], Command::SaveExit    };}
                 case CTRL_A: {return  {buffer[1], Command::MoveToBegin };}
                 case CTRL_E: {return  {buffer[1], Command::MoveToEnd   };}
-                case DELETE: {return  {fsym,      Command::Del};}
-                default:     {return {fsym, Command::Add};}
+                case DELETE: {return  {fsym,      Command::Del         };}
+                case CTRL_K: {return  {fsym,      Command::PopToEnd    };}
+                default:     {return  {fsym,      Command::Add         };}
             }
         }
         return {ret, Command::Error};
@@ -437,6 +453,7 @@ struct CommandHandler {
                 case Command::Left:            { RenderNotifier rn; bm.left();          break;}
                 case Command::MoveToBegin:     { RenderNotifier rn; bm.move_to_begin(); break;}
                 case Command::MoveToEnd:       { RenderNotifier rn; bm.move_to_end();   break;}
+                case Command::PopToEnd:        { RenderNotifier rn; bm.pop_to_end();    break;}
                 
                 case Command::SaveExit:   {  {std::lock_guard lg(render_mutex); events.push(Events::Save);} render_cv.notify_one(); return;}
                 case Command::Error:      { break;} // 
@@ -468,7 +485,6 @@ int main(int argc, char *argv[]){
     
     const char* filename = argv[1];
     BufferManager<FileBuffer> b(filename);
-    
     
     std::thread(CommandHandler{}, std::ref(b)).detach();
     
