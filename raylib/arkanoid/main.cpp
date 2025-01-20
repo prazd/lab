@@ -7,6 +7,8 @@ constexpr int WIDTH = 1200;
 constexpr int BLOCK_H = 60;
 constexpr int BLOCK_W = 100;
 constexpr int SPEED = 7;
+constexpr int START_POS_X = 600;
+constexpr int START_POS_Y = 550;
 
 struct RectangleObject {
     int x, y, h, w;
@@ -16,7 +18,6 @@ struct RectangleObject {
 struct MainStick: RectangleObject{};
 struct HP: RectangleObject {bool active;};
 struct BlockObj: RectangleObject{bool active;};
-
 
 template <size_t sz>
 struct HPBar {
@@ -73,6 +74,12 @@ struct Blocks {
     }
 };
 
+struct Ball {
+    int x, y, r;
+    Color c;
+    bool active;
+    Vector2 velocity;
+};
 
 struct StickManager{
     MainStick& ms;
@@ -92,14 +99,55 @@ struct StickManager{
 };
 
 
+struct BallManager {
+    Ball& b;
+    BallManager(Ball& b): b(b) {}
+    void move() {
+        if (!b.active){
+            if (IsKeyPressed(KEY_A) || IsKeyDown(KEY_A)){
+                if (b.x - b.r > 50) {
+                    b.x -= SPEED;
+                }
+            }
+            if (IsKeyPressed(KEY_D) || IsKeyDown(KEY_D)){
+                if (b.x + b.r < WIDTH-50) {
+                    b.x += SPEED;
+                }
+            }
+        } else {
+            update(WIDTH, HEIGHT, 2.f);
+        }
+    }
+    // todo: update 
+    void update(float screenWidth, float screenHeight, float bounceFactor) {
+        b.x += b.velocity.x;
+        b.y += b.velocity.y;
+
+        if (b.x < 0 || b.x + b.r > screenWidth) {
+            b.velocity.x *= -1;
+            b.x = b.x < 0 ? 0 : screenWidth - b.r; 
+        }
+
+        if (b.y < 0 || b.y + b.r > screenHeight) {
+            b.velocity.y *= -1; 
+            b.y = b.y < 0 ? 0 : screenHeight - b.r;
+        }
+    }
+};
+
+
 int main(){
     InitWindow(WIDTH, HEIGHT, "Arkanoid");
-    MainStick ms{{600, 550, 100, 10, BLACK}};
+    
+    MainStick ms{{START_POS_X, START_POS_Y, 100, 10, BLACK}};
+    Ball ball{START_POS_X + 50, START_POS_Y-11, 10,  RED, false, {0, -8}};
+
     StickManager sm(ms);
+    BallManager bm(ball);
     SetTargetFPS(60);
 
     HPBar<5> bar;
-    Blocks<4,8> blocks(150, 40, 120,70);
+    Blocks<4,8> blocks(150, 40, 105, 65);
 
     RenderTexture2D target = LoadRenderTexture(WIDTH, HEIGHT);
     auto render = [&]{
@@ -107,24 +155,28 @@ int main(){
         ClearBackground(RAYWHITE);
         for(const auto& el: bar){
             if (el.active)
-                DrawRectangle(el.x, el.y, el.h, el.w, el.c); // hp bar
+                DrawRectangle(el.x, el.y, el.h, el.w, el.c);   // hp bar
         }
         for(auto& row: blocks.blocks){
             for(const auto& el: row) {
                 if (el.active) {
                     DrawRectangle(el.x, el.y, el.h, el.w, el.c); // blocks
+                    DrawRectangleLinesEx((Rectangle){(float)el.x, (float)el.y, (float)el.h, (float)el.w}, 10, BLACK);
                 }
             }
         }
-        DrawRectangle(ms.x,ms.y,ms.h,ms.w,ms.c); // stick
+        
+        DrawCircle(ball.x, ball.y, ball.r, ball.c);    // ball
+        DrawRectangle(ms.x,ms.y,ms.h,ms.w,ms.c);       // stick
         EndTextureMode();
     };
    
     while(!WindowShouldClose()){
         sm.move();
+        bm.move();
         render();
         if (IsKeyPressed(KEY_SPACE)){
-            bar.min_hp();
+            if (!ball.active) ball.active = true;
         }
         BeginDrawing();
             ClearBackground(RAYWHITE);
