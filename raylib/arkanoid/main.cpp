@@ -96,38 +96,24 @@ class StateManager {
     Ball& b;
     MainStick& ms;
     void move_stick() {
-        if (IsKeyPressed(KEY_A) || IsKeyDown(KEY_A)){
-            if (ms.x > 0) {
-                ms.x -= STICK_SPEED;
-            }
-            if (!b.active && b.x - b.r > 50) {
-                b.x -= BALL_SPEED;
-            }
-        }
-        if (IsKeyPressed(KEY_D) || IsKeyDown(KEY_D)){
-            if (ms.x + ms.w < WIDTH) {
-                ms.x += STICK_SPEED;
-            }
-            if (!b.active && b.x + b.r < WIDTH-50) {
-                b.x += BALL_SPEED;
-            }
+        // todo: fix ranges
+        Vector2 mpos = GetMousePosition();
+        ms.x = mpos.x;
+        if (!b.active){
+            b.x = ms.x + ms.w/2;
         }
     }
 
     bool collision(int cx, int cy, int r, int rx, int ry, int rw, int rh) {
         int nearestX = std::max(rx, std::min(cx, rx + rw));
-    int nearestY = std::max(ry, std::min(cy, ry + rh));
+        int nearestY = std::max(ry, std::min(cy, ry + rh));
 
-    // Рассчитать расстояние от центра круга до ближайшей точки
-    int deltaX = cx - nearestX;
-    int deltaY = cy - nearestY;
+         // Рассчитать расстояние от центра круга до ближайшей точки
+        int deltaX = cx - nearestX;
+        int deltaY = cy - nearestY;
 
-    // Проверить, находится ли расстояние меньше или равно радиусу
-    return (deltaX * deltaX + deltaY * deltaY) <= (r * r);
-    }
-
-    bool ball_near(int rx, int ry, int rw, int rh) {
-        return (b.y + b.r >= ry && b.x >= rx && b.x <= rx + rw);
+         // Проверить, находится ли расстояние меньше или равно радиусу
+         return (deltaX * deltaX + deltaY * deltaY) <= (r * r);
     }
     
     void move_ball() {
