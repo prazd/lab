@@ -40,16 +40,6 @@ struct HPBar {
     auto end() {
         return bar.end();
     }
-    bool inactive() const {
-        for(auto& row: blocks) {
-            for (auto& el: blocks) {
-                if (el.active) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
     void reset() {
         for(auto& el: bar)
             el.active = true;
