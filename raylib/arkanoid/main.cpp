@@ -52,8 +52,9 @@ struct HPBar {
 
 template <size_t w, size_t h>
 struct Blocks {
+    size_t active_blocks;
     std::vector<std::vector<BlockObj>> blocks;
-    Blocks(int xstart, int ystart, int xstep, int ystep){
+    Blocks(int xstart, int ystart, int xstep, int ystep): active_blocks(w * h){
         blocks.resize(h);
         for(auto& el: blocks)
             el.resize(w);
@@ -74,6 +75,23 @@ struct Blocks {
                 el.active = true;
             }
         }
+        active_blocks = w * h;
+    }
+    size_t height() const {
+        return h;
+    }
+
+    size_t width() const {
+        return w;
+    }
+
+    size_t active_blocks_count() const {
+        return active_blocks;
+    }
+
+    void disable(BlockObj& obj) {
+        obj.active = false;
+        if (active_blocks) active_blocks--;
     }
     auto rbegin() {
         return blocks.rbegin();
@@ -158,7 +176,8 @@ class StateManager {
                     } else { 
                         b.velocity.y *= -1;
                     }
-                    el.active = false;
+                    blocks.disable(el);
+                    win_check();
                     return;
                 }
             }
@@ -178,7 +197,12 @@ class StateManager {
             }
         }
     }
-    
+
+    void win_check() {
+        if (!blocks.active_blocks_count()) {
+            current = State::Win;
+        }
+    }    
     enum class State: char {
         Prepare,
         Run,
@@ -207,7 +231,7 @@ public:
         }
 
         move_stick();
-        if (b.active){
+        if (b.active && current == State::Run){
             move_ball();
             check_stick_collision();
             check_block_collision();
@@ -259,6 +283,9 @@ int main(){
         DrawRectangle(ms.x,ms.y,ms.w, ms.h, ms.c);    // stick
         if (sm.loose()) {
            DrawText("LOOSE", 600, 400, 30, RED);
+        }
+        if (sm.win()) {
+            DrawText("Win", 600, 400, 30, GREEN);
         }
         EndTextureMode();
     };
