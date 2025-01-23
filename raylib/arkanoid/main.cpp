@@ -69,6 +69,39 @@ struct Blocks {
             y += ystep;
         }  
     }
+    void seed() {
+        size_t counter = 0;
+        active_blocks = 0;
+        for(auto& row: blocks) {
+            for(auto& el: row) {
+                if (counter & 1) {
+                    ++active_blocks;
+                    el.active = true;
+                } else {
+                    el.active = false;
+                }
+                ++counter;
+            }
+        }
+    }
+    void seedchess() {
+        size_t counter = 0;
+        active_blocks = 0;
+        bool next_block = false;
+        for(auto& row: blocks) {
+            for(auto& el: row) {
+                if (next_block) {
+                    ++active_blocks;
+                    el.active = true;
+                } else {
+                    el.active = false;
+                }
+                next_block = !next_block;
+            }
+            next_block = !next_block;
+        }
+    }
+    
     void reset() {
         for(auto& row: blocks){
             for(auto& el: row) {
@@ -212,7 +245,9 @@ class StateManager {
 
 public:
 
-    StateManager(Ball& b, MainStick& ms, Blocks& blocks, HPBar& hpbar): b(b), ms(ms), blocks(blocks), hpbar(hpbar) {}
+    StateManager(Ball& b, MainStick& ms, Blocks& blocks, HPBar& hpbar): b(b), ms(ms), blocks(blocks), hpbar(hpbar) {
+        blocks.seedchess();
+    }
     void update() {
         if (IsKeyPressed(KEY_R)){
             current = State::Prepare;
