@@ -40,6 +40,16 @@ struct HPBar {
     auto end() {
         return bar.end();
     }
+    bool inactive() const {
+        for(auto& row: blocks) {
+            for (auto& el: blocks) {
+                if (el.active) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
     void reset() {
         for(auto& el: bar)
             el.active = true;
@@ -68,6 +78,13 @@ struct Blocks {
             y += ystep;
         }  
     }
+    void reset() {
+        for(auto& row: blocks){
+            for(auto& el: row) {
+                el.active = true;
+            }
+        }
+    }
     auto rbegin() {
         return blocks.rbegin();
     }
@@ -90,11 +107,12 @@ struct Ball {
 };
 
 
-template <typename Blocks>
+template <typename Blocks, typename HPBar>
 class StateManager {
     Blocks& blocks;
     Ball& b;
     MainStick& ms;
+    HPBar& hpbar;
     void move_stick() {
         // todo: fix ranges
         Vector2 mpos = GetMousePosition();
@@ -107,13 +125,9 @@ class StateManager {
     bool collision(int cx, int cy, int r, int rx, int ry, int rw, int rh) {
         int nearestX = std::max(rx, std::min(cx, rx + rw));
         int nearestY = std::max(ry, std::min(cy, ry + rh));
-
-         // Рассчитать расстояние от центра круга до ближайшей точки
         int deltaX = cx - nearestX;
         int deltaY = cy - nearestY;
-
-         // Проверить, находится ли расстояние меньше или равно радиусу
-         return (deltaX * deltaX + deltaY * deltaY) <= (r * r);
+        return (deltaX * deltaX + deltaY * deltaY) <= (r * r);
     }
     
     void move_ball() {
@@ -124,12 +138,14 @@ class StateManager {
             b.velocity.x *= -1;
         }
 
-        if (b.y - b.r <= 0 || b.y + b.r >= HEIGHT) {
+        if (b.y - b.r <= 0) {
             b.velocity.y *= -1;
         }
+       
+    }
 
-        // stick collision
-        if ((b.y + b.r >= ms.y && b.x >= ms.x && b.x <= ms.x + ms.w) && collision(b.x, b.y, b.r, ms.x, ms.y, ms.w, ms.h)){              
+    void check_stick_collision() {
+        if ((b.y + b.r >= ms.y && b.x >= ms.x && b.x <= ms.x + ms.w) && collision(b.x, b.y, b.r, ms.x, ms.y, ms.w, ms.h)){                  
             if (b.x <= ms.x + ms.w / 3) { // left    
                 b.velocity.x = -5;
                 b.velocity.y = -std::abs(b.velocity.y);
@@ -141,7 +157,9 @@ class StateManager {
                 b.velocity.y = -std::abs(b.velocity.y); // right
             }  
         }
-        // blocks collision
+    }
+
+    void check_block_collision() {
         for(auto it = blocks.rbegin(), ite = blocks.rend();it!=ite;++it){
             for(auto& el: *it) {
                 if (el.active && collision(b.x, b.y, b.r, el.x, el.y, el.w, el.h)){
@@ -155,14 +173,63 @@ class StateManager {
                 }
             }
         }
-       
     }
 
+    void fall_check() {
+        if (b.y + b.r >= HEIGHT) {
+            if (!hpbar.active_index) {
+                current = State::Loose;
+            } else {
+                hpbar.min_hp();
+                current = State::Prepare;
+                b.active = false;
+                b.x = START_POS_X + 50;
+                b.y = START_POS_Y - 11;
+            }
+        }
+    }
+    
+    enum class State: char {
+        Prepare,
+        Run,
+        Loose,
+        Win
+    } current = State::Prepare;
+
 public:
-    StateManager(Ball& b, MainStick& ms, Blocks& blocks): b(b), ms(ms), blocks(blocks) {}
+
+    StateManager(Ball& b, MainStick& ms, Blocks& blocks, HPBar& hpbar): b(b), ms(ms), blocks(blocks), hpbar(hpbar) {}
     void update() {
+        if (IsKeyPressed(KEY_R)){
+            current = State::Prepare;
+            hpbar.reset();
+            blocks.reset();
+            b.active = false;
+            b.x = START_POS_X + 50;
+            b.y = START_POS_Y - 11;
+            
+        }
+        if (IsKeyPressed(KEY_SPACE) && current == State::Prepare){
+            if (!b.active) {
+                b.active = true;
+                current = StateManager::State::Run;
+            }
+        }
+
         move_stick();
-        if (b.active) move_ball();
+        if (b.active){
+            move_ball();
+            check_stick_collision();
+            check_block_collision();
+            fall_check();
+        };    
+    }
+    bool loose() const {
+        return current == State::Loose;
+    }
+
+    bool win() const {
+        return current == State::Win;
     }
 };
 
@@ -175,7 +242,7 @@ int main(){
     HPBar<5> bar;
     Blocks<18,8> blocks(40, 0, 62, 40);
 
-    StateManager sm(ball, ms, blocks);
+    StateManager sm(ball, ms, blocks, bar);
     SetTargetFPS(60);
 
     RenderTexture2D target = LoadRenderTexture(WIDTH, HEIGHT);
@@ -200,15 +267,16 @@ int main(){
         DrawCircle(ball.x, ball.y, ball.r, ball.c); // ball
         DrawCircleLines(ball.x, ball.y, ball.r, BLUE);
         DrawRectangle(ms.x,ms.y,ms.w, ms.h, ms.c);    // stick
+        if (sm.loose()) {
+           DrawText("LOOSE", 600, 400, 30, RED);
+        }
         EndTextureMode();
     };
    
     while(!WindowShouldClose()){
         sm.update();
         render();
-        if (IsKeyPressed(KEY_SPACE)){
-            if (!ball.active) ball.active = true;
-        }
+
         BeginDrawing();
             ClearBackground(RAYWHITE);
             DrawTextureRec(target.texture, {0, 0, (float)target.texture.width, -(float)target.texture.height}, {0, 0}, WHITE);
