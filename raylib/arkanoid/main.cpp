@@ -143,7 +143,7 @@ struct Blocks {
 struct Ball {
     int x, y, r;
     Color c;
-    bool active;
+    bool moving;
     Vector2 velocity;
 };
 
@@ -158,7 +158,7 @@ class StateManager {
         // todo: fix ranges
         Vector2 mpos = GetMousePosition();
         ms.x = mpos.x;
-        if (!b.active){
+        if (!b.moving){
             b.x = ms.x + ms.w/2;
         }
     }
@@ -201,13 +201,31 @@ class StateManager {
     }
 
     void check_block_collision() {
-        for(auto it = blocks.rbegin(), ite = blocks.rend();it!=ite;++it){
+        for(auto it = blocks.begin(), ite = blocks.end(); it != ite; ++it){
             for(auto& el: *it) {
                 if (el.active && collision(b.x, b.y, b.r, el.x, el.y, el.w, el.h)){
-                     if (b.x < el.x || b.x > el.x + el.w) { 
-                        b.velocity.x *= -1;
-                    } else { 
+                    int ballLeft = b.x - b.r;
+                    int ballRight = b.x + b.r;
+                    int ballTop = b.y - b.r;
+                    int ballBottom = b.y + b.r;
+
+                    int blockLeft = el.x;
+                    int blockRight = el.x + el.w;
+                    int blockTop = el.y;
+                    int blockBottom = el.y + el.h;
+
+                    bool hitFromLeft = ballRight >= blockLeft;
+                    bool hitFromRight = ballLeft <= blockRight;
+                    bool hitFromTop = ballBottom >= blockTop;
+                    bool hitFromBottom = ballTop <= blockBottom;
+
+                    // if ((hitFromLeft && hitFromRight) || (hitFromTop && hitFromBottom)) {
+                    //     b.velocity.x *= -1;
+                    //     b.velocity.y *= -1;
+                    if (hitFromLeft || hitFromRight) {
                         b.velocity.y *= -1;
+                    } else if (hitFromTop || hitFromBottom) {
+                        b.velocity.x *= -1;
                     }
                     blocks.disable(el);
                     win_check();
@@ -224,7 +242,7 @@ class StateManager {
             } else {
                 hpbar.min_hp();
                 current = State::Prepare;
-                b.active = false;
+                b.moving = false;
                 b.x = START_POS_X + 50;
                 b.y = START_POS_Y - 11;
             }
@@ -253,20 +271,20 @@ public:
             current = State::Prepare;
             hpbar.reset();
             blocks.reset();
-            b.active = false;
+            b.moving = false;
             b.x = START_POS_X + 50;
             b.y = START_POS_Y - 11;
             
         }
         if (IsKeyPressed(KEY_SPACE) && current == State::Prepare){
-            if (!b.active) {
-                b.active = true;
+            if (!b.moving) {
+                b.moving = true;
                 current = StateManager::State::Run;
             }
         }
 
         move_stick();
-        if (b.active && current == State::Run){
+        if (b.moving && current == State::Run){
             move_ball();
             check_stick_collision();
             check_block_collision();
