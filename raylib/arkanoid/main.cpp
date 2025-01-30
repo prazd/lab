@@ -6,31 +6,36 @@ constexpr int HEIGHT = 600;
 constexpr int WIDTH = 1200;
 constexpr int BLOCK_H = 40;
 constexpr int BLOCK_W = 60;
-constexpr int SPEED = 9;
-constexpr int STICK_SPEED = 9;
 constexpr int BALL_SPEED = 7;
 constexpr int START_POS_X = 600;
 constexpr int START_POS_Y = 550;
 
-struct RectangleObject {
-    int x, y, h, w;
-    Color c;
-};
 
-struct MainStick: RectangleObject{};
-struct HP: RectangleObject {bool active;};
-struct BlockObj: RectangleObject{bool active;};
+struct MainStick {
+    Rectangle rec;
+    Color color;
+};
+struct HP{
+    Rectangle rec;
+    Color color;
+    bool active;
+};
+struct BlockObj {
+    Rectangle rec;
+    Color color;
+    bool active;
+};
 
 template <size_t sz>
 struct HPBar {
     std::array<HP, sz> bar;
     size_t active_index = sz-1;
     HPBar() {
-        int x = 60;
-        int y = 580;
-        int step = 60;
+        float x = 60;
+        float y = 580;
+        float step = 60;
         for (auto& el: bar) {
-            el = {{x, y, 40,10, GREEN}, true};
+            el = {{x, y, 40, 10}, GREEN, true};
             x += step;
         }
     }
@@ -54,15 +59,15 @@ template <size_t w, size_t h>
 struct Blocks {
     size_t active_blocks;
     std::vector<std::vector<BlockObj>> blocks;
-    Blocks(int xstart, int ystart, int xstep, int ystep): active_blocks(w * h){
+    Blocks(float xstart, float ystart, float xstep, float ystep): active_blocks(w * h){
         blocks.resize(h);
         for(auto& el: blocks)
             el.resize(w);
-        int x = xstart;
-        int y = ystart;
+        float x = xstart;
+        float y = ystart;
         for (auto& row: blocks) {
             for(auto& el: row){
-                el = {{x, y, BLOCK_H, BLOCK_W,GRAY}, true};
+                el = {{x, y, BLOCK_W, BLOCK_H },GRAY,true};
                 x += xstep;
             }
             x = xstart;
@@ -126,12 +131,6 @@ struct Blocks {
         obj.active = false;
         if (active_blocks) active_blocks--;
     }
-    auto rbegin() {
-        return blocks.rbegin();
-    }
-    auto rend() {
-        return blocks.rend();
-    }
     auto begin() {
         return blocks.begin();
     }
@@ -157,9 +156,9 @@ class StateManager {
     void move_stick() {
         // todo: fix ranges
         Vector2 mpos = GetMousePosition();
-        ms.x = mpos.x;
+        ms.rec.x = mpos.x;
         if (!b.moving){
-            b.x = ms.x + ms.w/2;
+            b.x = ms.rec.x + ms.rec.width / 2;
         }
     }
 
@@ -186,11 +185,11 @@ class StateManager {
     }
 
     void check_stick_collision() {
-        if ((b.y + b.r >= ms.y && b.x >= ms.x && b.x <= ms.x + ms.w) && collision(b.x, b.y, b.r, ms.x, ms.y, ms.w, ms.h)){                  
-            if (b.x <= ms.x + ms.w / 3) { // left    
+        if ((b.y + b.r >= ms.rec.y && b.x >= ms.rec.x && b.x <= ms.rec.x + ms.rec.width) && collision(b.x, b.y, b.r, ms.rec.x, ms.rec.y, ms.rec.width, ms.rec.height)){                  
+            if (b.x <= ms.rec.x + ms.rec.width / 3) { // left    
                 b.velocity.x = -5;
                 b.velocity.y = -std::abs(b.velocity.y);
-            } else if (b.x <= ms.x + 2 * ms.w / 3) { // middle
+            } else if (b.x <= ms.rec.x + 2 * ms.rec.width / 3) { // middle
                 b.velocity.x = 0;
                 b.velocity.y = -std::abs(b.velocity.y);
             } else { 
@@ -203,16 +202,16 @@ class StateManager {
     void check_block_collision() {
         for(auto it = blocks.begin(), ite = blocks.end(); it != ite; ++it){
             for(auto& el: *it) {
-                if (el.active && collision(b.x, b.y, b.r, el.x, el.y, el.w, el.h)){
+                if (el.active && collision(b.x, b.y, b.r, el.rec.x, el.rec.y, el.rec.width, el.rec.height)){
                     int ballLeft = b.x - b.r;
                     int ballRight = b.x + b.r;
                     int ballTop = b.y - b.r;
                     int ballBottom = b.y + b.r;
 
-                    int blockLeft = el.x;
-                    int blockRight = el.x + el.w;
-                    int blockTop = el.y;
-                    int blockBottom = el.y + el.h;
+                    int blockLeft = el.rec.x;
+                    int blockRight = el.rec.x + el.rec.width;
+                    int blockTop = el.rec.y;
+                    int blockBottom = el.rec.y + el.rec.height;
 
                     bool hitFromLeft = ballRight >= blockLeft;
                     bool hitFromRight = ballLeft <= blockRight;
@@ -304,7 +303,7 @@ public:
 int main(){
     InitWindow(WIDTH, HEIGHT, "Arkanoid");
     
-    MainStick ms{{START_POS_X, START_POS_Y, 10, 100, BLACK}};
+    MainStick ms{{START_POS_X, START_POS_Y, 100, 10}, BLACK};
     Ball ball{START_POS_X + 50, START_POS_Y-11, 10,  RED, false, {0, -BALL_SPEED}};
     HPBar<5> bar;
     Blocks<18,8> blocks(40, 0, 62, 40);
@@ -318,22 +317,20 @@ int main(){
         ClearBackground(RAYWHITE);
         for(const auto& el: bar){
             if (el.active)
-                DrawRectangle(el.x, el.y, el.h, el.w, el.c);       // hp bar
+                DrawRectangleRec(el.rec, el.color);       // hp bar
         }
         for(auto& row: blocks.blocks){
             for(const auto& el: row) {
                 if (el.active) {
-                    DrawRectangle(el.x, el.y, el.w, el.h, el.c);   // blocks
-                    
-                    DrawRectangleLines(el.x, el.y, el.w, el.h, RED);
-                    // DrawRectangleLinesEx((Rectangle){(float)el.x, (float)el.y, (float)el.h, (float)el.w}, 10, BLACK);
+                    DrawRectangleRec(el.rec, el.color);   // blocks
+                    DrawRectangleLinesEx(el.rec, 1, RED);
                 }
             }
         }
         
         DrawCircle(ball.x, ball.y, ball.r, ball.c); // ball
         DrawCircleLines(ball.x, ball.y, ball.r, BLUE);
-        DrawRectangle(ms.x,ms.y,ms.w, ms.h, ms.c);    // stick
+        DrawRectangleRec(ms.rec, ms.color);    // stick
         if (sm.loose()) {
            DrawText("LOOSE", 600, 400, 30, RED);
         }
