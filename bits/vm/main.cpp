@@ -1,7 +1,7 @@
 #include <iostream>
 
 // 16-bit vm:
-// 0 0 0 1 | 0 0 1 | 0 0 1 | 0 | 0 0 0 0 0 
+// 0 0 0 1 | 0 0 1 | 0 0 1 | 0 | 0 0 0 0 0
 //  opcode   PARAM1  PARAM2        PARAM3
 class VM {    
     enum Register {R0, R1, R2, R3, R4, R5, R6, R7, RPC, RCND, RCNT};
@@ -37,16 +37,28 @@ class VM {
         return i & 0b11111; // 31 
     }
 
-    int getOffset9(unsigned short i) {
-        return i & 0b111111111; // 511
+    bool is_zero_bit(unsigned short i, int shift) {
+        return (i >> shift) & 1;
     }
+
+    int getOffset(unsigned short i, int num) {
+        return i & (0xFFFF >> 16-num);
+    }
+
+    //  FCND(i) (((i)>>9)&0x7)
+
+    int FCND(unsigned int i) {
+        return (i >> 9) & 0x7;
+    }
+
+    // int getOffset9(unsigned short i) {
+    //     return i & 0b111111111; // 511
+    // }
 
     unsigned short sext(unsigned short n, int b) {
         return (n>>(b-1) & 1) ? (n | (0xFFFF << b)) : n;
     }
 
-
-    void br(unsigned short){std::cout << "BR" << "\n";}
 
     // NOTE: DR stands for Destination Register. SR stands for Source Register
 
@@ -74,31 +86,76 @@ class VM {
     // 0 0 0 1 | . . . | . . . . . . . . . 
     //  opcode   DR1         OFFSET9
     void ld(unsigned short i){
-        reg[getDR1(i)] = readmem(reg[RPC] + getOffset9(i));
+        reg[getDR1(i)] = readmem(reg[RPC] + getOffset(i, 9));
         uf(getDR1(i));
     }
 
+    // 2 hops
     void ldi(unsigned short i){
         reg[DR(i)] = readmem(readmem(reg[RPC]+POFF9(i)));
         uf(getDR1(i));
     }
 
-    // TODO:
-    
+    // 0 0 0 1 | . . . | . . . | . . . . . . 
+    //  opcode   DR1     BASER     OFFSET6
+    void ldr(unsigned short i ){
+        reg[getDR1(i)] = readmem(reg[getSR1(i)] + getOffset(i, 6));
+        uf(getDR1(i));
+    }
 
+    void lea(unsigned short i){
+        reg[getDR1(i)] = reg[RPC] + getOffset(i, 9); 
+        uf(getDR1(i));
+    }
 
-    void st(unsigned short){std::cout << "ST" << "\n";}
-    void jsr(unsigned short){std::cout << "JSR" << "\n";}
+    // 0 0 0 1 | . . . | . . . | 1 1 1 1 1 1 
+    //  opcode   DR1     SR1     
+    void nott(unsigned short i){
+        reg[getDR1(i)] = ~getSR1(i);
+        uf(getDR1(i));
+    }
+
+    // 0 0 0 1 | . . . | . . . . . . . . .  
+    //  opcode   SR         OFFSET9   
+    void st(unsigned short i){
+        writemem(reg[RPC] + getOffset(i, 9), reg[getDR1(i)]);
+    }
+
+    void sti(unsigned short i ){
+        writemem(readmem(reg[RPC] + getOffset(i, 9)), reg[getDR1(i)]); 
+    }
+
+    void str(unsigned short i){
+        writemem(reg[getSR1(i)] + getOffset(i, 6), reg[getDR1(i)]); 
+    }
+
+    // 1 1 0 0 | . . . | . . . | . . . . . . 
+    //  opcode           BASER   
+    void jmp(unsigned short i){
+        reg[RPC] = reg[getSR1(i)];
+    }
+
+    void jsr(unsigned short i){
+        reg[R7] = reg[RPC];         
+        reg[RPC] = (is_zero_bit(i, 11)) ?            // Checks bit[11]
+            reg[RPC] + getOffset(i, 11) :      // rpc + offset
+            reg[getSR1(i)]; 
+    }
+
+    void br(unsigned short i){
+        if (reg[RCND] & FCND(i)) {          // if the condition is met
+            reg[RPC] += getOffset(i, 9);           // branch to offset
+        } 
+    }
+
     
-    void ldr(unsigned short){std::cout << "LDR" << "\n";}
-    void str(unsigned short){std::cout << "STR" << "\n";}
     void rti(unsigned short){std::cout << "RTI" << "\n";}
-    void nott(unsigned short){std::cout << "NOT" << "\n";}
     
-    void sti(unsigned short){std::cout << "STI" << "\n";}
-    void jmp(unsigned short){std::cout << "JMP" << "\n";}
+    
+    
+    
     void res(unsigned short){std::cout << "RES" << "\n";}
-    void lea(unsigned short){std::cout << "LEA" << "\n";}
+    
     void trap(unsigned short){std::cout << "TRAP" << "\n";}
 
     using ifunc = void (VM::*)(unsigned short);
