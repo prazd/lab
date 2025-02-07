@@ -16,22 +16,21 @@ constexpr float DELTA_ANGLE = FOV/RAY_COUNT;
 constexpr float VIEW_DISTANCE = 30.f;
 constexpr int TILE = 50;
 const int DIST = RAY_COUNT / (2 * std::tan(HALF_FOV));
-const int PROJ_COEFF = DIST * TILE;
+const int PROJ_COEFF = DIST * TILE * 2;
 const int SCALE = WIDTH / RAY_COUNT;
+constexpr float C_DIS = 10.f;
 
-
-
-std::vector<std::string> text_map = {
+std::array<std::string_view, MAP_HEIGHT> text_map = {
     "########################",
+    "#..........#############",
+    "#.#....................#",
+    "#.#........#######.....#",
+    "#.#..............#.....#",
+    "#.#..............#.....#",
+    "#.#....................#",
     "#......................#",
-    "#.#....................#",
-    "#.#........######......#",
-    "#.#....................#",
-    "#.#....................#",
-    "#.#............#.......#",
-    "#.............###......#",
-    "#..............#.......#",
-    "#........#.............#",
+    "#..........#############",
+    "#......................#",
     "#........#####.........#",
     "########################",
 };
@@ -56,10 +55,12 @@ void raycasting(float x, float y, float angle) {
     for (size_t i = 0; i < RAY_COUNT; ++i) {
         auto sina = std::sin(cur_angle);
         auto cosa = std::cos(cur_angle);
-        for (size_t j = 0; j < MAX_DEPTH;++j) {
+        for (int j = 0; j < MAX_DEPTH; ++j) {
             auto x0 = x + j * cosa;
             auto y0 = y + j * sina; 
             if (wall_collision(x0 / TILE * TILE, y0 / TILE * TILE)) {
+//                 float tc = 255.f / (1.f + float(j * j) * 0.00001f);
+//                 Color c = {(unsigned char)tc, (unsigned char)tc, (unsigned char)tc, 255};
                 auto proj_height = PROJ_COEFF / (j);
                 DrawRectangleRec(Rectangle{(float)(i * SCALE), (float)(300 - proj_height / 2), SCALE, (float)proj_height}, WHITE);
             }
@@ -68,49 +69,43 @@ void raycasting(float x, float y, float angle) {
     }
 }
 
-// void raycasting_mini_map2D(float x, float y, float angle) {
-//     auto cur_angle = angle - HALF_FOV;
-//     for (size_t i = 0; i < RAY_COUNT; ++i) {
-//         auto sina = std::sin(cur_angle);
-//         auto cosa = std::cos(cur_angle);
-//         for (size_t j = 0; j < MAX_DEPTH;++j) {
-//             auto x0 = x + j * cosa;
-//             auto y0 = y + j * sina; 
-//             DrawLineV(Vector2{x, y}, Vector2{x0,y0}, GRAY);
-//             if (walls_map.contains(std::pair<int, int>{((int)x0 / TILE * TILE), ((int) y0 / TILE * TILE)})) {
-//                 break;
-//             }
-//         }
-//         cur_angle += DELTA_ANGLE;
-//     }
-// }
 
 struct Player {
     Vector2 center;
     Vector2 velocity;
     Vector2 view_point;
     float r;
-    
     float angle = 0.f;
+    Vector2 front;
+    Vector2 back;
+    Vector2 left;
+    Vector2 right;
+
+    void update_sides() {
+        front =   {center.x + C_DIS * std::cos(angle),center.y + C_DIS * std::sin(angle)};
+        back  =   {center.x - C_DIS * std::cos(angle),center.y - C_DIS * std::sin(angle)};
+        right =   {center.x - C_DIS * std::sin(angle),center.y + C_DIS * std::cos(angle)};
+        left  =   {center.x + C_DIS * std::sin(angle),center.y - C_DIS * std::cos(angle)};
+    }
     void move() {
         auto sina = std::sin(angle);
         auto cosa = std::cos(angle);
 
         auto x = center.x + r + 100.f;
         auto y = center.y + r + 100.f;
-        if ((IsKeyPressed(KEY_W) || IsKeyDown(KEY_W))) {
+        if ((IsKeyPressed(KEY_W) || IsKeyDown(KEY_W)) && !wall_collision(front.x, front.y)) {
             center.x += velocity.x * cosa;
             center.y += velocity.y * sina;
         }
-        if ((IsKeyPressed(KEY_S) || IsKeyDown(KEY_S))) {
+        if ((IsKeyPressed(KEY_S) || IsKeyDown(KEY_S)) && !wall_collision(back.x, back.y)) {
             center.x += -velocity.x * cosa;
             center.y += -velocity.y * sina;
         }
-        if ((IsKeyPressed(KEY_A) || IsKeyDown(KEY_A))) {
+        if ((IsKeyPressed(KEY_A) || IsKeyDown(KEY_A)) && !wall_collision(left.x, left.y)) {
             center.x += velocity.x * sina;
             center.y += -velocity.y * cosa;
         }
-        if ((IsKeyPressed(KEY_D) || IsKeyDown(KEY_D))) {
+        if ((IsKeyPressed(KEY_D) || IsKeyDown(KEY_D)) && !wall_collision(right.x, right.y)) {
             center.x += -velocity.x * sina;
             center.y += velocity.y * cosa;
         }
@@ -128,6 +123,7 @@ struct Player {
         if (GetMouseDelta().x > 0) {
             angle += 0.1f;
         }
+        update_sides();
     }
 
 };
