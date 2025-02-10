@@ -65,7 +65,7 @@ struct RHMap {
                 auto old_el = arr[i];
                 arr[i] = {current, d};
                 current = {old_el.p.first, old_el.p.second};
-                d = old_el.D + 1; //
+                d = old_el.D; //
             }
             if ((i + 1) % c == index) full_circle = true;
         }
@@ -115,10 +115,15 @@ int main() {
     m.insert({"bax", 100});
     assert(m["alex"]== 123);
     assert(m["bax"]== 100);
+    m.debug_print();
     m.insert({"alex1", 101});
+    m.debug_print();
     m.insert({"alex2", 102});
+    m.debug_print();
     m.insert({"alex3", 103});
+    m.debug_print();
     m.insert({"alex4", 104});
+    m.debug_print();
     m.insert({"alex5", 105});
     assert(m["alex1"]== 101);
     assert(m["alex2"]== 102);
