@@ -1,5 +1,5 @@
-#include <iostream>
 #include "raylib.h"
+#include <iostream>
 
 constexpr int HEIGHT = 600;
 constexpr int WIDTH = 1200;
@@ -67,7 +67,7 @@ struct Suricane {
         .y = 352,
         .width = NINJA_FRAME_WIDTH,
         .height = NINJA_FRAME_HEIGHT
-    };;
+    };
     Vector2 velocity{620,0};
     Vector2 pos{10,HEIGHT-200};
     enum class State {none, left, right} state = State::none;
@@ -79,7 +79,7 @@ struct Suricane {
     void process(float dt) {
         anim.update();
         switch (state) {
-            case State::right:{
+            case State::right: {
                 if (pos.x < WIDTH){
                     pos.x += velocity.x * dt;
                 } else {
@@ -114,15 +114,23 @@ struct NinjaPlayer {
         .first = 0,
         .last = 1,
         .cur = 0,
-        .speed = 0.1f,
-        .duration_left = 0.1f
+        .speed = 0.5f,
+        .duration_left = 0.5f
     };
+
+    int fcounter_throw = 0;
 
     Rectangle rect;
     Vector2 velocity{200,200};
     Vector2 pos{10,HEIGHT-200};
     enum class JumpState {none, up, down} js = JumpState::none;
+
     void jump() {js = JumpState::up;}
+
+    void throw_suricane() {
+        fcounter_throw = 1;
+        throw_animation.direction = movement_animation.direction;
+    }
 
     void jump_proccess(float dt) {
         switch (js){
@@ -170,6 +178,13 @@ struct NinjaPlayer {
     }
 
     void update_rect() {
+        if (fcounter_throw > 0 && fcounter_throw < 20) {
+            rect = throw_animation.animation_frame(10, 88, 88);
+            ++fcounter_throw;
+            return;
+        } else if (fcounter_throw == 3) {
+            fcounter_throw = 0;
+        }
         rect = movement_animation.animation_frame(10);
     }
 };
@@ -189,13 +204,16 @@ int main(){
 
     Rectangle floor{0, HEIGHT-100, WIDTH, 100};
     NinjaPlayer player;
+    NinjaPlayer enemy;
+    enemy.pos.x = 600;
+    enemy.set_dir_left();
+
     Suricane suricane;
 
     RenderTexture2D target = LoadRenderTexture(WIDTH, HEIGHT);
     auto render = [&]{
         BeginTextureMode(target);
             ClearBackground(WHITE);
-
             auto dt = GetFrameTime();
 
             if (player.js == NinjaPlayer::JumpState::none)
@@ -203,7 +221,6 @@ int main(){
 
             if (IsKeyPressed(KEY_SPACE) && player.js == NinjaPlayer::JumpState::none)
                 player.jump();
-
 
             if (IsKeyPressed(KEY_E) && suricane.state == Suricane::State::none) {
                 if (player.movement_animation.direction == NinjaAnimation::Direction::left) {
@@ -216,6 +233,7 @@ int main(){
                 suricane.throw_suricane(
                         player.movement_animation.direction == NinjaAnimation::Direction::left ?
                 Suricane::State::left : Suricane::State::right);
+                player.throw_suricane();
             }
 
             if (IsKeyPressed(KEY_A)){
@@ -223,13 +241,10 @@ int main(){
                 player.update_rect();
             }
 
-
             if (IsKeyPressed(KEY_D)){
                 player.set_dir_right();
                 player.update_rect();
             }
-
-
 
             if (IsKeyDown(KEY_D))
                 player.move_right(dt);
@@ -237,14 +252,20 @@ int main(){
             if (IsKeyDown(KEY_A))
                 player.move_left(dt);
 
-
             if (IsKeyReleased(KEY_A) || IsKeyReleased(KEY_D))
                 player.stop_move();
 
             if (player.js != NinjaPlayer::JumpState::none)
                 player.jump_proccess(dt);
 
+            if (player.fcounter_throw > 0)
+                player.update_rect();
+
+
+            enemy.update_rect();
+
             DrawTexturePro(ninja, player.rect, {player.pos.x, player.pos.y, 100, 100}, {0, 0}, 0.0f, WHITE);
+            DrawTexturePro(ninja, enemy.rect, {enemy.pos.x, enemy.pos.y, 100, 100}, {0, 0}, 0.0f, GREEN);
             if (suricane.state != Suricane::State::none) {
                 suricane.process(dt);
                 DrawTexturePro(ninja, suricane.rect,
