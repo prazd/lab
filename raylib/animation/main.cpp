@@ -218,11 +218,17 @@ int main(){
                 Suricane::State::left : Suricane::State::right);
             }
 
-            if (IsKeyPressed(KEY_A))
+            if (IsKeyPressed(KEY_A)){
                 player.set_dir_left();
+                player.update_rect();
+            }
 
-            if (IsKeyPressed(KEY_D))
+
+            if (IsKeyPressed(KEY_D)){
                 player.set_dir_right();
+                player.update_rect();
+            }
+
 
 
             if (IsKeyDown(KEY_D))
