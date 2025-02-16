@@ -3,8 +3,8 @@
 
 constexpr int HEIGHT = 600;
 constexpr int WIDTH = 1200;
-constexpr int NINJA_FRAME_WIDTH  = 88.f;
-constexpr int NINJA_FRAME_HEIGHT = 80.f;
+constexpr float NINJA_FRAME_WIDTH  = 88.f;
+constexpr float NINJA_FRAME_HEIGHT = 80.f;
 constexpr auto ninja_img_path = "/Users/prazd/Desktop/books/cpp/cpp/raylib/animation/img/ninja.png";
 Texture2D ninja;
 
@@ -25,13 +25,13 @@ struct NinjaAnimation {
             cur = cur > last ? first : ++cur;
         }
     }
-    Rectangle animation_frame(int num_frames_per_row) {
+    Rectangle animation_frame(int num_frames_per_row, float offset_x = 0.f, float offset_y = 0.f) {
         float x = float(cur % num_frames_per_row) * NINJA_FRAME_WIDTH;
         float y = float(cur / num_frames_per_row) * NINJA_FRAME_HEIGHT;
         return (Rectangle){
-            .x = x,
-            .y = y,
-            .width = NINJA_FRAME_WIDTH,
+            .x = x + offset_x,
+            .y = y + offset_y,
+            .width = (direction == Direction::left ? -NINJA_FRAME_WIDTH : NINJA_FRAME_WIDTH),
             .height = NINJA_FRAME_HEIGHT
         };
     }
@@ -59,10 +59,9 @@ struct SuricaneAnimation {
 
 struct Suricane {
     SuricaneAnimation anim{
-        .speed = 0.05f,
+        .speed = 0.001f,
         .duration_left = 0.1f
     };
-    const Texture2D* ninja_sprite = &ninja;
     Rectangle rect{
         .x = 0,
         .y = 352,
@@ -72,11 +71,6 @@ struct Suricane {
     Vector2 velocity{620,0};
     Vector2 pos{10,HEIGHT-200};
     enum class State {none, left, right} state = State::none;
-
-    void update_pos(float x, float y) {
-        pos.x = x;
-        pos.y = y;
-    }
 
     void throw_suricane(State s){
         state = s;
@@ -108,22 +102,27 @@ struct Suricane {
 };
 
 struct NinjaPlayer {
-    const Texture2D* ninja_sprite = &ninja;
-    NinjaAnimation anim{
+    NinjaAnimation movement_animation{
         .first = 0,
         .last = 3,
         .cur = 0,
         .speed = 0.1f,
         .duration_left = 0.1f
     };
+
+    NinjaAnimation throw_animation{
+        .first = 0,
+        .last = 1,
+        .cur = 0,
+        .speed = 0.1f,
+        .duration_left = 0.1f
+    };
+
     Rectangle rect;
     Vector2 velocity{200,200};
     Vector2 pos{10,HEIGHT-200};
     enum class JumpState {none, up, down} js = JumpState::none;
-
-    void jump() {
-        js = JumpState::up;
-    }
+    void jump() {js = JumpState::up;}
 
     void jump_proccess(float dt) {
         switch (js){
@@ -140,42 +139,38 @@ struct NinjaPlayer {
                     pos.y += velocity.y * dt;
                 } else {
                     js = JumpState::none;
-                    break;
                 }
+                break;
             }
             default: break;
         }
     }
 
     void set_dir_left(){
-        anim.set_direction(NinjaAnimation::Direction::left);
+        movement_animation.set_direction(NinjaAnimation::Direction::left);
     }
 
     void set_dir_right() {
-        anim.set_direction(NinjaAnimation::Direction::right);
+        movement_animation.set_direction(NinjaAnimation::Direction::right);
     }
 
     void move_right(float dt) {
         pos.x += velocity.x * dt;
-        anim.update();
+        movement_animation.update();
     }
 
     void move_left(float dt) {
         pos.x += -velocity.x * dt;
-        anim.update();
+        movement_animation.update();
     }
 
     void stop_move() {
-        anim.cur = anim.first;
-        anim.update();
+        movement_animation.cur = movement_animation.first;
+        movement_animation.update();
     }
 
     void update_rect() {
-        rect = anim.animation_frame(10);
-    }
-
-    void turn_by_direction() {
-        rect.width *= (float)anim.direction;
+        rect = movement_animation.animation_frame(10);
     }
 };
 
@@ -200,53 +195,56 @@ int main(){
     auto render = [&]{
         BeginTextureMode(target);
             ClearBackground(WHITE);
-            auto dt = GetFrameTime();
-            player.update_rect();
 
-            if (IsKeyPressed(KEY_SPACE) && player.js == NinjaPlayer::JumpState::none) {
+            auto dt = GetFrameTime();
+
+            if (player.js == NinjaPlayer::JumpState::none)
+                player.update_rect();
+
+            if (IsKeyPressed(KEY_SPACE) && player.js == NinjaPlayer::JumpState::none)
                 player.jump();
-            }
+
 
             if (IsKeyPressed(KEY_E) && suricane.state == Suricane::State::none) {
-                if (player.anim.direction == NinjaAnimation::Direction::left) {
+                if (player.movement_animation.direction == NinjaAnimation::Direction::left) {
                     suricane.pos.x = player.pos.x + 60;
                     suricane.pos.y = player.pos.y + 40;
                 } else {
                     suricane.pos.x = player.pos.x + 30;
                     suricane.pos.y = player.pos.y + 40;
                 }
-                // suricane.pos.x = player.pos.x;
-                // suricane.pos.y = player.pos.y;
-                
                 suricane.throw_suricane(
-                        player.anim.direction == NinjaAnimation::Direction::left ?
+                        player.movement_animation.direction == NinjaAnimation::Direction::left ?
                 Suricane::State::left : Suricane::State::right);
             }
 
             if (IsKeyPressed(KEY_A))
                 player.set_dir_left();
-                
+
             if (IsKeyPressed(KEY_D))
                 player.set_dir_right();
+
 
             if (IsKeyDown(KEY_D))
                 player.move_right(dt);
             
-            if (IsKeyDown(KEY_A)){
+            if (IsKeyDown(KEY_A))
                 player.move_left(dt);
-            }
 
-            if (IsKeyReleased(KEY_A) || IsKeyReleased(KEY_D)){
+
+            if (IsKeyReleased(KEY_A) || IsKeyReleased(KEY_D))
                 player.stop_move();
-            }
-            if (player.js != NinjaPlayer::JumpState::none) {
+
+            if (player.js != NinjaPlayer::JumpState::none)
                 player.jump_proccess(dt);
-            }
-            player.turn_by_direction();
-            DrawTexturePro(*player.ninja_sprite, player.rect, {player.pos.x, player.pos.y,100,100}, {0, 0}, 0.0f, WHITE);
+
+            DrawTexturePro(ninja, player.rect, {player.pos.x, player.pos.y, 100, 100}, {0, 0}, 0.0f, WHITE);
             if (suricane.state != Suricane::State::none) {
                 suricane.process(dt);
-                DrawTexturePro(*player.ninja_sprite, suricane.rect, {suricane.pos.x, suricane.pos.y, 75, 75}, {suricane.rect.width/2, suricane.rect.height/2}, suricane.anim.angle, WHITE);
+                DrawTexturePro(ninja, suricane.rect,
+                               {suricane.pos.x, suricane.pos.y, 75, 75},
+                               {suricane.rect.width/2, suricane.rect.height/2},
+                               suricane.anim.angle, WHITE);
             }
             DrawRectangleRec(floor, BLACK);
         EndTextureMode();
