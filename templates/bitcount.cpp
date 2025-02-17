@@ -1,6 +1,17 @@
 #include <iostream>
 #include <limits>
 #include <climits>
+#include <cassert>
+
+template <std::integral T>
+constexpr size_t hamming_weight_comptime(T val) {
+    size_t res{};
+    while(val) {
+        val &= val - 1;
+        ++res;
+    }
+    return res;
+}
 
 template <typename T>
 size_t count_one(T& val) {
@@ -28,9 +39,11 @@ constexpr size_t count_one_comptime(T& val) {
 int main() {
     constexpr unsigned int x = std::numeric_limits<unsigned int>::max();
     constexpr auto result = count_one_comptime(x);
-    std::cout << result << "\n";
-
-    unsigned int y = std::numeric_limits<unsigned int>::max();;
+    static_assert(result == hamming_weight_comptime(x));
+    static_assert(2 == hamming_weight_comptime(10));
+    static_assert(8 == hamming_weight_comptime(255));
+    
+    unsigned int y = std::numeric_limits<unsigned int>::max();
     auto result2 = count_one(y);
-    std::cout << result2;
+    assert(result2 == 32);
 }
