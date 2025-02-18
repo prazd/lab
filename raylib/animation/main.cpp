@@ -1,4 +1,6 @@
 #include "raylib.h"
+#include <vector>
+#include <algorithm>
 #include <iostream>
 
 constexpr int HEIGHT = 600;
@@ -102,6 +104,7 @@ struct Suricane {
 };
 
 struct NinjaPlayer {
+
     NinjaAnimation movement_animation{
         .first = 0,
         .last = 3,
@@ -110,15 +113,16 @@ struct NinjaPlayer {
         .duration_left = 0.1f
     };
 
-    NinjaAnimation throw_animation{
+    NinjaAnimation static_animation{
         .first = 0,
         .last = 1,
         .cur = 0,
         .speed = 0.5f,
         .duration_left = 0.5f
     };
-
+    bool killed = false;
     int fcounter_throw = 0;
+    int fcounter_killed = 0;
 
     Rectangle rect;
     Vector2 velocity{200,200};
@@ -129,8 +133,15 @@ struct NinjaPlayer {
 
     void throw_suricane() {
         fcounter_throw = 1;
-        throw_animation.direction = movement_animation.direction;
+        static_animation.direction = movement_animation.direction;
     }
+
+    void dead_hit() {
+        fcounter_killed = 1;
+        killed = true;
+        static_animation.direction = movement_animation.direction;
+    }
+
 
     void jump_proccess(float dt) {
         switch (js){
@@ -177,15 +188,37 @@ struct NinjaPlayer {
         movement_animation.update();
     }
 
-    void update_rect() {
-        if (fcounter_throw > 0 && fcounter_throw < 20) {
-            rect = throw_animation.animation_frame(10, 88, 88);
-            ++fcounter_throw;
+    template <int more, int less, int offset_x, int offset_y>
+    static void processed_static_animation(Rectangle& rect, NinjaAnimation& animation, int& counter) {
+        if (counter > more && counter < less) {
+            rect = animation.animation_frame(10, offset_x, offset_y);
+            ++counter;
             return;
-        } else if (fcounter_throw == 3) {
-            fcounter_throw = 0;
         }
+        counter = 0;
+    }
+
+    void update_rect() {
+        if (fcounter_throw > 0){
+            processed_static_animation<0, 22, 88, 88>(rect, static_animation, fcounter_throw);
+            return;
+        }
+
+        if (fcounter_killed > 0) {
+            processed_static_animation<0, 25, 88, 264>(rect, static_animation, fcounter_killed);
+            return;
+        }
+
         rect = movement_animation.animation_frame(10);
+
+    }
+};
+
+template <size_t sz>
+struct Enemies  {
+    std::vector<NinjaPlayer> gang;
+    Enemies(): gang(sz) {
+        std::for_each(gang.begin(), gang.end(), [](auto& el){el.pos.x = rand() % 600;});
     }
 };
 
@@ -204,12 +237,9 @@ int main(){
 
     Rectangle floor{0, HEIGHT-100, WIDTH, 100};
     NinjaPlayer player;
-    NinjaPlayer enemy;
-    enemy.pos.x = 600;
-    enemy.set_dir_left();
+    Enemies<4> enemies;
 
     Suricane suricane;
-
     RenderTexture2D target = LoadRenderTexture(WIDTH, HEIGHT);
     auto render = [&]{
         BeginTextureMode(target);
@@ -258,14 +288,31 @@ int main(){
             if (player.js != NinjaPlayer::JumpState::none)
                 player.jump_proccess(dt);
 
-            if (player.fcounter_throw > 0)
+            if (player.fcounter_throw)
                 player.update_rect();
 
-
-            enemy.update_rect();
-
             DrawTexturePro(ninja, player.rect, {player.pos.x, player.pos.y, 100, 100}, {0, 0}, 0.0f, WHITE);
-            DrawTexturePro(ninja, enemy.rect, {enemy.pos.x, enemy.pos.y, 100, 100}, {0, 0}, 0.0f, GREEN);
+            DrawRectangleLinesEx({player.pos.x, player.pos.y, 100, 100}, 1, RED);
+
+            for (auto& el: enemies.gang){
+                el.update_rect();
+                DrawTexturePro(ninja, el.rect, {el.pos.x, el.pos.y, 100, 100}, {0, 0}, 0.0f, GREEN);
+            }
+
+            for (auto it = enemies.gang.begin(), ite = enemies.gang.end(); it != ite; ++it){
+                if (suricane.state != Suricane::State::none && CheckCollisionRecs((Rectangle){suricane.pos.x, suricane.pos.y, 10, 10},
+                                       (Rectangle){it->pos.x, it->pos.y, 100, 100})){
+                    suricane.state = Suricane::State::none;
+                    it->dead_hit();
+                }
+
+                if (it->killed && !it->fcounter_killed) {
+                    enemies.gang.erase(it);
+                    break;
+                }
+            }
+
+
             if (suricane.state != Suricane::State::none) {
                 suricane.process(dt);
                 DrawTexturePro(ninja, suricane.rect,
@@ -273,7 +320,9 @@ int main(){
                                {suricane.rect.width/2, suricane.rect.height/2},
                                suricane.anim.angle, WHITE);
             }
-            DrawRectangleRec(floor, BLACK);
+
+
+        DrawRectangleRec(floor, BLACK);
         EndTextureMode();
     };
    
