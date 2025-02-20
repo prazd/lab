@@ -2,13 +2,46 @@
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#include <utility>
 
 constexpr int HEIGHT = 600;
 constexpr int WIDTH = 1200;
 constexpr float NINJA_FRAME_WIDTH  = 88.f;
 constexpr float NINJA_FRAME_HEIGHT = 80.f;
 constexpr auto ninja_img_path = "/Users/prazd/Desktop/books/cpp/cpp/raylib/animation/img/ninja.png";
+constexpr auto heart_image_path = "/Users/prazd/Desktop/books/cpp/cpp/raylib/animation/img/pixel_heart.png";
 Texture2D ninja;
+Texture2D heart;
+constexpr Vector2 heart_sz = {30,30};
+
+template <std::size_t sz>
+struct HpBar {
+    std::array<Vector2, sz> arr{};
+    size_t count = sz;
+    HpBar(float x, float y, float offset = 32.f){
+        std::generate(arr.begin(), arr.end(), [x,y,offset]()mutable{return Vector2{std::exchange(x, x+offset), y};});
+    }
+    auto begin(){
+        return arr.begin();
+    }
+    auto end() {
+        return arr.begin() + count;
+    }
+};
+
+template <typename Iter>
+void draw_list_as_rec(Iter it, Iter ite, float width, float height, Color color = BLACK) {
+    for (; it != ite; ++it) {
+        DrawRectangleRec((Rectangle){it->x, it->y, width, height}, color);
+    }
+}
+
+template <typename Iter>
+void draw_list_as_textures(Iter it, Iter ite, Texture2D& texture) {
+    for (; it != ite; ++it) {
+        DrawTexture(texture, it->x, it->y, WHITE);
+    }
+}
 
 struct NinjaAnimation {
     enum class Direction {
@@ -222,22 +255,23 @@ struct Enemies  {
     }
 };
 
-
 void load_sprites() {
-    auto img = LoadImage(ninja_img_path);
-    ninja = LoadTextureFromImage(img);
+    ninja = LoadTextureFromImage(LoadImage(ninja_img_path));
+    auto img_heart = LoadImage(heart_image_path);
+    ImageResize(&img_heart, heart_sz.x, heart_sz.y);
+    heart = LoadTextureFromImage(img_heart);
 }
-
 
 int main(){
     InitWindow(WIDTH, HEIGHT, "Animation");
     load_sprites();
-
     SetTargetFPS(60);
 
     Rectangle floor{0, HEIGHT-100, WIDTH, 100};
     NinjaPlayer player;
     Enemies<4> enemies;
+    HpBar<5> hp_bar(10, 10);
+
 
     Suricane suricane;
     RenderTexture2D target = LoadRenderTexture(WIDTH, HEIGHT);
@@ -312,6 +346,7 @@ int main(){
                 }
             }
 
+            draw_list_as_textures(hp_bar.begin(), hp_bar.end(), heart);
 
             if (suricane.state != Suricane::State::none) {
                 suricane.process(dt);
