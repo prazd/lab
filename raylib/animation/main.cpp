@@ -2,6 +2,7 @@
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#include <sstream>
 #include <utility>
 
 constexpr int HEIGHT = 600;
@@ -91,7 +92,6 @@ struct SuricaneAnimation {
     }
 };
 
-
 struct Suricane {
     SuricaneAnimation anim{
         .speed = 0.001f,
@@ -137,7 +137,7 @@ struct Suricane {
 };
 
 struct NinjaPlayer {
-
+    
     NinjaAnimation movement_animation{
         .first = 0,
         .last = 3,
@@ -153,6 +153,7 @@ struct NinjaPlayer {
         .speed = 0.5f,
         .duration_left = 0.5f
     };
+
     bool killed = false;
     int fcounter_throw = 0;
     int fcounter_killed = 0;
@@ -249,9 +250,15 @@ struct NinjaPlayer {
 
 template <size_t sz>
 struct Enemies  {
-    std::vector<NinjaPlayer> gang;
-    Enemies(): gang(sz) {
-        std::for_each(gang.begin(), gang.end(), [](auto& el){el.pos.x = rand() % 600;});
+    static inline std::array<NinjaPlayer, sz> gang;
+    size_t killed = 0;
+    Enemies() {
+        std::for_each(gang.begin(), gang.end(), [](auto& el){el.pos.x = !(rand() % 2) ? (el.movement_animation.direction = NinjaAnimation::Direction::right, -100 + (rand() % 10)) : (el.movement_animation.direction = NinjaAnimation::Direction::left, WIDTH + 100 + (rand() % 10));});
+    }
+    void raise(NinjaPlayer& el) {
+            el = NinjaPlayer{};
+            el.pos.x = !(rand() % 2) ? (el.movement_animation.direction = NinjaAnimation::Direction::right, -100 + (rand() % 10)) : (el.movement_animation.direction = NinjaAnimation::Direction::left, WIDTH + 100 + (rand() % 10));
+        
     }
 };
 
@@ -269,11 +276,17 @@ int main(){
 
     Rectangle floor{0, HEIGHT-100, WIDTH, 100};
     NinjaPlayer player;
-    Enemies<4> enemies;
+    Enemies<10> enemies;
     HpBar<5> hp_bar(10, 10);
 
-
     Suricane suricane;
+    std::stringstream ss;
+    ss << "Scores:" << 0;
+    auto stream_updater = [&ss](auto&&... val){
+        ss.str("");
+        (ss << ... << val);
+    };
+
     RenderTexture2D target = LoadRenderTexture(WIDTH, HEIGHT);
     auto render = [&]{
         BeginTextureMode(target);
@@ -330,6 +343,11 @@ int main(){
 
             for (auto& el: enemies.gang){
                 el.update_rect();
+                if (el.pos.x < WIDTH/2) {
+                    el.move_right(dt / 10);
+                } else {
+                    el.move_left(dt / 10);
+                }
                 DrawTexturePro(ninja, el.rect, {el.pos.x, el.pos.y, 100, 100}, {0, 0}, 0.0f, GREEN);
             }
 
@@ -341,11 +359,15 @@ int main(){
                 }
 
                 if (it->killed && !it->fcounter_killed) {
-                    enemies.gang.erase(it);
+                    enemies.raise(*it);
+                    ++enemies.killed;
+                    stream_updater("Scores:", enemies.killed);
                     break;
                 }
             }
 
+            
+            DrawText(ss.str().data(), 400, 10, 20, BLACK);
             draw_list_as_textures(hp_bar.begin(), hp_bar.end(), heart);
 
             if (suricane.state != Suricane::State::none) {
