@@ -173,6 +173,7 @@ struct NinjaPlayer {
     void dead_hit() {
         fcounter_killed = 1;
         killed = true;
+        js = JumpState::up;
         static_animation.direction = movement_animation.direction;
     }
 
@@ -239,7 +240,7 @@ struct NinjaPlayer {
         }
 
         if (fcounter_killed > 0) {
-            processed_static_animation<0, 25, 88, 264>(rect, static_animation, fcounter_killed);
+            processed_static_animation<0, 80, 88, 264>(rect, static_animation, fcounter_killed);
             return;
         }
 
@@ -276,7 +277,7 @@ int main(){
 
     Rectangle floor{0, HEIGHT-100, WIDTH, 100};
     NinjaPlayer player;
-    Enemies<10> enemies;
+    Enemies<4> enemies;
     HpBar<5> hp_bar(10, 10);
 
     Suricane suricane;
@@ -338,16 +339,21 @@ int main(){
             if (player.fcounter_throw)
                 player.update_rect();
 
+
             DrawTexturePro(ninja, player.rect, {player.pos.x, player.pos.y, 100, 100}, {0, 0}, 0.0f, WHITE);
             DrawRectangleLinesEx({player.pos.x, player.pos.y, 100, 100}, 1, RED);
 
             for (auto& el: enemies.gang){
                 el.update_rect();
-                if (el.pos.x < WIDTH/2) {
+                if (el.pos.x < WIDTH/2 && !el.killed) {
                     el.move_right(dt / 10);
-                } else {
+                } else if (el.pos.x > 0 && !el.killed){
                     el.move_left(dt / 10);
                 }
+                
+                if (el.js != NinjaPlayer::JumpState::none)
+                    el.jump_proccess(dt);
+                
                 DrawTexturePro(ninja, el.rect, {el.pos.x, el.pos.y, 100, 100}, {0, 0}, 0.0f, GREEN);
             }
 
@@ -358,7 +364,7 @@ int main(){
                     it->dead_hit();
                 }
 
-                if (it->killed && !it->fcounter_killed) {
+                if (it->killed && !it->fcounter_killed && it->js == NinjaPlayer::JumpState::none) {
                     enemies.raise(*it);
                     ++enemies.killed;
                     stream_updater("Scores:", enemies.killed);
