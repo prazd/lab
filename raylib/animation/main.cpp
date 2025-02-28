@@ -1,10 +1,8 @@
 #include "raylib.h"
-#include <vector>
 #include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <utility>
-
 
 constexpr int HEIGHT = 600;
 constexpr int WIDTH = 1200;
@@ -43,13 +41,6 @@ struct HpBar {
         return arr.begin() + count;
     }
 };
-
-template <typename Iter>
-void draw_list_as_rec(Iter it, Iter ite, float width, float height, Color color = BLACK) {
-    for (; it != ite; ++it) {
-        DrawRectangleRec((Rectangle){it->x, it->y, width, height}, color);
-    }
-}
 
 template <typename Iter>
 void draw_list_as_textures(Iter it, Iter ite, Texture2D& texture) {
@@ -91,7 +82,7 @@ struct NinjaAnimation {
     }
 };
 
-struct SuricaneAnimation {
+struct ShurikenAnimation {
     float speed;
     float duration_left;
     float angle = 0.f;
@@ -106,8 +97,8 @@ struct SuricaneAnimation {
     }
 };
 
-struct Suricane {
-    SuricaneAnimation anim{
+struct Shuriken {
+    ShurikenAnimation anim{
         .speed = 0.001f,
         .duration_left = 0.1f
     };
@@ -121,9 +112,14 @@ struct Suricane {
     Vector2 pos{10,HEIGHT-200};
     bool in_process = false;
 
+    void stop() {
+        in_process = false;
+        state = State::none;
+    }
+
     enum class State {none, left, right} state = State::none;
 
-    void throw_suricane(State s){
+    void throw_shuriken(State s){
         in_process = (s == State::left || s == State::right);
         state = s;
     }
@@ -156,14 +152,14 @@ struct Suricane {
 };
 
 template <size_t n>
-struct SuricanePack{
-    std::array<Suricane, n> suricanes;
-    bool throw_suricane(Suricane::State s, float x, float y) {
-        for (auto& el: suricanes){
+struct ShurikenPack{
+    std::array<Shuriken, n> shurikens;
+    bool throw_shuriken(Shuriken::State s, float x, float y) {
+        for (auto& el: shurikens){
             if (!el.in_process) {
                 el.pos.x = x;
                 el.pos.y = y;
-                el.throw_suricane(s);
+                el.throw_shuriken(s);
                 return true;
             }
         }
@@ -172,7 +168,7 @@ struct SuricanePack{
 
     size_t ready() {
         size_t res{};
-        for (auto& el: suricanes){
+        for (auto& el: shurikens){
             if (el.in_process) {
                 ++res;
             }
@@ -183,7 +179,7 @@ struct SuricanePack{
 
 template <size_t n = 1>
 struct NinjaPlayer {
-    SuricanePack<n> sp;
+    ShurikenPack<n> sp;
     NinjaAnimation movement_animation{
         .first = 0,
         .last = 3,
@@ -212,7 +208,7 @@ struct NinjaPlayer {
 
     void jump() {js = JumpState::up;}
 
-    void throw_suricane() {
+    void throw_shuriken() {
         float x, y;
         if (movement_animation.direction == NinjaAnimation::Direction::left) {
             x = pos.x + 60;
@@ -221,8 +217,8 @@ struct NinjaPlayer {
             x = pos.x + 30;
             y = pos.y + 40;
         }
-        if (sp.throw_suricane(movement_animation.direction == NinjaAnimation::Direction::left ?
-            Suricane::State::left : Suricane::State::right, x, y)){
+        if (sp.throw_shuriken(movement_animation.direction == NinjaAnimation::Direction::left ?
+            Shuriken::State::left : Shuriken::State::right, x, y)){
                 fcounter_throw = 1;
                 static_animation.direction = movement_animation.direction;
         }
@@ -307,11 +303,11 @@ struct NinjaPlayer {
     }
 };
 
-template <size_t sz, size_t suricane_count = 1>
-struct Enemies  {
-    static inline std::array<NinjaPlayer<suricane_count>, sz> gang;
+template <size_t sz, size_t shuriken_count = 1>
+struct NinjaEnemies  {
+    static inline std::array<NinjaPlayer<shuriken_count>, sz> gang;
     size_t killed = 0;
-    Enemies() {
+    NinjaEnemies() {
         std::for_each(gang.begin(), gang.end(), [](auto& el){el.pos.x = !(rand() % 2) ? (el.movement_animation.direction = NinjaAnimation::Direction::right, -100 + (rand() % 10)) : (el.movement_animation.direction = NinjaAnimation::Direction::left, WIDTH + 100 + (rand() % 10));});
     }
     void raise(auto& el) {
@@ -319,10 +315,11 @@ struct Enemies  {
             el.pos.x = !(rand() % 2) ? (el.movement_animation.direction = NinjaAnimation::Direction::right, -100 + (rand() % 10)) : (el.movement_animation.direction = NinjaAnimation::Direction::left, WIDTH + 100 + (rand() % 10));
     }
     void flush() {
+        killed = 0;
         std::for_each(gang.begin(), gang.end(), [](auto& el){el.pos.x = !(rand() % 2) ? (el.movement_animation.direction = NinjaAnimation::Direction::right, -100 + (rand() % 10)) : (el.movement_animation.direction = NinjaAnimation::Direction::left, WIDTH + 100 + (rand() % 10));});
         std::for_each(gang.begin(), gang.end(), [](auto& el){
-            for (auto& suricane: el.sp.suricanes){
-                suricane.state = Suricane::State::none;
+            for (auto& Shuriken: el.sp.shurikens){
+                Shuriken.state = Shuriken::State::none;
             }
         });
     }
@@ -343,18 +340,19 @@ int main(){
 
     Rectangle floor{0, HEIGHT-100, WIDTH, 100};
     NinjaPlayer<3> player;
-    Enemies<4> enemies;
+    NinjaEnemies<5> enemies;
     HpBar<5> hp_bar(10, 10);
 
     using Player = decltype(player);
-    using EnemyPlayer = decltype(enemies.gang)::value_type;
+    using Enemies = decltype(enemies);
+    using EnemyPlayer = decltype(Enemies::gang)::value_type;
 
     bool game_running = true;
 
     std::stringstream ss_scores;
-    std::stringstream ss_suricanes;
+    std::stringstream ss_Shurikens;
     ss_scores << "Scores:" << 0;
-    ss_suricanes << "Suricanes:" << 0;
+    ss_Shurikens << "shurikens:" << 0;
 
     auto stream_updater = [](auto& ss, auto&&... val){
         ss.str("");
@@ -366,8 +364,8 @@ int main(){
         player = Player{};
         enemies.flush();
         hp_bar = HpBar<5>(10,10);
-        stream_updater(ss_scores, "Scores", 0);
-        stream_updater(ss_suricanes, "Suricanes", 0);
+        stream_updater(ss_scores, "Scores:", 0);
+        stream_updater(ss_Shurikens, "Shurikens:", 0);
     };
 
     RenderTexture2D target = LoadRenderTexture(WIDTH, HEIGHT);
@@ -392,7 +390,7 @@ int main(){
                 player.jump();
 
             if (IsKeyPressed(KEY_E)) {
-                player.throw_suricane();
+                player.throw_shuriken();
             }
 
             if (IsKeyPressed(KEY_R)) {
@@ -425,10 +423,68 @@ int main(){
                 player.update_rect();
 
 
+            // player <-> enemy shuriken collisison
+            for (auto& player_shuriken: player.sp.shurikens) {
+                for (auto& enemy: Enemies::gang) {
+                    for (auto& enemy_shuriken: enemy.sp.shurikens) {
+                        if (player_shuriken.state != Shuriken::State::none && enemy_shuriken.state != Shuriken::State::none && enemy_shuriken.in_process
+                        && player_shuriken.in_process && CheckCollisionRecs((Rectangle){player_shuriken.pos.x, player_shuriken.pos.y, 10, 10},
+                                                    (Rectangle){enemy_shuriken.pos.x, enemy_shuriken.pos.y, 10, 10})) {
+                            player_shuriken.stop();
+                            enemy_shuriken.stop();
+                        }
+                    }
+                }
+            }
+
+
+            for (auto& enemy: Enemies::gang){
+                // Player -> NinjaEnemies
+                for (auto& shuriken: player.sp.shurikens){
+                    if (shuriken.state != Shuriken::State::none && !enemy.killed && CheckCollisionRecs((Rectangle){shuriken.pos.x, shuriken.pos.y, 10, 10},
+                                                                                                     (Rectangle){enemy.pos.x, enemy.pos.y, 100, 100})){
+                        shuriken.stop();
+                        enemy.dead_hit();
+                    }
+
+                }
+
+                if (enemy.killed && !enemy.fcounter_killed && enemy.js == EnemyPlayer::JumpState::none) {
+                    enemies.raise(enemy);
+                    ++enemies.killed;
+                    hp_bar.add_hp();
+                    stream_updater(ss_scores, "Scores:", enemies.killed);
+                    break;
+                }
+
+                // NinjaEnemies -> player
+                if ((enemy.movement_animation.direction == NinjaAnimation::Direction::right && enemy.pos.x >= (WIDTH/2 - 500)) ||
+                (enemy.movement_animation.direction == NinjaAnimation::Direction::left &&
+                        enemy.pos.x <= WIDTH/2 + 400) && !enemy.killed){
+                    enemy.throw_shuriken();
+                }
+
+
+                for (auto& shuriken: enemy.sp.shurikens){
+                    if (shuriken.state != Shuriken::State::none && !enemy.killed && CheckCollisionRecs((Rectangle){shuriken.pos.x, shuriken.pos.y, 10, 10},
+                                                                                                     (Rectangle){player.pos.x, player.pos.y, 100, 100})){
+                        shuriken.stop();
+                        hp_bar.min_hp();
+                        if (!hp_bar.is_alive()) {
+                            game_running = false;
+                        }
+                    }
+                }
+            }
+
+            
+
+            // Draw player
             DrawTexturePro(ninja, player.rect, {player.pos.x, player.pos.y, 100, 100}, {0, 0}, 0.0f, WHITE);
             DrawRectangleLinesEx({player.pos.x, player.pos.y, 100, 100}, 1, RED);
 
-            for (auto& el: enemies.gang){
+            // Draw enemies
+            for (auto& el: Enemies::gang){
                 el.update_rect();
                 if (el.pos.x < (WIDTH/2 - 500) && !el.killed) {
                     el.move_right(dt / 5);
@@ -438,80 +494,44 @@ int main(){
 
                 if (el.js != EnemyPlayer::JumpState::none)
                     el.jump_proccess(dt);
-                
+
                 DrawTexturePro(ninja, el.rect, {el.pos.x, el.pos.y, 100, 100}, {0, 0}, 0.0f, GREEN);
             }
 
-            
-            for (auto it = enemies.gang.begin(), ite = enemies.gang.end(); it != ite; ++it){
-                // Player -> Enemies
-                for (auto& suricane: player.sp.suricanes){
-                    if (suricane.state != Suricane::State::none && !it->killed && CheckCollisionRecs((Rectangle){suricane.pos.x, suricane.pos.y, 10, 10},
-                                        (Rectangle){it->pos.x, it->pos.y, 100, 100})){
-                        suricane.state = Suricane::State::none;
-                        suricane.in_process = false;
-                        it->dead_hit();
-                    }
-
-                    if (it->killed && !it->fcounter_killed && it->js == EnemyPlayer::JumpState::none) {
-                        enemies.raise(*it);
-                        ++enemies.killed;
-                        hp_bar.add_hp();
-                        stream_updater(ss_scores, "Scores:", enemies.killed);
-                        break;
-                    }
-                }
-
-                // Enemies -> player
-                if ((it->movement_animation.direction == NinjaAnimation::Direction::right && it->pos.x >= (WIDTH/2 - 500)) || 
-                (it->movement_animation.direction == NinjaAnimation::Direction::left &&
-                it->pos.x <+ WIDTH/2 + 400) && !it->killed){
-                    it->throw_suricane();
-                }
-
-                for (auto& suricane: it->sp.suricanes){
-                    if (suricane.state != Suricane::State::none && !it->killed && CheckCollisionRecs((Rectangle){suricane.pos.x, suricane.pos.y, 10, 10},
-                                        (Rectangle){player.pos.x, player.pos.y, 100, 100})){
-                                            suricane.state = Suricane::State::none;
-                                            suricane.in_process = false;
-                                            hp_bar.min_hp();
-                                            if (!hp_bar.is_alive()) {
-                                                game_running = false;
-                                            }
-                                            
-                    }
-
-                }
-                
-            }
-
-            stream_updater(ss_suricanes, "Suricanes:", player.sp.ready());
+            // Draw text info
+            stream_updater(ss_Shurikens, "Shurikens:", player.sp.ready());
             DrawText(ss_scores.str().data(), 400, 10, 20, BLACK);
-            DrawText(ss_suricanes.str().data(), 600, 10, 20, BLACK);
-            draw_list_as_textures(hp_bar.begin(), hp_bar.end(), heart);
+            DrawText(ss_Shurikens.str().data(), 600, 10, 20, BLACK);
 
-            for (auto& suricane: player.sp.suricanes){
-                if (suricane.state != Suricane::State::none) {
-                    suricane.process(dt);
-                    DrawTexturePro(ninja, suricane.rect,
-                                   {suricane.pos.x, suricane.pos.y, 75, 75},
-                                   {suricane.rect.width/2, suricane.rect.height/2},
-                                   suricane.anim.angle, WHITE);
+            // Draw hp
+            if (hp_bar.is_alive())
+                draw_list_as_textures(hp_bar.begin(), hp_bar.end(), heart);
+
+            // Draw player's shurikens
+            for (auto& shuriken: player.sp.shurikens){
+                if (shuriken.state != Shuriken::State::none) {
+                    shuriken.process(dt);
+                    DrawTexturePro(ninja, shuriken.rect,
+                                   {shuriken.pos.x, shuriken.pos.y, 75, 75},
+                                   {shuriken.rect.width / 2, shuriken.rect.height / 2},
+                                   shuriken.anim.angle, WHITE);
                 }
             }
 
-            for (auto& gang: enemies.gang){
-                for (auto& suricane: gang.sp.suricanes) {
-                    if (suricane.state != Suricane::State::none) {
-                        suricane.process(dt);
-                        DrawTexturePro(ninja, suricane.rect,
-                                       {suricane.pos.x, suricane.pos.y, 75, 75},
-                                       {suricane.rect.width/2, suricane.rect.height/2},
-                                       suricane.anim.angle, WHITE);
+
+            // Draw enemies shurikens
+            for (auto& gang: Enemies::gang){
+                for (auto& shuriken: gang.sp.shurikens) {
+                    if (shuriken.state != Shuriken::State::none) {
+                        shuriken.process(dt);
+                        DrawTexturePro(ninja, shuriken.rect,
+                                       {shuriken.pos.x, shuriken.pos.y, 75, 75},
+                                       {shuriken.rect.width / 2, shuriken.rect.height / 2},
+                                       shuriken.anim.angle, WHITE);
                     }
                 }
-                
             }
+
 
         DrawRectangleRec(floor, BLACK);
         EndTextureMode();
