@@ -18,12 +18,23 @@ Texture2D ninja;
 Texture2D heart;
 constexpr Vector2 heart_sz = {30,30};
 
-template <std::size_t sz>
+template <int sz>
 struct HpBar {
     std::array<Vector2, sz> arr{};
-    size_t count = sz;
+    int count = sz;
     HpBar(float x, float y, float offset = 32.f){
         std::generate(arr.begin(), arr.end(), [x,y,offset]()mutable{return Vector2{std::exchange(x, x+offset), y};});
+    }
+    void add_hp() {
+        if (count < sz) {
+            ++count;
+        }
+    }
+    void min_hp() {
+        --count;
+    }
+    bool is_alive() const {
+        return count > 0;
     }
     auto begin(){
         return arr.begin();
@@ -202,8 +213,19 @@ struct NinjaPlayer {
     void jump() {js = JumpState::up;}
 
     void throw_suricane() {
-        fcounter_throw = 1;
-        static_animation.direction = movement_animation.direction;
+        float x, y;
+        if (movement_animation.direction == NinjaAnimation::Direction::left) {
+            x = pos.x + 60;
+            y = pos.y + 40;
+        } else {
+            x = pos.x + 30;
+            y = pos.y + 40;
+        }
+        if (sp.throw_suricane(movement_animation.direction == NinjaAnimation::Direction::left ?
+            Suricane::State::left : Suricane::State::right, x, y)){
+                fcounter_throw = 1;
+                static_animation.direction = movement_animation.direction;
+        }
     }
 
     void dead_hit() {
@@ -285,19 +307,27 @@ struct NinjaPlayer {
     }
 };
 
-template <size_t sz>
+template <size_t sz, size_t suricane_count = 1>
 struct Enemies  {
-    static inline std::array<NinjaPlayer<1>, sz> gang;
+    static inline std::array<NinjaPlayer<suricane_count>, sz> gang;
     size_t killed = 0;
     Enemies() {
         std::for_each(gang.begin(), gang.end(), [](auto& el){el.pos.x = !(rand() % 2) ? (el.movement_animation.direction = NinjaAnimation::Direction::right, -100 + (rand() % 10)) : (el.movement_animation.direction = NinjaAnimation::Direction::left, WIDTH + 100 + (rand() % 10));});
     }
-    void raise(NinjaPlayer<1>& el) {
+    void raise(auto& el) {
             el = NinjaPlayer{};
             el.pos.x = !(rand() % 2) ? (el.movement_animation.direction = NinjaAnimation::Direction::right, -100 + (rand() % 10)) : (el.movement_animation.direction = NinjaAnimation::Direction::left, WIDTH + 100 + (rand() % 10));
-        
+    }
+    void flush() {
+        std::for_each(gang.begin(), gang.end(), [](auto& el){el.pos.x = !(rand() % 2) ? (el.movement_animation.direction = NinjaAnimation::Direction::right, -100 + (rand() % 10)) : (el.movement_animation.direction = NinjaAnimation::Direction::left, WIDTH + 100 + (rand() % 10));});
+        std::for_each(gang.begin(), gang.end(), [](auto& el){
+            for (auto& suricane: el.sp.suricanes){
+                suricane.state = Suricane::State::none;
+            }
+        });
     }
 };
+
 
 void load_sprites() {
     ninja = LoadTextureFromImage(LoadImage(ninja_img_path));
@@ -316,41 +346,57 @@ int main(){
     Enemies<4> enemies;
     HpBar<5> hp_bar(10, 10);
 
-    // Suricane suricane;
+    using Player = decltype(player);
+    using EnemyPlayer = decltype(enemies.gang)::value_type;
+
+    bool game_running = true;
+
     std::stringstream ss_scores;
     std::stringstream ss_suricanes;
     ss_scores << "Scores:" << 0;
     ss_suricanes << "Suricanes:" << 0;
+
     auto stream_updater = [](auto& ss, auto&&... val){
         ss.str("");
         (ss << ... << val);
+    };
+
+    auto restart = [&]{
+        game_running = true;
+        player = Player{};
+        enemies.flush();
+        hp_bar = HpBar<5>(10,10);
+        stream_updater(ss_scores, "Scores", 0);
+        stream_updater(ss_suricanes, "Suricanes", 0);
     };
 
     RenderTexture2D target = LoadRenderTexture(WIDTH, HEIGHT);
     auto render = [&]{
         BeginTextureMode(target);
             ClearBackground(WHITE);
+            if (!game_running) {
+                DrawText("Game over. Press R to restart", (WIDTH/2)-200, HEIGHT/2, 20, BLACK);
+                if (IsKeyPressed(KEY_R)) {
+                    restart();
+                }
+                EndTextureMode();
+                return;
+            }
+
             auto dt = GetFrameTime();
 
-            if (player.js == decltype(player)::JumpState::none)
+            if (player.js == Player::JumpState::none)
                 player.update_rect();
 
-            if (IsKeyPressed(KEY_SPACE) && player.js == decltype(player)::JumpState::none)
+            if (IsKeyPressed(KEY_SPACE) && player.js == Player::JumpState::none)
                 player.jump();
 
             if (IsKeyPressed(KEY_E)) {
-                float x, y;
-                if (player.movement_animation.direction == NinjaAnimation::Direction::left) {
-                    x = player.pos.x + 60;
-                    y = player.pos.y + 40;
-                } else {
-                    x = player.pos.x + 30;
-                    y = player.pos.y + 40;
-                }
-                if (player.sp.throw_suricane(player.movement_animation.direction == NinjaAnimation::Direction::left ?
-                    Suricane::State::left : Suricane::State::right, x, y)){
-                        player.throw_suricane();
-                }
+                player.throw_suricane();
+            }
+
+            if (IsKeyPressed(KEY_R)) {
+                restart();
             }
 
             if (IsKeyPressed(KEY_A)){
@@ -372,7 +418,7 @@ int main(){
             if (IsKeyReleased(KEY_A) || IsKeyReleased(KEY_D))
                 player.stop_move();
 
-            if (player.js != decltype(player)::JumpState::none)
+            if (player.js != Player::JumpState::none)
                 player.jump_proccess(dt);
 
             if (player.fcounter_throw)
@@ -384,19 +430,21 @@ int main(){
 
             for (auto& el: enemies.gang){
                 el.update_rect();
-                if (el.pos.x < WIDTH/2 && !el.killed) {
-                    el.move_right(dt / 10);
-                } else if (el.pos.x > 0 && !el.killed){
-                    el.move_left(dt / 10);
+                if (el.pos.x < (WIDTH/2 - 500) && !el.killed) {
+                    el.move_right(dt / 5);
+                } else if (el.pos.x > (WIDTH/2 + 400) && !el.killed){
+                    el.move_left(dt / 5);
                 }
 
-                if (el.js != NinjaPlayer<1>::JumpState::none)
+                if (el.js != EnemyPlayer::JumpState::none)
                     el.jump_proccess(dt);
                 
                 DrawTexturePro(ninja, el.rect, {el.pos.x, el.pos.y, 100, 100}, {0, 0}, 0.0f, GREEN);
             }
 
+            
             for (auto it = enemies.gang.begin(), ite = enemies.gang.end(); it != ite; ++it){
+                // Player -> Enemies
                 for (auto& suricane: player.sp.suricanes){
                     if (suricane.state != Suricane::State::none && !it->killed && CheckCollisionRecs((Rectangle){suricane.pos.x, suricane.pos.y, 10, 10},
                                         (Rectangle){it->pos.x, it->pos.y, 100, 100})){
@@ -405,13 +453,36 @@ int main(){
                         it->dead_hit();
                     }
 
-                    if (it->killed && !it->fcounter_killed && it->js == NinjaPlayer<1>::JumpState::none) {
+                    if (it->killed && !it->fcounter_killed && it->js == EnemyPlayer::JumpState::none) {
                         enemies.raise(*it);
                         ++enemies.killed;
+                        hp_bar.add_hp();
                         stream_updater(ss_scores, "Scores:", enemies.killed);
                         break;
                     }
                 }
+
+                // Enemies -> player
+                if ((it->movement_animation.direction == NinjaAnimation::Direction::right && it->pos.x >= (WIDTH/2 - 500)) || 
+                (it->movement_animation.direction == NinjaAnimation::Direction::left &&
+                it->pos.x <+ WIDTH/2 + 400) && !it->killed){
+                    it->throw_suricane();
+                }
+
+                for (auto& suricane: it->sp.suricanes){
+                    if (suricane.state != Suricane::State::none && !it->killed && CheckCollisionRecs((Rectangle){suricane.pos.x, suricane.pos.y, 10, 10},
+                                        (Rectangle){player.pos.x, player.pos.y, 100, 100})){
+                                            suricane.state = Suricane::State::none;
+                                            suricane.in_process = false;
+                                            hp_bar.min_hp();
+                                            if (!hp_bar.is_alive()) {
+                                                game_running = false;
+                                            }
+                                            
+                    }
+
+                }
+                
             }
 
             stream_updater(ss_suricanes, "Suricanes:", player.sp.ready());
@@ -427,6 +498,19 @@ int main(){
                                    {suricane.rect.width/2, suricane.rect.height/2},
                                    suricane.anim.angle, WHITE);
                 }
+            }
+
+            for (auto& gang: enemies.gang){
+                for (auto& suricane: gang.sp.suricanes) {
+                    if (suricane.state != Suricane::State::none) {
+                        suricane.process(dt);
+                        DrawTexturePro(ninja, suricane.rect,
+                                       {suricane.pos.x, suricane.pos.y, 75, 75},
+                                       {suricane.rect.width/2, suricane.rect.height/2},
+                                       suricane.anim.angle, WHITE);
+                    }
+                }
+                
             }
 
         DrawRectangleRec(floor, BLACK);
