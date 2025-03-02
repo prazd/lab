@@ -8,7 +8,7 @@ constexpr float PLAYER_VEL_X = 220;
 constexpr float PLAYER_VEL_Y = 100;
 constexpr float HEIGHT = 600;
 constexpr float WIDTH = 1200;
-constexpr float WINDOW_SZ = 125.f;
+constexpr float WINDOW_SZ = 120.f;
 
 template <size_t n>
 struct Walls {
@@ -20,7 +20,7 @@ struct Walls {
         for (auto& el: walls) {
             el.first.x = start_x;
             el.first.y = start_y;
-            auto r = (rand() % 300);
+            auto r = (rand() % 250);
             el.second.x = el.first.x;
             el.second.y = el.first.y + r;
             start_x += 400.f;
@@ -33,10 +33,12 @@ struct Walls {
                 el.first.x = WIDTH + 300.f;
                 el.first.y = 0;
                 float sy = 0;
-                if (walls.back().first.y < HEIGHT - 100) {
-                    sy = (walls.back().first.y + (rand() % 200)) + WINDOW_SZ;
+                if (walls.back().first.y > HEIGHT - 10) {
+                    sy = (walls.back().first.y + (rand() % 250)) - WINDOW_SZ;
+                } else if (walls.back().first.y < 10) {
+                    sy = (walls.back().first.y + (rand() % 250)) + WINDOW_SZ;
                 } else {
-                    sy = (walls.back().first.y - (rand() % 200)) - WINDOW_SZ;
+                    sy = (rand() % 2) ? (walls.back().first.y + (rand() % 250)) - WINDOW_SZ : (walls.back().first.y + (rand() % 250)) + WINDOW_SZ;
                 }
                 el.second.x = el.first.x;
                 el.second.y = sy;
@@ -86,17 +88,17 @@ int main() {
             p.move_down(dt);
 
             for(auto& el: w.walls) {
-                DrawRectangleRec((Rectangle){el.first.x, el.first.y, 100, el.second.y}, WHITE);
-                DrawRectangleRec((Rectangle){el.second.x, el.second.y+WINDOW_SZ, 100, HEIGHT}, WHITE);
+                DrawRectangleRec((Rectangle){el.first.x, el.first.y, 100, el.second.y}, GRAY);
+                DrawRectangleRec((Rectangle){el.second.x, el.second.y+WINDOW_SZ, 100, HEIGHT}, GRAY);
             }
 
-            // todo: optimize
-            for (auto next_wall = w.walls.begin(), end = w.walls.end(); next_wall!=end;++next_wall){
+            auto next_wall = std::find_if(w.walls.begin(), w.walls.end(), [&](auto& el){return std::abs(el.first.x - p.pos.x) <= 150;});
+            if (next_wall != w.walls.end()) {
                 DrawRectangleLinesEx((Rectangle){next_wall->first.x, next_wall->first.y, 100, next_wall->second.y}, 1, BLUE);
-                DrawRectangleLinesEx((Rectangle){next_wall->second.x, next_wall->second.y+WINDOW_SZ, 100, HEIGHT}, 1, RED);
+                DrawRectangleLinesEx((Rectangle){next_wall->second.x, next_wall->second.y+WINDOW_SZ, 100, HEIGHT - next_wall->second.y - WINDOW_SZ}, 1, RED);
                 if (CheckCollisionRecs((Rectangle){p.pos.x, p.pos.y, 60,60},
                                        (Rectangle){next_wall->first.x, next_wall->first.y, 100, next_wall->second.y}) ||
-                    CheckCollisionRecs((Rectangle){p.pos.x, p.pos.y, 60,60}, (Rectangle){next_wall->second.x, next_wall->second.y+WINDOW_SZ, 100, HEIGHT})
+                    CheckCollisionRecs((Rectangle){p.pos.x, p.pos.y, 60,60}, (Rectangle){next_wall->second.x, next_wall->second.y+WINDOW_SZ, 100, HEIGHT - next_wall->second.y - WINDOW_SZ})
                 ){
                     running = false;
                 }
@@ -104,7 +106,7 @@ int main() {
       
             DrawCircle(p.pos.x+30, p.pos.y + 30, 35, RED);
             // DrawRectangleRec((Rectangle){p.pos.x, p.pos.y, 60,60}, BLACK);
-
+     
         EndTextureMode();
     };
 
