@@ -4,48 +4,75 @@
 #include <cassert>
 #include <iostream>
 
-constexpr float PLAYER_VEL_X = 220;
-constexpr float PLAYER_VEL_Y = 100;
+constexpr float PLAYER_VEL_X = 300;
+constexpr float PLAYER_VEL_Y = 150;
 constexpr float HEIGHT = 600;
 constexpr float WIDTH = 1200;
 constexpr float WINDOW_SZ = 120.f;
+constexpr float WALL_VELOCITY = 100.f;
+constexpr float WALL_DISTANCE = 400.f;
+constexpr float MAX_UP_DOWN = 15.f;
 
 template <size_t n>
 struct Walls {
-    Vector2 velocity{100,200};
-    std::array<std::pair<Vector2, Vector2>, n> walls;
+    using WallPair = std::pair<Vector2, Vector2>;
+
+    std::array<WallPair, n> walls;
+    size_t current_last = n - 1;
+
     Walls() {
         float start_x = 500.f;
         float start_y = 0.f;
-        for (auto& el: walls) {
-            el.first.x = start_x;
-            el.first.y = start_y;
-            auto r = (rand() % 250);
-            el.second.x = el.first.x;
-            el.second.y = el.first.y + r;
-            start_x += 400.f;
-        }
+        // genesis
+        auto& el = walls[0];
+        el.first.x  = start_x;
+        el.first.y = start_y;
+        auto r = (rand() % 250);
+        el.second.x = el.first.x;
+        el.second.y = el.first.y + r;
+        for (auto it = std::next(walls.begin()), ite = walls.end(); it != ite; ++it)
+            *it = gen_next_wall(*std::prev(it));
     }
-    //todo: finish
+
+    size_t get_last() {
+        return current_last++ % n;
+    }
+
+    float get_win_y_by_last(float l) {
+        auto down_gen = [](float l) {
+            return (l + (rand() % int(HEIGHT - l - WINDOW_SZ)));
+        };
+
+        auto up_gen = [](float l) {
+            return  (l - (rand() % int((l - WINDOW_SZ))));
+        };
+
+        if (HEIGHT - l <= WINDOW_SZ) {
+            return up_gen(l);
+        } else if (l - WINDOW_SZ <= WINDOW_SZ) {
+            return down_gen(l);
+        }
+        // todo: update
+        return rand() % 2 ? down_gen(l) : up_gen(l);
+    }
+
+    WallPair gen_next_wall(const WallPair& wp) {
+        WallPair el;
+        el.first.x = wp.first.x + WALL_DISTANCE;
+        el.first.y = 0;
+        el.second.x = el.first.x;
+        el.second.y = get_win_y_by_last(wp.second.y);
+        return el;
+    }
+
     void move_left(float dt) {
         for (auto& el: walls){
             if (el.first.x <= -100.f) {
-                el.first.x = WIDTH + 300.f;
-                el.first.y = 0;
-                float sy = 0;
-                if (walls.back().first.y > HEIGHT - 10) {
-                    sy = (walls.back().first.y + (rand() % 250)) - WINDOW_SZ;
-                } else if (walls.back().first.y < 10) {
-                    sy = (walls.back().first.y + (rand() % 250)) + WINDOW_SZ;
-                } else {
-                    sy = (rand() % 2) ? (walls.back().first.y + (rand() % 250)) - WINDOW_SZ : (walls.back().first.y + (rand() % 250)) + WINDOW_SZ;
-                }
-                el.second.x = el.first.x;
-                el.second.y = sy;
+                el = gen_next_wall(walls[get_last()]);
                 continue;
             }
-            el.first.x -= velocity.x * dt;
-            el.second.x -= velocity.x * dt;
+            el.first.x -= WALL_VELOCITY * dt;
+            el.second.x -= WALL_VELOCITY * dt;
         }
     }
 };
@@ -68,7 +95,7 @@ int main() {
     Walls<4> w;
     bool running = true;
     auto target = LoadRenderTexture(WIDTH, HEIGHT);
-    auto render = [&]{
+     auto render = [&]{
         BeginTextureMode(target);
             ClearBackground(RAYWHITE);
             auto dt = GetFrameTime();
@@ -82,6 +109,14 @@ int main() {
                 EndTextureMode();
                 return;
             }
+             if (IsKeyPressed(KEY_R)) {
+                 p = Player{};
+                 w = Walls<4>{};
+                 running = true;
+             }
+             if (IsKeyPressed(KEY_A)) {
+                std::cout << "123";
+             }
             w.move_left(dt);
             if (IsKeyPressed(KEY_SPACE) || IsKeyDown(KEY_SPACE))
                 p.move_up(dt);
