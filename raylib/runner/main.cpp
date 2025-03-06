@@ -8,6 +8,7 @@ constexpr float HEIGHT = 600;
 constexpr float WIDTH = 1200;
 constexpr float JUMP_VELOCITY = 400.f;
 constexpr float WALL_VELOCITY = 200.f;
+constexpr float JUMP_HEIGHT = 200.f;
 
 
 template <typename T, int a, int b>
@@ -47,7 +48,7 @@ struct Player {
         switch(jump_state){
             case JumpState::up: {
                 pos.y -= JUMP_VELOCITY * dt;
-                if (pos.y <= 300) {
+                if (pos.y <= JUMP_HEIGHT) {
                     jump_state = JumpState::down;
                 }
                 break;
