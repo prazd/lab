@@ -14,6 +14,8 @@ constexpr float PLAYER_VEL_Y = 100.f;
 constexpr float QUBE_SIDE = OFFSET - P_CHECK_VIEW;
 constexpr float FRAME_WIDTH = 40.f;
 constexpr float FRAME_HEIGHT = 40.f;
+constexpr float MONSTER_FRAME_HEIGHT = 40.f;
+constexpr float MONSTER_FRAME_WIDTH = 35.f;
 constexpr float FRAME_SZ = 40.f;
 constexpr auto pacman_img_path = "/Users/prazd/Desktop/books/cpp/cpp/raylib/pacman/img/pacman.png";
 Texture2D atlas;
@@ -52,6 +54,17 @@ struct Animation {
         };
     }
 
+    Rectangle animation_frame_monster(int num_frames_per_row, float offset_x = 0.f, float offset_y = 0.f) {
+        float x = float(cur % num_frames_per_row) * MONSTER_FRAME_WIDTH;
+        float y = float(cur / num_frames_per_row) * MONSTER_FRAME_HEIGHT;
+        return (Rectangle){
+            .x = x + offset_x,
+            .y = y + offset_y,
+            .width =  MONSTER_FRAME_WIDTH,
+            .height = MONSTER_FRAME_HEIGHT
+        };
+    }
+
     void set_direction(Direction dir) {
         direction = dir;
     }
@@ -61,7 +74,7 @@ template <typename T, int a, int b>
 class Random{
     static inline std::random_device rd;
     static inline std::mt19937 gen{rd()};
-    static inline std::uniform_int_distribution<T> dis = std::uniform_int_distribution<T>(a,b);
+    static inline std::uniform_int_distribution<T> dis = std::uniform_int_distribution<T>(a, b);
 public:
     static int roll() {
         return dis(gen);
@@ -72,7 +85,7 @@ constexpr std::array<std::string_view, 15> map = {
     "##############################",
     "####.......................###",
     "####.######.##.###.#######.###",
-    "####.######.##.###.#####...###",
+    "####.######.##.###.#####@..###",
     "####.######.##.###.#######.###",
     "####.######.##.###.#######.###",
     "####.######.##.###.#######.###",
@@ -115,14 +128,14 @@ struct CoinsMap {
 };
 
 
-constexpr auto fill_valid_points() {
+constexpr auto fill_walls() {
     std::array<std::pair<float, float>, count<'#'>()> res;
     float x = 0.f;
     float y = 0.f;
     size_t i{};
     for (auto&& row: map) {
         for(auto el: row) {
-            if (el == '#' || el == '@') {
+            if (el == '#') {
                res[i++] = {x, y};
             }
             x += OFFSET;
@@ -133,7 +146,7 @@ constexpr auto fill_valid_points() {
     return res;
 }
 
-constexpr auto valid_points = fill_valid_points();
+constexpr auto valid_points = fill_walls();
 
 void draw_map() {
     float x = 0.f;
@@ -141,6 +154,7 @@ void draw_map() {
     for (auto&& row: map){
         for (auto el: row) {
             if (el == '.') DrawRectangleLinesEx((Rectangle){x, y, OFFSET, OFFSET}, 1, BLUE);
+            else if (el == '@') DrawRectangleLinesEx((Rectangle){x, y, OFFSET, OFFSET}, 1, RED);
             x += OFFSET;
         }
         x = 0.f;
@@ -156,7 +170,7 @@ struct Player {
         .speed = 0.07f,
         .duration = 0.1f
     };
-    Rectangle rect;
+    Rectangle rect = anim.animation_frame(10, 0, 22);
     Vector2 pos{200,61};
     Vector2 velocity{PLAYER_VEL_X, PLAYER_VEL_Y};
     
@@ -231,8 +245,8 @@ struct Monster: Player {
         for (auto&& row: map){
             for (auto el: row){
                 if(el == '@') { // spawn
-                    pos.x = x;
-                    pos.y = y;
+                    pos.x = x + 20;
+                    pos.y = y + 20;
                     break;
                 }
                 x += OFFSET;
@@ -240,8 +254,47 @@ struct Monster: Player {
             x = 0;
             y += OFFSET;
         }
+        anim = {
+            .first = 0,
+            .last = 1,
+            .cur = 0,
+            .speed = 0.07f,
+            .duration = 0.1f
+        };
+        rect = anim.animation_frame_monster(10, 3, 80);
     }
+
+    void move(float dt) {
+        if (dir == Direction::null){
+            // todo: update
+            auto v = Random<int, 1,4>::roll();
+            switch (v) {
+                case 1: {next = Direction::left; break;}
+                case 2: {next = Direction::right; break;}
+                case 3: {next = Direction::up; break;}
+                case 4: {next = Direction::down; break;}
+            }
+        }
+        if (next != Direction::null) {
+            dir = next;
+            anim.set_direction(dir);
+            next = Direction::null;
+        }
+        if (collision(dir)){
+            dir = Direction::null;
+        }
+
+        switch(dir){
+            case Direction::left:  { move_left(dt);  anim.update();  rect = anim.animation_frame_monster(10, 3, 80); break;}
+            case Direction::right: { move_right(dt); anim.update();  rect = anim.animation_frame_monster(10, 73, 80); break;}
+            case Direction::up:    { move_up(dt);    anim.update();  rect = anim.animation_frame_monster(10, 143, 80); break;}
+            case Direction::down:  { move_down(dt);  anim.update();  rect = anim.animation_frame_monster(10, 213, 80); break;}
+            default: break;
+        }
+     }
 };
+
+
 
 int main() {
     InitWindow(WIDTH, HEIGHT, "Pacman");
@@ -251,6 +304,8 @@ int main() {
     bool running = true;
     Player p;
     CoinsMap cm;
+    std::array<Monster, 1> ms;
+
     auto target = LoadRenderTexture(WIDTH, HEIGHT);
      auto render = [&]{
         BeginTextureMode(target);
@@ -293,7 +348,10 @@ int main() {
                 }
             }
 
-            
+            for (auto& m: ms) {
+                m.move(dt);
+                DrawTexturePro(atlas, m.rect, {m.pos.x-R_PLAYER, m.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {0, 0}, 0.f, WHITE);
+            }
             
 
         EndTextureMode();
