@@ -7,9 +7,11 @@
 constexpr float WIDTH = 1200.f;
 constexpr float HEIGHT = 600.f;
 constexpr float OFFSET = 40.f;
-constexpr float R_PLAYER = 15.f;
-constexpr float PLAYER_VEL_X = 150.f;
-constexpr float PLAYER_VEL_Y = 150.f;
+constexpr float R_PLAYER = 20.f;
+constexpr float P_CHECK_VIEW = 2.f;
+constexpr float PLAYER_VEL_X = 100.f;
+constexpr float PLAYER_VEL_Y = 100.f;
+constexpr float QUBE_SIDE = OFFSET - P_CHECK_VIEW;
 
 template <typename T, int a, int b>
 class Random{
@@ -25,17 +27,17 @@ public:
 constexpr std::array<std::string_view, 15> map = {
     "##############################",
     "####.......................###",
-    "####.#####################.###",
-    "####.#####################.###",
-    "####.#####################.###",
-    "####.#####################.###",
-    "####.#####################.###",
-    "####.#####################.###",
-    "####.#####################.###",
-    "####.#####################.###",
-    "####.#####################.###",
-    "####.#####################.###",
-    "####.#####################.###",
+    "####.######.##.###.#######.###",
+    "####.######.##.###.#######.###",
+    "####.######.##.###.#######.###",
+    "####.######.##.###.#######.###",
+    "####.######.##.###.#######.###",
+    "####.###.##.##.###.##.####.###",
+    "####.###.##.##.###.##.####.###",
+    "####.###.##.##.###.##.####.###",
+    "####.###.##.##.###.##.####.###",
+    "####.###.##.##.###.##.####.###",
+    "####.###.##.##.###.##.####.###",
     "####.......................###",
     "##############################"
 };
@@ -87,32 +89,43 @@ void draw_map() {
 }
 
 struct Player {
-    Vector2 pos{200,60};
+    Vector2 pos{200,61};
     Vector2 velocity{PLAYER_VEL_X, PLAYER_VEL_Y};
-    enum class Direction{stop, left, right, up, down} dir = Direction::stop;
+    enum class Direction{null, left, right, up, down} dir = Direction::null;
+    Direction next = Direction::null;
 
     bool collision(Direction d) {
         auto current_x = pos.x - R_PLAYER;
         auto current_y = pos.y - R_PLAYER;
         switch(d) {
-            case Direction::left:  {current_x-=7.5f;break;}
-            case Direction::right: {current_x+=7.5f;break;}
-            case Direction::up:    {current_y-=7.5f;break;}
-            case Direction::down:  {current_y+=7.5f;break;}
+            case Direction::left:  {current_x -= P_CHECK_VIEW; break;}
+            case Direction::right: {current_x += P_CHECK_VIEW; break;}
+            case Direction::up:    {current_y -= P_CHECK_VIEW; break;}
+            case Direction::down:  {current_y += P_CHECK_VIEW; break;}
             default: return true;
         }
-        DrawRectangleLinesEx((Rectangle){current_x, current_y, 30, 30}, 1, GREEN);
+        DrawRectangleLinesEx((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE}, 1, GREEN);
         return std::any_of(std::begin(valid_points), std::end(valid_points), [current_x, current_y](auto& el){
-            return CheckCollisionRecs((Rectangle){current_x, current_y, 30, 30}, 
+            if (CheckCollisionRecs((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE},
+                                  (Rectangle){el.first, el.second, OFFSET, OFFSET})){
+                DrawRectangleLinesEx((Rectangle){el.first, el.second, QUBE_SIDE, QUBE_SIDE}, 1, YELLOW);
+            }
+            return CheckCollisionRecs((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE},
             (Rectangle){el.first, el.second, OFFSET, OFFSET});
         });
     }
+    
     void update(Direction d) {
-        if (!collision(d)) dir = dir == d ? Direction::stop : d;
+        next = d;
     }
+
     void move(float dt) {
+        if (next != Direction::null && !collision(next)) {
+            dir = next;
+            next = Direction::null;
+        }
         if (collision(dir)){
-            return;
+            dir = Direction::null;
         }
         switch(dir){
             case Direction::left:  { move_left(dt);  break;}
@@ -143,11 +156,6 @@ struct Player {
 int main() {
     InitWindow(WIDTH, HEIGHT, "Pacman");
     SetTargetFPS(60);
-    std::cout << "SZ:" << valid_points.size() << "\n";
-    for (auto& el: valid_points){
-        std::cout << "Fist:" << el.first << '\n';
-        std::cout << "Second:" << el.first << '\n';
-    }
     size_t scores = 0;
     bool running = true;
     Player p;
@@ -166,8 +174,8 @@ int main() {
             if (IsKeyPressed(KEY_D))
                 p.update(Player::Direction::right);
             p.move(dt);
-            DrawCircle(p.pos.x, p.pos.y, 15, RED);
-            DrawRectangleLinesEx((Rectangle){p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, 30, 30}, 1, BLUE);
+            DrawCircle(p.pos.x, p.pos.y, R_PLAYER, RED);
+            DrawRectangleLinesEx((Rectangle){p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, QUBE_SIDE, QUBE_SIDE}, 1, BLUE);
         EndTextureMode();
     };
 
