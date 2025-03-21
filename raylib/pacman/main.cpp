@@ -17,14 +17,18 @@ constexpr float FRAME_HEIGHT = 40.f;
 constexpr float MONSTER_FRAME_HEIGHT = 40.f;
 constexpr float MONSTER_FRAME_WIDTH = 35.f;
 constexpr float FRAME_SZ = 40.f;
+constexpr float COINS_OFFSET = 15.f;
+constexpr float PLAYER_SPAWN_OFFSET_X = 20.f;
+constexpr float PLAYER_SPAWN_OFFSET_Y = 21.f;
+
 constexpr auto pacman_img_path = "/Users/prazd/Desktop/books/cpp/cpp/raylib/pacman/img/pacman.png";
 Texture2D atlas;
-
-enum class Direction{null, left, right, up, down};
 
 void load_sprites() {
     atlas = LoadTextureFromImage(LoadImage(pacman_img_path));
 }
+
+enum class Direction{null, left, right, up, down};
 
 struct Animation {
     Direction direction = Direction::right;
@@ -33,6 +37,8 @@ struct Animation {
     int cur;
     float speed;
     float duration;
+    float width;
+    float height;
 
     void update() {
         float dt = GetFrameTime();
@@ -43,25 +49,25 @@ struct Animation {
         }
     }
 
-    Rectangle animation_frame(int num_frames_per_row, float offset_x = 0.f, float offset_y = 0.f) {
-        float x = float(cur % num_frames_per_row) * FRAME_WIDTH;
-        float y = float(cur / num_frames_per_row) * FRAME_HEIGHT;
+    Rectangle animation_frame_adaptive(int num_frames_per_row, float offset_x = 0.f, float offset_y = 0.f) {
+        float x = float(cur % num_frames_per_row) * width;
+        float y = float(cur / num_frames_per_row) * height;
         return (Rectangle){
             .x = x + offset_x,
             .y = y + offset_y,
-            .width =  ((direction == Direction::left || direction == Direction::up) ? -FRAME_WIDTH : FRAME_WIDTH),
-            .height = FRAME_HEIGHT
+            .width =  ((direction == Direction::left || direction == Direction::up) ? -width : width),
+            .height = height
         };
     }
 
-    Rectangle animation_frame_monster(int num_frames_per_row, float offset_x = 0.f, float offset_y = 0.f) {
-        float x = float(cur % num_frames_per_row) * MONSTER_FRAME_WIDTH;
-        float y = float(cur / num_frames_per_row) * MONSTER_FRAME_HEIGHT;
+    Rectangle animation_frame(int num_frames_per_row, float offset_x = 0.f, float offset_y = 0.f) {
+        float x = float(cur % num_frames_per_row) * width;
+        float y = float(cur / num_frames_per_row) * height;
         return (Rectangle){
             .x = x + offset_x,
             .y = y + offset_y,
-            .width =  MONSTER_FRAME_WIDTH,
-            .height = MONSTER_FRAME_HEIGHT
+            .width =  width,
+            .height = height
         };
     }
 
@@ -85,7 +91,7 @@ constexpr std::array<std::string_view, 15> map = {
     "##############################",
     "####.......................###",
     "####.######.##.###.#######.###",
-    "####.######.##.###.#####@..###",
+    "####.p#####.##.###.#####@..###",
     "####.######.##.###.#######.###",
     "####.######.##.###.#######.###",
     "####.######.##.###.#######.###",
@@ -99,6 +105,46 @@ constexpr std::array<std::string_view, 15> map = {
     "##############################"
 };
 
+constexpr auto fill_coords() {
+    std::array<Vector2, 30 * 15> res{};
+    float x = 0.f;
+    float y = 0.f;
+    size_t i{};
+    for (auto&& raw: map) {
+        for (auto el: raw) {
+            res[i++] = {x, y};
+            x += OFFSET;
+        }
+        x = 0;
+        y += OFFSET;
+    }
+    return res;
+}
+
+constexpr std::array<Vector2, 30 * 15> coords = fill_coords();
+
+template <typename Func>
+constexpr void map_elements_call(Func&& f) {
+    size_t i{};
+    size_t coords_i{};
+    for (auto&& row: map) {
+        for(auto el: row) {
+            f(i, coords_i, el);
+            ++coords_i;
+        }
+    }
+}
+
+constexpr Vector2 get_point(char p) {
+    Vector2 res{};
+    map_elements_call([&res, p](auto, auto coord_i, auto el){
+        if (el == p) {
+            res = coords[coord_i];
+        }
+    });
+    return res;
+}
+
 template <char... sym>
 constexpr size_t count() {
     size_t res{};
@@ -108,58 +154,51 @@ constexpr size_t count() {
     return res;
 }
 
+
 struct CoinsMap {
-    std::array<std::pair<std::pair<float, float>, bool>, count<'.'>()> coins;
+    size_t collected = 0;
+    static inline std::array<std::pair<std::pair<float, float>, bool>, count<'.'>()> coins;
     CoinsMap() {
-        float x = 0.f;
-        float y = 0.f;
-        size_t i{};
-        for (auto&& row: map) {
-            for(auto el: row) {
-                if (el == '.') {
-                    coins[i++] = {{x+20, y+20}, true};
-                }
-                x += OFFSET;
+        map_elements_call([](auto& i, auto coords_i, auto el){
+            if (el == '.'){
+                auto v = coords[coords_i];
+                coins[i++] = {{v.x+COINS_OFFSET, v.y+COINS_OFFSET}, true};
             }
-            x = 0;
-            y += OFFSET;
+        });
+    }
+
+    bool collect_all() const {
+        return collected == coins.size();
+    }
+
+    void reset() {
+        collected = 0;
+        for (auto& el: coins) {
+            auto& [p, active] = el;
+            active = true;
         }
     }
 };
 
 
 constexpr auto fill_walls() {
-    std::array<std::pair<float, float>, count<'#'>()> res;
-    float x = 0.f;
-    float y = 0.f;
-    size_t i{};
-    for (auto&& row: map) {
-        for(auto el: row) {
-            if (el == '#') {
-               res[i++] = {x, y};
-            }
-            x += OFFSET;
-        }
-        x = 0;
-        y += OFFSET;
-    }
+    std::array<Vector2, count<'#'>()> res;
+    map_elements_call([&res](auto& i, auto& coords_i, auto el){
+        if (el == '#') {
+            res[i++] = coords[coords_i];
+         }
+    });
     return res;
 }
 
 constexpr auto valid_points = fill_walls();
 
 void draw_map() {
-    float x = 0.f;
-    float y = 0.f;
-    for (auto&& row: map){
-        for (auto el: row) {
-            if (el == '.') DrawRectangleLinesEx((Rectangle){x, y, OFFSET, OFFSET}, 1, BLUE);
-            else if (el == '@') DrawRectangleLinesEx((Rectangle){x, y, OFFSET, OFFSET}, 1, RED);
-            x += OFFSET;
-        }
-        x = 0.f;
-        y += OFFSET;
-    }
+    map_elements_call([](auto, auto coord_i, auto el) {
+        auto [x,y] = coords[coord_i];
+        if (el == '.' || el == 'p') DrawRectangleLinesEx((Rectangle){x, y, OFFSET, OFFSET}, 1, BLUE);
+        else if (el == '@') DrawRectangleLinesEx((Rectangle){x, y, OFFSET, OFFSET}, 1, RED);
+    });
 }
 
 struct Player {
@@ -168,14 +207,20 @@ struct Player {
         .last = 2,
         .cur = 2,
         .speed = 0.07f,
-        .duration = 0.1f
+        .duration = 0.1f,
+        .width = FRAME_WIDTH,
+        .height = FRAME_HEIGHT
     };
-    Rectangle rect = anim.animation_frame(10, 0, 22);
-    Vector2 pos{200,61};
+    Rectangle rect = anim.animation_frame_adaptive(10, 0, 22);
+    Vector2 pos = get_point('p');
     Vector2 velocity{PLAYER_VEL_X, PLAYER_VEL_Y};
     
     Direction dir;
     Direction next = Direction::null;
+    Player() {
+        pos.x += PLAYER_SPAWN_OFFSET_X;
+        pos.y += PLAYER_SPAWN_OFFSET_Y;
+    }
 
     bool collision(Direction d) {
         auto current_x = pos.x - R_PLAYER;
@@ -190,11 +235,11 @@ struct Player {
         DrawRectangleLinesEx((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE}, 1, GREEN);
         return std::any_of(std::begin(valid_points), std::end(valid_points), [current_x, current_y](auto& el){
             if (CheckCollisionRecs((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE},
-                                  (Rectangle){el.first, el.second, OFFSET, OFFSET})){
-                DrawRectangleLinesEx((Rectangle){el.first, el.second, QUBE_SIDE, QUBE_SIDE}, 1, YELLOW);
+                                  (Rectangle){el.x, el.y, OFFSET, OFFSET})){
+                DrawRectangleLinesEx((Rectangle){el.x, el.y, QUBE_SIDE, QUBE_SIDE}, 1, YELLOW);
             }
             return CheckCollisionRecs((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE},
-            (Rectangle){el.first, el.second, OFFSET, OFFSET});
+            (Rectangle){el.x, el.y, OFFSET, OFFSET});
         });
     }
     
@@ -203,7 +248,7 @@ struct Player {
     }
 
     void move(float dt) {
-        rect = anim.animation_frame(10, 0, 22);
+        rect = anim.animation_frame_adaptive(10, 0, 22);
         if (next != Direction::null && !collision(next)) {
             dir = next;
             anim.set_direction(dir);
@@ -211,6 +256,8 @@ struct Player {
         }
         if (collision(dir)){
             dir = Direction::null;
+            anim.cur = anim.last;
+            rect = anim.animation_frame_adaptive(10, 0, 22);
         }
         switch(dir){
             case Direction::left:  { move_left(dt);  anim.update();  break;}
@@ -240,28 +287,24 @@ struct Player {
 
 struct Monster: Player {
     Monster(){
-        float x = 0.f;
-        float y = 0.f;
-        for (auto&& row: map){
-            for (auto el: row){
-                if(el == '@') { // spawn
-                    pos.x = x + 20;
-                    pos.y = y + 20;
-                    break;
-                }
-                x += OFFSET;
-            }
-            x = 0;
-            y += OFFSET;
-        }
+        map_elements_call([this](auto, auto coord_i, auto el) {
+            if(el == '@') {
+              auto [x, y] = coords[coord_i];
+              pos.x = x + 20;
+              pos.y = y + 20;
+           }
+      });
+
         anim = {
             .first = 0,
             .last = 1,
             .cur = 0,
             .speed = 0.07f,
-            .duration = 0.1f
+            .duration = 0.1f,
+            .width = MONSTER_FRAME_WIDTH,
+            .height = MONSTER_FRAME_HEIGHT
         };
-        rect = anim.animation_frame_monster(10, 3, 80);
+        rect = anim.animation_frame(10, 3, 80);
     }
 
     void move(float dt) {
@@ -285,10 +328,10 @@ struct Monster: Player {
         }
 
         switch(dir){
-            case Direction::left:  { move_left(dt);  anim.update();  rect = anim.animation_frame_monster(10, 3, 80); break;}
-            case Direction::right: { move_right(dt); anim.update();  rect = anim.animation_frame_monster(10, 73, 80); break;}
-            case Direction::up:    { move_up(dt);    anim.update();  rect = anim.animation_frame_monster(10, 143, 80); break;}
-            case Direction::down:  { move_down(dt);  anim.update();  rect = anim.animation_frame_monster(10, 213, 80); break;}
+            case Direction::left:  { move_left(dt);  anim.update();  rect = anim.animation_frame(10, 3, 80); break;}
+            case Direction::right: { move_right(dt); anim.update();  rect = anim.animation_frame(10, 73, 80); break;}
+            case Direction::up:    { move_up(dt);    anim.update();  rect = anim.animation_frame(10, 143, 80); break;}
+            case Direction::down:  { move_down(dt);  anim.update();  rect = anim.animation_frame(10, 213, 80); break;}
             default: break;
         }
      }
@@ -342,6 +385,7 @@ int main() {
                     auto& [coord, active] = el;         
                     if (CheckCollisionRecs({p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {coord.first, coord.second, 10, 10})){
                         active = false;
+                        ++cm.collected;
                         continue;
                     }
                     DrawTexturePro(atlas, {80, 22, FRAME_WIDTH, FRAME_HEIGHT}, {coord.first, coord.second, 10, 10}, {0, 0}, 0.f, WHITE);
@@ -352,7 +396,6 @@ int main() {
                 m.move(dt);
                 DrawTexturePro(atlas, m.rect, {m.pos.x-R_PLAYER, m.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {0, 0}, 0.f, WHITE);
             }
-            
 
         EndTextureMode();
     };
