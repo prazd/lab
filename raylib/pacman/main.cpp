@@ -18,8 +18,10 @@ constexpr float MONSTER_FRAME_HEIGHT = 40.f;
 constexpr float MONSTER_FRAME_WIDTH = 35.f;
 constexpr float FRAME_SZ = 40.f;
 constexpr float COINS_OFFSET = 15.f;
-constexpr float PLAYER_SPAWN_OFFSET_X = 20.f;
+constexpr float PLAYER_SPAWN_OFFSET_X = 21.f;
 constexpr float PLAYER_SPAWN_OFFSET_Y = 21.f;
+
+//#define DRAW_LINE = 1
 
 constexpr auto pacman_img_path = "/Users/prazd/Desktop/books/cpp/cpp/raylib/pacman/img/pacman.png";
 Texture2D atlas;
@@ -28,7 +30,7 @@ void load_sprites() {
     atlas = LoadTextureFromImage(LoadImage(pacman_img_path));
 }
 
-enum class Direction{null, left, right, up, down};
+enum class Direction{left, right, up, down, null};
 
 struct Animation {
     Direction direction = Direction::right;
@@ -76,7 +78,7 @@ struct Animation {
     }
 };
 
-template <typename T, int a, int b>
+template <typename T, int a = 0, int b = 0>
 class Random{
     static inline std::random_device rd;
     static inline std::mt19937 gen{rd()};
@@ -84,6 +86,10 @@ class Random{
 public:
     static int roll() {
         return dis(gen);
+    }
+    static int roll(int l, int r) {
+        std::uniform_int_distribution<T> cdis = std::uniform_int_distribution<int>(l, r);
+        return cdis(gen);
     }
 };
 
@@ -214,9 +220,10 @@ struct Player {
     Rectangle rect = anim.animation_frame_adaptive(10, 0, 22);
     Vector2 pos = get_point('p');
     Vector2 velocity{PLAYER_VEL_X, PLAYER_VEL_Y};
-    
-    Direction dir;
+
+    Direction dir = Direction::null;
     Direction next = Direction::null;
+
     Player() {
         pos.x += PLAYER_SPAWN_OFFSET_X;
         pos.y += PLAYER_SPAWN_OFFSET_Y;
@@ -232,17 +239,21 @@ struct Player {
             case Direction::down:  {current_y += P_CHECK_VIEW; break;}
             default: return true;
         }
+#ifdef DRAW_LINE
         DrawRectangleLinesEx((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE}, 1, GREEN);
+#endif
         return std::any_of(std::begin(valid_points), std::end(valid_points), [current_x, current_y](auto& el){
             if (CheckCollisionRecs((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE},
                                   (Rectangle){el.x, el.y, OFFSET, OFFSET})){
+#ifdef DRAW_LINE
                 DrawRectangleLinesEx((Rectangle){el.x, el.y, QUBE_SIDE, QUBE_SIDE}, 1, YELLOW);
+#endif
             }
             return CheckCollisionRecs((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE},
             (Rectangle){el.x, el.y, OFFSET, OFFSET});
         });
     }
-    
+
     void update(Direction d) {
         next = d;
     }
@@ -271,7 +282,7 @@ struct Player {
     void move_up(float dt) {
         pos.y -= velocity.y * dt;
     }
-    
+
     void move_down(float dt) {
         pos.y += velocity.y * dt;
     }
@@ -290,8 +301,7 @@ struct Monster: Player {
         map_elements_call([this](auto, auto coord_i, auto el) {
             if(el == '@') {
               auto [x, y] = coords[coord_i];
-              pos.x = x + 20;
-              pos.y = y + 20;
+              pos = {x + 21, y + 21};
            }
       });
 
@@ -304,25 +314,47 @@ struct Monster: Player {
             .width = MONSTER_FRAME_WIDTH,
             .height = MONSTER_FRAME_HEIGHT
         };
+
         rect = anim.animation_frame(10, 3, 80);
+        dir = Direction::right;
+        anim.set_direction(dir);
     }
 
     void move(float dt) {
-        if (dir == Direction::null){
-            // todo: update
-            auto v = Random<int, 1,4>::roll();
-            switch (v) {
-                case 1: {next = Direction::left; break;}
-                case 2: {next = Direction::right; break;}
-                case 3: {next = Direction::up; break;}
-                case 4: {next = Direction::down; break;}
+        // left, right, up, down
+        std::array<bool, 4> current{collision(Direction::left), collision(Direction::right), collision(Direction::up), collision(Direction::down)};
+        if (dir != Direction::null) {
+            for (size_t i = 0; i < 4; ++i) {
+                if (!current[i]){
+                    auto cd = static_cast<Direction>(i);
+                    if (dir == cd) continue;
+                    if (dir == Direction::left && cd == Direction::right ||
+                        dir == Direction::up && cd == Direction::down ||
+                        dir == Direction::right && cd == Direction::left ||
+                        dir == Direction::down && cd == Direction::up
+                        ) continue;
+                    auto v = Random<int, 1,2>::roll();
+                    if (v == 1) continue;
+                    else dir = static_cast<Direction>(i);
+                    break;
+                }
+            }
+        } else {
+            auto leagal_paths = std::count(current.begin(), current.end(), false);
+            auto r = Random<int>::roll(1, leagal_paths);
+            size_t curr{};
+            for (size_t i = 0; i < 4; ++i) {
+                if (!current[i]) {
+                    ++curr;
+                    if (curr == r) {
+                        dir = static_cast<Direction>(i);
+                        anim.set_direction(dir);
+                        break;
+                    }
+                }
             }
         }
-        if (next != Direction::null) {
-            dir = next;
-            anim.set_direction(dir);
-            next = Direction::null;
-        }
+
         if (collision(dir)){
             dir = Direction::null;
         }
@@ -347,7 +379,7 @@ int main() {
     bool running = true;
     Player p;
     CoinsMap cm;
-    std::array<Monster, 1> ms;
+    std::array<Monster, 3> ms;
 
     auto target = LoadRenderTexture(WIDTH, HEIGHT);
      auto render = [&]{
@@ -365,7 +397,9 @@ int main() {
                 p.update(Direction::right);
 
             p.move(dt);
+#ifdef DRAW_LINE
             DrawRectangleLinesEx((Rectangle){p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, QUBE_SIDE, QUBE_SIDE}, 1, BLUE);
+#endif
             switch(p.dir) {
                 case Direction::up:
                 case Direction::down:
@@ -394,7 +428,7 @@ int main() {
 
             for (auto& m: ms) {
                 m.move(dt);
-                DrawTexturePro(atlas, m.rect, {m.pos.x-R_PLAYER, m.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {0, 0}, 0.f, WHITE);
+                DrawTexturePro(atlas, m.rect, {m.pos.x-R_PLAYER, m.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {2, 5}, 0.f, WHITE);
             }
 
         EndTextureMode();
