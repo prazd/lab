@@ -375,16 +375,45 @@ int main() {
     InitWindow(WIDTH, HEIGHT, "Pacman");
     load_sprites();
     SetTargetFPS(60);
-    size_t scores = 0;
     bool running = true;
+    bool win = false;
     Player p;
     CoinsMap cm;
     std::array<Monster, 3> ms;
+
+    std::stringstream score_text;
+
+    auto monster_spawn_vec = get_point('@');
+
+    auto stream_updater = [](std::stringstream& ss, auto&&... data) {
+        ss.str("");
+        (ss << ... << data);
+    };
+
+    auto restart = [&]{
+        p = Player{};
+        cm.reset();
+        ms = std::array<Monster, 3>{};
+        stream_updater(score_text, "Score:0");
+        running = true;
+        win = false;
+    };
 
     auto target = LoadRenderTexture(WIDTH, HEIGHT);
      auto render = [&]{
         BeginTextureMode(target);
             ClearBackground(BLACK);
+            if (!running) {
+                stream_updater(score_text, "Game Over. Scores ", cm.collected, ". Press R to restart");
+                if (!win) DrawText(score_text.str().data(), WIDTH/4, HEIGHT/2, 30, WHITE);
+                else DrawText("YOU WIN. Press R to restart", WIDTH/4, HEIGHT/2, 30, WHITE);
+
+                EndTextureMode();
+                if (IsKeyPressed(KEY_R)) {
+                    restart();
+                }
+                return;
+            }
             draw_map();
             auto dt = GetFrameTime();
             if (IsKeyPressed(KEY_W))
@@ -428,8 +457,21 @@ int main() {
 
             for (auto& m: ms) {
                 m.move(dt);
+                if (CheckCollisionRecs({p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {m.pos.x-R_PLAYER, m.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT})){
+                    running = false;
+                    win = false;
+                }
                 DrawTexturePro(atlas, m.rect, {m.pos.x-R_PLAYER, m.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {2, 5}, 0.f, WHITE);
             }
+
+
+            if (CheckCollisionRecs({p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {monster_spawn_vec.x, monster_spawn_vec.y, 10,10}) && cm.collected == cm.coins.size()){
+                running = false;
+                win = true;
+            }
+
+            stream_updater(score_text, "Score:", cm.collected);
+            DrawText(score_text.str().data(), 0, 0, 20, WHITE);
 
         EndTextureMode();
     };
