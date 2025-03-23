@@ -20,8 +20,10 @@ constexpr float FRAME_SZ = 40.f;
 constexpr float COINS_OFFSET = 15.f;
 constexpr float PLAYER_SPAWN_OFFSET_X = 21.f;
 constexpr float PLAYER_SPAWN_OFFSET_Y = 21.f;
+constexpr float MONSTER_VIEW_DISTANCE = 200.f;
 
 //#define DRAW_LINE = 1
+// #define DEBUG_LOGS = 1
 
 constexpr auto pacman_img_path = "/Users/prazd/Desktop/books/cpp/cpp/raylib/pacman/img/pacman.png";
 Texture2D atlas;
@@ -297,6 +299,8 @@ struct Player {
 };
 
 struct Monster: Player {
+    Rectangle ray;
+
     Monster(){
         map_elements_call([this](auto, auto coord_i, auto el) {
             if(el == '@') {
@@ -318,27 +322,41 @@ struct Monster: Player {
         rect = anim.animation_frame(10, 3, 80);
         dir = Direction::right;
         anim.set_direction(dir);
+        
     }
 
-    void move(float dt) {
+
+    void move(float dt, const Player& p) {
         // left, right, up, down
         std::array<bool, 4> current{collision(Direction::left), collision(Direction::right), collision(Direction::up), collision(Direction::down)};
+        
         if (dir != Direction::null) {
-            for (size_t i = 0; i < 4; ++i) {
-                if (!current[i]){
-                    auto cd = static_cast<Direction>(i);
-                    if (dir == cd) continue;
-                    if (dir == Direction::left && cd == Direction::right ||
-                        dir == Direction::up && cd == Direction::down ||
-                        dir == Direction::right && cd == Direction::left ||
-                        dir == Direction::down && cd == Direction::up
-                        ) continue;
-                    auto v = Random<int, 1,2>::roll();
-                    if (v == 1) continue;
-                    else dir = static_cast<Direction>(i);
-                    break;
+        #ifdef  DEBUG_LOGS
+                    if (CheckCollisionRecs(ray, {p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT})){
+                        std::cout << "----------------------" << '\n';
+                        std::cout << "PX:"    <<    p.pos.x-R_PLAYER << '\n';
+                        std::cout << "PY:"    <<    p.pos.y-R_PLAYER << '\n';
+                        std::cout << "RayX:"  <<    ray.x << '\n';
+                        std::cout << "RayY:"  <<    ray.y << '\n';
+                    }
+        #endif
+            if (!CheckCollisionRecs(ray, {p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT})) {
+                for (size_t i = 0; i < 4; ++i) {
+                    if (!current[i]){
+                        auto cd = static_cast<Direction>(i);
+                        if (dir == cd) continue;
+                        if (dir == Direction::left && cd == Direction::right ||
+                            dir == Direction::up && cd == Direction::down ||
+                            dir == Direction::right && cd == Direction::left ||
+                            dir == Direction::down && cd == Direction::up
+                            ) continue;
+                        auto v = Random<int, 1,2>::roll();
+                        if (v == 1) continue;
+                        else dir = static_cast<Direction>(i);
+                        break;
+                    }
                 }
-            }
+            }   
         } else {
             auto leagal_paths = std::count(current.begin(), current.end(), false);
             auto r = Random<int>::roll(1, leagal_paths);
@@ -354,6 +372,9 @@ struct Monster: Player {
                 }
             }
         }
+#ifdef DRAW_LINE
+        DrawRectangleLinesEx(ray, 1, GREEN);
+#endif        
 
         if (collision(dir)){
             dir = Direction::null;
@@ -364,6 +385,17 @@ struct Monster: Player {
             case Direction::right: { move_right(dt); anim.update();  rect = anim.animation_frame(10, 73, 80); break;}
             case Direction::up:    { move_up(dt);    anim.update();  rect = anim.animation_frame(10, 143, 80); break;}
             case Direction::down:  { move_down(dt);  anim.update();  rect = anim.animation_frame(10, 213, 80); break;}
+            default: break;
+        }
+        update_ray();
+     }
+
+     void update_ray() {
+        switch(dir) {
+            case Direction::left:   {ray = {pos.x-MONSTER_VIEW_DISTANCE, pos.y, MONSTER_VIEW_DISTANCE, 1};break;}
+            case Direction::right:  {ray = {pos.x, pos.y, MONSTER_VIEW_DISTANCE, 1};break;}
+            case Direction::up:     {ray = {pos.x, pos.y-MONSTER_VIEW_DISTANCE, 1, MONSTER_VIEW_DISTANCE};break;}
+            case Direction::down:   {ray = {pos.x, pos.y, 1, MONSTER_VIEW_DISTANCE};break;}
             default: break;
         }
      }
@@ -416,13 +448,13 @@ int main() {
             }
             draw_map();
             auto dt = GetFrameTime();
-            if (IsKeyPressed(KEY_W))
+            if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP))
                 p.update(Direction::up);
-            if (IsKeyPressed(KEY_S))
+            if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN))
                 p.update(Direction::down);
-            if (IsKeyPressed(KEY_A))
+            if (IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT))
                 p.update(Direction::left);
-            if (IsKeyPressed(KEY_D))
+            if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT))
                 p.update(Direction::right);
 
             p.move(dt);
@@ -456,7 +488,7 @@ int main() {
             }
 
             for (auto& m: ms) {
-                m.move(dt);
+                m.move(dt, p);
                 if (CheckCollisionRecs({p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {m.pos.x-R_PLAYER, m.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT})){
                     running = false;
                     win = false;
