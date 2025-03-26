@@ -34,4 +34,6 @@ std::string bwt_decoding(const std::string& d) {
 
 int main() {
     assert(bwt_decoding(bwt_encoding("banana$")) == "banana$");
+    assert(bwt_decoding(bwt_encoding("apple$")) == "apple$");
+    assert(bwt_decoding(bwt_encoding("asdasdsdsdiwueiwueiwueiueiwqeweweeeeeeewwwwwwqqqq$")) == "asdasdsdsdiwueiwueiwueiueiwqeweweeeeeeewwwwwwqqqq$");
 }
