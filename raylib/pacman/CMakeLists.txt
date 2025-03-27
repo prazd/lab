@@ -14,7 +14,9 @@ set(RAYLIB_DIR "/usr/local/Cellar/raylib/")
 
 find_package(raylib REQUIRED HINTS ${RAYLIB_DIR})
 
+include_directories(include)
 set(SOURCES
+    src/Animation.cpp
     main.cpp
 )
 

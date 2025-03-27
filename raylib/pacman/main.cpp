@@ -1,26 +1,10 @@
 #include "raylib.h"
 #include <array>
-#include <iostream>
-#include <random>
 #include <sstream>
-
-constexpr float WIDTH = 1200.f;
-constexpr float HEIGHT = 600.f;
-constexpr float OFFSET = 40.f;
-constexpr float R_PLAYER = 20.f;
-constexpr float P_CHECK_VIEW = 2.f;
-constexpr float PLAYER_VEL_X = 100.f;
-constexpr float PLAYER_VEL_Y = 100.f;
-constexpr float QUBE_SIDE = OFFSET - P_CHECK_VIEW;
-constexpr float FRAME_WIDTH = 40.f;
-constexpr float FRAME_HEIGHT = 40.f;
-constexpr float MONSTER_FRAME_HEIGHT = 40.f;
-constexpr float MONSTER_FRAME_WIDTH = 35.f;
-constexpr float FRAME_SZ = 40.f;
-constexpr float COINS_OFFSET = 15.f;
-constexpr float PLAYER_SPAWN_OFFSET_X = 21.f;
-constexpr float PLAYER_SPAWN_OFFSET_Y = 21.f;
-constexpr float MONSTER_VIEW_DISTANCE = 200.f;
+#include "Animation.h"
+#include "Random.h"
+#include "Map.h"
+#include "Constants.h"
 
 //#define DRAW_LINE = 1
 // #define DEBUG_LOGS = 1
@@ -32,120 +16,27 @@ void load_sprites() {
     atlas = LoadTextureFromImage(LoadImage(pacman_img_path));
 }
 
-enum class Direction{left, right, up, down, null};
-
-struct Animation {
-    Direction direction = Direction::right;
-    int first;
-    int last;
-    int cur;
-    float speed;
-    float duration;
-    float width;
-    float height;
-
-    void update() {
-        float dt = GetFrameTime();
-        duration-=dt;
-        if (duration <= 0.f){
-            duration = speed;
-            cur = cur == last ? first : ++cur;
-        }
-    }
-
-    Rectangle animation_frame_adaptive(int num_frames_per_row, float offset_x = 0.f, float offset_y = 0.f) {
-        float x = float(cur % num_frames_per_row) * width;
-        float y = float(cur / num_frames_per_row) * height;
-        return (Rectangle){
-            .x = x + offset_x,
-            .y = y + offset_y,
-            .width =  ((direction == Direction::left || direction == Direction::up) ? -width : width),
-            .height = height
-        };
-    }
-
-    Rectangle animation_frame(int num_frames_per_row, float offset_x = 0.f, float offset_y = 0.f) {
-        float x = float(cur % num_frames_per_row) * width;
-        float y = float(cur / num_frames_per_row) * height;
-        return (Rectangle){
-            .x = x + offset_x,
-            .y = y + offset_y,
-            .width =  width,
-            .height = height
-        };
-    }
-
-    void set_direction(Direction dir) {
-        direction = dir;
-    }
-};
-
-template <typename T, int a = 0, int b = 0>
-class Random{
-    static inline std::random_device rd;
-    static inline std::mt19937 gen{rd()};
-    static inline std::uniform_int_distribution<T> dis = std::uniform_int_distribution<T>(a, b);
-public:
-    static int roll() {
-        return dis(gen);
-    }
-    static int roll(int l, int r) {
-        std::uniform_int_distribution<T> cdis = std::uniform_int_distribution<int>(l, r);
-        return cdis(gen);
-    }
-};
-
-constexpr std::array<std::string_view, 15> map = {
-    "##############################",
-    "####.......................###",
-    "####.######.##.###.#######.###",
-    "####.p#####.##.###.#####@..###",
-    "####.######.##.###.#######.###",
-    "####.######.##.###.#######.###",
-    "####.######.##.###.#######.###",
-    "####.###.##.##.###.##.####.###",
-    "####.###.##.##.###.##.####.###",
-    "####.###.##.##.###.##.####.###",
-    "####.###.##.##.###.##.####.###",
-    "####.###.##.##.###.##.####.###",
-    "####.###.##.##.###.##.####.###",
-    "####.......................###",
-    "##############################"
-};
-
-constexpr auto fill_coords() {
+constexpr std::array<Vector2, 30 * 15> fill_coords() {
     std::array<Vector2, 30 * 15> res{};
     float x = 0.f;
     float y = 0.f;
     size_t i{};
-    for (auto&& raw: map) {
+    for (auto&& raw: Map::raw) {
         for (auto el: raw) {
             res[i++] = {x, y};
-            x += OFFSET;
+            x += gc::OFFSET;
         }
         x = 0;
-        y += OFFSET;
+        y += gc::OFFSET;
     }
     return res;
 }
 
 constexpr std::array<Vector2, 30 * 15> coords = fill_coords();
 
-template <typename Func>
-constexpr void map_elements_call(Func&& f) {
-    size_t i{};
-    size_t coords_i{};
-    for (auto&& row: map) {
-        for(auto el: row) {
-            f(i, coords_i, el);
-            ++coords_i;
-        }
-    }
-}
-
 constexpr Vector2 get_point(char p) {
     Vector2 res{};
-    map_elements_call([&res, p](auto, auto coord_i, auto el){
+    Map::call([&res, p](auto, auto coord_i, auto el){
         if (el == p) {
             res = coords[coord_i];
         }
@@ -153,24 +44,15 @@ constexpr Vector2 get_point(char p) {
     return res;
 }
 
-template <char... sym>
-constexpr size_t count() {
-    size_t res{};
-    for (auto&& row: map){
-        res += std::count_if(std::begin(row), std::end(row), [](auto el){return ((el == sym) || ...);});
-    }
-    return res;
-}
-
 
 struct CoinsMap {
     size_t collected = 0;
-    static inline std::array<std::pair<std::pair<float, float>, bool>, count<'.'>()> coins;
+    static inline std::array<std::pair<std::pair<float, float>, bool>, Map::count<'.'>()> coins;
     CoinsMap() {
-        map_elements_call([](auto& i, auto coords_i, auto el){
+        Map::call([](auto& i, auto coords_i, auto el){
             if (el == '.'){
                 auto v = coords[coords_i];
-                coins[i++] = {{v.x+COINS_OFFSET, v.y+COINS_OFFSET}, true};
+                coins[i++] = {{v.x+gc::COINS_OFFSET, v.y+gc::COINS_OFFSET}, true};
             }
         });
     }
@@ -190,8 +72,8 @@ struct CoinsMap {
 
 
 constexpr auto fill_walls() {
-    std::array<Vector2, count<'#'>()> res;
-    map_elements_call([&res](auto& i, auto& coords_i, auto el){
+    std::array<Vector2, Map::count<'#'>()> res;
+    Map::call([&res](auto& i, auto& coords_i, auto el){
         if (el == '#') {
             res[i++] = coords[coords_i];
          }
@@ -202,10 +84,10 @@ constexpr auto fill_walls() {
 constexpr auto valid_points = fill_walls();
 
 void draw_map() {
-    map_elements_call([](auto, auto coord_i, auto el) {
+    Map::call([](auto, auto coord_i, auto el) {
         auto [x,y] = coords[coord_i];
-        if (el == '.' || el == 'p') DrawRectangleLinesEx((Rectangle){x, y, OFFSET, OFFSET}, 1, BLUE);
-        else if (el == '@') DrawRectangleLinesEx((Rectangle){x, y, OFFSET, OFFSET}, 1, RED);
+        if (el == '.' || el == 'p') DrawRectangleLinesEx((Rectangle){x, y, gc::OFFSET, gc::OFFSET}, 1, BLUE);
+        else if (el == '@') DrawRectangleLinesEx((Rectangle){x, y, gc::OFFSET, gc::OFFSET}, 1, RED);
     });
 }
 
@@ -216,43 +98,43 @@ struct Player {
         .cur = 2,
         .speed = 0.07f,
         .duration = 0.1f,
-        .width = FRAME_WIDTH,
-        .height = FRAME_HEIGHT
+        .width = gc::FRAME_WIDTH,
+        .height = gc::FRAME_HEIGHT
     };
     Rectangle rect = anim.animation_frame_adaptive(10, 0, 22);
     Vector2 pos = get_point('p');
-    Vector2 velocity{PLAYER_VEL_X, PLAYER_VEL_Y};
+    Vector2 velocity{gc::PLAYER_VEL_X, gc::PLAYER_VEL_Y};
 
     Direction dir = Direction::null;
     Direction next = Direction::null;
 
     Player() {
-        pos.x += PLAYER_SPAWN_OFFSET_X;
-        pos.y += PLAYER_SPAWN_OFFSET_Y;
+        pos.x += gc::PLAYER_SPAWN_OFFSET_X;
+        pos.y += gc::PLAYER_SPAWN_OFFSET_Y;
     }
 
     bool collision(Direction d) {
-        auto current_x = pos.x - R_PLAYER;
-        auto current_y = pos.y - R_PLAYER;
+        auto current_x = pos.x - gc::R_PLAYER;
+        auto current_y = pos.y - gc::R_PLAYER;
         switch(d) {
-            case Direction::left:  {current_x -= P_CHECK_VIEW; break;}
-            case Direction::right: {current_x += P_CHECK_VIEW; break;}
-            case Direction::up:    {current_y -= P_CHECK_VIEW; break;}
-            case Direction::down:  {current_y += P_CHECK_VIEW; break;}
+                case Direction::left:  {current_x -= gc::P_CHECK_VIEW; break;}
+                case Direction::right: {current_x += gc::P_CHECK_VIEW; break;}
+                case Direction::up:    {current_y -= gc::P_CHECK_VIEW; break;}
+                case Direction::down:  {current_y += gc::P_CHECK_VIEW; break;}
             default: return true;
         }
 #ifdef DRAW_LINE
         DrawRectangleLinesEx((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE}, 1, GREEN);
 #endif
         return std::any_of(std::begin(valid_points), std::end(valid_points), [current_x, current_y](auto& el){
-            if (CheckCollisionRecs((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE},
-                                  (Rectangle){el.x, el.y, OFFSET, OFFSET})){
+            if (CheckCollisionRecs((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE},
+                                  (Rectangle){el.x, el.y, gc::OFFSET, gc::OFFSET})){
 #ifdef DRAW_LINE
                 DrawRectangleLinesEx((Rectangle){el.x, el.y, QUBE_SIDE, QUBE_SIDE}, 1, YELLOW);
 #endif
             }
-            return CheckCollisionRecs((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE},
-            (Rectangle){el.x, el.y, OFFSET, OFFSET});
+            return CheckCollisionRecs((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE},
+            (Rectangle){el.x, el.y, gc::OFFSET, gc::OFFSET});
         });
     }
 
@@ -302,7 +184,7 @@ struct Monster: Player {
     Rectangle ray;
 
     Monster(){
-        map_elements_call([this](auto, auto coord_i, auto el) {
+        Map::call([this](auto, auto coord_i, auto el) {
             if(el == '@') {
               auto [x, y] = coords[coord_i];
               pos = {x + 21, y + 21};
@@ -315,8 +197,8 @@ struct Monster: Player {
             .cur = 0,
             .speed = 0.07f,
             .duration = 0.1f,
-            .width = MONSTER_FRAME_WIDTH,
-            .height = MONSTER_FRAME_HEIGHT
+            .width = gc::MONSTER_FRAME_WIDTH,
+            .height = gc::MONSTER_FRAME_HEIGHT
         };
 
         rect = anim.animation_frame(10, 3, 80);
@@ -340,7 +222,7 @@ struct Monster: Player {
                         std::cout << "RayY:"  <<    ray.y << '\n';
                     }
         #endif
-            if (!CheckCollisionRecs(ray, {p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT})) {
+            if (!CheckCollisionRecs(ray, {p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT})) {
                 for (size_t i = 0; i < 4; ++i) {
                     if (!current[i]){
                         auto cd = static_cast<Direction>(i);
@@ -392,10 +274,10 @@ struct Monster: Player {
 
      void update_ray() {
         switch(dir) {
-            case Direction::left:   {ray = {pos.x-MONSTER_VIEW_DISTANCE, pos.y, MONSTER_VIEW_DISTANCE, 1};break;}
-            case Direction::right:  {ray = {pos.x, pos.y, MONSTER_VIEW_DISTANCE, 1};break;}
-            case Direction::up:     {ray = {pos.x, pos.y-MONSTER_VIEW_DISTANCE, 1, MONSTER_VIEW_DISTANCE};break;}
-            case Direction::down:   {ray = {pos.x, pos.y, 1, MONSTER_VIEW_DISTANCE};break;}
+                    case Direction::left:   {ray = {pos.x-gc::MONSTER_VIEW_DISTANCE, pos.y, gc::MONSTER_VIEW_DISTANCE, 1};break;}
+                    case Direction::right:  {ray = {pos.x, pos.y, gc::MONSTER_VIEW_DISTANCE, 1};break;}
+                    case Direction::up:     {ray = {pos.x, pos.y-gc::MONSTER_VIEW_DISTANCE, 1, gc::MONSTER_VIEW_DISTANCE};break;}
+                    case Direction::down:   {ray = {pos.x, pos.y, 1, gc::MONSTER_VIEW_DISTANCE};break;}
             default: break;
         }
      }
@@ -404,7 +286,7 @@ struct Monster: Player {
 
 
 int main() {
-    InitWindow(WIDTH, HEIGHT, "Pacman");
+    InitWindow(gc::WIDTH, gc::HEIGHT, "Pacman");
     load_sprites();
     SetTargetFPS(60);
     bool running = true;
@@ -431,14 +313,14 @@ int main() {
         win = false;
     };
 
-    auto target = LoadRenderTexture(WIDTH, HEIGHT);
+    auto target = LoadRenderTexture(gc::WIDTH, gc::HEIGHT);
      auto render = [&]{
         BeginTextureMode(target);
             ClearBackground(BLACK);
             if (!running) {
                 stream_updater(score_text, "Game Over. Scores ", cm.collected, ". Press R to restart");
-                if (!win) DrawText(score_text.str().data(), WIDTH/4, HEIGHT/2, 30, WHITE);
-                else DrawText("YOU WIN. Press R to restart", WIDTH/4, HEIGHT/2, 30, WHITE);
+                if (!win) DrawText(score_text.str().data(), gc::WIDTH/4, gc::HEIGHT/2, 30, WHITE);
+                else DrawText("YOU WIN. Press R to restart", gc::WIDTH/4, gc::HEIGHT/2, 30, WHITE);
 
                 EndTextureMode();
                 if (IsKeyPressed(KEY_R)) {
@@ -465,12 +347,12 @@ int main() {
                 case Direction::up:
                 case Direction::down:
                 {
-                    DrawTexturePro(atlas, p.rect, {p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {0, FRAME_SZ}, 90.f, WHITE);
+                    DrawTexturePro(atlas, p.rect, {p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {0, gc::FRAME_SZ}, 90.f, WHITE);
                     break;
                 }
                 default:
                 {
-                    DrawTexturePro(atlas, p.rect, {p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {0, 0}, 0.f, WHITE);
+                    DrawTexturePro(atlas, p.rect, {p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {0, 0}, 0.f, WHITE);
                     break;
                 }
             }
@@ -478,26 +360,26 @@ int main() {
             for (auto& el: cm.coins) {
                 if (std::get<1>(el)) {
                     auto& [coord, active] = el;         
-                    if (CheckCollisionRecs({p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {coord.first, coord.second, 10, 10})){
+                    if (CheckCollisionRecs({p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {coord.first, coord.second, 10, 10})){
                         active = false;
                         ++cm.collected;
                         continue;
                     }
-                    DrawTexturePro(atlas, {80, 22, FRAME_WIDTH, FRAME_HEIGHT}, {coord.first, coord.second, 10, 10}, {0, 0}, 0.f, WHITE);
+                    DrawTexturePro(atlas, {80, 22, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {coord.first, coord.second, 10, 10}, {0, 0}, 0.f, WHITE);
                 }
             }
 
             for (auto& m: ms) {
                 m.move(dt, p);
-                if (CheckCollisionRecs({p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {m.pos.x-R_PLAYER, m.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT})){
+                if (CheckCollisionRecs({p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {m.pos.x-gc::R_PLAYER, m.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT})){
                     running = false;
                     win = false;
                 }
-                DrawTexturePro(atlas, m.rect, {m.pos.x-R_PLAYER, m.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {2, 5}, 0.f, WHITE);
+                DrawTexturePro(atlas, m.rect, {m.pos.x-gc::R_PLAYER, m.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {2, 5}, 0.f, WHITE);
             }
 
 
-            if (CheckCollisionRecs({p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, FRAME_WIDTH, FRAME_HEIGHT}, {monster_spawn_vec.x, monster_spawn_vec.y, 10,10}) && cm.collected == cm.coins.size()){
+            if (CheckCollisionRecs({p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {monster_spawn_vec.x, monster_spawn_vec.y, 10,10}) && cm.collected == cm.coins.size()){
                 running = false;
                 win = true;
             }
