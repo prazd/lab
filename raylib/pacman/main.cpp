@@ -72,7 +72,7 @@ struct CoinsMap {
 
 
 constexpr auto fill_walls() {
-    std::array<Vector2, Map::count<'#'>()> res;
+    std::array<Vector2, Map::count<'#'>()> res{};
     Map::call([&res](auto& i, auto& coords_i, auto el){
         if (el == '#') {
             res[i++] = coords[coords_i];
@@ -113,7 +113,7 @@ struct Player {
         pos.y += gc::PLAYER_SPAWN_OFFSET_Y;
     }
 
-    bool collision(Direction d) {
+    bool collision(Direction d) const {
         auto current_x = pos.x - gc::R_PLAYER;
         auto current_y = pos.y - gc::R_PLAYER;
         switch(d) {
@@ -357,7 +357,7 @@ int main() {
                 }
             }
 
-            for (auto& el: cm.coins) {
+            for (auto& el: CoinsMap::coins) {
                 if (std::get<1>(el)) {
                     auto& [coord, active] = el;         
                     if (CheckCollisionRecs({p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {coord.first, coord.second, 10, 10})){
@@ -379,7 +379,7 @@ int main() {
             }
 
 
-            if (CheckCollisionRecs({p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {monster_spawn_vec.x, monster_spawn_vec.y, 10,10}) && cm.collected == cm.coins.size()){
+            if (CheckCollisionRecs({p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {monster_spawn_vec.x, monster_spawn_vec.y, 10,10}) && cm.collect_all()){
                 running = false;
                 win = true;
             }

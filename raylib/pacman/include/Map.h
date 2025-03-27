@@ -37,7 +37,7 @@ public:
     static constexpr void call(Func&& f) {
         size_t i{};
         size_t coords_i{};
-        for (auto&& row: Map::raw) {
+        for (auto&& row: raw) {
             for(auto el: row) {
                 f(i, coords_i, el);
                 ++coords_i;
