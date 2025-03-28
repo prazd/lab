@@ -17,8 +17,8 @@ find_package(raylib REQUIRED HINTS ${RAYLIB_DIR})
 include_directories(include)
 set(SOURCES
     src/Animation.cpp
-    src/Map.cpp
     src/Unit.cpp
+    src/GMap.cpp
     main.cpp
 )
 

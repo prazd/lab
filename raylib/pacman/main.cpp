@@ -2,9 +2,9 @@
 #include <array>
 #include <sstream>
 #include "Animation.h"
-#include "Map.h"
 #include "Constants.h"
 #include "Unit.h"
+#include "GMap.h"
 
 constexpr auto pacman_img_path = "/Users/prazd/Desktop/books/cpp/cpp/raylib/pacman/img/pacman.png";
 Texture2D atlas;
@@ -14,10 +14,10 @@ void load_sprites() {
 }
 
 void draw_map() {
-    Map::call([](auto, auto coord_i, auto el) {
-        auto [x,y] = Coords::points[coord_i];
-        if (el == '.' || el == 'p') DrawRectangleLinesEx((Rectangle){x, y, gc::OFFSET, gc::OFFSET}, 1, BLUE);
-        else if (el == '@') DrawRectangleLinesEx((Rectangle){x, y, gc::OFFSET, gc::OFFSET}, 1, RED);
+    GMap::call([](auto, auto coord_i, auto el) {
+        auto [x,y] = GCoords::points[coord_i];
+        if (el == Cells::Empty || el == Cells::PSpawn) DrawRectangleLinesEx((Rectangle){x, y, gc::OFFSET, gc::OFFSET}, 1, BLUE);
+        else if (el == Cells::GSpawn) DrawRectangleLinesEx((Rectangle){x, y, gc::OFFSET, gc::OFFSET}, 1, RED);
     });
 }
 
@@ -27,13 +27,14 @@ int main() {
     SetTargetFPS(60);
     bool running = true;
     bool win = false;
-    PacMan p;
-    CoinsMap cm;
 
-    std::array<Ghost, 3> ms;
+    PacMan p;
+    GCoinsMap cm;
+
+    std::array<Ghost, 2> ms;
     std::stringstream score_text;
 
-    auto monster_spawn_vec = Coords::get_point('@');
+    auto monster_spawn_vec = GCoords::get_point(Cells::GSpawn);
 
     auto stream_updater = [](std::stringstream& ss, auto&&... data) {
         ss.str("");
@@ -41,13 +42,19 @@ int main() {
     };
 
     auto restart = [&]{
-        p = PacMan{};
+        GMap::reset();
+        MapGenerator::gen();
+        GWalls::update();
         cm.reset();
-        ms = std::array<Ghost, 3>{};
+        p = PacMan{};
+        ms = std::array<Ghost, 2>{};
+        monster_spawn_vec = GCoords::get_point(Cells::GSpawn);
         stream_updater(score_text, "Score:0");
         running = true;
         win = false;
     };
+
+    restart();
 
     auto target = LoadRenderTexture(gc::WIDTH, gc::HEIGHT);
      auto render = [&]{
@@ -93,15 +100,17 @@ int main() {
                 }
             }
 
-            for (auto& el: CoinsMap::coins) {
-                if (std::get<1>(el)) {
-                    auto& [coord, active] = el;         
-                    if (CheckCollisionRecs({p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {coord.first, coord.second, 10, 10})){
-                        active = false;
-                        ++cm.collected;
-                        continue;
+            for (auto& el: GCoinsMap::coins) {
+                if (el.has_value()) {
+                    if (std::get<1>(el.value())) {
+                        auto& [coord, active] = el.value();
+                        if (CheckCollisionRecs({p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {coord.first, coord.second, 10, 10})){
+                            active = false;
+                            ++cm.collected;
+                            continue;
+                        }
+                        DrawTexturePro(atlas, {80, 22, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {coord.first, coord.second, 10, 10}, {0, 0}, 0.f, WHITE);
                     }
-                    DrawTexturePro(atlas, {80, 22, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {coord.first, coord.second, 10, 10}, {0, 0}, 0.f, WHITE);
                 }
             }
 
@@ -115,9 +124,10 @@ int main() {
             }
 
 
-            if (CheckCollisionRecs({p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {monster_spawn_vec.x, monster_spawn_vec.y, 10,10}) && cm.collect_all()){
-                running = false;
-                win = true;
+            if (CheckCollisionRecs({p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {monster_spawn_vec.x, monster_spawn_vec.y, 10,10})){
+//                running = false;
+//                win = true;
+                  restart();
             }
 
             stream_updater(score_text, "Score:", cm.collected);

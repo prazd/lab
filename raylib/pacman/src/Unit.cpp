@@ -1,7 +1,7 @@
 #include "Unit.h"
 #include "Constants.h"
 #include <algorithm>
-#include "Map.h"
+#include "GMap.h"
 #include "Random.h"
 #include <iostream>
 
@@ -36,7 +36,7 @@ Unit(Animation({.first = 0,
                        .duration = 0.1f,
                        .width = gc::FRAME_WIDTH,
                        .height = gc::FRAME_HEIGHT}),
-     Coords::get_point('p'),
+     GCoords::get_point(Cells::PSpawn),
      {gc::PLAYER_VEL_X, gc::PLAYER_VEL_Y},
      Direction::null,
      Direction::null) {
@@ -59,15 +59,19 @@ bool Unit::collision(Direction d) const {
 #ifdef DRAW_LINE
         DrawRectangleLinesEx((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE}, 1, GREEN);
 #endif
-        return std::any_of(std::begin(Walls::points), std::end(Walls::points), [current_x, current_y](auto& el){
-            if (CheckCollisionRecs((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE},
-                                   (Rectangle){el.x, el.y, gc::OFFSET, gc::OFFSET})){
-#ifdef DRAW_LINE
-                DrawRectangleLinesEx((Rectangle){el.x, el.y, gc::QUBE_SIDE, gc::QUBE_SIDE}, 1, YELLOW);
-#endif
+        return std::any_of(std::begin(GWalls::points), std::end(GWalls::points), [current_x, current_y](auto& el){
+            if (!el.has_value()) {
+                return false;
             }
+            auto [x,y] = el.value();
+//            if (CheckCollisionRecs((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE},
+//                                   (Rectangle){x, y, gc::OFFSET, gc::OFFSET})){
+//#ifdef DRAW_LINE
+//                DrawRectangleLinesEx((Rectangle){x, y, gc::QUBE_SIDE, gc::QUBE_SIDE}, 1, YELLOW);
+//#endif
+//            }
             return CheckCollisionRecs((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE},
-                                      (Rectangle){el.x, el.y, gc::OFFSET, gc::OFFSET});
+                                      (Rectangle){x, y, gc::OFFSET, gc::OFFSET});
         });
 }
 
@@ -111,9 +115,9 @@ Ghost::Ghost():
              Direction::right,
              Direction::null), offset_x(3), offset_y(0) {
 
-                Map::call([this](auto, auto coord_i, auto el) {
-                    if(el == '@') {
-                        auto [x, y] = Coords::points[coord_i];
+                GMap::call([this](auto, auto coord_i, auto el) {
+                    if(el == Cells::GSpawn) {
+                        auto [x, y] = GCoords::points[coord_i];
                         pos = {x + 21, y + 21};
                     }
                 });
