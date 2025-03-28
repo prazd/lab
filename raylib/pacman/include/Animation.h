@@ -4,8 +4,8 @@
 
 enum class Direction{left, right, up, down, null};
 
-struct Animation {
-    Direction direction = Direction::right;
+struct AnimationData{
+    Direction direction;
     int first;
     int last;
     int cur;
@@ -13,7 +13,13 @@ struct Animation {
     float duration;
     float width;
     float height;
+};
 
+class Animation {
+public:
+    AnimationData d;
+    explicit Animation(const AnimationData&);
+    Animation& operator=(const AnimationData&);
     void update();
     Rectangle animation_frame_adaptive(int num_frames_per_row, float offset_x = 0.f, float offset_y = 0.f);
     Rectangle animation_frame(int num_frames_per_row, float offset_x = 0.f, float offset_y = 0.f);

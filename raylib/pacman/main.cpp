@@ -16,93 +16,24 @@ void load_sprites() {
     atlas = LoadTextureFromImage(LoadImage(pacman_img_path));
 }
 
-constexpr std::array<Vector2, 30 * 15> fill_coords() {
-    std::array<Vector2, 30 * 15> res{};
-    float x = 0.f;
-    float y = 0.f;
-    size_t i{};
-    for (auto&& raw: Map::raw) {
-        for (auto el: raw) {
-            res[i++] = {x, y};
-            x += gc::OFFSET;
-        }
-        x = 0;
-        y += gc::OFFSET;
-    }
-    return res;
-}
-
-constexpr std::array<Vector2, 30 * 15> coords = fill_coords();
-
-constexpr Vector2 get_point(char p) {
-    Vector2 res{};
-    Map::call([&res, p](auto, auto coord_i, auto el){
-        if (el == p) {
-            res = coords[coord_i];
-        }
-    });
-    return res;
-}
-
-
-struct CoinsMap {
-    size_t collected = 0;
-    static inline std::array<std::pair<std::pair<float, float>, bool>, Map::count<'.'>()> coins;
-    CoinsMap() {
-        Map::call([](auto& i, auto coords_i, auto el){
-            if (el == '.'){
-                auto v = coords[coords_i];
-                coins[i++] = {{v.x+gc::COINS_OFFSET, v.y+gc::COINS_OFFSET}, true};
-            }
-        });
-    }
-
-    bool collect_all() const {
-        return collected == coins.size();
-    }
-
-    void reset() {
-        collected = 0;
-        for (auto& el: coins) {
-            auto& [p, active] = el;
-            active = true;
-        }
-    }
-};
-
-
-constexpr auto fill_walls() {
-    std::array<Vector2, Map::count<'#'>()> res{};
-    Map::call([&res](auto& i, auto& coords_i, auto el){
-        if (el == '#') {
-            res[i++] = coords[coords_i];
-         }
-    });
-    return res;
-}
-
-constexpr auto valid_points = fill_walls();
-
 void draw_map() {
     Map::call([](auto, auto coord_i, auto el) {
-        auto [x,y] = coords[coord_i];
+        auto [x,y] = Coords::points[coord_i];
         if (el == '.' || el == 'p') DrawRectangleLinesEx((Rectangle){x, y, gc::OFFSET, gc::OFFSET}, 1, BLUE);
         else if (el == '@') DrawRectangleLinesEx((Rectangle){x, y, gc::OFFSET, gc::OFFSET}, 1, RED);
     });
 }
 
 struct Player {
-    Animation anim = {
-        .first = 0,
-        .last = 2,
-        .cur = 2,
-        .speed = 0.07f,
-        .duration = 0.1f,
-        .width = gc::FRAME_WIDTH,
-        .height = gc::FRAME_HEIGHT
-    };
+    Animation anim = Animation({.first = 0,
+                                   .last = 2,
+                                   .cur = 2,
+                                   .speed = 0.07f,
+                                   .duration = 0.1f,
+                                   .width = gc::FRAME_WIDTH,
+                                   .height = gc::FRAME_HEIGHT});
     Rectangle rect = anim.animation_frame_adaptive(10, 0, 22);
-    Vector2 pos = get_point('p');
+    Vector2 pos = Coords::get_point('p');
     Vector2 velocity{gc::PLAYER_VEL_X, gc::PLAYER_VEL_Y};
 
     Direction dir = Direction::null;
@@ -117,16 +48,16 @@ struct Player {
         auto current_x = pos.x - gc::R_PLAYER;
         auto current_y = pos.y - gc::R_PLAYER;
         switch(d) {
-                case Direction::left:  {current_x -= gc::P_CHECK_VIEW; break;}
-                case Direction::right: {current_x += gc::P_CHECK_VIEW; break;}
-                case Direction::up:    {current_y -= gc::P_CHECK_VIEW; break;}
-                case Direction::down:  {current_y += gc::P_CHECK_VIEW; break;}
+            case Direction::left:  {current_x -= gc::P_CHECK_VIEW; break;}
+            case Direction::right: {current_x += gc::P_CHECK_VIEW; break;}
+            case Direction::up:    {current_y -= gc::P_CHECK_VIEW; break;}
+            case Direction::down:  {current_y += gc::P_CHECK_VIEW; break;}
             default: return true;
         }
 #ifdef DRAW_LINE
         DrawRectangleLinesEx((Rectangle){current_x, current_y, QUBE_SIDE, QUBE_SIDE}, 1, GREEN);
 #endif
-        return std::any_of(std::begin(valid_points), std::end(valid_points), [current_x, current_y](auto& el){
+        return std::any_of(std::begin(Walls::points), std::end(Walls::points), [current_x, current_y](auto& el){
             if (CheckCollisionRecs((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE},
                                   (Rectangle){el.x, el.y, gc::OFFSET, gc::OFFSET})){
 #ifdef DRAW_LINE
@@ -151,7 +82,7 @@ struct Player {
         }
         if (collision(dir)){
             dir = Direction::null;
-            anim.cur = anim.last;
+            anim.d.cur = anim.d.last;
             rect = anim.animation_frame_adaptive(10, 0, 22);
         }
         switch(dir){
@@ -186,7 +117,7 @@ struct Monster: Player {
     Monster(){
         Map::call([this](auto, auto coord_i, auto el) {
             if(el == '@') {
-              auto [x, y] = coords[coord_i];
+              auto [x, y] = Coords::points[coord_i];
               pos = {x + 21, y + 21};
            }
       });
@@ -274,10 +205,10 @@ struct Monster: Player {
 
      void update_ray() {
         switch(dir) {
-                    case Direction::left:   {ray = {pos.x-gc::MONSTER_VIEW_DISTANCE, pos.y, gc::MONSTER_VIEW_DISTANCE, 1};break;}
-                    case Direction::right:  {ray = {pos.x, pos.y, gc::MONSTER_VIEW_DISTANCE, 1};break;}
-                    case Direction::up:     {ray = {pos.x, pos.y-gc::MONSTER_VIEW_DISTANCE, 1, gc::MONSTER_VIEW_DISTANCE};break;}
-                    case Direction::down:   {ray = {pos.x, pos.y, 1, gc::MONSTER_VIEW_DISTANCE};break;}
+            case Direction::left:   {ray = {pos.x-gc::MONSTER_VIEW_DISTANCE, pos.y, gc::MONSTER_VIEW_DISTANCE, 1};break;}
+            case Direction::right:  {ray = {pos.x, pos.y, gc::MONSTER_VIEW_DISTANCE, 1};break;}
+            case Direction::up:     {ray = {pos.x, pos.y-gc::MONSTER_VIEW_DISTANCE, 1, gc::MONSTER_VIEW_DISTANCE};break;}
+            case Direction::down:   {ray = {pos.x, pos.y, 1, gc::MONSTER_VIEW_DISTANCE};break;}
             default: break;
         }
      }
@@ -297,7 +228,7 @@ int main() {
 
     std::stringstream score_text;
 
-    auto monster_spawn_vec = get_point('@');
+    auto monster_spawn_vec = Coords::get_point('@');
 
     auto stream_updater = [](std::stringstream& ss, auto&&... data) {
         ss.str("");
