@@ -18,6 +18,7 @@ include_directories(include)
 set(SOURCES
     src/Animation.cpp
     src/Map.cpp
+    src/Unit.cpp
     main.cpp
 )
 

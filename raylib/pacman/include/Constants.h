@@ -18,5 +18,9 @@ namespace gc {
     constexpr float PLAYER_SPAWN_OFFSET_X = 21.f;
     constexpr float PLAYER_SPAWN_OFFSET_Y = 21.f;
     constexpr float MONSTER_VIEW_DISTANCE = 200.f;
+    constexpr float BLINKY_OFFSET_Y = 80.f;
+    constexpr float PINKY_OFFSET_Y = 148.f;
+    constexpr float INKY_OFFSET_Y = 217.f;
+    constexpr float CLYDE_OFFSET_Y = 285.f;
 }
 #endif //PACMAN_CONSTANTS_H
