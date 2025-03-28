@@ -1,7 +1,7 @@
 #include "Animation.h"
 #include "raylib.h"
 
-Animation::Animation(const AnimationData &d): d(d){}
+Animation::Animation(const Data &d): d(d){}
 
 void Animation::update() {
     float dt = GetFrameTime();
@@ -34,7 +34,7 @@ Rectangle Animation::animation_frame(int num_frames_per_row, float offset_x, flo
     };
 }
 
-Animation& Animation::operator=(const AnimationData& ad) {
+Animation& Animation::operator=(const Data& ad) {
     d = ad;
     return *this;
 }
