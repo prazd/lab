@@ -331,6 +331,7 @@ void load_sprites() {
     auto img_heart = LoadImage(heart_image_path);
     ImageResize(&img_heart, heart_sz.x, heart_sz.y);
     heart = LoadTextureFromImage(img_heart);
+    UnloadImage(img_heart);
 }
 
 int main(){
@@ -547,5 +548,7 @@ int main(){
     }
 
     UnloadTexture(ninja);
+    UnloadTexture(heart);
+    UnloadRenderTexture(target);
     CloseWindow();
 }

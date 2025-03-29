@@ -39,11 +39,12 @@ void load_sprites() {
     img = LoadImage(invader_img_path);
     ImageResize(&img, 80, 60);
     invader_sprite = LoadTextureFromImage(img);
-
+    
     // background
     img = LoadImage(background_img_path);
     ImageResize(&img, WIDTH, HEIGHT);
     background_sprite = LoadTextureFromImage(img);
+    UnloadImage(img);
 }
 
 struct HP{
@@ -250,5 +251,6 @@ int main(){
     UnloadTexture(ship_sprite);
     UnloadTexture(invader_sprite);
     UnloadTexture(background_sprite);
+    UnloadRenderTexture(target);
     CloseWindow();
 }

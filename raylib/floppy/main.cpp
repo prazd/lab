@@ -163,6 +163,7 @@ int main() {
         EndDrawing();
     }
 
+    UnloadRenderTexture(target);
     CloseWindow();
     return 0;
 }

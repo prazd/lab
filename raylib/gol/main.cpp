@@ -163,6 +163,8 @@ int main(){
             }
         }
     }
+    
+    UnloadRenderTexture(target);
     CloseWindow();
     return 0;
 }

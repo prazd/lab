@@ -66,6 +66,8 @@ int main(void)
             DrawFPS(10, 10);
         EndDrawing();
     }
+    
+    UnloadRenderTexture(target);
     CloseWindow();
     return 0;
 }

@@ -182,5 +182,7 @@ int main(){
             DrawFPS(10, 10);
         EndDrawing();
     }
+    UnloadRenderTexture(target3D);
+    UnloadRenderTexture(target2D);
     CloseWindow();
 }

@@ -10,7 +10,9 @@ constexpr auto pacman_img_path = "/Users/prazd/Desktop/books/cpp/cpp/raylib/pacm
 Texture2D atlas;
 
 void load_sprites() {
-    atlas = LoadTextureFromImage(LoadImage(pacman_img_path));
+    auto img = LoadImage(pacman_img_path);
+    atlas = LoadTextureFromImage(img);
+    UnloadImage(img);
 }
 
 void draw_map() {
@@ -146,6 +148,7 @@ int main() {
     }
 
     UnloadTexture(atlas);
+    UnloadRenderTexture(target);
     CloseWindow();
     return 0;
 }
