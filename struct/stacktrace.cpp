@@ -1,6 +1,5 @@
-#include <iostream>
 #include <execinfo.h>
-#include <stacktrace>
+#include <iostream>
 
 void print_stack_c_style() {
     void* callstack[128];
