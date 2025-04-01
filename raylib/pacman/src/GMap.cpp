@@ -1,6 +1,6 @@
 #include "GMap.h"
 
-GCoinsMap::GCoinsMap(): collected(0) {
+void GCoinsMap::seed() {
     GMap::call([](auto& i, auto coords_i, auto el){
         if (el == Cells::Empty){
             auto v = GCoords::points[coords_i];
@@ -11,7 +11,7 @@ GCoinsMap::GCoinsMap(): collected(0) {
     });
 }
 
-bool GCoinsMap::collect_all() const {
+bool GCoinsMap::collect_all() {
     return collected == coins.size();
 }
 

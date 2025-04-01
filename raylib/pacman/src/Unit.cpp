@@ -1,9 +1,9 @@
 #include "Unit.h"
 #include "Constants.h"
 #include <algorithm>
-#include "GMap.h"
 #include "Random.h"
 #include <iostream>
+#include "MapManager.h"
 
 //#define DRAW_LINE = 1
 //#define DEBUG_LOGS = 1
@@ -36,7 +36,7 @@ Unit(Animation({.first = 0,
                        .duration = 0.1f,
                        .width = gc::FRAME_WIDTH,
                        .height = gc::FRAME_HEIGHT}),
-     GCoords::get_point(Cells::PSpawn),
+     MapManager::coord_point(Cells::PSpawn),
      {gc::PLAYER_VEL_X, gc::PLAYER_VEL_Y},
      Direction::null,
      Direction::null) {
@@ -59,20 +59,25 @@ bool Unit::collision(Direction d) const {
 #ifdef DRAW_LINE
         DrawRectangleLinesEx((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE}, 1, GREEN);
 #endif
-        return std::any_of(std::begin(GWalls::points), std::end(GWalls::points), [current_x, current_y](auto& el){
-            if (!el.has_value()) {
-                return false;
-            }
-            auto [x,y] = el.value();
-//            if (CheckCollisionRecs((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE},
-//                                   (Rectangle){x, y, gc::OFFSET, gc::OFFSET})){
-//#ifdef DRAW_LINE
-//                DrawRectangleLinesEx((Rectangle){x, y, gc::QUBE_SIDE, gc::QUBE_SIDE}, 1, YELLOW);
-//#endif
-//            }
+
+        return MapManager::walls_any_of([current_x, current_y](auto x, auto y){
             return CheckCollisionRecs((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE},
-                                      (Rectangle){x, y, gc::OFFSET, gc::OFFSET});
+                               (Rectangle){x, y, gc::OFFSET, gc::OFFSET});
         });
+//        return std::any_of(std::begin(MapManager::get_coords_raw()), std::end(MapManager::get_coords_raw()), [current_x, current_y](auto& el){
+//            if (!el.has_value()) {
+//                return false;
+//            }
+//            auto [x,y] = el.value();
+////            if (CheckCollisionRecs((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE},
+////                                   (Rectangle){x, y, gc::OFFSET, gc::OFFSET})){
+////#ifdef DRAW_LINE
+////                DrawRectangleLinesEx((Rectangle){x, y, gc::QUBE_SIDE, gc::QUBE_SIDE}, 1, YELLOW);
+////#endif
+////            }
+//            return CheckCollisionRecs((Rectangle){current_x, current_y, gc::QUBE_SIDE, gc::QUBE_SIDE},
+//                                      (Rectangle){x, y, gc::OFFSET, gc::OFFSET});
+//        });
 }
 
 void PacMan::update(Direction d) {
@@ -115,9 +120,9 @@ Ghost::Ghost():
              Direction::right,
              Direction::null), offset_x(3), offset_y(0) {
 
-                GMap::call([this](auto, auto coord_i, auto el) {
+                MapManager::call([this](auto, auto coord_i, auto el) {
                     if(el == Cells::GSpawn) {
-                        auto [x, y] = GCoords::points[coord_i];
+                        auto [x, y] = MapManager::get_coords_raw()[coord_i];
                         pos = {x + 21, y + 21};
                     }
                 });

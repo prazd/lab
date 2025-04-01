@@ -1,6 +1,6 @@
 #include "Map.h"
 
-CoinsMap::CoinsMap(): collected(0) {
+void CoinsMap::seed() {
     Map::call([](auto& i, auto coords_i, auto el){
         if (el == '.'){
             auto v = Coords::points[coords_i];
@@ -9,7 +9,7 @@ CoinsMap::CoinsMap(): collected(0) {
     });
 }
 
-bool CoinsMap::collect_all() const {
+bool CoinsMap::collect_all()  {
     return collected == coins.size();
 }
 

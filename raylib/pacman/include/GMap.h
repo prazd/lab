@@ -7,7 +7,7 @@
 #include <random>
 #include <ranges>
 
-enum Cells: char {Empty, Wall, PSpawn, GSpawn};
+enum Cells: char {Empty = '.', Wall = '#', PSpawn = 'p', GSpawn = '@'};
 
 class GMap {
 public:
@@ -88,11 +88,11 @@ struct GWalls {
 };
 
 struct GCoinsMap{
-    size_t collected;
+    static inline size_t collected = 0;
     static inline std::array<std::optional<std::pair<std::pair<float, float>, bool>>, 30 * 15> coins{};
-    GCoinsMap();
-    bool collect_all() const;
-    void reset();
+    static void seed();
+    static bool collect_all();
+    static void reset();
 };
 
 struct MapGenerator {
