@@ -97,12 +97,11 @@ struct MapManager {
                 GMap::reset();
                 MapGenerator::gen();
                 GWalls::update();
-                GCoinsMap::reset();
+                GCoinsMap::seed();
                 break;
             }
             default:
-                CoinsMap::collected = 0;
-                CoinsMap::reset();
+                CoinsMap::seed();
                 break;
         }
         current = m;

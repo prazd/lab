@@ -29,6 +29,7 @@ int main() {
     SetTargetFPS(60);
     bool running = true;
     bool win = false;
+    bool pause = true;
 
     PacMan p;
 
@@ -41,33 +42,75 @@ int main() {
         ss.str("");
         (ss << ... << data);
     };
-    MapManager::set_mode(Classic);
-    CoinsMap::seed();
-    auto restart = [&]{
+
+    auto restart_classic = [&]{
         MapManager::set_mode(Classic);
         p = PacMan{};
         ms = std::array<Ghost, 2>{};
         monster_spawn_vec = MapManager::coord_point(Cells::GSpawn);
+        MapManager::get_coins_collected() = 0;
         stream_updater(score_text, "Score:0");
         running = true;
+        pause = false;
         win = false;
     };
 
-    restart();
+    auto restart_maze = [&]{
+        MapManager::set_mode(Maze);
+        p = PacMan{};
+        ms = std::array<Ghost, 2>{};
+        monster_spawn_vec = MapManager::coord_point(Cells::GSpawn);
+        MapManager::get_coins_collected() = 0;
+        stream_updater(score_text, "Score:0");
+        running = true;
+        pause = false;
+        win = false;
+    };
+
+    auto portal_classic = [&]{
+        if (CoinsMap::collect_all()){
+            running = false;
+            win = true;
+        }
+    };
+
+    auto portal_maze = [&]{
+        MapManager::set_mode(Maze);
+        p = PacMan{};
+        ms = std::array<Ghost, 2>{};
+        monster_spawn_vec = MapManager::coord_point(Cells::GSpawn);
+        running = true;
+        pause = false;
+        win = false;
+    };
+
+    // default
+    restart_classic();
+    pause = true;
 
     auto target = LoadRenderTexture(gc::WIDTH, gc::HEIGHT);
      auto render = [&]{
         BeginTextureMode(target);
             ClearBackground(BLACK);
+            if (pause) {
+                DrawText("1 - Classic\n 2 - Maze\n  R - restart", gc::WIDTH/2.3f, gc::HEIGHT/2.3f, 30, WHITE);
+                if (IsKeyPressed(KEY_ONE))
+                    restart_classic();
+                if (IsKeyPressed(KEY_TWO))
+                    restart_maze();
+                if (IsKeyPressed(KEY_R)) {
+                    MapManager::current == Classic ? restart_classic() : restart_maze();
+                }
+                EndTextureMode();
+            }
             if (!running) {
                 stream_updater(score_text, "Game Over. Scores ", MapManager::get_coins_collected(), ". Press R to restart");
                 if (!win) DrawText(score_text.str().data(), gc::WIDTH/4, gc::HEIGHT/2, 30, WHITE);
                 else DrawText("YOU WIN. Press R to restart", gc::WIDTH/4, gc::HEIGHT/2, 30, WHITE);
 
                 EndTextureMode();
-                if (IsKeyPressed(KEY_R)) {
-                    restart();
-                }
+                if (IsKeyPressed(KEY_R)) 
+                    MapManager::current == Classic ? restart_classic() : restart_maze();
                 return;
             }
             draw_map();
@@ -80,7 +123,8 @@ int main() {
                 p.update(Direction::left);
             if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT))
                 p.update(Direction::right);
-
+             if (IsKeyPressed(KEY_ESCAPE))
+                 pause = !pause;
             p.move(dt);
 #ifdef DRAW_LINE
             DrawRectangleLinesEx((Rectangle){p.pos.x-R_PLAYER, p.pos.y-R_PLAYER, QUBE_SIDE, QUBE_SIDE}, 1, BLUE);
@@ -123,9 +167,7 @@ int main() {
 
 
             if (CheckCollisionRecs({p.pos.x-gc::R_PLAYER, p.pos.y-gc::R_PLAYER, gc::FRAME_WIDTH, gc::FRAME_HEIGHT}, {monster_spawn_vec.x, monster_spawn_vec.y, 10,10})){
-//                running = false;
-//                win = true;
-                  restart();
+                MapManager::current == Classic ?  portal_classic(): portal_maze();
             }
 
             stream_updater(score_text, "Score:", MapManager::get_coins_collected());
@@ -134,6 +176,7 @@ int main() {
         EndTextureMode();
     };
 
+    SetExitKey(KEY_NULL);
     while(!WindowShouldClose()){
         render();
         BeginDrawing();
