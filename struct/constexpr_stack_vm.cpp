@@ -1,10 +1,8 @@
 #include <iostream>
-#include <stack>
-#include <sstream>
 #include <vector>
 #include <array>
-
-#define DEBUG 0
+#include <utility>
+#include <optional>
 
 template <typename T>
 class Stack {
@@ -38,9 +36,9 @@ public:
     constexpr ~Stack() {delete[] ptr;}
 };
 
-enum class Operation {PUSH, POP, DUP, SWAP, DROP, UNKNOWN, ADD};
-constexpr Operation ops[] = {Operation::PUSH, Operation::POP, Operation::DUP, Operation::SWAP, Operation::DROP, Operation::ADD};
-constexpr std::string_view mnemonics[] = {"PUSH", "POP", "DUP","SWAP", "DROP", "ADD"};
+enum class Operation {PUSH, POP, DUP, SWAP, DROP, UNKNOWN, ADD, TOP};
+constexpr Operation ops[] = {Operation::PUSH, Operation::POP, Operation::DUP, Operation::SWAP, Operation::DROP, Operation::ADD, Operation::TOP};
+constexpr std::string_view mnemonics[] = {"PUSH", "POP", "DUP","SWAP", "DROP", "ADD", "TOP"};
 constexpr size_t ins_c = std::size(mnemonics);
 
 
@@ -51,7 +49,7 @@ struct Instruction {
 
 struct StackVM {
     Stack<int> s;
-    consteval long long execute(Instruction ins) {
+    consteval std::optional<int> execute(Instruction ins) {
         switch (ins.op) {
             case Operation::POP:    
             case Operation::DROP:    
@@ -68,12 +66,15 @@ struct StackVM {
                 s.push(r + l);
                 break;
             }
+            case Operation::TOP: {
+                return s.top();
+            }
         }
-        return s.top();
+        return {};
     }
 };
 
-consteval int get_index(const auto& v) {
+consteval int token_to_index(const auto& v) {
     for (size_t i = 0; i < ins_c; ++i) {
         if (mnemonics[i] == v) {
             return i;
@@ -84,7 +85,20 @@ consteval int get_index(const auto& v) {
 
 consteval bool isnum(char el) {
     constexpr std::array<char, 10> nums{'0','1','2','3','4','5','6','7','8','9'};
-    for (auto a: nums){
+    for (auto n: nums){
+        if (el == n){
+            return true;
+        }
+    }
+    return false;
+}
+
+consteval bool isalpha(char el) {
+    constexpr std::array<char, 52> alphas{
+        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'
+        };
+    for (auto a: alphas){
         if (el == a){
             return true;
         }
@@ -127,7 +141,7 @@ consteval Instruction fetch(std::string_view str) {
         if (el == ' ') break;
         token += el;
     }
-    auto index = get_index(token);
+    auto index = token_to_index(token);
     if (index == -1) {
         return Instruction{.op = Operation::UNKNOWN};
     }
@@ -139,46 +153,70 @@ consteval Instruction fetch(std::string_view str) {
         case Operation::UNKNOWN:
         case Operation::ADD:
         case Operation::SWAP:
+        case Operation::TOP:
             return Instruction{.op = op};
         case Operation::PUSH: {
-            
             auto num = atoi(std::string_view{str.begin()+current});
-            return Instruction{.op = op, .data = num};
+            return Instruction{.op = op, .data = num};    
         }
     }
     return Instruction{.op = Operation::UNKNOWN};
 }
 
-consteval auto execute(std::string_view s) {
-    StackVM vm;
-    return vm.execute(fetch(s));
-}
-
-consteval auto mexecute(std::string_view s) {
-    StackVM vm;
+consteval auto parse_to_ranges(std::string_view s) {
+    std::vector<std::pair<int, int>> result;
     size_t head{};
     size_t tail{};
-    int res{};
+    bool searching = true;
     for (auto it = s.begin(), ite = s.end(); it != ite; ++it) {
-        if (*it == ';') {
-            #if DEBUG
-            std::cout << std::string_view{s.begin() + head, s.begin() + tail} << '\n';
-            #endif
-            res = vm.execute(fetch({s.begin() + head, s.begin() + tail}));
-            if (std::next(it) != s.end()){
-                ++tail;
-                head = tail;
-            }
-        } else {
+        if (!isalpha(*it) && searching) {++head; ++tail; continue;}else{searching = false;}
+        if (*it != ';') {
             ++tail;
+            continue;
+        }
+        result.push_back({head, tail});
+        if (std::next(it) != s.end()){
+            ++tail;
+            head = tail;
+            searching = true;
         }
     }
+    return result;
+}
+
+consteval auto execute(std::string_view s) {
+    StackVM vm;
+    auto ranges = parse_to_ranges(s);
+    std::optional<int> res;
+    for (auto [begin, end]: ranges)
+        res = vm.execute(fetch({s.begin() + begin, s.begin() + end}));
     return res;
 }
 
-constexpr auto raw = "PUSH 1;DUP;PUSH 10;PUSH 30;ADD;ADD;ADD;PUSH -10;PUSH 10;ADD;POP;";
+constexpr auto raw = R"(
+        PUSH 10;
+        PUSH 10;
+        PUSH 5;
+        PUSH 5;
+        PUSH 10;
+        PUSH 1;
+        PUSH 1;
+        ADD;
+        ADD;
+        ADD;
+        ADD;
+        ADD;
+        ADD;
+        PUSH -10;
+        PUSH 10;
+        SWAP;
+        ADD;
+        POP;
+        TOP;
+)";
 
 int main() {
-    constexpr auto res = mexecute(raw);
-    static_assert(res == 42);
+    constexpr auto res = execute(raw);
+    static_assert(res.has_value());
+    static_assert(res.value() == 42);
 }
