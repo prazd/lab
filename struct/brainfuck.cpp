@@ -2,14 +2,15 @@
 #include <iterator>
 #include <array>
 #include <vector>
+#include <span>
 
-constexpr size_t mem_sz = 30'000;
+constexpr size_t mem_sz_bytes = 30'000;
 enum Command {RightShift, LeftShift, Plus, Minus, Dot, Comma, SLoop, ELoop};
 constexpr Command commands[] = {RightShift, LeftShift, Plus, Minus, Dot, Comma, SLoop, ELoop};
 constexpr char commands_str[] = {'>', '<', '+', '-', '.', ',', '[', ']'};
 
 class VM {
-    static inline std::array<unsigned char, mem_sz> memory;
+    static inline std::array<unsigned char, mem_sz_bytes> memory;
     decltype(memory.begin()) current;
     void base_operation_call(Command cmd) {
         switch(cmd) {
@@ -42,36 +43,47 @@ class VM {
             default: break;
         }
     }
-public:    
-    VM(): current(memory.begin()){}
-    
-    // TODO: loop levels
-    void execute(const auto& cmds) {
-        bool loop_seed = false;
-        decltype(current) loop_begin;
-        size_t start{};
-        size_t end{};
-        for (size_t i = 0; i < std::size(cmds); ++i) {
+
+    int get_loop_end(std::span<Command> cmds) {
+        size_t scope{};
+        for (int i = 0; i < std::size(cmds); ++i) {
             if (cmds[i] == SLoop) {
-                start = i;
-                loop_seed = true;
-                loop_begin = current;
+                ++scope;
                 continue;
             }
             if (cmds[i] == ELoop) {
-               while(*loop_begin){
-                 for (size_t s = start; s != i; ++s)
-                    base_operation_call(cmds[s]);
-               }
-               loop_seed = false;
-               continue;
+                if (!scope) {
+                    return i;
+                }
+                --scope;
             }
-            if (!loop_seed) base_operation_call(cmds[i]);
         }
+        return -1;
+    }
+
+    void handler(std::span<Command> cmds) {
+        for (size_t i = 0; i < std::size(cmds); ++i) {
+            if (cmds[i] == SLoop){
+                loop_execute({cmds.begin() + i + 1, cmds.begin() + i + 1 + get_loop_end({cmds.begin() + i + 1, cmds.end()})});
+                i += get_loop_end({cmds.begin() + i + 1, cmds.end()});
+            } else {
+                base_operation_call(cmds[i]);
+            }
+        }
+    }
+
+    void loop_execute(std::span<Command> cmds) {
+        while(*current) handler(cmds);
+    }
+  
+public:    
+    VM(): current(memory.begin()){}
+    void execute(auto& cmds) {
+        handler(cmds);
     }
 };
 
-constexpr std::string_view raw = "++++++++++[>++++++>+++++++++++>+++++++++>++++++++++>+++++++++++>++++++++++>+++++++++++>++++++++++>+++++++++++>+++>++++++++++>+++++++++++>+++>++++++++++>++++++++++++>+++++++++++>+++<<<<<<<<<<<<<<<<<-]>++++++.>++++.>+++++++.>+++++.>.>++.>+++++++.>-.>---.>++.>+++++.>+++++.>++.>++.>---.>.>+++.";
+constexpr std::string_view raw = "+++++++[>+++[>+++[>+++[>++++++<-]<-]<-]<-]>>>>.";
 
 auto get_index(char el) {
     for (int i = 0; i < std::size(commands_str);++i) {
@@ -90,5 +102,6 @@ auto parse_commands(std::string_view raw) {
 
 
 int main() {
-    VM{}.execute(parse_commands(raw));
+    auto commands = parse_commands(raw);
+    VM{}.execute(commands);
 }
