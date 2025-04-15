@@ -10,7 +10,7 @@ constexpr Command commands[] = {RightShift, LeftShift, Plus, Minus, Dot, Comma, 
 constexpr char commands_str[] = {'>', '<', '+', '-', '.', ',', '[', ']'};
 
 class VM {
-    static inline std::array<unsigned char, mem_sz_bytes> memory;
+    static inline std::array<unsigned char, mem_sz_bytes> memory{};
     decltype(memory.begin()) current;
     void base_operation_call(Command cmd) {
         switch(cmd) {
@@ -35,9 +35,9 @@ class VM {
                 break;
             }
             case Comma: {
-                unsigned char info;
-                std::cin >> info;
-                *current = info;
+                char info;
+                std::cin.get(info);
+                *current = static_cast<unsigned char>(info);
                 break;
             }
             default: break;
@@ -83,7 +83,7 @@ public:
     }
 };
 
-constexpr std::string_view raw = "+++++++[>+++[>+++[>+++[>++++++<-]<-]<-]<-]>>>>.";
+constexpr std::string_view raw = "++++++++++[>++++++>+++++++++++>+++++++++>++++++++++>+++++++++++>++++++++++>+++++++++++>++++++++++>+++++++++++>+++>++++++++++>+++++++++++>+++>++++++++++>++++++++++++>>>>>>+++<<<<<<<<<<<<<<<<<<<<<-]>++++++.>++++.>+++++++.>+++++.>.>++.>+++++++.>-.>---.>++.>+++++.>+++++.>++.>++.>---.>+++++++[>+++[>+++[>+++[>++++++<-]<-]<-]<-]>>>>.>+++.";
 
 auto get_index(char el) {
     for (int i = 0; i < std::size(commands_str);++i) {
