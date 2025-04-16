@@ -1,7 +1,6 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <cassert>
 
 // c++-14 -std=c++23 forward_like_example.cpp
 
