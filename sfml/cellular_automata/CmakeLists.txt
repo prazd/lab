@@ -1,0 +1,24 @@
+cmake_minimum_required(VERSION 3.16)
+project(automata_collection)
+
+set(CMAKE_CXX_STANDARD 20)
+
+set(CMAKE_PREFIX_PATH "$ENV{HOME}/Desktop/lib/SFML/build-static") # 2.6.1
+set(SFML_STATIC_LIBRARIES TRUE)
+include_directories(${SFML_INCLUDE_DIR})
+
+if(NOT DEFINED AUTOMATON_NAME)
+    message(FATAL_ERROR "Please set AUTOMATON_NAME, e.g. -DAUTOMATON_NAME=game_of_life")
+endif()
+
+set(SOURCE_DIR ${CMAKE_SOURCE_DIR})
+
+find_package(SFML 2.6.1 COMPONENTS system window graphics network audio REQUIRED)
+include_directories(automata)
+
+add_executable(${AUTOMATON_NAME} ${AUTOMATON_NAME}.cpp)
+target_include_directories(${AUTOMATON_NAME} PRIVATE ${SOURCE_DIR})
+
+target_include_directories(${AUTOMATON_NAME} PRIVATE /System/Library/Frameworks/OpenGL.framework/Headers)
+target_link_libraries(${AUTOMATON_NAME}  sfml-graphics sfml-network sfml-audio)
+target_link_libraries(${AUTOMATON_NAME} "-framework OpenGL" "-framework GLUT")
