@@ -3,6 +3,10 @@ project(SierpinskiTriangle)
 
 set(CMAKE_CXX_STANDARD 20)
 
+set(CMAKE_PREFIX_PATH "$ENV{HOME}/Desktop/lib/SFML/build-static") # 2.6.1
+set(SFML_STATIC_LIBRARIES TRUE)
+include_directories(${SFML_INCLUDE_DIR})
+
 # include_directories(include)
 
 # Установка флагов компилятора и компоновщика для санитайзеров и отладочной информации
@@ -21,5 +25,5 @@ add_executable(Sierpinski
 target_include_directories(Sierpinski PRIVATE /System/Library/Frameworks/OpenGL.framework/Headers)
 
 # Связать SFML и OpenGL библиотеки с вашим проектом
-target_link_libraries(Sierpinski  sfml-system sfml-window sfml-graphics sfml-network sfml-audio)
+target_link_libraries(Sierpinski  sfml-graphics sfml-network sfml-audio)
 target_link_libraries(Sierpinski "-framework OpenGL" "-framework GLUT")
