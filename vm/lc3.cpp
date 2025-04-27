@@ -8,23 +8,33 @@
 #include <string_view>
 
 enum Registers {R0, R1, R2, R3, R4, R5, R6, R7};
-enum Instructions {ADD = 0b0001, AND = 0b0101, BR = 0b0000, JMP = 0b1100, JSR = 0b0100, LD = 0b0010, LDI = 0b1010, LDR = 0b0110, LEA = 0b1110, NOT = 0b1001, RET = 0b1100, ST = 0b0011, STI = 0b1011, STR = 0b0111, TRAP = 0b1111};
-std::unordered_map<int, std::string_view> mnemonics = 
-    { {ADD, "ADD"},
-      {AND, "AND"}, 
-      {BR, "BR"}, 
-      {JMP, "JMP"}, 
-      {JSR, "JSR"},  
-      {LD, "LD"}, 
-      {LDI, "LDI"}, 
-      {LDR, "LDR"}, 
-      {LEA, "LEA"}, 
-      {NOT, "NOT"}, 
-      {RET, "RET"}, 
-      {ST, "ST"}, 
-      {STI, "STI"}, 
-      {STR, "STR"}, 
-      {TRAP, "TRAP"}
+enum Instructions: unsigned short {ADD = 0b0001, AND = 0b0101, BR = 0b0000, JMP = 0b1100, JSR = 0b0100, LD = 0b0010, LDI = 0b1010, LDR = 0b0110, LEA = 0b1110, NOT = 0b1001, RET = 0b1100, ST = 0b0011, STI = 0b1011, STR = 0b0111, TRAP = 0b1111};
+std::unordered_map<std::string_view, unsigned short> mnemonics = 
+    { {"ADD", ADD},
+      {"AND", AND}, 
+      {"BR",   BR}, 
+      {"JMP", JMP}, 
+      {"JSR", JSR},  
+      {"LD",   LD}, 
+      {"LDI", LDI}, 
+      {"LDR", LDR}, 
+      {"LEA", LEA}, 
+      {"NOT", NOT}, 
+      {"RET", RET}, 
+      {"ST",   ST}, 
+      {"STI", STI}, 
+      {"STR", STR}, 
+      {"TRAP", TRAP}
+    };    
+std::unordered_map<std::string_view, unsigned short> regs = 
+    { {"R0", R0},
+      {"R1", R1}, 
+      {"R2", R2}, 
+      {"R3", R3}, 
+      {"R4", R4},  
+      {"R5", R5}, 
+      {"R6", R6}, 
+      {"R7", R7},
     };    
 
 constexpr std::string_view reg_str[] = {"R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7"};
@@ -105,16 +115,19 @@ struct LC3 {
     }
     
     void execute(unsigned short i) {
+        
+        auto current_pc = pc;
+        std::cout << "PC=0x" << std::hex << current_pc << ", R6=" << std::dec << reg[6] << "\n";
         ++pc;
         switch(Parser::instruction(i)) {
             // memory
             case LD:  {
-                auto address = pc + Parser::nbits_sign_extend(i, 9);
+                auto address = current_pc + Parser::nbits_sign_extend(i, 9);
                 reg[Parser::destination(i)] = mem[address]; 
                 break;
             }
             case LDI: {
-                auto address1 = pc + Parser::nbits_sign_extend(i, 9);
+                auto address1 = current_pc + Parser::nbits_sign_extend(i, 9);
                 reg[Parser::destination(i)] = mem[mem[address1]];
                 break;
             }
@@ -123,15 +136,15 @@ struct LC3 {
                 break;
             }
             case LEA: {
-                reg[Parser::destination(i)] = pc + Parser::nbits_sign_extend(i, 9);
+                reg[Parser::destination(i)] = current_pc + Parser::nbits_sign_extend(i, 9);
                 break;
             }
             case ST: {
-                mem[pc + Parser::nbits_sign_extend(i, 9)] = reg[Parser::source(i)];
+                mem[current_pc + Parser::nbits_sign_extend(i, 9)] = reg[Parser::source(i)];
                 break;
             }
             case STI: {
-                auto address = pc + Parser::nbits_sign_extend(i, 9);
+                auto address = current_pc + Parser::nbits_sign_extend(i, 9);
                 mem[mem[address]] = reg[Parser::destination(i)];
                 break;
             }
@@ -157,7 +170,7 @@ struct LC3 {
                 break;
             }
             case NOT: {
-                reg[Parser::destination(i)] = ~reg[Parser::source(i)];
+                reg[Parser::destination(i)] = ~reg[Parser::source1(i)];
                 update_nzp(reg[Parser::destination(i)]);
                 break;
             }
@@ -167,7 +180,7 @@ struct LC3 {
                 if ((nzp[N] && Parser::nzp_g_n(nzp_i)) || 
                     (nzp[Z] && Parser::nzp_g_z(nzp_i)) || 
                     (nzp[P] && Parser::nzp_g_p(nzp_i))) {
-                    pc += Parser::nbits_sign_extend(i, 9);
+                        pc = current_pc + Parser::nbits_sign_extend(i, 9);
                 }
                 break;
             }
@@ -190,6 +203,9 @@ struct LC3 {
         auto counter = 0x3000;
         for (auto el: instructions)
             mem[counter++] = el;
+
+        for (size_t i = 0; i < instructions.size(); ++i)
+            std::cout << "0x" << std::hex << (0x3000 + i) << ": 0x" << instructions[i] << "\n";
         pc = 0x3000;
     }
 public:
@@ -215,39 +231,166 @@ public:
     }
 };
 
+std::vector<std::vector<std::string_view>> split(std::string_view raw) {
+    std::vector<std::vector<std::string_view>> res;
+    std::vector<std::string_view> tmp;
 
+    size_t begin = 0;
+    size_t end = 0;
+    bool searching = true;
 
-// constexpr std::string_view raw = R"(
-//         ADD R1, R0, #1
-//         ADD R1, R1, #4
-//         ADD R2, R0, #3
-//         ADD R2, R2, #2
-//         ADD R2, R2, #2
-//         ADD R3, R0, #10
-//         ADD R1, R1, R2
-//         ADD R1, R1, R3
-//         ST R1, PC+1
-// )";
+    for (auto el: raw) {
+        if (el != ' ' && el != '\n' && searching){
+            ++end;
+            searching = false;
+            continue;
+        } else if (searching){
+            ++begin;
+            ++end;
+            continue;
+        }
+
+        if (el == ' ' && !searching) {
+            tmp.push_back({raw.begin() + begin,  *(raw.begin() + end - 1) == ',' ? raw.begin() + end - 1 : raw.begin() + end});
+            ++end;
+            begin = end;
+            continue;
+        }
+        
+        if (el == '\n' && !searching) {
+            tmp.push_back({raw.begin() + begin,  *(raw.begin() + end - 1) == ',' ? raw.begin() + end - 1 : raw.begin() + end});
+            ++end;
+            begin = end;
+            res.push_back(tmp);
+            tmp = {};
+            searching = true;
+            continue;
+        }
+        ++end;
+    }
+    return res;
+
+}
+
+bool isnum(char el) {
+    constexpr std::array<char, 10> nums{'0','1','2','3','4','5','6','7','8','9'};
+    for (auto n: nums){
+        if (el == n){
+            return true;
+        }
+    }
+    return false;
+}
+
+int atoi(std::string_view s) {
+    int res{};
+    int tmp{};
+    bool gz = true;
+    bool update = false;
+    auto imax = std::numeric_limits<int>::max();
+    auto imin = std::numeric_limits<int>::min();
+    auto ret_func = [&gz, &res]{return gz ? res : res * -1;};
+    for (auto el: s) {
+        if (el == '-') {if (update) return ret_func(); update = true; gz = false; continue;};
+        if (!isnum(el)) return ret_func();
+        tmp = el - '0';
+        if (!res) {
+            res = tmp;
+            update = true;
+            continue;
+        }
+        if (imax / 10 < res || ((imax / 10 == res && tmp > 7)))
+            return gz ? imax : imin;
+        
+        res *= 10;
+        res += tmp;
+        update = true;
+    }
+    return ret_func();
+}
+
+std::vector<unsigned short> to_instructions(std::string_view raw) {
+    auto splited = split(raw);
+    std::vector<unsigned short> instructions;
+    unsigned short current{};
+    for (auto&& raw: splited) {
+        auto i = raw[0];
+        current = mnemonics[i] << 12; 
+        if (i == "AND" || i == "ADD"){
+            current |= regs[raw[1]] << 9; // DR
+            current |= regs[raw[2]] << 6; // SR1
+            if (raw[3][0] == '#') {
+                current |= 1 << 5;
+                current |= atoi({raw[3].begin() + 1, raw[3].end()}); // imm5
+            }
+            else{current |= regs[raw[3]];} // SR2
+        }
+        if (i == "LD" || i == "LDI" || i == "ST" || i == "LEA" || i == "STI") {
+            current |= regs[raw[1]] << 9;
+            current |= atoi({raw[2].begin() + 1, raw[2].end()}); // offset9
+        }
+
+        if (i == "STR" || i == "LDR") {
+            current |= regs[raw[1]] << 9; // SR
+            current |= regs[raw[2]] << 6; // baseR
+            current |= atoi({raw[3].begin() + 1, raw[3].end()}); // offset6
+        }
+
+        if (i == "JMP" || i == "JSRR") {
+            current |= regs[raw[1]] << 6; // baseR
+        }
+        if (i == "JSR") {
+            current |= 1 << 11;
+            current |= atoi({raw[1].begin() + 1, raw[1].end()}); // offset11
+        }
+
+        if (i == "NOT") {
+            current |= regs[raw[1]] << 9; // DR
+            current |= regs[raw[2]] << 6; // SR
+        }
+
+        // todo: labels
+        if (i[0] == 'B' && i[1] == 'R') {
+            current = mnemonics["BR"] << 12; 
+            for (int j = 2; j < std::size(i); ++j) {
+                if (i[j] == 'n')
+                    current |= 1 << 11;
+                else if (i[j] == 'z')
+                    current |= 1 << 10;
+                else if (i[j] == 'p')
+                    current |= 1 << 9;
+            }
+            current |= atoi({raw[1].begin() + 1, raw[1].end()}); // offset9
+        }
+
+        
+        instructions.push_back(current);
+        current = 0;
+    }
+    return instructions;
+}
+
+constexpr std::string_view raw = R"(
+        ADD R1, R0, #5
+        ADD R2, R0, #10
+        ADD R3, R0, #3
+        AND R4, R1, R2
+        NOT R5, R3
+        ADD R6, R4, R5
+        BRz #3
+        ADD R6, R6, #1
+        ADD R6, R6, #1
+        ADD R6, R6, #1
+        BRnzp #2
+        ADD R6, R6, #5
+        ADD R6, R6, #5
+        ST R6, #100
+        LD R7, #100
+        ADD R7, R7, #1
+)";
 
 int main() {
-    std::array<unsigned short, 10> program = {
-        0b0001'001'000'1'00001, // ADD R1, R0, #1
-        0b0001'001'001'1'00100, // ADD R1, R1, #4
-    
-        0b0001'010'000'1'00011, // ADD R2, R0, #3
-        0b0001'010'010'1'00010, // ADD R2, R2, #2
-        0b0001'010'010'1'00010, // ADD R2, R2, #2
-    
-        0b0001'011'000'1'01010, // ADD R3, R0, #10
-    
-        0b0001'001'001'0'00'010, // ADD R1, R1, R2
-        0b0001'001'001'0'00'011, // ADD R1, R1, R3
-    
-        0b0011'001'100000001,    // ST R1, PC+1
-        0b00000000000000000     // пустышка
-    };
-    // to_instructions(raw);
     LC3 vm;
-    vm.run(program);
-    assert(vm.read_mem(12042) == 22);
+    vm.run(to_instructions(raw));
+    vm.print_regs();
 }
