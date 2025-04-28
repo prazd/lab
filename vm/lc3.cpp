@@ -6,6 +6,9 @@
 #include <unordered_map>
 #include <vector>
 #include <string_view>
+#include <iomanip>
+
+#define DEBUG 1
 
 enum Registers {R0, R1, R2, R3, R4, R5, R6, R7};
 enum Instructions: unsigned short {ADD = 0b0001, AND = 0b0101, BR = 0b0000, JMP = 0b1100, JSR = 0b0100, LD = 0b0010, LDI = 0b1010, LDR = 0b0110, LEA = 0b1110, NOT = 0b1001, RET = 0b1100, ST = 0b0011, STI = 0b1011, STR = 0b0111, TRAP = 0b1111};
@@ -26,6 +29,26 @@ std::unordered_map<std::string_view, unsigned short> mnemonics =
       {"STR", STR}, 
       {"TRAP", TRAP}
     };    
+
+#if DEBUG
+std::unordered_map<unsigned short, std::string_view> debug_mnemonics = 
+    { {ADD, "ADD"},
+      {AND, "AND"}, 
+      {BR,  "BR"}, 
+      {JMP, "JMP"}, 
+      {JSR, "JSR"},  
+      {LD,  "LD"}, 
+      {LDI, "LDI"}, 
+      {LDR, "LDR"}, 
+      {LEA, "LEA"}, 
+      {NOT, "NOT"}, 
+      {RET, "RET"}, 
+      {ST,  "ST"}, 
+      {STI, "STI"}, 
+      {STR, "STR"}, 
+      {TRAP,"TRAP"}
+    };   
+#endif  
 std::unordered_map<std::string_view, unsigned short> regs = 
     { {"R0", R0},
       {"R1", R1}, 
@@ -115,19 +138,17 @@ struct LC3 {
     }
     
     void execute(unsigned short i) {
-        
-        auto current_pc = pc;
-        std::cout << "PC=0x" << std::hex << current_pc << ", R6=" << std::dec << reg[6] << "\n";
-        ++pc;
         switch(Parser::instruction(i)) {
             // memory
             case LD:  {
-                auto address = current_pc + Parser::nbits_sign_extend(i, 9);
-                reg[Parser::destination(i)] = mem[address]; 
+                ++pc;
+                auto address = pc + Parser::nbits_sign_extend(i, 9);
+                reg[Parser::destination(i)] = mem[address];
                 break;
             }
             case LDI: {
-                auto address1 = current_pc + Parser::nbits_sign_extend(i, 9);
+                ++pc;
+                auto address1 = pc + Parser::nbits_sign_extend(i, 9);
                 reg[Parser::destination(i)] = mem[mem[address1]];
                 break;
             }
@@ -136,24 +157,29 @@ struct LC3 {
                 break;
             }
             case LEA: {
-                reg[Parser::destination(i)] = current_pc + Parser::nbits_sign_extend(i, 9);
+                ++pc;
+                reg[Parser::destination(i)] = pc + Parser::nbits_sign_extend(i, 9);
                 break;
             }
             case ST: {
-                mem[current_pc + Parser::nbits_sign_extend(i, 9)] = reg[Parser::source(i)];
+                ++pc;
+                mem[pc + Parser::nbits_sign_extend(i, 9)] = reg[Parser::source(i)];
                 break;
             }
             case STI: {
-                auto address = current_pc + Parser::nbits_sign_extend(i, 9);
+                ++pc;
+                auto address = pc + Parser::nbits_sign_extend(i, 9);
                 mem[mem[address]] = reg[Parser::destination(i)];
                 break;
             }
             case STR: {
+                ++pc;
                 mem[Parser::nbits_sign_extend(i, 6) + reg[Parser::baseR(i)]] = reg[Parser::source(i)];
                 break;
             }
             // arithmetic
             case ADD: {
+                ++pc;
                 if (Parser::bit_one(i, 5))
                     reg[Parser::destination(i)] = reg[Parser::source1(i)] + Parser::nbits_sign_extend(i, 5);
                 else
@@ -162,6 +188,7 @@ struct LC3 {
                 break;
             }
             case AND: {
+                ++pc;
                 if (Parser::bit_one(i, 5))
                     reg[Parser::destination(i)] = (reg[Parser::source1(i)] & Parser::nbits_sign_extend(i, 5));
                 else
@@ -170,17 +197,19 @@ struct LC3 {
                 break;
             }
             case NOT: {
+                ++pc;
                 reg[Parser::destination(i)] = ~reg[Parser::source1(i)];
                 update_nzp(reg[Parser::destination(i)]);
                 break;
             }
             // control flow
             case BR: {
+                ++pc;
                 auto nzp_i = Parser::nzp(i);
                 if ((nzp[N] && Parser::nzp_g_n(nzp_i)) || 
                     (nzp[Z] && Parser::nzp_g_z(nzp_i)) || 
                     (nzp[P] && Parser::nzp_g_p(nzp_i))) {
-                        pc = current_pc + Parser::nbits_sign_extend(i, 9);
+                        pc = pc + Parser::nbits_sign_extend(i, 9);
                 }
                 break;
             }
@@ -195,7 +224,6 @@ struct LC3 {
                     reg[R7] = std::exchange(pc, reg[Parser::baseR(i)]); // JSRR
                 break;
             }
-            // todo: trap
         }
     }
 
@@ -204,14 +232,30 @@ struct LC3 {
         for (auto el: instructions)
             mem[counter++] = el;
 
+        #if DEBUG    
         for (size_t i = 0; i < instructions.size(); ++i)
-            std::cout << "0x" << std::hex << (0x3000 + i) << ": 0x" << instructions[i] << "\n";
+            // std::cout << "0x" << std::hex << instructions[i] << ",\n";
+        #endif
+
         pc = 0x3000;
     }
 public:
     void run(const auto& instructions) {
         load_instructions(instructions);
-        while (mem[pc]) {execute(mem[pc]);};
+        #if DEBUG
+        int counter{};
+        #endif
+        while (mem[pc]) { 
+            #if DEBUG
+                std::cout << "\n---------------------STEP "<< counter++ << "----------------\n"; 
+                std::cout << "Instruction:" << debug_mnemonics[Parser::instruction(mem[pc])] << '\n'; 
+                execute(mem[pc]);
+                print_regs(); 
+                std::cout << "\n--------------------------\n";
+            #else 
+                execute(mem[pc]);
+            #endif
+        }
     }
 
     unsigned short read_mem(unsigned short index) const {
@@ -371,22 +415,21 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
 }
 
 constexpr std::string_view raw = R"(
-        ADD R1, R0, #5
-        ADD R2, R0, #10
-        ADD R3, R0, #3
-        AND R4, R1, R2
-        NOT R5, R3
-        ADD R6, R4, R5
-        BRz #3
-        ADD R6, R6, #1
-        ADD R6, R6, #1
-        ADD R6, R6, #1
-        BRnzp #2
-        ADD R6, R6, #5
-        ADD R6, R6, #5
-        ST R6, #100
-        LD R7, #100
-        ADD R7, R7, #1
+        LD R0, #13
+        LD R1, #13
+        ADD R2, R0, R1
+        AND R3, R0, R1
+        NOT R4, R2
+        BRz #2
+        ADD R2, R2, #1
+        ADD R5, R5, #0
+        JSR #5
+        LDR R5, R6, #0
+        STR R5, R6, #1
+        JMP R7
+        LEA R6, #4
+        LDI R1, #2
+        STI R2, #0
 )";
 
 int main() {
