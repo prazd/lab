@@ -9,7 +9,7 @@
 #include <iomanip>
 
 #define DEBUG 1
-
+constexpr unsigned short PC_START = 0x3000;
 enum Registers {R0, R1, R2, R3, R4, R5, R6, R7};
 enum Instructions: unsigned short {ADD = 0b0001, AND = 0b0101, BR = 0b0000, JMP = 0b1100, JSR = 0b0100, LD = 0b0010, LDI = 0b1010, LDR = 0b0110, LEA = 0b1110, NOT = 0b1001, RET = 0b1100, ST = 0b0011, STI = 0b1011, STR = 0b0111, TRAP = 0b1111};
 std::unordered_map<std::string_view, unsigned short> mnemonics = 
@@ -123,7 +123,8 @@ struct Parser {
 struct LC3 {
     unsigned short reg[8]{};
     std::array<unsigned short, std::numeric_limits<unsigned short>::max() + 1> mem{};
-    unsigned short pc{};
+    unsigned short pc = PC_START;
+    bool running = false;
     enum {N = 0, Z = 1, P = 2};
     std::array<bool, 3> nzp{};
 
@@ -138,48 +139,49 @@ struct LC3 {
     }
     
     void execute(unsigned short i) {
+        if (i == 0xF025) {
+            running = false;
+            return;
+        }
         switch(Parser::instruction(i)) {
             // memory
             case LD:  {
-                ++pc;
                 auto address = pc + Parser::nbits_sign_extend(i, 9);
                 reg[Parser::destination(i)] = mem[address];
+                update_nzp(reg[Parser::destination(i)]);
                 break;
             }
             case LDI: {
-                ++pc;
                 auto address1 = pc + Parser::nbits_sign_extend(i, 9);
                 reg[Parser::destination(i)] = mem[mem[address1]];
+                update_nzp(reg[Parser::destination(i)]);
                 break;
             }
             case LDR: {
                 reg[Parser::destination(i)] = mem[Parser::nbits_sign_extend(i, 6) + reg[Parser::baseR(i)]];
+                update_nzp(reg[Parser::destination(i)]);
                 break;
             }
             case LEA: {
-                ++pc;
                 reg[Parser::destination(i)] = pc + Parser::nbits_sign_extend(i, 9);
+                update_nzp(reg[Parser::destination(i)]);
                 break;
             }
             case ST: {
-                ++pc;
                 mem[pc + Parser::nbits_sign_extend(i, 9)] = reg[Parser::source(i)];
                 break;
             }
             case STI: {
-                ++pc;
                 auto address = pc + Parser::nbits_sign_extend(i, 9);
                 mem[mem[address]] = reg[Parser::destination(i)];
                 break;
             }
             case STR: {
-                ++pc;
                 mem[Parser::nbits_sign_extend(i, 6) + reg[Parser::baseR(i)]] = reg[Parser::source(i)];
                 break;
             }
             // arithmetic
             case ADD: {
-                ++pc;
                 if (Parser::bit_one(i, 5))
                     reg[Parser::destination(i)] = reg[Parser::source1(i)] + Parser::nbits_sign_extend(i, 5);
                 else
@@ -188,7 +190,6 @@ struct LC3 {
                 break;
             }
             case AND: {
-                ++pc;
                 if (Parser::bit_one(i, 5))
                     reg[Parser::destination(i)] = (reg[Parser::source1(i)] & Parser::nbits_sign_extend(i, 5));
                 else
@@ -197,14 +198,12 @@ struct LC3 {
                 break;
             }
             case NOT: {
-                ++pc;
                 reg[Parser::destination(i)] = ~reg[Parser::source1(i)];
                 update_nzp(reg[Parser::destination(i)]);
                 break;
             }
             // control flow
             case BR: {
-                ++pc;
                 auto nzp_i = Parser::nzp(i);
                 if ((nzp[N] && Parser::nzp_g_n(nzp_i)) || 
                     (nzp[Z] && Parser::nzp_g_z(nzp_i)) || 
@@ -228,34 +227,46 @@ struct LC3 {
     }
 
     void load_instructions(const auto& instructions) {
-        auto counter = 0x3000;
-        for (auto el: instructions)
-            mem[counter++] = el;
-
         #if DEBUG    
+        std::cout << "Instructions(hex):\n";
         for (size_t i = 0; i < instructions.size(); ++i)
-            // std::cout << "0x" << std::hex << instructions[i] << ",\n";
+            std::cout << "0x" << std::hex << instructions[i] << std::dec << ",\n";
         #endif
-
-        pc = 0x3000;
+        auto counter = PC_START;
+        #if DEBUG
+        std::cout << "\nADDRESS : INSTRUCTION\n";
+        #endif
+        for (auto el: instructions) {
+            mem[counter++] = el;
+            #if DEBUG
+            std::cout << " | " << std::hex << "0x" << counter << " | " << "0x" << el << " |\n";
+            #endif
+        }
+        #if DEBUG
+        std::cout << std::dec;
+        #endif
     }
 public:
     void run(const auto& instructions) {
+        running = true;
         load_instructions(instructions);
         #if DEBUG
         int counter{};
         #endif
         while (mem[pc]) { 
             #if DEBUG
-                std::cout << "\n---------------------STEP "<< counter++ << "----------------\n"; 
+                std::cout << "\n---------------------STEP "<< counter++ << "----------------------\n"; 
                 std::cout << "Instruction:" << debug_mnemonics[Parser::instruction(mem[pc])] << '\n'; 
-                execute(mem[pc]);
+                execute(mem[pc++]);
                 print_regs(); 
-                std::cout << "\n--------------------------\n";
             #else 
-                execute(mem[pc]);
+                execute(mem[pc++]);
             #endif
         }
+        #if DEBUG
+        std::cout << "\n";
+        #endif
+        running = false;
     }
 
     unsigned short read_mem(unsigned short index) const {
@@ -358,8 +369,12 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
     std::vector<unsigned short> instructions;
     unsigned short current{};
     for (auto&& raw: splited) {
+        
         auto i = raw[0];
         current = mnemonics[i] << 12; 
+        if (i == "HALT"){
+            current = 0xF025; // HALT
+        }
         if (i == "AND" || i == "ADD"){
             current |= regs[raw[1]] << 9; // DR
             current |= regs[raw[2]] << 6; // SR1
@@ -415,21 +430,22 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
 }
 
 constexpr std::string_view raw = R"(
-        LD R0, #13
-        LD R1, #13
-        ADD R2, R0, R1
-        AND R3, R0, R1
-        NOT R4, R2
-        BRz #2
-        ADD R2, R2, #1
-        ADD R5, R5, #0
-        JSR #5
-        LDR R5, R6, #0
-        STR R5, R6, #1
-        JMP R7
-        LEA R6, #4
-        LDI R1, #2
-        STI R2, #0
+    LD R0, #13
+    LD R1, #13
+    ADD R2, R0, R1
+    AND R3, R0, R1
+    NOT R4, R2
+    BRz #2
+    ADD R2, R2, #1
+    ADD R5, R5, #0
+    JSR #5
+    LDR R5, R6, #0
+    STR R5, R6, #1
+    JMP R7
+    LEA R6, #4
+    LDI R1, #2
+    STI R2, #0
+    HALT
 )";
 
 int main() {
