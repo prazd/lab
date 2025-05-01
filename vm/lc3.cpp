@@ -8,7 +8,7 @@
 #include <string_view>
 #include <iomanip>
 
-#define DEBUG 1
+#define DEBUG 0
 constexpr unsigned short PC_START = 0x3000;
 enum Registers {R0, R1, R2, R3, R4, R5, R6, R7};
 enum Instructions: unsigned short {ADD = 0b0001, AND = 0b0101, BR = 0b0000, JMP = 0b1100, JSR = 0b0100, LD = 0b0010, LDI = 0b1010, LDR = 0b0110, LEA = 0b1110, NOT = 0b1001, RET = 0b1100, ST = 0b0011, STI = 0b1011, STR = 0b0111, TRAP = 0b1111};
@@ -48,17 +48,18 @@ std::unordered_map<unsigned short, std::string_view> debug_mnemonics =
       {STR, "STR"}, 
       {TRAP,"TRAP"}
     };   
-#endif  
+#endif
+
 std::unordered_map<std::string_view, unsigned short> regs = 
-    { {"R0", R0},
-      {"R1", R1}, 
-      {"R2", R2}, 
-      {"R3", R3}, 
-      {"R4", R4},  
-      {"R5", R5}, 
-      {"R6", R6}, 
-      {"R7", R7},
-    };    
+   {{"R0", R0},
+    {"R1", R1}, 
+    {"R2", R2}, 
+    {"R3", R3}, 
+    {"R4", R4},  
+    {"R5", R5}, 
+    {"R6", R6}, 
+    {"R7", R7},
+};    
 
 constexpr std::string_view reg_str[] = {"R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7"};
 
@@ -277,9 +278,10 @@ public:
         return pc;
     }
 
-    unsigned short read_r1() const {
-        return reg[R1];
+    unsigned short read_reg(int i) const {
+        return reg[i];
     }
+
     void print_regs() {
         for (size_t i = 0; i < 8; ++i)
             std::cout << reg_str[i] << ":" << reg[i] << '\n';
@@ -288,11 +290,14 @@ public:
 
 std::vector<std::vector<std::string_view>> split(std::string_view raw) {
     std::vector<std::vector<std::string_view>> res;
+    res.reserve(std::count(raw.begin(), raw.end(), '\n'));
     std::vector<std::string_view> tmp;
+    tmp.reserve(4);
 
     size_t begin = 0;
     size_t end = 0;
     bool searching = true;
+    
 
     for (auto el: raw) {
         if (el != ' ' && el != '\n' && searching){
@@ -317,7 +322,7 @@ std::vector<std::vector<std::string_view>> split(std::string_view raw) {
             ++end;
             begin = end;
             res.push_back(tmp);
-            tmp = {};
+            tmp.clear();
             searching = true;
             continue;
         }
@@ -327,17 +332,7 @@ std::vector<std::vector<std::string_view>> split(std::string_view raw) {
 
 }
 
-bool isnum(char el) {
-    constexpr std::array<char, 10> nums{'0','1','2','3','4','5','6','7','8','9'};
-    for (auto n: nums){
-        if (el == n){
-            return true;
-        }
-    }
-    return false;
-}
-
-int atoi(std::string_view s) {
+consteval int atoi(std::string_view s) {
     int res{};
     int tmp{};
     bool gz = true;
@@ -347,7 +342,7 @@ int atoi(std::string_view s) {
     auto ret_func = [&gz, &res]{return gz ? res : res * -1;};
     for (auto el: s) {
         if (el == '-') {if (update) return ret_func(); update = true; gz = false; continue;};
-        if (!isnum(el)) return ret_func();
+        if (!std::isdigit(el)) return ret_func();
         tmp = el - '0';
         if (!res) {
             res = tmp;
@@ -364,13 +359,29 @@ int atoi(std::string_view s) {
     return ret_func();
 }
 
+int label_index(const auto& data, std::string_view label) {
+    for (int i = 0; i < data.size(); ++i) {
+        if (*(data[i][0].end()-1) == ':' && std::equal(data[i][0].begin(), data[i][0].end()-1, label.begin())) {
+            return i - 1;
+        }
+    }
+    return -1;
+}
+
 std::vector<unsigned short> to_instructions(std::string_view raw) {
     auto splited = split(raw);
+    
     std::vector<unsigned short> instructions;
+    instructions.reserve(std::count(raw.begin(), raw.end(), '\n'));
+
     unsigned short current{};
-    for (auto&& raw: splited) {
+    size_t index{};
+
+    for (size_t k = 0; k < splited.size(); ++k) {
+        auto raw = splited[k];
         
         auto i = raw[0];
+        if (i[std::size(raw[0]) - 1] == ':') continue;
         current = mnemonics[i] << 12; 
         if (i == "HALT"){
             current = 0xF025; // HALT
@@ -380,19 +391,19 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
             current |= regs[raw[2]] << 6; // SR1
             if (raw[3][0] == '#') {
                 current |= 1 << 5;
-                current |= atoi({raw[3].begin() + 1, raw[3].end()}); // imm5
+                current |= atoi(std::string_view{raw[3].begin() + 1, raw[3].end()}.data()); // imm5
             }
             else{current |= regs[raw[3]];} // SR2
         }
         if (i == "LD" || i == "LDI" || i == "ST" || i == "LEA" || i == "STI") {
             current |= regs[raw[1]] << 9;
-            current |= atoi({raw[2].begin() + 1, raw[2].end()}); // offset9
+            current |= atoi(std::string_view{raw[2].begin() + 1, raw[2].end()}.data()); // offset9
         }
 
         if (i == "STR" || i == "LDR") {
             current |= regs[raw[1]] << 9; // SR
             current |= regs[raw[2]] << 6; // baseR
-            current |= atoi({raw[3].begin() + 1, raw[3].end()}); // offset6
+            current |= atoi(std::string_view{raw[3].begin() + 1, raw[3].end()}.data()); // offset6
         }
 
         if (i == "JMP" || i == "JSRR") {
@@ -400,7 +411,8 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
         }
         if (i == "JSR") {
             current |= 1 << 11;
-            current |= atoi({raw[1].begin() + 1, raw[1].end()}); // offset11
+            current |= label_index(splited, {raw[1].begin(), raw[1].end()}) - k;
+            // current |= atoi(std::string_view{raw[1].begin() + 1, raw[1].end()}.data()); // offset11
         }
 
         if (i == "NOT") {
@@ -419,9 +431,9 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
                 else if (i[j] == 'p')
                     current |= 1 << 9;
             }
-            current |= atoi({raw[1].begin() + 1, raw[1].end()}); // offset9
+            current |= label_index(splited, {raw[1].begin(), raw[1].end()}) - k;
+            // current |= atoi(std::string_view{raw[1].begin() + 1, raw[1].end()}.data()); // offset9
         }
-
         
         instructions.push_back(current);
         current = 0;
@@ -431,25 +443,39 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
 
 constexpr std::string_view raw = R"(
     LD R0, #13
-    LD R1, #13
+    LD R1, #12
+    LEA R6, #11
     ADD R2, R0, R1
     AND R3, R0, R1
     NOT R4, R2
-    BRz #2
+    BRz SKIP
     ADD R2, R2, #1
     ADD R5, R5, #0
-    JSR #5
+SKIP:
+    JSR SUBR
     LDR R5, R6, #0
     STR R5, R6, #1
     JMP R7
-    LEA R6, #4
     LDI R1, #2
-    STI R2, #0
+    STI R2, #1
+SUBR:
+    ST R2, #0
+    ADD R0, R2, #0
+    NOT R0, R0
+    ADD R0, R0, #1
     HALT
 )";
 
 int main() {
     LC3 vm;
     vm.run(to_instructions(raw));
+    assert(vm.read_reg(R0) == 19455);
+    assert(vm.read_reg(R1) == 46081);
+    assert(vm.read_reg(R2) == 26627);
+    assert(vm.read_reg(R3) == 46081);
+    assert(vm.read_reg(R4) == 0);
+    assert(vm.read_reg(R5) == 0);
+    assert(vm.read_reg(R6) == 12302);
+    assert(vm.read_reg(R7) == 12298);
     vm.print_regs();
 }
