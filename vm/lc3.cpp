@@ -298,7 +298,6 @@ std::vector<std::vector<std::string_view>> split(std::string_view raw) {
     size_t end = 0;
     bool searching = true;
     
-
     for (auto el: raw) {
         if (el != ' ' && el != '\n' && searching){
             ++end;
@@ -332,33 +331,6 @@ std::vector<std::vector<std::string_view>> split(std::string_view raw) {
 
 }
 
-consteval int atoi(std::string_view s) {
-    int res{};
-    int tmp{};
-    bool gz = true;
-    bool update = false;
-    auto imax = std::numeric_limits<int>::max();
-    auto imin = std::numeric_limits<int>::min();
-    auto ret_func = [&gz, &res]{return gz ? res : res * -1;};
-    for (auto el: s) {
-        if (el == '-') {if (update) return ret_func(); update = true; gz = false; continue;};
-        if (!std::isdigit(el)) return ret_func();
-        tmp = el - '0';
-        if (!res) {
-            res = tmp;
-            update = true;
-            continue;
-        }
-        if (imax / 10 < res || ((imax / 10 == res && tmp > 7)))
-            return gz ? imax : imin;
-        
-        res *= 10;
-        res += tmp;
-        update = true;
-    }
-    return ret_func();
-}
-
 int label_index(const auto& data, std::string_view label) {
     for (int i = 0; i < data.size(); ++i) {
         if (*(data[i][0].end()-1) == ':' && std::equal(data[i][0].begin(), data[i][0].end()-1, label.begin())) {
@@ -375,7 +347,6 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
     instructions.reserve(std::count(raw.begin(), raw.end(), '\n'));
 
     unsigned short current{};
-    size_t index{};
 
     for (size_t k = 0; k < splited.size(); ++k) {
         auto raw = splited[k];
@@ -391,19 +362,19 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
             current |= regs[raw[2]] << 6; // SR1
             if (raw[3][0] == '#') {
                 current |= 1 << 5;
-                current |= atoi(std::string_view{raw[3].begin() + 1, raw[3].end()}.data()); // imm5
+                current |= std::atoi(std::string_view{raw[3].begin() + 1, raw[3].end()}.data()); // imm5
             }
             else{current |= regs[raw[3]];} // SR2
         }
         if (i == "LD" || i == "LDI" || i == "ST" || i == "LEA" || i == "STI") {
             current |= regs[raw[1]] << 9;
-            current |= atoi(std::string_view{raw[2].begin() + 1, raw[2].end()}.data()); // offset9
+            current |= std::atoi(std::string_view{raw[2].begin() + 1, raw[2].end()}.data()); // offset9
         }
 
         if (i == "STR" || i == "LDR") {
             current |= regs[raw[1]] << 9; // SR
             current |= regs[raw[2]] << 6; // baseR
-            current |= atoi(std::string_view{raw[3].begin() + 1, raw[3].end()}.data()); // offset6
+            current |= std::atoi(std::string_view{raw[3].begin() + 1, raw[3].end()}.data()); // offset6
         }
 
         if (i == "JMP" || i == "JSRR") {
@@ -411,8 +382,9 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
         }
         if (i == "JSR") {
             current |= 1 << 11;
-            current |= label_index(splited, {raw[1].begin(), raw[1].end()}) - k;
-            // current |= atoi(std::string_view{raw[1].begin() + 1, raw[1].end()}.data()); // offset11
+            current |= raw[1][0] == '#' ?
+                std::atoi(std::string_view{raw[1].begin() + 1, raw[1].end()}.data()) :  // num
+                label_index(splited, {raw[1].begin(), raw[1].end()}) - k; // label
         }
 
         if (i == "NOT") {
@@ -420,7 +392,7 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
             current |= regs[raw[2]] << 6; // SR
         }
 
-        // todo: labels
+    
         if (i[0] == 'B' && i[1] == 'R') {
             current = mnemonics["BR"] << 12; 
             for (int j = 2; j < std::size(i); ++j) {
@@ -431,8 +403,9 @@ std::vector<unsigned short> to_instructions(std::string_view raw) {
                 else if (i[j] == 'p')
                     current |= 1 << 9;
             }
-            current |= label_index(splited, {raw[1].begin(), raw[1].end()}) - k;
-            // current |= atoi(std::string_view{raw[1].begin() + 1, raw[1].end()}.data()); // offset9
+            current |= raw[1][0] == '#' ? 
+            std::atoi(std::string_view{raw[1].begin() + 1, raw[1].end()}.data()) : // num
+            label_index(splited, {raw[1].begin(), raw[1].end()}) - k; //label
         }
         
         instructions.push_back(current);
