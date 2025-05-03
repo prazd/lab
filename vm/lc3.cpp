@@ -7,11 +7,12 @@
 #include <vector>
 #include <string_view>
 #include <iomanip>
+#include <cctype>
 
 #define DEBUG 0
 constexpr unsigned short PC_START = 0x3000;
 enum Registers {R0, R1, R2, R3, R4, R5, R6, R7};
-enum Instructions: unsigned short {ADD = 0b0001, AND = 0b0101, BR = 0b0000, JMP = 0b1100, JSR = 0b0100, LD = 0b0010, LDI = 0b1010, LDR = 0b0110, LEA = 0b1110, NOT = 0b1001, RET = 0b1100, ST = 0b0011, STI = 0b1011, STR = 0b0111, TRAP = 0b1111};
+enum Instructions: unsigned short {ADD = 0b0001, AND = 0b0101, BR = 0b0000, JMP = 0b1100, JSR = 0b0100, LD = 0b0010, LDI = 0b1010, LDR = 0b0110, LEA = 0b1110, NOT = 0b1001, RET = 0b1100, ST = 0b0011, STI = 0b1011, STR = 0b0111, TRAP = 0b1111, HALT = 0xF025};
 std::unordered_map<std::string_view, unsigned short> mnemonics = 
     { {"ADD", ADD},
       {"AND", AND}, 
@@ -27,7 +28,8 @@ std::unordered_map<std::string_view, unsigned short> mnemonics =
       {"ST",   ST}, 
       {"STI", STI}, 
       {"STR", STR}, 
-      {"TRAP", TRAP}
+      {"TRAP", TRAP},
+      {"HALT", HALT},
     };    
 
 #if DEBUG
@@ -288,138 +290,205 @@ public:
     }
 };
 
-std::vector<std::vector<std::string_view>> split(std::string_view raw) {
-    std::vector<std::vector<std::string_view>> res;
-    res.reserve(std::count(raw.begin(), raw.end(), '\n'));
-    std::vector<std::string_view> tmp;
-    tmp.reserve(4);
 
-    size_t begin = 0;
-    size_t end = 0;
-    bool searching = true;
-    
-    for (auto el: raw) {
-        if (el != ' ' && el != '\n' && searching){
-            ++end;
-            searching = false;
-            continue;
-        } else if (searching){
-            ++begin;
-            ++end;
-            continue;
-        }
+struct Lexer {
+    enum TokenType {
+        Mnemonic,
+        LabelAnnotate,
+        LabelUse,
+        Immediate,
+        Register,
+        EndOfLine,
+    };
 
-        if (el == ' ' && !searching) {
-            tmp.push_back({raw.begin() + begin,  *(raw.begin() + end - 1) == ',' ? raw.begin() + end - 1 : raw.begin() + end});
-            ++end;
-            begin = end;
-            continue;
+    constexpr static std::string_view tt_str[] = {"Mnemonic", "LabelAnnotate", "LabelUse", "Immediate", "Register", "EndOfLine"};
+
+    struct Token {
+        TokenType type;
+        std::string_view value;
+    };
+
+    static auto lex(std::string_view line) {
+        std::vector<Token> result;
+
+        for (size_t i = 0; i < line.size();) {
+
+            if (line[i] == 'R' && std::isdigit(line[i+1])) {
+                result.push_back({Register, line.substr(i, 2)});
+                i += 2;
+                continue;
+            }
+
+            if (std::isalpha(line[i])) {
+                auto s = i;
+                size_t sz{};
+                while(std::isalpha(line[s])){++sz; ++s;};
+
+                if (line[s] == ':') {
+                    result.push_back({LabelAnnotate, line.substr(std::exchange(i, i + sz), sz)});
+                    continue;
+                }
+
+                if (line[s] == ' ' || line[s] == '\n') {
+
+                    if (line[i] == 'B' && line[i + 1] == 'R'){
+                        if (mnemonics.contains(line.substr(i, 2)))
+                            result.push_back({Mnemonic, line.substr(std::exchange(i, i + sz), sz)});
+                        continue;
+                    }
+
+                    if (mnemonics.contains(line.substr(i, sz)))
+                        result.push_back({Mnemonic, line.substr(std::exchange(i, i + sz), sz)});
+                    else
+                        result.push_back({LabelUse, line.substr(std::exchange(i, i + sz), sz)});
+                    continue;
+                }
+            }
+
+            if (line[i] == '#') {
+                auto s = ++i;
+                size_t sz{};
+                while(std::isdigit(line[s])){++sz; ++s;};
+                result.push_back({Immediate, line.substr(std::exchange(i, i + sz), sz)});
+                continue;
+            }
+
+            if (line[i] == '\n') {
+                result.push_back({EndOfLine, line.substr(i++, 1)});
+                continue;
+            }
+            ++i;
         }
-        
-        if (el == '\n' && !searching) {
-            tmp.push_back({raw.begin() + begin,  *(raw.begin() + end - 1) == ',' ? raw.begin() + end - 1 : raw.begin() + end});
-            ++end;
-            begin = end;
-            res.push_back(tmp);
-            tmp.clear();
-            searching = true;
-            continue;
+        return result;
+    }
+};
+
+auto split_tokens(const std::vector<Lexer::Token>& tokens) {
+    std::vector<std::vector<Lexer::Token>> res;
+    std::vector<Lexer::Token> tmp;
+    for (auto& el: tokens) {
+        if (el.type == Lexer::EndOfLine && !tmp.empty()) {
+            res.push_back(std::exchange(tmp, {}));
+        } else if (el.type != Lexer::EndOfLine){
+            tmp.push_back(el);
         }
-        ++end;
     }
     return res;
-
 }
 
-int label_index(const auto& data, std::string_view label) {
-    for (int i = 0; i < data.size(); ++i) {
-        if (*(data[i][0].end()-1) == ':' && std::equal(data[i][0].begin(), data[i][0].end()-1, label.begin())) {
-            return i - 1;
+auto label_tab(const auto& stokens) {
+    std::unordered_map<std::string_view, size_t> res;
+    for (size_t i = 0; i < stokens.size(); ++i) {
+        if (stokens[i][0].type == Lexer::LabelAnnotate) {
+            res[stokens[i][0].value] = i;
         }
     }
-    return -1;
+    return res;
 }
 
-std::vector<unsigned short> to_instructions(std::string_view raw) {
-    auto splited = split(raw);
-    
+std::vector<unsigned short> parser(const std::vector<Lexer::Token>& tokens) {
     std::vector<unsigned short> instructions;
-    instructions.reserve(std::count(raw.begin(), raw.end(), '\n'));
-
     unsigned short current{};
 
-    for (size_t k = 0; k < splited.size(); ++k) {
-        auto raw = splited[k];
-        
-        auto i = raw[0];
-        if (i[std::size(raw[0]) - 1] == ':') continue;
-        current = mnemonics[i] << 12; 
-        if (i == "HALT"){
-            current = 0xF025; // HALT
-        }
-        if (i == "AND" || i == "ADD"){
-            current |= regs[raw[1]] << 9; // DR
-            current |= regs[raw[2]] << 6; // SR1
-            if (raw[3][0] == '#') {
-                current |= 1 << 5;
-                current |= std::atoi(std::string_view{raw[3].begin() + 1, raw[3].end()}.data()); // imm5
+    auto stokens = split_tokens(tokens);
+    auto ltab = label_tab(stokens);
+
+    size_t k = 0;
+    for (auto&& raw: stokens) {
+        k++;
+        auto t = raw[0];
+        if (t.type == Lexer::Mnemonic) {
+            auto value = t.value;
+            current = mnemonics[value] << 12;
+
+            if (value == "HALT") {
+                current = 0xF025;
+                instructions.push_back(std::exchange(current, 0));
+                continue;
+            };
+
+            if (value == "AND" || value == "ADD") {
+                current |= regs[raw[1].value] << 9; // DR
+                current |= regs[raw[2].value] << 6; // SR1
+                if (raw[3].type == Lexer::Immediate) {
+                    current |= 1 << 5;
+                    current |= std::atoi(raw[3].value.data()); // imm5
+                }
+                else{current |= regs[raw[3].value];} // SR2
+                instructions.push_back(std::exchange(current, 0));
+                continue;
             }
-            else{current |= regs[raw[3]];} // SR2
-        }
-        if (i == "LD" || i == "LDI" || i == "ST" || i == "LEA" || i == "STI") {
-            current |= regs[raw[1]] << 9;
-            current |= std::atoi(std::string_view{raw[2].begin() + 1, raw[2].end()}.data()); // offset9
-        }
 
-        if (i == "STR" || i == "LDR") {
-            current |= regs[raw[1]] << 9; // SR
-            current |= regs[raw[2]] << 6; // baseR
-            current |= std::atoi(std::string_view{raw[3].begin() + 1, raw[3].end()}.data()); // offset6
-        }
-
-        if (i == "JMP" || i == "JSRR") {
-            current |= regs[raw[1]] << 6; // baseR
-        }
-        if (i == "JSR") {
-            current |= 1 << 11;
-            current |= raw[1][0] == '#' ?
-                std::atoi(std::string_view{raw[1].begin() + 1, raw[1].end()}.data()) :  // num
-                label_index(splited, {raw[1].begin(), raw[1].end()}) - k; // label
-        }
-
-        if (i == "NOT") {
-            current |= regs[raw[1]] << 9; // DR
-            current |= regs[raw[2]] << 6; // SR
-        }
-
-    
-        if (i[0] == 'B' && i[1] == 'R') {
-            current = mnemonics["BR"] << 12; 
-            for (int j = 2; j < std::size(i); ++j) {
-                if (i[j] == 'n')
-                    current |= 1 << 11;
-                else if (i[j] == 'z')
-                    current |= 1 << 10;
-                else if (i[j] == 'p')
-                    current |= 1 << 9;
+            if (value == "LD" || value == "LDI" || value == "ST" || value == "LEA" || value == "STI") {
+                current |= regs[raw[1].value] << 9;
+                current |= std::atoi(raw[2].value.data()); // offset9
+                instructions.push_back(std::exchange(current, 0));
+                continue;
             }
-            current |= raw[1][0] == '#' ? 
-            std::atoi(std::string_view{raw[1].begin() + 1, raw[1].end()}.data()) : // num
-            label_index(splited, {raw[1].begin(), raw[1].end()}) - k; //label
+
+            if (value == "STR" || value == "LDR") {
+                current |= regs[raw[1].value] << 9; // SR
+                current |= regs[raw[2].value] << 6; // baseR
+                current |= std::atoi(raw[3].value.data()); // offset6
+                instructions.push_back(std::exchange(current, 0));
+                continue;
+            }
+
+            if (value == "JMP" || value == "JSRR") {
+                current |= regs[raw[1].value] << 6; // baseR
+                instructions.push_back(std::exchange(current, 0));
+                continue;
+            }
+
+            if (value == "JSR") {
+                current |= 1 << 11;
+                current |= raw[1].type == Lexer::Immediate ?
+                           std::atoi(raw[1].value.data()) :  // num
+                           ltab[raw[1].value] - k;
+                instructions.push_back(std::exchange(current, 0));
+                continue;
+            }
+
+            if (value == "NOT") {
+                current |= regs[raw[1].value] << 9; // DR
+                current |= regs[raw[2].value] << 6; // SR
+                instructions.push_back(std::exchange(current, 0));
+                continue;
+            }
+
+            if (value[0] == 'B' && value[1] == 'R') {
+                current = mnemonics["BR"] << 12;
+                for (int j = 2; j < std::size(value); ++j) {
+                    if (value[j] == 'n')
+                        current |= 1 << 11;
+                    else if (value[j] == 'z')
+                        current |= 1 << 10;
+                    else if (value[j] == 'p')
+                        current |= 1 << 9;
+                }
+                current |= raw[1].type == Lexer::Immediate ?
+                           std::atoi(raw[2].value.data()) : // num
+                           ltab[raw[1].value] - k;
+                instructions.push_back(std::exchange(current, 0));
+                continue;
+            }
+
+
         }
-        
-        instructions.push_back(current);
-        current = 0;
     }
     return instructions;
 }
 
 constexpr std::string_view raw = R"(
     LD R0, #13
+
     LD R1, #12
     LEA R6, #11
+
     ADD R2, R0, R1
     AND R3, R0, R1
+
+
     NOT R4, R2
     BRz SKIP
     ADD R2, R2, #1
@@ -428,7 +497,10 @@ SKIP:
     JSR SUBR
     LDR R5, R6, #0
     STR R5, R6, #1
+
     JMP R7
+
+
     LDI R1, #2
     STI R2, #1
 SUBR:
@@ -439,16 +511,23 @@ SUBR:
     HALT
 )";
 
+
+void print_lex(std::string_view r) {
+    auto res = Lexer::lex(r);
+    for (auto& el: res)
+        std::cout << "{ Type:" << Lexer::tt_str[el.type] << "  Value:" << el.value << "}" << '\n';
+}
+
 int main() {
-    LC3 vm;
-    vm.run(to_instructions(raw));
-    assert(vm.read_reg(R0) == 19455);
-    assert(vm.read_reg(R1) == 46081);
-    assert(vm.read_reg(R2) == 26627);
-    assert(vm.read_reg(R3) == 46081);
-    assert(vm.read_reg(R4) == 0);
-    assert(vm.read_reg(R5) == 0);
-    assert(vm.read_reg(R6) == 12302);
-    assert(vm.read_reg(R7) == 12298);
-    vm.print_regs();
+     LC3 vm;
+     vm.run(parser(Lexer::lex(raw)));
+     assert(vm.read_reg(R0) == 19455);
+     assert(vm.read_reg(R1) == 46081);
+     assert(vm.read_reg(R2) == 26627);
+     assert(vm.read_reg(R3) == 46081);
+     assert(vm.read_reg(R4) == 0);
+     assert(vm.read_reg(R5) == 0);
+     assert(vm.read_reg(R6) == 12302);
+     assert(vm.read_reg(R7) == 12298);
+     vm.print_regs();
 }
