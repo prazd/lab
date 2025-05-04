@@ -8,11 +8,23 @@
 #include <string_view>
 #include <iomanip>
 #include <cctype>
+#include <iterator>
 
 #define DEBUG 0
 constexpr unsigned short PC_START = 0x3000;
 enum Registers {R0, R1, R2, R3, R4, R5, R6, R7};
-enum Instructions: unsigned short {ADD = 0b0001, AND = 0b0101, BR = 0b0000, JMP = 0b1100, JSR = 0b0100, LD = 0b0010, LDI = 0b1010, LDR = 0b0110, LEA = 0b1110, NOT = 0b1001, RET = 0b1100, ST = 0b0011, STI = 0b1011, STR = 0b0111, TRAP = 0b1111, HALT = 0xF025};
+enum Instructions: unsigned short {ADD = 0b0001, AND = 0b0101, BR = 0b0000, JMP = 0b1100, JSR = 0b0100, LD = 0b0010, LDI = 0b1010, LDR = 0b0110, LEA = 0b1110, NOT = 0b1001, RET = 0b1100, ST = 0b0011, STI = 0b1011, STR = 0b0111, TRAP = 0b1111};
+enum Trapvect8 {TGETC = 0x20, TOUT = 0x21, TPUTS = 0x22, TIN = 0x23, TPUTSP = 0x24, THALT = 0x25};
+
+std::unordered_map<std::string_view, unsigned short> trapvec_table = {
+    {"GETC",  TGETC},
+    {"OUT",   TOUT},
+    {"PUTS",  TPUTS},
+    {"IN",    TIN},
+    {"PUTSP", TPUTSP},
+    {"HALT",  THALT},
+};
+
 std::unordered_map<std::string_view, unsigned short> mnemonics = 
     { {"ADD", ADD},
       {"AND", AND}, 
@@ -29,7 +41,6 @@ std::unordered_map<std::string_view, unsigned short> mnemonics =
       {"STI", STI}, 
       {"STR", STR}, 
       {"TRAP", TRAP},
-      {"HALT", HALT},
     };    
 
 #if DEBUG
@@ -124,12 +135,64 @@ struct Parser {
 };
 
 struct LC3 {
-    unsigned short reg[8]{};
-    std::array<unsigned short, std::numeric_limits<unsigned short>::max() + 1> mem{};
+    static inline unsigned short reg[8]{};
+    static inline std::array<unsigned short, std::numeric_limits<unsigned short>::max() + 1> mem{};
     unsigned short pc = PC_START;
     bool running = false;
     enum {N = 0, Z = 1, P = 2};
     std::array<bool, 3> nzp{};
+
+    using trap_func = void(LC3::*)();
+
+
+    void trap_getc() {
+        char s;
+        std::cin >> s;
+        reg[R0] = static_cast<unsigned short>(s);
+    }
+    void trap_out() {std::cout << "OUT:" << static_cast<char>(reg[R0] & 0xff);}
+    void trap_puts() {
+        for (unsigned short i = reg[R0]; mem[i]; ++i) 
+            std::cout << static_cast<char>(mem[i] & 0xff);
+    }
+    void trap_in() {
+        char s;
+        std::cin >> s;
+        std::cout << "\nData:" << s << '\n';
+        reg[R0] = static_cast<unsigned short>(s);
+    }
+    void trap_putsp() {
+        for (unsigned short i = reg[R0]; mem[i]; ++i) {
+            auto word = mem[i];
+            char l = 0xff & word;
+            char h = 0xff & (word>>8);
+            std::cout << l;
+            if (h) std::cout << h;
+        }
+    }
+    void trap_halt() {
+        running = false;
+    }
+    
+    const static inline trap_func trap_instructions[6] = {
+        &LC3::trap_getc, 
+        &LC3::trap_out, 
+        &LC3::trap_puts, 
+        &LC3::trap_in, 
+        &LC3::trap_putsp, 
+        &LC3::trap_halt,
+    };
+
+    // offset table for trap instruction
+    std::unordered_map<unsigned short, unsigned short> trap_offset_table = {
+        {TGETC,  0},
+        {TOUT,   1},
+        {TPUTS,  2},
+        {TIN,    3},
+        {TPUTSP, 4},
+        {THALT,  5},
+    };
+
 
     void update_nzp(short value) {
         nzp = {};
@@ -142,11 +205,8 @@ struct LC3 {
     }
     
     void execute(unsigned short i) {
-        if (i == 0xF025) {
-            running = false;
-            return;
-        }
         switch(Parser::instruction(i)) {
+
             // memory
             case LD:  {
                 auto address = pc + Parser::nbits_sign_extend(i, 9);
@@ -183,6 +243,7 @@ struct LC3 {
                 mem[Parser::nbits_sign_extend(i, 6) + reg[Parser::baseR(i)]] = reg[Parser::source(i)];
                 break;
             }
+            
             // arithmetic
             case ADD: {
                 if (Parser::bit_one(i, 5))
@@ -205,6 +266,7 @@ struct LC3 {
                 update_nzp(reg[Parser::destination(i)]);
                 break;
             }
+
             // control flow
             case BR: {
                 auto nzp_i = Parser::nzp(i);
@@ -226,10 +288,17 @@ struct LC3 {
                     reg[R7] = std::exchange(pc, reg[Parser::baseR(i)]); // JSRR
                 break;
             }
+
+            case TRAP: {
+                ((*this).**(((trap_func*)mem.data()) + trap_offset_table[i & 0xff]))();
+                break;
+            }
         }
     }
-
     void load_instructions(const auto& instructions) {
+        // load TRAP
+        std::copy(std::begin(trap_instructions), std::end(trap_instructions), (trap_func*)mem.data());
+
         #if DEBUG    
         std::cout << "Instructions(hex):\n";
         for (size_t i = 0; i < instructions.size(); ++i)
@@ -314,8 +383,7 @@ struct Lexer {
         for (size_t i = 0; i < line.size();) {
 
             if (line[i] == 'R' && std::isdigit(line[i+1])) {
-                result.push_back({Register, line.substr(i, 2)});
-                i += 2;
+                result.push_back({Register, line.substr(std::exchange(i, i + 2), 2)});
                 continue;
             }
 
@@ -330,14 +398,13 @@ struct Lexer {
                 }
 
                 if (line[s] == ' ' || line[s] == '\n') {
-
                     if (line[i] == 'B' && line[i + 1] == 'R'){
                         if (mnemonics.contains(line.substr(i, 2)))
                             result.push_back({Mnemonic, line.substr(std::exchange(i, i + sz), sz)});
                         continue;
                     }
 
-                    if (mnemonics.contains(line.substr(i, sz)))
+                    if (mnemonics.contains(line.substr(i, sz)) || trapvec_table.contains(line.substr(i, sz)))
                         result.push_back({Mnemonic, line.substr(std::exchange(i, i + sz), sz)});
                     else
                         result.push_back({LabelUse, line.substr(std::exchange(i, i + sz), sz)});
@@ -386,7 +453,7 @@ auto label_tab(const auto& stokens) {
     return res;
 }
 
-std::vector<unsigned short> parser(const std::vector<Lexer::Token>& tokens) {
+std::vector<unsigned short> parse_tokens(const std::vector<Lexer::Token>& tokens) {
     std::vector<unsigned short> instructions;
     unsigned short current{};
 
@@ -399,14 +466,16 @@ std::vector<unsigned short> parser(const std::vector<Lexer::Token>& tokens) {
         auto t = raw[0];
         if (t.type == Lexer::Mnemonic) {
             auto value = t.value;
-            current = mnemonics[value] << 12;
 
-            if (value == "HALT") {
-                current = 0xF025;
+            if (trapvec_table.contains(value)) {
+                current = mnemonics["TRAP"] << 12;
+                current |= trapvec_table[value];
                 instructions.push_back(std::exchange(current, 0));
                 continue;
             };
 
+            current = mnemonics[value] << 12;
+      
             if (value == "AND" || value == "ADD") {
                 current |= regs[raw[1].value] << 9; // DR
                 current |= regs[raw[2].value] << 6; // SR1
@@ -481,13 +550,11 @@ std::vector<unsigned short> parser(const std::vector<Lexer::Token>& tokens) {
 
 constexpr std::string_view raw = R"(
     LD R0, #13
-
     LD R1, #12
     LEA R6, #11
 
     ADD R2, R0, R1
     AND R3, R0, R1
-
 
     NOT R4, R2
     BRz SKIP
@@ -499,7 +566,6 @@ SKIP:
     STR R5, R6, #1
 
     JMP R7
-
 
     LDI R1, #2
     STI R2, #1
@@ -519,15 +585,15 @@ void print_lex(std::string_view r) {
 }
 
 int main() {
-     LC3 vm;
-     vm.run(parser(Lexer::lex(raw)));
-     assert(vm.read_reg(R0) == 19455);
-     assert(vm.read_reg(R1) == 46081);
-     assert(vm.read_reg(R2) == 26627);
-     assert(vm.read_reg(R3) == 46081);
-     assert(vm.read_reg(R4) == 0);
-     assert(vm.read_reg(R5) == 0);
-     assert(vm.read_reg(R6) == 12302);
-     assert(vm.read_reg(R7) == 12298);
-     vm.print_regs();
+    LC3 vm;
+    vm.run(parse_tokens(Lexer::lex(raw)));
+    assert(vm.read_reg(R0) == 19455);
+    assert(vm.read_reg(R1) == 46081);
+    assert(vm.read_reg(R2) == 26627);
+    assert(vm.read_reg(R3) == 46081);
+    assert(vm.read_reg(R4) == 0);
+    assert(vm.read_reg(R5) == 0);
+    assert(vm.read_reg(R6) == 12302);
+    assert(vm.read_reg(R7) == 12298);
+    vm.print_regs();
 }
