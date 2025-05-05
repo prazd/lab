@@ -135,9 +135,15 @@ struct Parser {
 };
 
 struct LC3 {
+    struct Input {
+        std::vector<unsigned short> instructions;
+        struct Params {
+            unsigned short orig;
+        } params;
+    };
     static inline unsigned short reg[8]{};
     static inline std::array<unsigned short, std::numeric_limits<unsigned short>::max() + 1> mem{};
-    unsigned short pc = PC_START;
+    unsigned short pc;
     bool running = false;
     enum {N = 0, Z = 1, P = 2};
     std::array<bool, 3> nzp{};
@@ -206,7 +212,6 @@ struct LC3 {
     
     void execute(unsigned short i) {
         switch(Parser::instruction(i)) {
-
             // memory
             case LD:  {
                 auto address = pc + Parser::nbits_sign_extend(i, 9);
@@ -304,7 +309,7 @@ struct LC3 {
         for (size_t i = 0; i < instructions.size(); ++i)
             std::cout << "0x" << std::hex << instructions[i] << std::dec << ",\n";
         #endif
-        auto counter = PC_START;
+        auto counter = pc;
         #if DEBUG
         std::cout << "\nADDRESS : INSTRUCTION\n";
         #endif
@@ -319,9 +324,11 @@ struct LC3 {
         #endif
     }
 public:
-    void run(const auto& instructions) {
+    void run(const Input& input) {
+        pc = input.params.orig;
+        load_instructions(input.instructions);
+
         running = true;
-        load_instructions(instructions);
         #if DEBUG
         int counter{};
         #endif
@@ -359,7 +366,6 @@ public:
     }
 };
 
-
 struct Lexer {
     enum TokenType {
         Mnemonic,
@@ -368,9 +374,10 @@ struct Lexer {
         Immediate,
         Register,
         EndOfLine,
+        Params,
     };
 
-    constexpr static std::string_view tt_str[] = {"Mnemonic", "LabelAnnotate", "LabelUse", "Immediate", "Register", "EndOfLine"};
+    constexpr static std::string_view tt_str[] = {"Mnemonic", "LabelAnnotate", "LabelUse", "Immediate", "Register", "EndOfLine", "Params"};
 
     struct Token {
         TokenType type;
@@ -381,6 +388,13 @@ struct Lexer {
         std::vector<Token> result;
 
         for (size_t i = 0; i < line.size();) {
+            if (line[i] == '.' && std::isalpha(line[i+1])) {
+                auto s = ++i;
+                size_t sz{};
+                while(std::isalpha(line[s])){++sz; ++s;};
+                result.push_back({Params, line.substr(std::exchange(i, i + sz), sz)});
+                continue;
+            }
 
             if (line[i] == 'R' && std::isdigit(line[i+1])) {
                 result.push_back({Register, line.substr(std::exchange(i, i + 2), 2)});
@@ -412,10 +426,11 @@ struct Lexer {
                 }
             }
 
-            if (line[i] == '#') {
-                auto s = ++i;
-                size_t sz{};
-                while(std::isdigit(line[s])){++sz; ++s;};
+            // todo: split on two types - heximm/decimm
+            if (line[i] == '#' || line[i] == 'x') { // dec
+                auto s = i + 1;
+                size_t sz = 1;
+                while(line[i] == '#' ? std::isdigit(line[s]) : (std::isdigit(line[s]) || std::isalpha(line[s]))){++sz; ++s;};
                 result.push_back({Immediate, line.substr(std::exchange(i, i + sz), sz)});
                 continue;
             }
@@ -453,8 +468,22 @@ auto label_tab(const auto& stokens) {
     return res;
 }
 
-std::vector<unsigned short> parse_tokens(const std::vector<Lexer::Token>& tokens) {
+unsigned short parse_num(std::string_view raw) {
+    if (raw[0] == 'x') {
+        int value;
+        std::from_chars(raw.data() + 1, raw.data() + 1 + raw.size(), value, 16);
+        return value;
+    } else if (raw[0] == '#') {
+        return std::atoi(raw.data() + 1);
+    }
+    std::cout << "Parse num: ivalid \n";
+    std::abort();
+}
+
+LC3::Input parse_tokens(const std::vector<Lexer::Token>& tokens) {
     std::vector<unsigned short> instructions;
+    LC3::Input::Params params;
+
     unsigned short current{};
 
     auto stokens = split_tokens(tokens);
@@ -464,6 +493,12 @@ std::vector<unsigned short> parse_tokens(const std::vector<Lexer::Token>& tokens
     for (auto&& raw: stokens) {
         k++;
         auto t = raw[0];
+        if (t.type == Lexer::Params) {
+            if (t.value == "ORIG") {
+                params.orig = parse_num(raw[1].value);
+                continue;
+            }
+        }
         if (t.type == Lexer::Mnemonic) {
             auto value = t.value;
 
@@ -481,7 +516,7 @@ std::vector<unsigned short> parse_tokens(const std::vector<Lexer::Token>& tokens
                 current |= regs[raw[2].value] << 6; // SR1
                 if (raw[3].type == Lexer::Immediate) {
                     current |= 1 << 5;
-                    current |= std::atoi(raw[3].value.data()); // imm5
+                    current |= parse_num(raw[3].value); // imm5
                 }
                 else{current |= regs[raw[3].value];} // SR2
                 instructions.push_back(std::exchange(current, 0));
@@ -490,7 +525,7 @@ std::vector<unsigned short> parse_tokens(const std::vector<Lexer::Token>& tokens
 
             if (value == "LD" || value == "LDI" || value == "ST" || value == "LEA" || value == "STI") {
                 current |= regs[raw[1].value] << 9;
-                current |= std::atoi(raw[2].value.data()); // offset9
+                current |= parse_num(raw[2].value); // offset9
                 instructions.push_back(std::exchange(current, 0));
                 continue;
             }
@@ -498,7 +533,7 @@ std::vector<unsigned short> parse_tokens(const std::vector<Lexer::Token>& tokens
             if (value == "STR" || value == "LDR") {
                 current |= regs[raw[1].value] << 9; // SR
                 current |= regs[raw[2].value] << 6; // baseR
-                current |= std::atoi(raw[3].value.data()); // offset6
+                current |= parse_num(raw[3].value); // offset6
                 instructions.push_back(std::exchange(current, 0));
                 continue;
             }
@@ -512,7 +547,7 @@ std::vector<unsigned short> parse_tokens(const std::vector<Lexer::Token>& tokens
             if (value == "JSR") {
                 current |= 1 << 11;
                 current |= raw[1].type == Lexer::Immediate ?
-                           std::atoi(raw[1].value.data()) :  // num
+                           parse_num(raw[1].value) :  // num
                            ltab[raw[1].value] - k;
                 instructions.push_back(std::exchange(current, 0));
                 continue;
@@ -536,7 +571,7 @@ std::vector<unsigned short> parse_tokens(const std::vector<Lexer::Token>& tokens
                         current |= 1 << 9;
                 }
                 current |= raw[1].type == Lexer::Immediate ?
-                           std::atoi(raw[2].value.data()) : // num
+                           parse_num(raw[2].value) : // num
                            ltab[raw[1].value] - k;
                 instructions.push_back(std::exchange(current, 0));
                 continue;
@@ -545,12 +580,13 @@ std::vector<unsigned short> parse_tokens(const std::vector<Lexer::Token>& tokens
 
         }
     }
-    return instructions;
+    return {instructions, params};
 }
 
 constexpr std::string_view raw = R"(
-    LD R0, #13
-    LD R1, #12
+.ORIG x3000
+    LD R0, xd
+    LD R1, xc
     LEA R6, #11
 
     ADD R2, R0, R1
