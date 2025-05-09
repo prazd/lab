@@ -388,6 +388,12 @@ struct Lexer {
         std::vector<Token> result;
 
         for (size_t i = 0; i < line.size();) {
+            if (line[i] == ';' && line[i+1] == ';') {
+                for (;line[i] != '\n'; ++i);
+                result.push_back({EndOfLine, line.substr(i, 1)});
+                continue;
+            }
+
             if (line[i] == '.' && std::isalpha(line[i+1])) {
                 auto s = ++i;
                 size_t sz{};
@@ -441,6 +447,7 @@ struct Lexer {
             }
             ++i;
         }
+        std::cout << "SZ:" << result.size() << '\n';
         return result;
     }
 };
@@ -584,6 +591,8 @@ LC3::Input parse_tokens(const std::vector<Lexer::Token>& tokens) {
 }
 
 constexpr std::string_view raw = R"(
+;; LC3 program
+
 .ORIG x3000
     LD R0, xd
     LD R1, xc
@@ -593,7 +602,8 @@ constexpr std::string_view raw = R"(
     AND R3, R0, R1
 
     NOT R4, R2
-    BRz SKIP
+
+    BRz SKIP   ;; branch to SKIP if zero flag is set
     ADD R2, R2, #1
     ADD R5, R5, #0
 SKIP:
