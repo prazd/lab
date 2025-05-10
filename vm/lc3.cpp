@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <cctype>
 #include <iterator>
+#include <charconv>
 
 #define DEBUG 0
 constexpr unsigned short PC_START = 0x3000;
@@ -407,10 +408,19 @@ struct Lexer {
                 continue;
             }
 
+            // todo: split on two types - heximm/decimm
+            if (line[i] == '#' || line[i] == 'x') { // dec
+                auto s = i + 1;
+                size_t sz = 1;
+                while(line[i] == '#' ? std::isdigit(line[s]) : (std::isdigit(line[s]) || std::isalpha(line[s]))){++sz; ++s;};
+                result.push_back({Immediate, line.substr(std::exchange(i, i + sz), sz)});
+                continue;
+            }
+
             if (std::isalpha(line[i])) {
                 auto s = i;
                 size_t sz{};
-                while(std::isalpha(line[s])){++sz; ++s;};
+                while(std::isalpha(line[s]) || std::isdigit(line[s])){++sz; ++s;};
 
                 if (line[s] == ':') {
                     result.push_back({LabelAnnotate, line.substr(std::exchange(i, i + sz), sz)});
@@ -430,15 +440,6 @@ struct Lexer {
                         result.push_back({LabelUse, line.substr(std::exchange(i, i + sz), sz)});
                     continue;
                 }
-            }
-
-            // todo: split on two types - heximm/decimm
-            if (line[i] == '#' || line[i] == 'x') { // dec
-                auto s = i + 1;
-                size_t sz = 1;
-                while(line[i] == '#' ? std::isdigit(line[s]) : (std::isdigit(line[s]) || std::isalpha(line[s]))){++sz; ++s;};
-                result.push_back({Immediate, line.substr(std::exchange(i, i + sz), sz)});
-                continue;
             }
 
             if (line[i] == '\n') {
@@ -475,6 +476,25 @@ auto label_tab(const auto& stokens) {
     return res;
 }
 
+auto fills(auto& stokens) {
+    size_t begin = 0;
+    for (size_t i = 0; i < stokens.size();) {
+        if (stokens[i].type == Lexer::Params && stokens[i].value == "FILL") {
+            if (!begin) begin = i - 1;
+            for (size_t j = 0; j < i; ++j) {
+                if (stokens[j].type == Lexer::LabelUse && stokens[j].value == stokens[i-1].value) {
+                    stokens[j].type = Lexer::Immediate;
+                    stokens[j].value = stokens[i + 1].value; // imm
+                }
+            }
+            i+=2;
+            continue;
+        }
+        ++i;
+    }
+    return !begin ? stokens.end() : stokens.begin() + begin;
+}
+
 unsigned short parse_num(std::string_view raw) {
     if (raw[0] == 'x') {
         int value;
@@ -487,11 +507,12 @@ unsigned short parse_num(std::string_view raw) {
     std::abort();
 }
 
-LC3::Input parse_tokens(const std::vector<Lexer::Token>& tokens) {
+LC3::Input parse_tokens(std::vector<Lexer::Token>&& tokens) {
     std::vector<unsigned short> instructions;
     LC3::Input::Params params;
-
     unsigned short current{};
+    
+    tokens.erase(fills(tokens), tokens.end());
 
     auto stokens = split_tokens(tokens);
     auto ltab = label_tab(stokens);
@@ -594,9 +615,9 @@ constexpr std::string_view raw = R"(
 ;; LC3 program
 
 .ORIG x3000
-    LD R0, xd
-    LD R1, xc
-    LEA R6, #11
+    LD R0, A
+    LD R1, B
+    LEA R6, C
 
     ADD R2, R0, R1
     AND R3, R0, R1
@@ -621,11 +642,16 @@ SUBR:
     NOT R0, R0
     ADD R0, R0, #1
     HALT
+
+    A .FILL  xd
+    B .FILL  xc
+    C .FILL  #11
 )";
 
 
 void print_lex(std::string_view r) {
     auto res = Lexer::lex(r);
+    res.erase(fills(res), res.end());
     for (auto& el: res)
         std::cout << "{ Type:" << Lexer::tt_str[el.type] << "  Value:" << el.value << "}" << '\n';
 }
