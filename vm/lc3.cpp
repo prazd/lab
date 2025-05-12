@@ -42,7 +42,7 @@ std::unordered_map<std::string_view, unsigned short> mnemonics =
       {"STI", STI}, 
       {"STR", STR}, 
       {"TRAP", TRAP},
-    };    
+    };
 
 #if DEBUG
 std::unordered_map<unsigned short, std::string_view> debug_mnemonics = 
@@ -376,9 +376,10 @@ struct Lexer {
         Register,
         EndOfLine,
         Params,
+        Constant,
     };
 
-    constexpr static std::string_view tt_str[] = {"Mnemonic", "LabelAnnotate", "LabelUse", "Immediate", "Register", "EndOfLine", "Params"};
+    constexpr static std::string_view tt_str[] = {"Mnemonic", "LabelAnnotate", "LabelUse", "Immediate", "Register", "EndOfLine", "Params", "Constant"};
 
     struct Token {
         TokenType type;
@@ -399,6 +400,9 @@ struct Lexer {
                 auto s = ++i;
                 size_t sz{};
                 while(std::isalpha(line[s])){++sz; ++s;};
+                if (line.substr(i, sz) == "FILL") {
+                    result.back().type = Constant;
+                }
                 result.push_back({Params, line.substr(std::exchange(i, i + sz), sz)});
                 continue;
             }
@@ -422,7 +426,9 @@ struct Lexer {
                 size_t sz{};
                 while(std::isalpha(line[s]) || std::isdigit(line[s])){++sz; ++s;};
 
-                if (line[s] == ':') {
+                if (line[s] == ':' || (!mnemonics.contains(line.substr(i, sz)) && !trapvec_table.contains(line.substr(i, sz)) 
+                && !(line[i] == 'B' && line[i + 1] == 'R')
+                && result.back().type == EndOfLine)) {
                     result.push_back({LabelAnnotate, line.substr(std::exchange(i, i + sz), sz)});
                     continue;
                 }
@@ -469,30 +475,20 @@ auto split_tokens(const std::vector<Lexer::Token>& tokens) {
 auto label_tab(const auto& stokens) {
     std::unordered_map<std::string_view, size_t> res;
     for (size_t i = 0; i < stokens.size(); ++i) {
-        if (stokens[i][0].type == Lexer::LabelAnnotate) {
+        if (stokens[i][0].type == Lexer::LabelAnnotate) 
             res[stokens[i][0].value] = i;
-        }
     }
     return res;
 }
 
-auto fills(auto& stokens) {
-    size_t begin = 0;
-    for (size_t i = 0; i < stokens.size();) {
-        if (stokens[i].type == Lexer::Params && stokens[i].value == "FILL") {
-            if (!begin) begin = i - 1;
-            for (size_t j = 0; j < i; ++j) {
-                if (stokens[j].type == Lexer::LabelUse && stokens[j].value == stokens[i-1].value) {
-                    stokens[j].type = Lexer::Immediate;
-                    stokens[j].value = stokens[i + 1].value; // imm
-                }
-            }
-            i+=2;
-            continue;
+auto fills_tab(const auto& stokens) {
+    std::unordered_map<std::string_view, std::string_view> res;
+    for (size_t i = 0; i < stokens.size(); ++i) {
+        if (stokens[i][0].type == Lexer::Constant && stokens[i][2].type == Lexer::Immediate) {
+            res[stokens[i][0].value] = stokens[i][2].value;
         }
-        ++i;
     }
-    return !begin ? stokens.end() : stokens.begin() + begin;
+    return res;
 }
 
 unsigned short parse_num(std::string_view raw) {
@@ -507,29 +503,49 @@ unsigned short parse_num(std::string_view raw) {
     std::abort();
 }
 
-LC3::Input parse_tokens(std::vector<Lexer::Token>&& tokens) {
+LC3::Input parse_tokens(const std::vector<Lexer::Token>& tokens) {
     std::vector<unsigned short> instructions;
     LC3::Input::Params params;
     unsigned short current{};
-    
-    tokens.erase(fills(tokens), tokens.end());
+
 
     auto stokens = split_tokens(tokens);
     auto ltab = label_tab(stokens);
+    auto ftab = fills_tab(stokens);
+
+    auto imm_sv = [&](auto& el){
+        if (el.type == Lexer::LabelUse) {
+            return ftab[el.value];
+        }
+        return el.value;
+    };
+    
 
     size_t k = 0;
     for (auto&& raw: stokens) {
         k++;
         auto t = raw[0];
+        size_t i = 0;
+
+        if (t.type == Lexer::Constant) {
+            break; // skip const section
+        }
+
         if (t.type == Lexer::Params) {
             if (t.value == "ORIG") {
                 params.orig = parse_num(raw[1].value);
                 continue;
             }
         }
+
+        if (t.type == Lexer::LabelAnnotate && std::size(raw) > 1) {
+            t = raw[1];
+            ++i;
+        }
+
         if (t.type == Lexer::Mnemonic) {
             auto value = t.value;
-
+            
             if (trapvec_table.contains(value)) {
                 current = mnemonics["TRAP"] << 12;
                 current |= trapvec_table[value];
@@ -540,50 +556,51 @@ LC3::Input parse_tokens(std::vector<Lexer::Token>&& tokens) {
             current = mnemonics[value] << 12;
       
             if (value == "AND" || value == "ADD") {
-                current |= regs[raw[1].value] << 9; // DR
-                current |= regs[raw[2].value] << 6; // SR1
-                if (raw[3].type == Lexer::Immediate) {
+                current |= regs[raw[i + 1].value] << 9; // DR
+                current |= regs[raw[i + 2].value] << 6; // SR1
+                if (raw[i + 3].type == Lexer::Register){
+                    current |= regs[raw[i + 3].value];    //sr2
+                } else {
                     current |= 1 << 5;
-                    current |= parse_num(raw[3].value); // imm5
+                    current |= parse_num(imm_sv(raw[i+3])); // imm5
                 }
-                else{current |= regs[raw[3].value];} // SR2
                 instructions.push_back(std::exchange(current, 0));
                 continue;
             }
 
             if (value == "LD" || value == "LDI" || value == "ST" || value == "LEA" || value == "STI") {
-                current |= regs[raw[1].value] << 9;
-                current |= parse_num(raw[2].value); // offset9
+                current |= regs[raw[i + 1].value] << 9;
+                current |= parse_num(imm_sv(raw[i + 2])); // offset9
                 instructions.push_back(std::exchange(current, 0));
                 continue;
             }
 
             if (value == "STR" || value == "LDR") {
-                current |= regs[raw[1].value] << 9; // SR
-                current |= regs[raw[2].value] << 6; // baseR
-                current |= parse_num(raw[3].value); // offset6
+                current |= regs[raw[i + 1].value] << 9; // SR
+                current |= regs[raw[i + 2].value] << 6; // baseR
+                current |= parse_num(imm_sv(raw[i + 3])); // offset6
                 instructions.push_back(std::exchange(current, 0));
                 continue;
             }
 
             if (value == "JMP" || value == "JSRR") {
-                current |= regs[raw[1].value] << 6; // baseR
+                current |= regs[raw[i + 1].value] << 6; // baseR
                 instructions.push_back(std::exchange(current, 0));
                 continue;
             }
 
             if (value == "JSR") {
                 current |= 1 << 11;
-                current |= raw[1].type == Lexer::Immediate ?
-                           parse_num(raw[1].value) :  // num
-                           ltab[raw[1].value] - k;
+                current |= raw[i + 1].type == Lexer::Immediate ?
+                           parse_num(raw[i + 1].value) :  // num
+                           ltab[raw[i + 1].value] - k;
                 instructions.push_back(std::exchange(current, 0));
                 continue;
             }
 
             if (value == "NOT") {
-                current |= regs[raw[1].value] << 9; // DR
-                current |= regs[raw[2].value] << 6; // SR
+                current |= regs[raw[i + 1].value] << 9; // DR
+                current |= regs[raw[i + 2].value] << 6; // SR
                 instructions.push_back(std::exchange(current, 0));
                 continue;
             }
@@ -598,14 +615,12 @@ LC3::Input parse_tokens(std::vector<Lexer::Token>&& tokens) {
                     else if (value[j] == 'p')
                         current |= 1 << 9;
                 }
-                current |= raw[1].type == Lexer::Immediate ?
-                           parse_num(raw[2].value) : // num
-                           ltab[raw[1].value] - k;
+                current |= raw[i + 1].type == Lexer::Immediate ?
+                           parse_num(raw[i + 1].value) : // num
+                           ltab[raw[i + 1].value] - k;
                 instructions.push_back(std::exchange(current, 0));
                 continue;
             }
-
-
         }
     }
     return {instructions, params};
@@ -627,6 +642,7 @@ constexpr std::string_view raw = R"(
     BRz SKIP   ;; branch to SKIP if zero flag is set
     ADD R2, R2, #1
     ADD R5, R5, #0
+
 SKIP:
     JSR SUBR
     LDR R5, R6, #0
@@ -636,8 +652,8 @@ SKIP:
 
     LDI R1, #2
     STI R2, #1
-SUBR:
-    ST R2, #0
+
+SUBR ST R2, #0
     ADD R0, R2, #0
     NOT R0, R0
     ADD R0, R0, #1
@@ -651,7 +667,6 @@ SUBR:
 
 void print_lex(std::string_view r) {
     auto res = Lexer::lex(r);
-    res.erase(fills(res), res.end());
     for (auto& el: res)
         std::cout << "{ Type:" << Lexer::tt_str[el.type] << "  Value:" << el.value << "}" << '\n';
 }
