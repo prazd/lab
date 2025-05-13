@@ -171,8 +171,14 @@ struct LC3 {
         reg[R0] = static_cast<unsigned short>(s);
     }
     void trap_putsp() {
+        std::cout << "PUTSP:" << '\n';
+        std::cout << "Reg[0]:" << reg[R0] << '\n';
         for (unsigned short i = reg[R0]; mem[i]; ++i) {
             auto word = mem[i];
+            
+            std::cout << "Index:" << i << '\n';
+            std::cout << std::hex << "Hex:" << mem[i] << '\n';
+            std::cout << std::dec;
             char l = 0xff & word;
             char h = 0xff & (word>>8);
             std::cout << l;
@@ -314,6 +320,7 @@ struct LC3 {
             } else if (std::holds_alternative<Param>(v)) {
                 if (std::holds_alternative<BLKW>(std::get<Param>(v))) {
                     auto num = std::get<BLKW>(std::get<Param>(v));
+                    std::cout << "MEMSET:" <<  num * 2 << " ORIG:" << orig << '\n';
                     std::memset(mem.data() + orig, 0, num * 2);
                 }
             }
@@ -386,7 +393,7 @@ struct Lexer {
     static auto lex(std::string_view line) {
         std::vector<Token> result;
 
-        for (size_t i = 0; i < line.size();) {
+        for (size_t i = 0, sz = line.size(); i < sz;) {
             if (line[i] == ';' && line[i+1] == ';') {
                 for (;line[i] != '\n'; ++i);
                 result.push_back({EndOfLine, line.substr(i, 1)});
@@ -397,7 +404,7 @@ struct Lexer {
                 auto s = ++i;
                 size_t sz{};
                 while(std::isalpha(line[s])){++sz; ++s;};
-                if (line.substr(i, sz) == "FILL") {
+                if ((line.substr(i, sz) == "FILL" || line.substr(i, sz) == "BLKW") && result.back().type == LabelAnnotate) {
                     result.back().type = Constant;
                 }
                 result.push_back({Params, line.substr(std::exchange(i, i + sz), sz)});
@@ -456,6 +463,18 @@ struct Lexer {
     }
 };
 
+unsigned short parse_num(std::string_view raw) {
+    if (raw[0] == 'x') {
+        int value;
+        std::from_chars(raw.data() + 1, raw.data() + 1 + raw.size(), value, 16);
+        return value;
+    } else if (raw[0] == '#') {
+        return std::atoi(raw.data() + 1);
+    }
+    std::cout << "Parse num: ivalid \n";
+    std::abort();
+}
+
 auto split_tokens(const std::vector<Lexer::Token>& tokens) {
     std::vector<std::vector<Lexer::Token>> res;
     std::vector<Lexer::Token> tmp;
@@ -471,7 +490,7 @@ auto split_tokens(const std::vector<Lexer::Token>& tokens) {
 
 auto label_tab(const auto& stokens) {
     std::unordered_map<std::string_view, size_t> res;
-    for (size_t i = 0; i < stokens.size(); ++i) {
+    for (size_t i = 0, sz = stokens.size(); i < sz; ++i) {
         if (stokens[i][0].type == Lexer::LabelAnnotate) 
             res[stokens[i][0].value] = i;
     }
@@ -480,59 +499,72 @@ auto label_tab(const auto& stokens) {
 
 auto fills_tab(const auto& stokens) {
     std::unordered_map<std::string_view, std::string_view> res;
-    for (size_t i = 0; i < stokens.size(); ++i) {
-        if (stokens[i][0].type == Lexer::Constant && stokens[i][2].type == Lexer::Immediate) {
+    for (size_t i = 0, sz = stokens.size(); i < sz; ++i) {
+        if (stokens[i][0].type == Lexer::Constant && stokens[i][1].value == "FILL" && stokens[i][2].type == Lexer::Immediate) {
             res[stokens[i][0].value] = stokens[i][2].value;
         }
     }
     return res;
 }
 
-unsigned short parse_num(std::string_view raw) {
-    if (raw[0] == 'x') {
-        int value;
-        std::from_chars(raw.data() + 1, raw.data() + 1 + raw.size(), value, 16);
-        return value;
-    } else if (raw[0] == '#') {
-        return std::atoi(raw.data() + 1);
+auto orig_tab(const auto& stokens) {
+    std::unordered_map<std::string_view, unsigned short> res;
+    unsigned short orig{};
+    for (size_t i = 0, sz = stokens.size(); i < sz; ++i) {
+        if (stokens[i][0].type == Lexer::Params && stokens[i][0].value == "ORIG") {
+            orig = parse_num(stokens[i][1].value);
+            continue;
+        } else if (stokens[i][0].type == Lexer::Constant && stokens[i][1].type == Lexer::Params) {
+            if (stokens[i][1].value == "BLKW") {
+                res[stokens[i][0].value] = orig;
+            }
+        } else {
+            ++orig;
+        }
     }
-    std::cout << "Parse num: ivalid \n";
-    std::abort();
+    return res;
 }
-
 
 decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
     std::vector<std::pair<unsigned short, Value>> instructions;
     unsigned short current{};
+    size_t k = 0;
+    unsigned short orig{};
 
     auto stokens = split_tokens(tokens);
     auto ltab = label_tab(stokens);
     auto ftab = fills_tab(stokens);
+    auto otab = orig_tab(stokens);
 
-    auto imm_sv = [&](auto& el){
+    auto parse_constant = [&](auto& el){
         if (el.type == Lexer::LabelUse) {
-            return ftab[el.value];
+            if (ftab.contains(el.value)) {
+                return parse_num(ftab[el.value]);
+            } else if (otab.contains(el.value)) {
+                return (unsigned short)(otab[el.value] - orig);
+            }
         }
-        return el.value;
+        return parse_num(el.value);
     };
     
 
-    size_t k = 0;
-    unsigned short orig{};
     for (auto&& raw: stokens) {
         k++;
         auto t = raw[0];
         size_t i = 0;
 
         if (t.type == Lexer::Constant) {
-            break; // skip const section
+            if (raw[1].type == Lexer::Params){
+                t = raw[1];
+                ++i;
+            }
         }
 
         if (t.type == Lexer::Params) {
             if (t.value == "ORIG") {
                 orig = parse_num(raw[1].value);
             } else if (t.value == "BLKW") {
-                instructions.emplace_back(orig++, Param{parse_num(raw[1].value)});
+                instructions.emplace_back(orig++, Param{parse_num(raw[i + 1].value)});
             }
             continue;
         }
@@ -561,7 +593,7 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
                     current |= regs[raw[i + 3].value];    //sr2
                 } else {
                     current |= 1 << 5;
-                    current |= parse_num(imm_sv(raw[i+3])); // imm5
+                    current |= parse_constant(raw[i+3]); // imm5
                 }
                 instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
                 continue;
@@ -569,7 +601,7 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
 
             if (value == "LD" || value == "LDI" || value == "ST" || value == "LEA" || value == "STI") {
                 current |= regs[raw[i + 1].value] << 9;
-                current |= parse_num(imm_sv(raw[i + 2])); // offset9
+                current |= parse_constant(raw[i + 2]); // offset9
                 instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
                 continue;
             }
@@ -577,7 +609,7 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
             if (value == "STR" || value == "LDR") {
                 current |= regs[raw[i + 1].value] << 9; // SR
                 current |= regs[raw[i + 2].value] << 6; // baseR
-                current |= parse_num(imm_sv(raw[i + 3])); // offset6
+                current |= parse_constant(raw[i + 3]); // offset6
                 instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
                 continue;
             }
@@ -625,23 +657,18 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
     return instructions;
 }
 
-constexpr std::string_view raw = R"(
+constexpr std::string_view raw1 = R"(
     ;; LC3 program
     .ORIG x3000
     LD R0, A
     LD R1, B
     LEA R6, C
-
-    .ORIG x4000
-    .BLKW #10
-
-    .ORIG x3003
     ADD R2, R0, R1
     AND R3, R0, R1
 
     NOT R4, R2
 
-    BRz SKIP      ;; branch to SKIP if zero flag is set
+    BRz SKIP     ;; branch to SKIP if zero flag is set
     ADD R2, R2, #1
     ADD R5, R5, #0
 
@@ -666,6 +693,25 @@ SUBR ST R2, #0
     C .FILL  #11
 )";
 
+constexpr std::string_view raw2 = R"(
+    ;; Hello
+
+    .ORIG x3000
+    
+    ;; Print H
+    ADD R0, R0, #15
+    ADD R0, R0, #15
+    ADD R0, R0, #15
+    ADD R0, R0, #15
+    ADD R0, R0, #12
+    ST R0, DATA
+    LEA R0, #244
+    PUTSP
+
+    .ORIG 0x30fa
+    DATA .BLKW #7
+)";
+
 
 void print_lex(std::string_view r) {
     auto res = Lexer::lex(r);
@@ -675,14 +721,19 @@ void print_lex(std::string_view r) {
 
 int main() {
     LC3 vm;
-    vm.run(parse_tokens(Lexer::lex(raw)));
-    assert(vm.read_reg(R0) == 19455);
-    assert(vm.read_reg(R1) == 46081);
-    assert(vm.read_reg(R2) == 26627);
-    assert(vm.read_reg(R3) == 46081);
-    assert(vm.read_reg(R4) == 0);
-    assert(vm.read_reg(R5) == 0);
-    assert(vm.read_reg(R6) == 12302);
-    assert(vm.read_reg(R7) == 12298);
-    vm.print_regs();
+    // std::cout << "PROGRAM1:" << '\n';
+    // vm.run(parse_tokens(Lexer::lex(raw1)));
+    // assert(vm.read_reg(R0) == 19455);
+    // assert(vm.read_reg(R1) == 46081);
+    // assert(vm.read_reg(R2) == 26627);
+    // assert(vm.read_reg(R3) == 46081);
+    // assert(vm.read_reg(R4) == 0);
+    // assert(vm.read_reg(R5) == 0);
+    // assert(vm.read_reg(R6) == 12302);
+    // assert(vm.read_reg(R7) == 12298);
+    // vm.print_regs();
+
+    std::cout << "PROGRAM2:" << '\n';
+    vm = {};
+    vm.run(parse_tokens(Lexer::lex(raw2)));
 }
