@@ -150,7 +150,7 @@ using Param = std::variant<BLKW, STRINGZ>;
 using Value = std::variant<Instruction, Param>;
 
 struct LC3 {
-    static inline unsigned short reg[8]{};
+    static inline std::array<unsigned short, 8> reg{};
     static inline std::array<unsigned short, std::numeric_limits<unsigned short>::max() + 1> mem{};
     unsigned short pc;
     bool running = false;
@@ -176,14 +176,8 @@ struct LC3 {
         reg[R0] = static_cast<unsigned short>(s);
     }
     void trap_putsp() {
-        std::cout << "PUTSP:" << '\n';
-        std::cout << "Reg[0]:" << reg[R0] << '\n';
         for (unsigned short i = reg[R0]; mem[i]; ++i) {
             auto word = mem[i];
-            
-            std::cout << "Index:" << i << '\n';
-            std::cout << std::hex << "Hex:" << mem[i] << '\n';
-            std::cout << std::dec;
             char l = 0xff & word;
             char h = 0xff & (word>>8);
             std::cout << l;
@@ -215,11 +209,6 @@ struct LC3 {
 
 
     void update_nzp(short value) {
-        // std::cout << "NZP:" << "\n";
-        // std::cout << "N:"<< nzp[N] << "\n";
-        // std::cout << "Z:"<< nzp[Z] << "\n";
-        // std::cout << "P:"<< nzp[P] << "\n";
-        // std::cout << "-------------------\n";
         nzp = {};
         if (value > 0)
             nzp[P] = 1;
@@ -270,13 +259,6 @@ struct LC3 {
             
             // arithmetic
             case ADD: {
-                if (Parser::destination(i) == R1) {
-
-                    std::cout << "ADD Res:" << reg[Parser::source1(i)] + Parser::nbits_sign_extend(i, 5) << '\n';
-                    std::cout << "REG Data:" << reg[Parser::source1(i)] << '\n';
-                    std::cout << "IMM:" << Parser::nbits_sign_extend(i, 5) << '\n';
-                    std::cout << "----------------------\n";
-                }
                 if (Parser::bit_one(i, 5))
                     reg[Parser::destination(i)] = reg[Parser::source1(i)] + Parser::nbits_sign_extend(i, 5);
                 else
@@ -337,15 +319,18 @@ struct LC3 {
             } else if (std::holds_alternative<Param>(v)) {
                 if (std::holds_alternative<BLKW>(std::get<Param>(v))) {
                     auto num = std::get<BLKW>(std::get<Param>(v));
-                    std::cout << "MEMSET:" <<  num * 2 << " ORIG:" << orig << '\n';
                     std::memset(mem.data() + orig, 0, num * 2);
                 }
             }
         }
     }
 public:
+    void reset() {
+        reg = {};
+        mem = {};
+        pc = {};
+    }
     void run(const auto& input) {
-//        pc = input.params.orig;
         auto [f,s] = input[0];
         pc = f;
         load_instructions(input);
@@ -445,7 +430,7 @@ struct Lexer {
             if (std::isalpha(line[i])) {
                 auto s = i;
                 size_t sz{};
-                while(std::isalpha(line[s]) || std::isdigit(line[s])){++sz; ++s;};
+                while(std::isalpha(line[s]) || std::isdigit(line[s]) || line[s] == '_'){++sz; ++s;};
 
                 if (line[s] == ':' || (!mnemonics.contains(line.substr(i, sz)) && !trapvec_table.contains(line.substr(i, sz)) 
                 && !(line[i] == 'B' && line[i + 1] == 'R')
@@ -475,7 +460,6 @@ struct Lexer {
             }
             ++i;
         }
-        std::cout << "SZ:" << result.size() << '\n';
         return result;
     }
 };
@@ -553,6 +537,11 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
     auto ftab = fills_tab(stokens);
     auto otab = orig_tab(stokens);
 
+    auto ltab_offset_set = [](short value, unsigned short offset) {
+        auto r = value > 0 ? value : value + 1;
+        return r & offset;
+    };
+
     auto parse_constant = [&](auto& el){
         if (el.type == Lexer::LabelUse) {
             if (ftab.contains(el.value)) {
@@ -610,7 +599,6 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
                     current |= regs[raw[i + 3].value];    //sr2
                 } else {
                     current |= 1 << 5;
-                    std::cout << "ADD const:" << Parser::nbits_sign_extend((parse_constant(raw[i+3]) & OFFSET_5), 5) << '\n';
                     current |= (parse_constant(raw[i+3]) & OFFSET_5); // imm5
                 }
                 instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
@@ -642,7 +630,7 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
                 current |= 1 << 11;
                 current |= raw[i + 1].type == Lexer::Immediate ?
                            (parse_num(raw[i + 1].value) & OFFSET_11):  // offset11
-                           ((ltab[raw[i + 1].value] - k) & OFFSET_11);
+                           (ltab_offset_set((ltab[raw[i + 1].value] - k), OFFSET_11));
                 instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
                 continue;
             }
@@ -666,7 +654,7 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
                 }
                 current |= raw[i + 1].type == Lexer::Immediate ?
                            (parse_num(raw[i + 1].value) & OFFSET_9) : // offset9
-                           ((ltab[raw[i + 1].value] - k) & OFFSET_9);
+                           (ltab_offset_set((ltab[raw[i + 1].value] - k), OFFSET_9));
                 instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
                 continue;
             }
@@ -712,23 +700,31 @@ SUBR ST R2, #0
 )";
 
 constexpr std::string_view raw2 = R"(
-    ;; Hello
+    ;; Print LC3
 
     .ORIG x3000
-    ;; Print H
- 
-    ADD R1, R1, #4
-    ADD R3, R3, #1 ;; todo: fix label jump
-LOOP:
-    ADD R0, R0, #15
-    ADD R1, R1, #-1
-    BRp LOOP
-    ADD R0, R0, #12
-    ST R0, DATA
-    LEA R0, #-250
-    PUTSP
 
-    .ORIG 0x2f0d
+    ADD R1, R1, #5
+    
+    LOOP:
+        ADD R0, R0, #15
+        ADD R1, R1, #-1
+        BRp LOOP
+
+    ADD R0, R0, #1
+    
+    ST R0, DATA ;; mem[data] = 76 (L) -46
+    ADD R0, R0, #-9
+    ST R0, #-46 ;; mem[data + 1] = 67 (C)
+    ADD R0, R0, #-15
+    ADD R0, R0, #-1
+    ST R0, #-48 ;; mem[data + 2] = 51 (3)
+
+    LEA R0, #-51
+    
+    PUTS
+
+    .ORIG 0x2fd8
     DATA .BLKW #20
 )";
 
@@ -740,22 +736,22 @@ void print_lex(std::string_view r) {
 }
 
 int main() {
-    // print_lex(raw2);
-    // print_lex(raw2);
     LC3 vm;
-    // std::cout << "PROGRAM1:" << '\n';
-    // vm.run(parse_tokens(Lexer::lex(raw1)));
-    // assert(vm.read_reg(R0) == 19455);
-    // assert(vm.read_reg(R1) == 46081);
-    // assert(vm.read_reg(R2) == 26627);
-    // assert(vm.read_reg(R3) == 46081);
-    // assert(vm.read_reg(R4) == 0);
-    // assert(vm.read_reg(R5) == 0);
-    // assert(vm.read_reg(R6) == 12302);
-    // assert(vm.read_reg(R7) == 12298);
-    // vm.print_regs();
+    std::cout << "\nPROGRAM1:" << '\n';
+    vm.run(parse_tokens(Lexer::lex(raw1)));
+    assert(vm.read_reg(R0) == 19455);
+    assert(vm.read_reg(R1) == 46081);
+    assert(vm.read_reg(R2) == 26627);
+    assert(vm.read_reg(R3) == 46081);
+    assert(vm.read_reg(R4) == 0);
+    assert(vm.read_reg(R5) == 0);
+    assert(vm.read_reg(R6) == 12302);
+    assert(vm.read_reg(R7) == 12298);
+    vm.print_regs();
 
-    std::cout << "PROGRAM2:" << '\n';
+    vm.reset();
+
+    std::cout << "\nPROGRAM2:" << '\n';
     vm = {};
     vm.run(parse_tokens(Lexer::lex(raw2)));
 }
