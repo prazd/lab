@@ -25,6 +25,8 @@ enum Registers {R0, R1, R2, R3, R4, R5, R6, R7};
 enum Instructions: unsigned short {ADD = 0b0001, AND = 0b0101, BR = 0b0000, JMP = 0b1100, JSR = 0b0100, LD = 0b0010, LDI = 0b1010, LDR = 0b0110, LEA = 0b1110, NOT = 0b1001, RET = 0b1100, ST = 0b0011, STI = 0b1011, STR = 0b0111, TRAP = 0b1111};
 enum Trapvect8 {TGETC = 0x20, TOUT = 0x21, TPUTS = 0x22, TIN = 0x23, TPUTSP = 0x24, THALT = 0x25};
 
+constexpr std::string_view params_str[] = {"BLKW", "FILL", "STRINGZ"};
+
 std::unordered_map<std::string_view, unsigned short> trapvec_table = {
     {"GETC",  TGETC},
     {"OUT",   TOUT},
@@ -324,6 +326,11 @@ struct LC3 {
                 } else if (std::holds_alternative<FILL>(std::get<Param>(v))) {
                     auto num = (unsigned short)std::get<FILL>(std::get<Param>(v));
                     mem[orig] = num;
+                } else if (std::holds_alternative<STRINGZ>(std::get<Param>(v))) {
+                    auto str = std::get<STRINGZ>(std::get<Param>(v));
+                    auto mptr = (char*)(mem.data() + orig);
+                    std::copy(str.begin(), str.end(), mptr);
+                    mptr[str.size()] = '\0';
                 }
             }
         }
@@ -387,9 +394,10 @@ struct Lexer {
         EndOfLine,
         Params,
         Constant,
+        RawString,
     };
 
-    constexpr static std::string_view tt_str[] = {"Mnemonic", "LabelAnnotate", "LabelUse", "Immediate", "Register", "EndOfLine", "Params", "Constant"};
+    constexpr static std::string_view tt_str[] = {"Mnemonic", "LabelAnnotate", "LabelUse", "Immediate", "Register", "EndOfLine", "Params", "Constant", "RawString"};
 
     struct Token {
         TokenType type;
@@ -410,10 +418,18 @@ struct Lexer {
                 auto s = ++i;
                 size_t sz{};
                 while(std::isalpha(line[s])){++sz; ++s;};
-                if ((line.substr(i, sz) == "FILL" || line.substr(i, sz) == "BLKW") && result.back().type == LabelAnnotate) {
+                if ((std::any_of(std::begin(params_str), std::end(params_str), [&](auto& el){return el == line.substr(i,sz);}) && result.back().type == LabelAnnotate)) {
                     result.back().type = Constant;
                 }
                 result.push_back({Params, line.substr(std::exchange(i, i + sz), sz)});
+                continue;
+            }
+
+            if (line[i] == '"') {
+                auto s = ++i;
+                size_t sz{};
+                while(line[s] != '"'){++sz;++s;};
+                result.push_back({RawString, line.substr(std::exchange(i, i + sz + 1), sz)});
                 continue;
             }
 
@@ -512,12 +528,9 @@ auto orig_tab(const auto& stokens) {
         if (stokens[i][0].type == Lexer::Params && stokens[i][0].value == "ORIG") {
             orig = parse_num(stokens[i][1].value);
             continue;
-        } else if (stokens[i][0].type == Lexer::Constant && stokens[i][1].type == Lexer::Params) {
-            if (stokens[i][1].value == "BLKW") {
+        } else if (stokens[i][0].type == Lexer::Constant && stokens[i][1].type == Lexer::Params && 
+            std::any_of(std::begin(params_str), std::end(params_str), [&](auto& el){return el == stokens[i][1].value;})) {
                 res[stokens[i][0].value] = orig++;
-            } else if (stokens[i][1].value == "FILL") {
-                res[stokens[i][0].value] = orig++;
-            }
         } else {
             ++orig;
         }
@@ -568,6 +581,8 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
                 instructions.emplace_back(orig++, Param{parse_num(raw[i + 1].value)});
             } else if (t.value == "FILL"){
                 instructions.emplace_back(orig++, Param{(short)parse_num(raw[i + 1].value)});
+            } else if (t.value == "STRINGZ") {
+                instructions.emplace_back(orig++, Param{raw[i + 1].value});
             }
             continue;
         }
@@ -714,23 +729,29 @@ constexpr std::string_view raw2 = R"(
 
     ADD R0, R0, #-9
     ST R0, #-12 ;;  67 (C)
-    ST R0, #9
+    ST R0, #11
 
     ADD R0, R0, #-15
     ADD R0, R0, #-1
     ST R0, #-15 ;; 51 (3)
-    ST R0, #6
+    ST R0, #8
 
     LEA R0, #-19
     PUTS
     
-    LEA R0, #1
+    LEA R0, #7
+    PUTSP
+
+    LEA R0, DATA_AFTER
     PUTS
 
     DATA_AFTER .BLKW #4 ;; next orig after instructions
 
     .ORIG x2ffc ;; custom orig
     DATA_BEFORE .BLKW #4
+
+    .ORIG x3018
+    STRING .STRINGZ " ASM "
 )";
 
 
@@ -757,10 +778,18 @@ int main() {
     vm.reset();
     std::cout << "\nPROGRAM2:" << '\n';
     vm.run(parse_tokens(Lexer::lex(raw2)));
-    assert((char)LC3::mem[0x3012] == 'L');
-    assert((char)LC3::mem[0x3013] == 'C');
-    assert((char)LC3::mem[0x3014] == '3');
-    assert((char)LC3::mem[0x3015] == '\0');
+
+    assert((char)LC3::mem[0x3018] == ' ');
+    assert(((char*)&LC3::mem[0x3018])[1] == 'A');
+    assert((char)LC3::mem[0x3019] == 'S');
+    assert(((char*)&LC3::mem[0x3019])[1] == 'M');
+    assert((char)LC3::mem[0x301a] == ' ');
+    assert(((char*)&LC3::mem[0x301a])[1] == '\0');
+
+    assert((char)LC3::mem[0x3014] == 'L');
+    assert((char)LC3::mem[0x3015] == 'C');
+    assert((char)LC3::mem[0x3016] == '3');
+    assert((char)LC3::mem[0x3017] == '\0');
 
     assert((char)LC3::mem[0x2ffc] == 'L');
     assert((char)LC3::mem[0x2ffd] == 'C');
