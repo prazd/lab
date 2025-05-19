@@ -12,6 +12,7 @@
 #include <charconv>
 #include <variant>
 #include <cstring>
+#include <unordered_set>
 
 
 #define DEBUG 0
@@ -25,9 +26,9 @@ enum Registers {R0, R1, R2, R3, R4, R5, R6, R7};
 enum Instructions: unsigned short {ADD = 0b0001, AND = 0b0101, BR = 0b0000, JMP = 0b1100, JSR = 0b0100, LD = 0b0010, LDI = 0b1010, LDR = 0b0110, LEA = 0b1110, NOT = 0b1001, RET = 0b1100, ST = 0b0011, STI = 0b1011, STR = 0b0111, TRAP = 0b1111};
 enum Trapvect8 {TGETC = 0x20, TOUT = 0x21, TPUTS = 0x22, TIN = 0x23, TPUTSP = 0x24, THALT = 0x25};
 
-constexpr std::string_view params_str[] = {"BLKW", "FILL", "STRINGZ"};
+const std::unordered_set<std::string_view> params_set = {"BLKW", "FILL", "STRINGZ"};
 
-std::unordered_map<std::string_view, unsigned short> trapvec_table = {
+const std::unordered_map<std::string_view, unsigned short> trapvec_table = {
     {"GETC",  TGETC},
     {"OUT",   TOUT},
     {"PUTS",  TPUTS},
@@ -36,7 +37,7 @@ std::unordered_map<std::string_view, unsigned short> trapvec_table = {
     {"HALT",  THALT},
 };
 
-std::unordered_map<std::string_view, unsigned short> mnemonics = 
+const std::unordered_map<std::string_view, unsigned short> mnemonics = 
     { {"ADD", ADD},
       {"AND", AND}, 
       {"BR",   BR}, 
@@ -55,7 +56,7 @@ std::unordered_map<std::string_view, unsigned short> mnemonics =
     };
 
 #if DEBUG
-std::unordered_map<unsigned short, std::string_view> debug_mnemonics = 
+const std::unordered_map<unsigned short, std::string_view> debug_mnemonics = 
     { {ADD, "ADD"},
       {AND, "AND"}, 
       {BR,  "BR"}, 
@@ -74,7 +75,7 @@ std::unordered_map<unsigned short, std::string_view> debug_mnemonics =
     };   
 #endif
 
-std::unordered_map<std::string_view, unsigned short> regs = 
+const std::unordered_map<std::string_view, unsigned short> regs = 
    {{"R0", R0},
     {"R1", R1}, 
     {"R2", R2}, 
@@ -418,7 +419,7 @@ struct Lexer {
                 auto s = ++i;
                 size_t sz{};
                 while(std::isalpha(line[s])){++sz; ++s;};
-                if ((std::any_of(std::begin(params_str), std::end(params_str), [&](auto& el){return el == line.substr(i,sz);}) && result.back().type == LabelAnnotate)) {
+                if (params_set.contains(line.substr(i, sz)) && result.back().type == LabelAnnotate) {
                     result.back().type = Constant;
                 }
                 result.push_back({Params, line.substr(std::exchange(i, i + sz), sz)});
@@ -529,7 +530,7 @@ auto orig_tab(const auto& stokens) {
             orig = parse_num(stokens[i][1].value);
             continue;
         } else if (stokens[i][0].type == Lexer::Constant && stokens[i][1].type == Lexer::Params && 
-            std::any_of(std::begin(params_str), std::end(params_str), [&](auto& el){return el == stokens[i][1].value;})) {
+            (params_set.contains(stokens[i][1].value))) {
                 res[stokens[i][0].value] = orig++;
         } else {
             ++orig;
@@ -575,6 +576,9 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
         }
 
         if (t.type == Lexer::Params) {
+            if (t.value == "END") {
+                break;
+            }
             if (t.value == "ORIG") {
                 orig = parse_num(raw[1].value);
             } else if (t.value == "BLKW") {
@@ -596,19 +600,37 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
             auto value = t.value;
             
             if (trapvec_table.contains(value)) {
-                current = mnemonics["TRAP"] << 12;
-                current |= trapvec_table[value];
+                current = mnemonics.at("TRAP") << 12;
+                current |= trapvec_table.at(value);
                 instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
                 continue;
             };
 
-            current = mnemonics[value] << 12;
+            if (value[0] == 'B' && value[1] == 'R') {
+                current = mnemonics.at("BR") << 12;
+                for (int j = 2; j < std::size(value); ++j) {
+                    if (value[j] == 'n')
+                        current |= 1 << 11;
+                    else if (value[j] == 'z')
+                        current |= 1 << 10;
+                    else if (value[j] == 'p')
+                        current |= 1 << 9;
+                }
+                current |= raw[i + 1].type == Lexer::Immediate ?
+                           (parse_num(raw[i + 1].value) & OFFSET_9) : // offset9
+                           (ltab_offset_set((ltab.at(raw[i + 1].value) - k), OFFSET_9));
+                instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
+                continue;
+            }
+
+
+            current = mnemonics.at(value) << 12;
       
             if (value == "AND" || value == "ADD") {
-                current |= regs[raw[i + 1].value] << 9; // DR
-                current |= regs[raw[i + 2].value] << 6; // SR1
+                current |= regs.at(raw[i + 1].value) << 9; // DR
+                current |= regs.at(raw[i + 2].value) << 6; // SR1
                 if (raw[i + 3].type == Lexer::Register){
-                    current |= regs[raw[i + 3].value];    //sr2
+                    current |= regs.at(raw[i + 3].value);    //sr2
                 } else {
                     current |= 1 << 5;
                     current |= (parse_constant(raw[i+3]) & OFFSET_5); // imm5
@@ -619,22 +641,22 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
 
             if (value == "LD" || value == "LDI" || value == "ST" || value == "LEA" || value == "STI") {
   
-                current |= regs[raw[i + 1].value] << 9;
+                current |= regs.at(raw[i + 1].value) << 9;
                 current |= (parse_constant(raw[i + 2]) & OFFSET_9); // offset9
                 instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
                 continue;
             }
 
             if (value == "STR" || value == "LDR") {
-                current |= regs[raw[i + 1].value] << 9; // SR
-                current |= regs[raw[i + 2].value] << 6; // baseR
+                current |= regs.at(raw[i + 1].value) << 9; // SR
+                current |= regs.at(raw[i + 2].value) << 6; // baseR
                 current |= (parse_constant(raw[i + 3]) & OFFSET_6); // offset6
                 instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
                 continue;
             }
 
             if (value == "JMP" || value == "JSRR") {
-                current |= regs[raw[i + 1].value] << 6; // baseR
+                current |= regs.at(raw[i + 1].value) << 6; // baseR
                 instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
                 continue;
             }
@@ -649,28 +671,13 @@ decltype(auto) parse_tokens(const std::vector<Lexer::Token>& tokens) {
             }
 
             if (value == "NOT") {
-                current |= regs[raw[i + 1].value] << 9; // DR
-                current |= regs[raw[i + 2].value] << 6; // SR
+                current |= regs.at(raw[i + 1].value) << 9; // DR
+                current |= regs.at(raw[i + 2].value) << 6; // SR
                 instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
                 continue;
             }
 
-            if (value[0] == 'B' && value[1] == 'R') {
-                current = mnemonics["BR"] << 12;
-                for (int j = 2; j < std::size(value); ++j) {
-                    if (value[j] == 'n')
-                        current |= 1 << 11;
-                    else if (value[j] == 'z')
-                        current |= 1 << 10;
-                    else if (value[j] == 'p')
-                        current |= 1 << 9;
-                }
-                current |= raw[i + 1].type == Lexer::Immediate ?
-                           (parse_num(raw[i + 1].value) & OFFSET_9) : // offset9
-                           (ltab_offset_set((ltab[raw[i + 1].value] - k), OFFSET_9));
-                instructions.emplace_back(orig++, Instruction{std::exchange(current, 0)});
-                continue;
-            }
+
         }
     }
     return instructions;
@@ -710,6 +717,8 @@ SUBR ST R2, #0
 
     .ORIG x3064
     A .FILL  #-19455
+
+    .END
 )";
 
 constexpr std::string_view raw2 = R"(
@@ -752,6 +761,8 @@ constexpr std::string_view raw2 = R"(
 
     .ORIG x3018
     STRING .STRINGZ " ASM "
+
+    .END
 )";
 
 
