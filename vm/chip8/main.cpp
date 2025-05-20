@@ -1,0 +1,119 @@
+#include <iostream>
+#include <array>
+
+
+
+struct Chip8VM {
+    enum GRegisters {V0, V1, V2, V3, V4, V5, V6, V7, V8, V9, VA, VB, VC, VD, VE, VF};
+
+    // http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#00E0
+    
+    // nnn or addr - A 12-bit value, the lowest 12 bits of the instruction
+    // n or nibble - A 4-bit value, the lowest 4 bits of the instruction
+    // x - A 4-bit value, the lower 4 bits of the high byte of the instruction
+    // y - A 4-bit value, the upper 4 bits of the low byte of the instruction
+    // kk or byte - An 8-bit value, the lowest 8 bits of the instruction
+
+    enum Instruction{
+        SYS, 
+        JP_1nnn, 
+        CALL_2nnn, 
+        SE_3xkk, 
+        SNE_4xkk, 
+        SE_5xy0,
+        LD_6xkk, 
+        ADD_7xkk,
+        LD_8xy0,
+        OR_8xy1, 
+        AND_8xy2, 
+        XOR_8xy3,
+        ADD_8xy4,
+        SUB_8xy5, 
+        SHR_8xy6,
+        SUBN_8xy7,
+        SHL_8xyE, 
+        SNE_9xy0,
+        LD_Annn,
+        JP_Bnnn,
+        RND_Cxkk, 
+        DRW_Dxyn,
+        SKP_Ex9E,
+        SKNP_ExA1,
+        LD_Fx07,
+        LD_Fx0A,
+        LD_Fx15,
+        LD_Fx18,
+        LD_Fx1E,
+        LD_Fx29,
+        LD_Fx33,
+        LD_Fx55,
+        LD_Fx65,
+    };
+    unsigned short index{};                     // index register
+    unsigned short pc{};                    // program counter
+    unsigned char  delay_timer{};             // An 8-bit delay timer which is decremented at a rate of 60 Hz (60 times per second) until it reaches 0
+    unsigned char  sound_timer{};            // An 8-bit sound timer which functions like the delay timer, but which also gives off a beeping sound as long as it’s not 0
+    unsigned char  sp{};                    // stack pointer
+    
+    std::array<unsigned short, 16> stack{}; // stack is an array of 16 16-bit values
+                                            // used to store the address that the interpreter should return to when finished with a subroutine
+    
+    std::array<unsigned char, 16>  regs{};  // 16 general purpose 8-bit registers
+    std::array<unsigned char, 4096> mem{};  // 4kb RAM
+
+    unsigned short readx(unsigned short i) {
+        return 0x0F & (i >> 8);
+    }
+    unsigned short ready(unsigned short i) {
+        return 0xF & (i >> 8);
+    }
+    void execute(unsigned short i) {
+        auto cmd = i >> 12;
+        switch(cmd) {
+            case JP_1nnn:  { pc = 0xFFF & i;  break;} 
+            case CALL_2nnn:{ ++sp; stack[sp] = pc; pc = 0xFFF & i; break;}
+            case SE_3xkk:  { pc += regs[readx(i)] == (i & 0xFF) ? 2 : 0; break;} // todo: check
+            case SNE_4xkk: { pc += regs[readx(i)] == (i & 0xFF) ? 0 : 2; break;}
+            case SE_5xy0:  {pc += regs[readx(i)] == regs[ready(i)] ? 2 : 0; break;}
+            case LD_6xkk:  {regs[readx(i)] = (i & 0xFF);      break;}
+            case ADD_7xkk: {regs[readx(i)] += (i & 0xFF);     break;}
+            case LD_8xy0:  {regs[readx(i)] = regs[ready(i)];  break;}
+            case OR_8xy1:  {regs[readx(i)] |= regs[ready(i)]; break;}
+            case AND_8xy2: {regs[readx(i)] &= regs[ready(i)]; break;}
+            case XOR_8xy3: {regs[readx(i)] ^= regs[ready(i)]; break;}
+            case ADD_8xy4: {int val = regs[readx(i)] + regs[ready(i)]; regs[VF] = val > 255; regs[readx(i)] = val & 0xff; break;}
+            case SUB_8xy5: {regs[VF] = regs[readx(i)] > regs[ready(i)]; regs[readx(i)] -= regs[ready(i)]; break;}
+            case SHR_8xy6: {regs[VF] = (regs[readx(i)] & 1); regs[readx(i)]>>=1; break;}
+            case SUBN_8xy7:{regs[VF] = regs[ready(i)] > regs[readx(i)]; regs[readx(i)] = regs[ready(i)] - regs[readx(i)]; break;}
+            case SHL_8xyE: {regs[VF] = (regs[readx(i)] & 0x80); regs[readx(i)] <<= 1; break;}
+            case SNE_9xy0: {pc += regs[readx(i)] == regs[ready(i)] ? 2 : 0; break;}
+            case LD_Annn:  {index = 0xFFF & i; break;}
+            case JP_Bnnn:  {pc = (0xFFF & i) + regs[V0]; break;}
+            case RND_Cxkk: { regs[readx(i)] = ((rand() % 256) & (0xFF & i)); break;} // todo: update
+            case DRW_Dxyn: {break;}  // todo: Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
+            case SKP_Ex9E: { break;} // todo: Skip next instruction if key with the value of Vx is pressed.
+            case SKNP_ExA1: {break;} // todo: Skip next instruction if key with the value of Vx is not pressed.
+            case LD_Fx07: { regs[readx(i)] = delay_timer; break;}
+            case LD_Fx0A: { break;}  // todo: Wait for a key press, store the value of the key in Vx.
+            case LD_Fx15: {delay_timer = regs[readx(i)]; break;}
+            case LD_Fx18: {sound_timer = regs[readx(i)]; break;}
+            case LD_Fx1E: {index += regs[readx(i)]; break;}
+            case LD_Fx29: {break;} // todo: Set I = location of sprite for digit Vx
+            case LD_Fx33: {break;} // todo: Store BCD representation of Vx in memory locations I, I+1, and I+2.
+            case LD_Fx55: {
+                auto current = index;
+                for (int k = 0; k <= readx(i); ++k, ++current)
+                    mem[current] = regs[k];
+                break;} // Store registers V0 through Vx in memory starting at location I
+            case LD_Fx65: {
+                auto current = index;
+                for (int k = 0; k <= readx(i); ++k, ++current)
+                    regs[k] = mem[current];
+                break;} // Read registers V0 through Vx from memory starting at location I.    
+        }
+    }
+};
+
+int main() {
+
+}
