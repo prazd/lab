@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cassert>
 #include <limits>
+#include <bitset>
+#include <climits>
 #include <bit>
 
 template <typename T>
@@ -95,7 +97,7 @@ class BitChanger{
 public:
     BitChanger(T& val) {
         auto val_ptr = reinterpret_cast<unsigned char*>(&val);
-        for(unsigned long i = 0;i < sizeof(val); ++i) {
+        for(size_t i = 0, e = sizeof(val); i < e; ++i) {
             buffer[i] = val_ptr+i;
         }
     }
@@ -106,6 +108,7 @@ public:
 
     std::string get_string() {
         std::string res;
+        res.reserve(sizeof(T) * CHAR_BIT);
         for(auto it = std::begin(buffer), ite = std::end(buffer);it!=ite;++it) {
             auto tmp = std::bitset<8>(**it).to_string();
             std::reverse(tmp.begin(), tmp.end());
