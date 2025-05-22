@@ -5,6 +5,7 @@
 
 struct Chip8VM {
     enum GRegisters {V0, V1, V2, V3, V4, V5, V6, V7, V8, V9, VA, VB, VC, VD, VE, VF};
+    constexpr static unsigned char FONT_OFFSET = 0x50;
 
     // http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#00E0
     
@@ -49,11 +50,11 @@ struct Chip8VM {
         LD_Fx55,
         LD_Fx65,
     };
-    unsigned short index{};                     // index register
-    unsigned short pc{};                    // program counter
+    unsigned short index{};                   // index register
+    unsigned short pc{};                      // program counter
     unsigned char  delay_timer{};             // An 8-bit delay timer which is decremented at a rate of 60 Hz (60 times per second) until it reaches 0
-    unsigned char  sound_timer{};            // An 8-bit sound timer which functions like the delay timer, but which also gives off a beeping sound as long as it’s not 0
-    unsigned char  sp{};                    // stack pointer
+    unsigned char  sound_timer{};             // An 8-bit sound timer which functions like the delay timer, but which also gives off a beeping sound as long as it’s not 0
+    unsigned char  sp{};                      // stack pointer
     
     std::array<unsigned short, 16> stack{}; // stack is an array of 16 16-bit values
                                             // used to store the address that the interpreter should return to when finished with a subroutine
@@ -61,12 +62,47 @@ struct Chip8VM {
     std::array<unsigned char, 16>  regs{};  // 16 general purpose 8-bit registers
     std::array<unsigned char, 4096> mem{};  // 4kb RAM
 
+    std::array<unsigned char, 80> fonts{
+        0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+        0x20, 0x60, 0x20, 0x20, 0x70, // 1
+        0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+        0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+        0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+        0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+        0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+        0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+        0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+        0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+        0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+        0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+        0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+        0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+        0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+        0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+    };
+
+    // std::array<unsigned char, 16> keyboard = { // todo: use raylib keyboard
+    //     0x31, 0x32, 0x33, 0x34, // 1 2 3 4
+    //     0x71, 0x77, 0x65, 0x72, // q w e r
+    //     0x61, 0x73, 0x64, 0x66, // a s d f
+    //     0x7a, 0x78, 0x63, 0x76, // z x c v
+    // };
+
+    // x - A 4-bit value, the lower 4 bits of the high byte of the instruction
     unsigned short readx(unsigned short i) {
-        return 0x0F & (i >> 8);
-    }
-    unsigned short ready(unsigned short i) {
         return 0xF & (i >> 8);
     }
+
+    // y - A 4-bit value, the upper 4 bits of the low byte of the instruction
+    unsigned short ready(unsigned short i) {
+        return 0xF & (i >> 4);
+    }
+
+    void load_instructions() {
+        // load fonts
+        std::copy(fonts.begin(), fonts.end(), mem.data() + FONT_OFFSET);
+    }
+
     void execute(unsigned short i) {
         auto cmd = i >> 12;
         switch(cmd) {
@@ -74,7 +110,7 @@ struct Chip8VM {
             case CALL_2nnn:{ ++sp; stack[sp] = pc; pc = 0xFFF & i; break;}
             case SE_3xkk:  { pc += regs[readx(i)] == (i & 0xFF) ? 2 : 0; break;} // todo: check
             case SNE_4xkk: { pc += regs[readx(i)] == (i & 0xFF) ? 0 : 2; break;}
-            case SE_5xy0:  {pc += regs[readx(i)] == regs[ready(i)] ? 2 : 0; break;}
+            case SE_5xy0:  { pc += regs[readx(i)] == regs[ready(i)] ? 2 : 0; break;}
             case LD_6xkk:  {regs[readx(i)] = (i & 0xFF);      break;}
             case ADD_7xkk: {regs[readx(i)] += (i & 0xFF);     break;}
             case LD_8xy0:  {regs[readx(i)] = regs[ready(i)];  break;}
@@ -86,7 +122,7 @@ struct Chip8VM {
             case SHR_8xy6: {regs[VF] = (regs[readx(i)] & 1); regs[readx(i)]>>=1; break;}
             case SUBN_8xy7:{regs[VF] = regs[ready(i)] > regs[readx(i)]; regs[readx(i)] = regs[ready(i)] - regs[readx(i)]; break;}
             case SHL_8xyE: {regs[VF] = (regs[readx(i)] & 0x80); regs[readx(i)] <<= 1; break;}
-            case SNE_9xy0: {pc += regs[readx(i)] == regs[ready(i)] ? 2 : 0; break;}
+            case SNE_9xy0: {pc += regs[readx(i)] != regs[ready(i)] ? 2 : 0; break;}
             case LD_Annn:  {index = 0xFFF & i; break;}
             case JP_Bnnn:  {pc = (0xFFF & i) + regs[V0]; break;}
             case RND_Cxkk: { regs[readx(i)] = ((rand() % 256) & (0xFF & i)); break;} // todo: update
@@ -94,11 +130,11 @@ struct Chip8VM {
             case SKP_Ex9E: { break;} // todo: Skip next instruction if key with the value of Vx is pressed.
             case SKNP_ExA1: {break;} // todo: Skip next instruction if key with the value of Vx is not pressed.
             case LD_Fx07: { regs[readx(i)] = delay_timer; break;}
-            case LD_Fx0A: { break;}  // todo: Wait for a key press, store the value of the key in Vx.
+            case LD_Fx0A: { break;} // todo: Wait for a key press, store the value of the key in Vx.
             case LD_Fx15: {delay_timer = regs[readx(i)]; break;}
             case LD_Fx18: {sound_timer = regs[readx(i)]; break;}
             case LD_Fx1E: {index += regs[readx(i)]; break;}
-            case LD_Fx29: {break;} // todo: Set I = location of sprite for digit Vx
+            case LD_Fx29: {index = (regs[readx(i)] * 5) + FONT_OFFSET; break;} // Set I = location of sprite for digit Vx (0 - 0, 1 - 5 ...)
             case LD_Fx33: {break;} // todo: Store BCD representation of Vx in memory locations I, I+1, and I+2.
             case LD_Fx55: {
                 auto current = index;
