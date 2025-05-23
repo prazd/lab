@@ -201,16 +201,6 @@ struct LC3 {
         &LC3::trap_halt,
     };
 
-    // offset table for trap instruction
-    std::unordered_map<unsigned short, unsigned short> trap_offset_table = {
-        {TGETC,  0},
-        {TOUT,   1},
-        {TPUTS,  2},
-        {TIN,    3},
-        {TPUTSP, 4},
-        {THALT,  5},
-    };
-
 
     void update_nzp(short value) {
         nzp = {};
@@ -307,14 +297,14 @@ struct LC3 {
             }
 
             case TRAP: {
-                ((*this).**(((trap_func*)mem.data()) + trap_offset_table[i & 0xff]))();
+                ((*this).**(((trap_func*)mem.data()) + (i & 0xff)))();
                 break;
             }
         }
     }
     void load_instructions(const auto& instructions) {
         // load TRAP
-        std::copy(std::begin(trap_instructions), std::end(trap_instructions), (trap_func*)mem.data());
+        std::copy(std::begin(trap_instructions), std::end(trap_instructions), ((trap_func*)mem.data()) + TGETC);
 
         // load instruction / data
         for (auto& [orig, v]: instructions) {
