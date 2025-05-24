@@ -1,5 +1,6 @@
 #include <iostream>
 #include <array>
+#include "raylib.h"
 
 
 
@@ -62,6 +63,10 @@ struct Chip8VM {
     std::array<unsigned char, 16>  regs{};  // 16 general purpose 8-bit registers
     std::array<unsigned char, 4096> mem{};  // 4kb RAM
 
+
+    // 64 x 32
+    std::array<std::array<bool, 64>, 32> display;
+
     std::array<unsigned char, 80> fonts{
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
         0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -81,12 +86,21 @@ struct Chip8VM {
         0xF0, 0x80, 0xF0, 0x80, 0x80  // F
     };
 
-    // std::array<unsigned char, 16> keyboard = { // todo: use raylib keyboard
-    //     0x31, 0x32, 0x33, 0x34, // 1 2 3 4
-    //     0x71, 0x77, 0x65, 0x72, // q w e r
-    //     0x61, 0x73, 0x64, 0x66, // a s d f
-    //     0x7a, 0x78, 0x63, 0x76, // z x c v
-    // };
+    std::array<unsigned char, 16> keyboard = {
+         1,  2,  3,  0xC,
+         4,  5,  6,  0xD,
+         7,  8,  9,  0xE,
+        0xA, 0, 0xB, 0xF,
+    };
+
+    std::array<unsigned char, 16> raylib_keyboard = {
+        KEY_ONE, KEY_TWO, KEY_THREE, KEY_FOUR,
+        KEY_Q, KEY_W, KEY_E, KEY_R,
+        KEY_A, KEY_S, KEY_D, KEY_F, 
+        KEY_Z, KEY_X, KEY_C, KEY_V,
+    };
+
+    std::array<bool, 16> key_pressed_list;
 
     // x - A 4-bit value, the lower 4 bits of the high byte of the instruction
     unsigned short readx(unsigned short i) {
@@ -103,12 +117,22 @@ struct Chip8VM {
         std::copy(fonts.begin(), fonts.end(), mem.data() + FONT_OFFSET);
     }
 
+    void key_handler(unsigned short i) {
+        for (size_t i = 0; i < 16; ++i) {
+            if (IsKeyPressed(raylib_keyboard[i])) {
+                regs[readx(i)] = keyboard[i];
+                key_pressed_list[i] = true;
+                return;
+            }
+        }
+    }
+
     void execute(unsigned short i) {
         auto cmd = i >> 12;
         switch(cmd) {
             case JP_1nnn:  { pc = 0xFFF & i;  break;} 
             case CALL_2nnn:{ ++sp; stack[sp] = pc; pc = 0xFFF & i; break;}
-            case SE_3xkk:  { pc += regs[readx(i)] == (i & 0xFF) ? 2 : 0; break;} // todo: check
+            case SE_3xkk:  { pc += regs[readx(i)] == (i & 0xFF) ? 2 : 0; break;}
             case SNE_4xkk: { pc += regs[readx(i)] == (i & 0xFF) ? 0 : 2; break;}
             case SE_5xy0:  { pc += regs[readx(i)] == regs[ready(i)] ? 2 : 0; break;}
             case LD_6xkk:  {regs[readx(i)] = (i & 0xFF);      break;}
@@ -125,17 +149,40 @@ struct Chip8VM {
             case SNE_9xy0: {pc += regs[readx(i)] != regs[ready(i)] ? 2 : 0; break;}
             case LD_Annn:  {index = 0xFFF & i; break;}
             case JP_Bnnn:  {pc = (0xFFF & i) + regs[V0]; break;}
-            case RND_Cxkk: { regs[readx(i)] = ((rand() % 256) & (0xFF & i)); break;} // todo: update
-            case DRW_Dxyn: {break;}  // todo: Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
-            case SKP_Ex9E: { break;} // todo: Skip next instruction if key with the value of Vx is pressed.
-            case SKNP_ExA1: {break;} // todo: Skip next instruction if key with the value of Vx is not pressed.
+            case RND_Cxkk: { regs[readx(i)] = ((rand() % 256) & (0xFF & i)); break;} // todo: update rand
+            case DRW_Dxyn: { 
+                auto x = regs[readx(i)];
+                auto y = regs[ready(i)];
+                auto nibble = i & 0xF;
+                regs[VF] = 0;
+                for (size_t j = 0; j < nibble; ++j){
+                    unsigned char current = mem[index + j];      // X = 10, y = 20; n = 2; mem[index] = 0b01001111, mem[index + 1] = 0b10011000
+                    auto cx = x;                                 // y[20]: ... x[10] = 0, x[11] = 1 ... x[17] = 1
+                    for (size_t k = 0; k < CHAR_BIT; ++k) {      // y[21]: ... x[10] = 1, x[11] = 0 ... x[17] = 0
+                        auto before = display[y + j][cx];
+                        display[y + j][cx] ^= ((current >> (7 - k)) & 1);
+                        if (before && !display[y + j][cx]) regs[VF] = 1;
+                        ++cx;
+                    }
+                }
+                break;} // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
+            case SKP_Ex9E:  {pc += (key_pressed_list[regs[readx(i)]]) ? 2 : 0; break;} // Skip next instruction if key with the value of Vx is pressed.
+            case SKNP_ExA1: {pc += (key_pressed_list[regs[readx(i)]]) ? 0 : 2; break;} // Skip next instruction if key with the value of Vx is not pressed.
             case LD_Fx07: { regs[readx(i)] = delay_timer; break;}
-            case LD_Fx0A: { break;} // todo: Wait for a key press, store the value of the key in Vx.
+            case LD_Fx0A: { 
+                key_handler(i);
+                break;
+            } // Wait for a key press, store the value of the key in Vx.
             case LD_Fx15: {delay_timer = regs[readx(i)]; break;}
             case LD_Fx18: {sound_timer = regs[readx(i)]; break;}
             case LD_Fx1E: {index += regs[readx(i)]; break;}
             case LD_Fx29: {index = (regs[readx(i)] * 5) + FONT_OFFSET; break;} // Set I = location of sprite for digit Vx (0 - 0, 1 - 5 ...)
-            case LD_Fx33: {break;} // todo: Store BCD representation of Vx in memory locations I, I+1, and I+2.
+            case LD_Fx33: {
+                auto val = regs[readx(i)];         //  val = 123
+                mem[index] = val / 100;            //  1
+                mem[index + 1] = (val % 100) / 10; //  2
+                mem[index + 2] = val % 10;         //  3
+                break;} // Store BCD representation of Vx in memory locations I, I+1, and I+2.
             case LD_Fx55: {
                 auto current = index;
                 for (int k = 0; k <= readx(i); ++k, ++current)
@@ -151,5 +198,5 @@ struct Chip8VM {
 };
 
 int main() {
-
+    
 }
