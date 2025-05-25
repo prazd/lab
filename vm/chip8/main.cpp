@@ -1,8 +1,11 @@
 #include <iostream>
 #include <array>
 #include "raylib.h"
+#include <fstream>
+#include <filesystem>
 
 
+#define DEBUG 0
 
 struct Chip8VM {
     enum GRegisters {V0, V1, V2, V3, V4, V5, V6, V7, V8, V9, VA, VB, VC, VD, VE, VF};
@@ -17,7 +20,9 @@ struct Chip8VM {
     // kk or byte - An 8-bit value, the lowest 8 bits of the instruction
 
     enum Instruction{
-        SYS, 
+        SYS_0nnn,
+        CLS_00E0,
+        RET_00EE,
         JP_1nnn, 
         CALL_2nnn, 
         SE_3xkk, 
@@ -50,7 +55,49 @@ struct Chip8VM {
         LD_Fx33,
         LD_Fx55,
         LD_Fx65,
+        Invalid
     };
+
+#ifdef DEBUG
+    std::unordered_map<Instruction, std::string_view> instruction_str {
+        {SYS_0nnn,  "SYS_0nnn" },
+        {CLS_00E0,  "CLS_00E0" },
+        {RET_00EE,  "RET_00EE" },
+        {JP_1nnn,   "JP_1nnn"  },
+        {CALL_2nnn, "CALL_2nnn"},
+        {SE_3xkk,   "SE_3xkk"  },
+        {SNE_4xkk,  "SNE_4xkk" },
+        {SE_5xy0,   "SE_5xy0"  },
+        {LD_6xkk,   "LD_6xkk"  },
+        {ADD_7xkk,  "ADD_7xkk" },
+        {LD_8xy0,   "LD_8xy0"  },
+        {OR_8xy1,   "OR_8xy1"  },
+        {AND_8xy2,  "AND_8xy2" },  
+        {XOR_8xy3,  "XOR_8xy3" },  
+        {ADD_8xy4,  "ADD_8xy4" }, 
+        {SUB_8xy5,  "SUB_8xy5" },  
+        {SHR_8xy6,  "SHR_8xy6" },
+        {SUBN_8xy7, "SUBN_8xy7"},      
+        {SHL_8xyE,  "SHL_8xyE" },   
+        {SNE_9xy0,  "SNE_9xy0" },
+        {LD_Annn,   "LD_Annn"  },
+        {JP_Bnnn,   "JP_Bnnn"  },
+        {RND_Cxkk,  "RND_Cxkk" },
+        {DRW_Dxyn,  "DRW_Dxyn" },
+        {SKP_Ex9E,  "SKP_Ex9E" },
+        {SKNP_ExA1, "SKNP_ExA1"},
+        {LD_Fx07,   "LD_Fx07"  },
+        {LD_Fx0A,   "LD_Fx0A"  },
+        {LD_Fx15,   "LD_Fx15"  },
+        {LD_Fx18,   "LD_Fx18"  },
+        {LD_Fx1E,   "LD_Fx1E"  },
+        {LD_Fx29,   "LD_Fx29"  },
+        {LD_Fx33,   "LD_Fx33"  },
+        {LD_Fx55,   "LD_Fx55"  },
+        {LD_Fx65,   "LD_Fx65"  },
+        {Invalid,   "Invalid"  },
+    }; 
+#endif    
     unsigned short index{};                   // index register
     unsigned short pc{};                      // program counter
     unsigned char  delay_timer{};             // An 8-bit delay timer which is decremented at a rate of 60 Hz (60 times per second) until it reaches 0
@@ -63,9 +110,8 @@ struct Chip8VM {
     std::array<unsigned char, 16>  regs{};  // 16 general purpose 8-bit registers
     std::array<unsigned char, 4096> mem{};  // 4kb RAM
 
-
     // 64 x 32
-    std::array<std::array<bool, 64>, 32> display;
+    std::array<std::array<bool, 128>, 32> display;
 
     std::array<unsigned char, 80> fonts{
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -85,6 +131,10 @@ struct Chip8VM {
         0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
         0xF0, 0x80, 0xF0, 0x80, 0x80  // F
     };
+
+    const auto& cdisplay() const {
+        return display;
+    }
 
     std::array<unsigned char, 16> keyboard = {
          1,  2,  3,  0xC,
@@ -127,15 +177,99 @@ struct Chip8VM {
         }
     }
 
-    void execute(unsigned short i) {
-        auto cmd = i >> 12;
-        switch(cmd) {
-            case JP_1nnn:  { pc = 0xFFF & i;  break;} 
+    Instruction decode (unsigned short i) {
+        switch(i >> 12) {
+            case 0: {
+                switch(i & 0xff) {
+                    case 0xE0: {return CLS_00E0;}
+                    case 0xEE: {return RET_00EE;}
+                    default:   {return SYS_0nnn;}
+                }
+            }
+            case 1: { return JP_1nnn; }
+            case 2: { return CALL_2nnn;}
+            case 3: { return SE_3xkk;}
+            case 4: { return SNE_4xkk;}
+            case 5: { return SE_5xy0;}
+            case 6: { return LD_6xkk;}
+            case 7: { return ADD_7xkk;}
+            case 8: {
+                switch(0xf & i){
+                    case 0:   {return LD_8xy0;}
+                    case 1:   {return OR_8xy1;}
+                    case 2:   {return AND_8xy2;}
+                    case 3:   {return XOR_8xy3;}
+                    case 4:   {return ADD_8xy4;}
+                    case 5:   {return SUB_8xy5;}
+                    case 6:   {return SHR_8xy6;}
+                    case 7:   {return SUBN_8xy7;}
+                    case 0xE: {return SHL_8xyE;}
+                }
+            }
+            case 9: {return SNE_9xy0;}
+            case 0xA: {return LD_Annn;}
+            case 0xB: {return JP_Bnnn;}
+            case 0xC: {return RND_Cxkk;}
+            case 0xD: {return DRW_Dxyn;}
+            case 0xE: {
+                switch(i & 0xff) {
+                    case 0x9E: {return SKP_Ex9E;}
+                    case 0xA1: {return SKNP_ExA1;}
+                }
+            }
+            
+            case 0xF: {
+                switch(i & 0xff) {
+                    case 0x07:  {return LD_Fx07;}
+                    case 0x0A:  {return LD_Fx0A;}
+                    case 0x15:  {return LD_Fx15;}
+                    case 0x18:  {return LD_Fx18;}
+                    case 0x1E:  {return LD_Fx1E;}
+                    case 0x29:  {return LD_Fx29;}
+                    case 0x33:  {return LD_Fx33;}
+                    case 0x55:  {return LD_Fx55;}
+                    case 0x65:  {return LD_Fx65;}
+                }
+            }
+        }
+        return Invalid;
+    }
+
+    void clear_screen(){
+        for (auto&& row: display)
+            row.fill(false);
+    }
+
+    template <typename Ctr>
+    void run(const Ctr& instructions) {
+        load_instructions();
+        clear_screen();
+        pc = 0x200;
+        std::memcpy(mem.data() + pc, instructions.data(), std::size(instructions) * sizeof(typename Ctr::value_type));
+        while((mem[pc + 1] | mem[pc] << 8)) {
+            dec_exec((mem[pc + 1] | mem[pc] << 8)); 
+            pc += 2;
+        }
+    }
+
+    void dec_exec(unsigned short i) {
+        auto decoded = decode(i);
+        #ifdef DEBUG 
+        std::cout << std::hex << "Instruction: " << instruction_str[decoded] << " 0x"<< i << '\n';
+        std::cout << std::dec;
+        #endif
+        switch(decoded) {
+            case SYS_0nnn: { /* check */ break;}
+            case CLS_00E0: { clear_screen(); break;};
+            case RET_00EE: { pc = stack[sp--]; break;}
+            case JP_1nnn:  { pc = (0xFFF & i);  
+                std::cout << "JP_1nnn PC:" << pc << '\n';
+                break;} 
             case CALL_2nnn:{ ++sp; stack[sp] = pc; pc = 0xFFF & i; break;}
             case SE_3xkk:  { pc += regs[readx(i)] == (i & 0xFF) ? 2 : 0; break;}
             case SNE_4xkk: { pc += regs[readx(i)] == (i & 0xFF) ? 0 : 2; break;}
             case SE_5xy0:  { pc += regs[readx(i)] == regs[ready(i)] ? 2 : 0; break;}
-            case LD_6xkk:  {regs[readx(i)] = (i & 0xFF);      break;}
+            case LD_6xkk:  {regs[readx(i)] = (i & 0xFF);     break;}
             case ADD_7xkk: {regs[readx(i)] += (i & 0xFF);     break;}
             case LD_8xy0:  {regs[readx(i)] = regs[ready(i)];  break;}
             case OR_8xy1:  {regs[readx(i)] |= regs[ready(i)]; break;}
@@ -147,7 +281,10 @@ struct Chip8VM {
             case SUBN_8xy7:{regs[VF] = regs[ready(i)] > regs[readx(i)]; regs[readx(i)] = regs[ready(i)] - regs[readx(i)]; break;}
             case SHL_8xyE: {regs[VF] = (regs[readx(i)] & 0x80); regs[readx(i)] <<= 1; break;}
             case SNE_9xy0: {pc += regs[readx(i)] != regs[ready(i)] ? 2 : 0; break;}
-            case LD_Annn:  {index = 0xFFF & i; break;}
+            case LD_Annn:  {
+                index = (0xFFF & i); 
+                std::cout << "\nLD_Annn index:" << index << '\n';
+                break;}
             case JP_Bnnn:  {pc = (0xFFF & i) + regs[V0]; break;}
             case RND_Cxkk: { regs[readx(i)] = ((rand() % 256) & (0xFF & i)); break;} // todo: update rand
             case DRW_Dxyn: { 
@@ -193,10 +330,33 @@ struct Chip8VM {
                 for (int k = 0; k <= readx(i); ++k, ++current)
                     regs[k] = mem[current];
                 break;} // Read registers V0 through Vx from memory starting at location I.    
+
+            case Invalid:{
+                std::cout << std::hex << "!!!! Invalid instruction: " << i << '\n';
+                std::cout << std::dec;
+                break;
+            }    
         }
     }
 };
 
+auto rom_to_raw_instructions(const std::string_view& path) {
+    std::ifstream f{path, std::ios::binary | std::ios::in };
+    if (!f.is_open()) {std::cout << "Cannot open file"; std::abort();}
+    auto sz = std::filesystem::file_size(path);
+    std::vector<char> result(sz);
+    f.seekg(0, std::ios::beg);
+    f.read(result.data(), sz);
+    f.close();
+    return result;
+}
+
 int main() {
-    
+    Chip8VM vm;
+    vm.run(rom_to_raw_instructions("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/test_opcode.ch8"));
+    for (auto&& row: vm.display){
+        for (auto& el: row)
+            std::cout << (el ? "0" : ".");
+        std::cout << "\n";
+    }
 }
