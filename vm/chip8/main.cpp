@@ -3,9 +3,16 @@
 #include "raylib.h"
 #include <fstream>
 #include <filesystem>
+#include <thread>
 
 
 #define DEBUG 0
+
+constexpr float HEIGHT = 600;
+constexpr float WIDTH = 1200;
+
+constexpr size_t DISPLAY_HEIGHT = 32;
+constexpr size_t DISPLAY_WIDTH = 64;
 
 struct Chip8VM {
     enum GRegisters {V0, V1, V2, V3, V4, V5, V6, V7, V8, V9, VA, VB, VC, VD, VE, VF};
@@ -58,7 +65,7 @@ struct Chip8VM {
         Invalid
     };
 
-#ifdef DEBUG
+#if DEBUG
     std::unordered_map<Instruction, std::string_view> instruction_str {
         {SYS_0nnn,  "SYS_0nnn" },
         {CLS_00E0,  "CLS_00E0" },
@@ -111,7 +118,7 @@ struct Chip8VM {
     std::array<unsigned char, 4096> mem{};  // 4kb RAM
 
     // 64 x 32
-    std::array<std::array<bool, 128>, 32> display;
+    std::array<std::array<bool, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display;
 
     std::array<unsigned char, 80> fonts{
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -162,8 +169,11 @@ struct Chip8VM {
         return 0xF & (i >> 4);
     }
 
-    void load_instructions() {
-        // load fonts
+    template <typename Ctr>
+    void load_instructions(const Ctr& instructions) {
+        pc = 0x200;
+        clear_screen();
+        std::memcpy(mem.data() + pc, instructions.data(), std::size(instructions) * sizeof(typename Ctr::value_type));
         std::copy(fonts.begin(), fonts.end(), mem.data() + FONT_OFFSET);
     }
 
@@ -242,28 +252,31 @@ struct Chip8VM {
 
     template <typename Ctr>
     void run(const Ctr& instructions) {
-        load_instructions();
-        clear_screen();
-        pc = 0x200;
-        std::memcpy(mem.data() + pc, instructions.data(), std::size(instructions) * sizeof(typename Ctr::value_type));
+        load_instructions(instructions);
         while((mem[pc + 1] | mem[pc] << 8)) {
-            dec_exec((mem[pc + 1] | mem[pc] << 8)); 
-            pc += 2;
+            auto current_pc = std::exchange(pc, pc + 2);
+            dec_exec((mem[current_pc + 1] | mem[current_pc] << 8)); 
+        }
+    }
+
+    void step() {
+        if ((mem[pc + 1] | mem[pc] << 8)) {
+            auto current_pc = std::exchange(pc, pc + 2);
+            dec_exec((mem[current_pc + 1] | mem[current_pc] << 8));
         }
     }
 
     void dec_exec(unsigned short i) {
         auto decoded = decode(i);
-        #ifdef DEBUG 
-        std::cout << std::hex << "Instruction: " << instruction_str[decoded] << " 0x"<< i << '\n';
-        std::cout << std::dec;
+        #if DEBUG 
+        std::cout << std::hex << " Instruction: " << instruction_str[decoded] << " 0x" << i;
+        std::cout << std::dec << " PC:" << pc << " I: " << index << '\n';
         #endif
         switch(decoded) {
             case SYS_0nnn: { /* check */ break;}
             case CLS_00E0: { clear_screen(); break;};
             case RET_00EE: { pc = stack[sp--]; break;}
-            case JP_1nnn:  { pc = (0xFFF & i);  
-                std::cout << "JP_1nnn PC:" << pc << '\n';
+            case JP_1nnn:  { pc = (0xFFF & i);
                 break;} 
             case CALL_2nnn:{ ++sp; stack[sp] = pc; pc = 0xFFF & i; break;}
             case SE_3xkk:  { pc += regs[readx(i)] == (i & 0xFF) ? 2 : 0; break;}
@@ -282,8 +295,7 @@ struct Chip8VM {
             case SHL_8xyE: {regs[VF] = (regs[readx(i)] & 0x80); regs[readx(i)] <<= 1; break;}
             case SNE_9xy0: {pc += regs[readx(i)] != regs[ready(i)] ? 2 : 0; break;}
             case LD_Annn:  {
-                index = (0xFFF & i); 
-                std::cout << "\nLD_Annn index:" << index << '\n';
+                index = (0xFFF & i);
                 break;}
             case JP_Bnnn:  {pc = (0xFFF & i) + regs[V0]; break;}
             case RND_Cxkk: { regs[readx(i)] = ((rand() % 256) & (0xFF & i)); break;} // todo: update rand
@@ -340,7 +352,7 @@ struct Chip8VM {
     }
 };
 
-auto rom_to_raw_instructions(const std::string_view& path) {
+auto read_rom(const std::string_view& path) {
     std::ifstream f{path, std::ios::binary | std::ios::in };
     if (!f.is_open()) {std::cout << "Cannot open file"; std::abort();}
     auto sz = std::filesystem::file_size(path);
@@ -351,12 +363,55 @@ auto rom_to_raw_instructions(const std::string_view& path) {
     return result;
 }
 
+auto create_rects() {
+    std::array<std::array<Rectangle, DISPLAY_WIDTH>, DISPLAY_HEIGHT> result{};
+    float x = 0.0f;
+    float y = 0.0f;
+    
+    auto rec_width  = WIDTH/DISPLAY_WIDTH;
+    auto rec_height = HEIGHT/DISPLAY_HEIGHT;
+
+    for (auto&& row: result) {
+        for (auto& el: row) {
+            el = Rectangle{x,y,rec_width, rec_height};
+            x += rec_width;
+        }
+        x = 0.0f;
+        y += rec_height;
+    }
+
+    return result;
+}
+
 int main() {
+    InitWindow(WIDTH, HEIGHT, "CHIP-8");
+    SetTargetFPS(100);
+    auto target = LoadRenderTexture(WIDTH, HEIGHT);
+
+ 
     Chip8VM vm;
-    vm.run(rom_to_raw_instructions("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/test_opcode.ch8"));
-    for (auto&& row: vm.display){
-        for (auto& el: row)
-            std::cout << (el ? "0" : ".");
-        std::cout << "\n";
+    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/Pong.ch8"));
+
+    auto rects = create_rects();
+
+    auto render = [&]{
+        BeginTextureMode(target);
+            ClearBackground(RAYWHITE);
+            vm.step();
+            for (size_t i = 0, e = vm.display.size(); i < e; ++i) {
+                for (size_t j = 0, e = vm.display[i].size(); j < e; ++j) {
+                    DrawRectangleRec(rects[i][j], vm.display[i][j] ? GREEN : BLACK);
+                }
+            }
+        EndTextureMode();
+    };
+
+    while(!WindowShouldClose()){
+        render();
+        BeginDrawing();
+            ClearBackground(RAYWHITE);
+            DrawTextureRec(target.texture, {0, 0, (float)target.texture.width, -(float)target.texture.height}, {0, 0}, WHITE);
+            // DrawFPS(1000, 10);
+        EndDrawing();
     }
 }
