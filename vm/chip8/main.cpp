@@ -5,7 +5,6 @@
 #include <filesystem>
 #include <thread>
 
-
 #define DEBUG 0
 
 constexpr float HEIGHT = 600;
@@ -105,6 +104,7 @@ struct Chip8VM {
         {Invalid,   "Invalid"  },
     }; 
 #endif    
+    bool press_wait = false;
     unsigned short index{};                   // index register
     unsigned short pc{};                      // program counter
     unsigned char  delay_timer{};             // An 8-bit delay timer which is decremented at a rate of 60 Hz (60 times per second) until it reaches 0
@@ -177,13 +177,18 @@ struct Chip8VM {
         std::copy(fonts.begin(), fonts.end(), mem.data() + FONT_OFFSET);
     }
 
-    void key_handler(unsigned short i) {
-        for (size_t i = 0; i < 16; ++i) {
-            if (IsKeyPressed(raylib_keyboard[i])) {
-                regs[readx(i)] = keyboard[i];
-                key_pressed_list[i] = true;
-                return;
-            }
+    void key_handle() {
+        for (size_t i = 0; i < 16; ++i){
+            key_pressed_list[i] = IsKeyDown(raylib_keyboard[i]);
+        }
+    }
+
+    void wait_for_press(unsigned short i) {
+        if (IsKeyPressed(raylib_keyboard[i])) { // todo: test
+            regs[readx(i)] = keyboard[i];
+            key_pressed_list[i] = true;
+            press_wait = false;
+            return;
         }
     }
 
@@ -260,9 +265,11 @@ struct Chip8VM {
     }
 
     void step() {
+        if (delay_timer) --delay_timer;
         if ((mem[pc + 1] | mem[pc] << 8)) {
             auto current_pc = std::exchange(pc, pc + 2);
             dec_exec((mem[current_pc + 1] | mem[current_pc] << 8));
+            if (press_wait) pc = current_pc;
         }
     }
 
@@ -308,9 +315,9 @@ struct Chip8VM {
                     unsigned char current = mem[index + j];      // X = 10, y = 20; n = 2; mem[index] = 0b01001111, mem[index + 1] = 0b10011000
                     auto cx = x;                                 // y[20]: ... x[10] = 0, x[11] = 1 ... x[17] = 1
                     for (size_t k = 0; k < CHAR_BIT; ++k) {      // y[21]: ... x[10] = 1, x[11] = 0 ... x[17] = 0
-                        auto before = display[y + j][cx];
-                        display[y + j][cx] ^= ((current >> (7 - k)) & 1);
-                        if (before && !display[y + j][cx]) regs[VF] = 1;
+                        auto before = display[(y + j) % DISPLAY_HEIGHT][cx % DISPLAY_WIDTH];
+                        display[(y + j) % DISPLAY_HEIGHT][cx % DISPLAY_WIDTH] ^= ((current >> (7 - k)) & 1);
+                        if (before && !display[(y + j) % DISPLAY_HEIGHT][cx % DISPLAY_WIDTH]) regs[VF] = 1;
                         ++cx;
                     }
                 }
@@ -319,7 +326,8 @@ struct Chip8VM {
             case SKNP_ExA1: {pc += (key_pressed_list[regs[readx(i)]]) ? 0 : 2; break;} // Skip next instruction if key with the value of Vx is not pressed.
             case LD_Fx07: { regs[readx(i)] = delay_timer; break;}
             case LD_Fx0A: { 
-                key_handler(i);
+                press_wait = true;
+                wait_for_press(i);
                 break;
             } // Wait for a key press, store the value of the key in Vx.
             case LD_Fx15: {delay_timer = regs[readx(i)]; break;}
@@ -385,18 +393,18 @@ auto create_rects() {
 
 int main() {
     InitWindow(WIDTH, HEIGHT, "CHIP-8");
-    SetTargetFPS(100);
+    SetTargetFPS(500);
     auto target = LoadRenderTexture(WIDTH, HEIGHT);
 
- 
     Chip8VM vm;
-    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/Pong.ch8"));
+    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/animalrace.ch8"));
 
     auto rects = create_rects();
 
     auto render = [&]{
         BeginTextureMode(target);
             ClearBackground(RAYWHITE);
+            vm.key_handle();
             vm.step();
             for (size_t i = 0, e = vm.display.size(); i < e; ++i) {
                 for (size_t j = 0, e = vm.display[i].size(); j < e; ++j) {
