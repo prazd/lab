@@ -3,19 +3,30 @@
 #include "raylib.h"
 #include <fstream>
 #include <filesystem>
-#include <thread>
 
 #define DEBUG 0
 
 constexpr float HEIGHT = 600;
 constexpr float WIDTH = 1200;
 
-constexpr size_t DISPLAY_HEIGHT = 32;
-constexpr size_t DISPLAY_WIDTH = 64;
+constexpr size_t CLASSIC_HEIGHT = 32;
+constexpr size_t CLASSIC_WIDTH = 64;
+
+constexpr size_t SCHIP_HEIGHT = 64;
+constexpr size_t SCHIP_WIDTH = 128;
+
+constexpr size_t DISPLAY_HEIGHT = 64;
+constexpr size_t DISPLAY_WIDTH = 128;
 
 struct Chip8VM {
     enum GRegisters {V0, V1, V2, V3, V4, V5, V6, V7, V8, V9, VA, VB, VC, VD, VE, VF};
+
+    enum Mode {Classic, SCHIP};
+    
+    Mode current_mode = Classic;
+
     constexpr static unsigned char FONT_OFFSET = 0x50;
+    constexpr static unsigned short HR_FONT_OFFSET = 0x100;
 
     // http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#00E0
     
@@ -61,6 +72,18 @@ struct Chip8VM {
         LD_Fx33,
         LD_Fx55,
         LD_Fx65,
+        
+        // super chip
+        SCD_00CN, 
+        SCR_00FB,
+        SCL_00FC,
+        EXIT_00FD,
+        LOW_00FE,
+        HIGH_00FF,
+        LD_Fx30,
+        LD_Fx75,
+        LD_Fx85,
+
         Invalid
     };
 
@@ -117,6 +140,9 @@ struct Chip8VM {
     std::array<unsigned char, 16>  regs{};  // 16 general purpose 8-bit registers
     std::array<unsigned char, 4096> mem{};  // 4kb RAM
 
+
+    std::array<unsigned char, 8> rpl{};     // super chip
+
     // 64 x 32
     std::array<std::array<bool, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display;
 
@@ -137,6 +163,26 @@ struct Chip8VM {
         0xE0, 0x90, 0x90, 0x90, 0xE0, // D
         0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
         0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+    };
+
+    // super chip
+    std::array<unsigned char, 160> high_res_font {
+        0xF0,0xF0,0x90,0x90,0x90,0x90,0x90,0x90,0xF0,0xF0, // 0
+        0x20,0x20,0x60,0x60,0x20,0x20,0x20,0x20,0x70,0x70, // 1
+        0xF0,0xF0,0x10,0x10,0xF0,0xF0,0x80,0x80,0xF0,0xF0, // 2
+        0xF0,0xF0,0x10,0x10,0xF0,0xF0,0x10,0x10,0xF0,0xF0, // 3
+        0x90,0x90,0x90,0x90,0xF0,0xF0,0x10,0x10,0x10,0x10, // 4
+        0xF0,0xF0,0x80,0x80,0xF0,0xF0,0x10,0x10,0xF0,0xF0, // 5
+        0xF0,0xF0,0x80,0x80,0xF0,0xF0,0x90,0x90,0xF0,0xF0, // 6
+        0xF0,0xF0,0x10,0x10,0x20,0x20,0x40,0x40,0x40,0x40, // 7
+        0xF0,0xF0,0x90,0x90,0xF0,0xF0,0x90,0x90,0xF0,0xF0, // 8
+        0xF0,0xF0,0x90,0x90,0xF0,0xF0,0x10,0x10,0xF0,0xF0, // 9
+        0xF0,0xF0,0x90,0x90,0xF0,0xF0,0x90,0x90,0x90,0x90, // A
+        0xE0,0xE0,0x90,0x90,0xE0,0xE0,0x90,0x90,0xE0,0xE0, // B
+        0xF0,0xF0,0x80,0x80,0x80,0x80,0x80,0x80,0xF0,0xF0, // C
+        0xE0,0xE0,0x90,0x90,0x90,0x90,0x90,0x90,0xE0,0xE0, // D
+        0xF0,0xF0,0x80,0x80,0xF0,0xF0,0x80,0x80,0xF0,0xF0, // E
+        0xF0,0xF0,0x80,0x80,0xF0,0xF0,0x80,0x80,0x80,0x80  // F
     };
 
     const auto& cdisplay() const {
@@ -175,6 +221,7 @@ struct Chip8VM {
         clear_screen();
         std::memcpy(mem.data() + pc, instructions.data(), std::size(instructions) * sizeof(typename Ctr::value_type));
         std::copy(fonts.begin(), fonts.end(), mem.data() + FONT_OFFSET);
+        std::copy(high_res_font.begin(), high_res_font.end(), mem.data() + HR_FONT_OFFSET);
     }
 
     void key_handle() {
@@ -184,7 +231,7 @@ struct Chip8VM {
     }
 
     void wait_for_press(unsigned short i) {
-        if (IsKeyPressed(raylib_keyboard[i])) { // todo: test
+        if (IsKeyPressed(raylib_keyboard[i])) {
             regs[readx(i)] = keyboard[i];
             key_pressed_list[i] = true;
             press_wait = false;
@@ -195,9 +242,18 @@ struct Chip8VM {
     Instruction decode (unsigned short i) {
         switch(i >> 12) {
             case 0: {
+                if (((0xf0 & i) >> 1) == 0xC) {
+                    return SCD_00CN;
+                }
                 switch(i & 0xff) {
                     case 0xE0: {return CLS_00E0;}
                     case 0xEE: {return RET_00EE;}
+                    // super chip
+                    case 0xFB: {return SCR_00FB;}
+                    case 0xFC: {return SCL_00FC;}
+                    case 0xFD: {return EXIT_00FD;}
+                    case 0xFE: {return LOW_00FE;}
+                    case 0xFF: {return HIGH_00FF;}
                     default:   {return SYS_0nnn;}
                 }
             }
@@ -232,7 +288,6 @@ struct Chip8VM {
                     case 0xA1: {return SKNP_ExA1;}
                 }
             }
-            
             case 0xF: {
                 switch(i & 0xff) {
                     case 0x07:  {return LD_Fx07;}
@@ -244,6 +299,10 @@ struct Chip8VM {
                     case 0x33:  {return LD_Fx33;}
                     case 0x55:  {return LD_Fx55;}
                     case 0x65:  {return LD_Fx65;}
+                    // super chip
+                    case 0x30:  {return LD_Fx30;}
+                    case 0x75:  {return LD_Fx75;}
+                    case 0x85:  {return LD_Fx85;}
                 }
             }
         }
@@ -265,6 +324,7 @@ struct Chip8VM {
     }
 
     void step() {
+        if (sound_timer) { std::cout << "BEEP!\n"; --sound_timer;}
         if (delay_timer) --delay_timer;
         if ((mem[pc + 1] | mem[pc] << 8)) {
             auto current_pc = std::exchange(pc, pc + 2);
@@ -273,12 +333,54 @@ struct Chip8VM {
         }
     }
 
+    size_t width() const {
+        return current_mode == Classic ? CLASSIC_WIDTH : SCHIP_WIDTH;
+    }
+
+    size_t height() const {
+        return current_mode == Classic ? CLASSIC_HEIGHT : SCHIP_HEIGHT;
+    }
+
+    void scroll_screen_down(size_t n) {
+        std::shift_right(display.begin(), display.end(), n);
+        for (size_t i = 0; i < n; ++i) display[i].fill(false);
+    }
+
+    void scroll_screen_right(size_t n) {
+        for (auto&& row: display){
+            std::shift_right(row.begin(), row.end(), n);
+            for (size_t i = 0; i < n; ++i) row[i] = false;
+        }
+    }
+
+    void scroll_screen_left(size_t n) {
+        for (auto&& row: display){
+            std::shift_left(row.begin(), row.end(), n);
+            for (size_t i = width() - n; i < width(); ++i) row[i] = false;
+        }
+    }
+
+    void draw16x16(size_t x, size_t y) {
+        for (size_t j = 0; j < 32; j+=2){
+            unsigned short current = (mem[index + j*2] << 8| mem[index + j*2 + 1]);
+            auto cx = x;                           
+            for (size_t k = 0; k < 16; ++k) {      
+                auto before = display[(y + j) % height()][cx % width()];
+                display[(y + j) % height()][cx % width()] ^= ((current >> (15 - k)) & 1);
+                if (before && !display[(y + j) % height()][cx % width()]) regs[VF] = 1;
+                ++cx;
+            }
+        }
+    }
+
     void dec_exec(unsigned short i) {
         auto decoded = decode(i);
+        
         #if DEBUG 
         std::cout << std::hex << " Instruction: " << instruction_str[decoded] << " 0x" << i;
         std::cout << std::dec << " PC:" << pc << " I: " << index << '\n';
-        #endif
+        #endif  
+
         switch(decoded) {
             case SYS_0nnn: { /* check */ break;}
             case CLS_00E0: { clear_screen(); break;};
@@ -311,13 +413,17 @@ struct Chip8VM {
                 auto y = regs[ready(i)];
                 auto nibble = i & 0xF;
                 regs[VF] = 0;
+                if (current_mode == SCHIP && !nibble) {
+                    draw16x16(x, y);
+                    break;
+                }
                 for (size_t j = 0; j < nibble; ++j){
                     unsigned char current = mem[index + j];      // X = 10, y = 20; n = 2; mem[index] = 0b01001111, mem[index + 1] = 0b10011000
                     auto cx = x;                                 // y[20]: ... x[10] = 0, x[11] = 1 ... x[17] = 1
                     for (size_t k = 0; k < CHAR_BIT; ++k) {      // y[21]: ... x[10] = 1, x[11] = 0 ... x[17] = 0
-                        auto before = display[(y + j) % DISPLAY_HEIGHT][cx % DISPLAY_WIDTH];
-                        display[(y + j) % DISPLAY_HEIGHT][cx % DISPLAY_WIDTH] ^= ((current >> (7 - k)) & 1);
-                        if (before && !display[(y + j) % DISPLAY_HEIGHT][cx % DISPLAY_WIDTH]) regs[VF] = 1;
+                        auto before = display[(y + j) % height()][cx % width()];
+                        display[(y + j) % height()][cx % width()] ^= ((current >> (7 - k)) & 1);
+                        if (before && !display[(y + j) % height()][cx % width()]) regs[VF] = 1;
                         ++cx;
                     }
                 }
@@ -334,6 +440,7 @@ struct Chip8VM {
             case LD_Fx18: {sound_timer = regs[readx(i)]; break;}
             case LD_Fx1E: {index += regs[readx(i)]; break;}
             case LD_Fx29: {index = (regs[readx(i)] * 5) + FONT_OFFSET; break;} // Set I = location of sprite for digit Vx (0 - 0, 1 - 5 ...)
+            
             case LD_Fx33: {
                 auto val = regs[readx(i)];         //  val = 123
                 mem[index] = val / 100;            //  1
@@ -351,6 +458,25 @@ struct Chip8VM {
                     regs[k] = mem[current];
                 break;} // Read registers V0 through Vx from memory starting at location I.    
 
+
+            // super chip
+            case LD_Fx30: {index = (regs[readx(i)] * 10) + HR_FONT_OFFSET; break;}
+            case SCD_00CN: { scroll_screen_down(i & 0xf); break;}
+            case SCR_00FB: { scroll_screen_right(4); break;}
+            case SCL_00FC: { scroll_screen_left(4);  break;}
+            case EXIT_00FD: { break;} // todo
+            case LOW_00FE:  {current_mode = Classic; break;}
+            case HIGH_00FF: {current_mode = SCHIP; break;}
+            case LD_Fx75: {
+                for (int k = 0; k <= readx(i); ++k)
+                    rpl[k] = regs[k];
+                break;
+            };
+            case LD_Fx85: {
+                for (int k = 0; k <= readx(i); ++k)
+                    regs[k] = rpl[k];
+                break;
+            }
             case Invalid:{
                 std::cout << std::hex << "!!!! Invalid instruction: " << i << '\n';
                 std::cout << std::dec;
@@ -371,13 +497,14 @@ auto read_rom(const std::string_view& path) {
     return result;
 }
 
+template <size_t display_width, size_t display_height>
 auto create_rects() {
-    std::array<std::array<Rectangle, DISPLAY_WIDTH>, DISPLAY_HEIGHT> result{};
+    std::array<std::array<Rectangle, display_width>, display_height> result{};
     float x = 0.0f;
     float y = 0.0f;
     
-    auto rec_width  = WIDTH/DISPLAY_WIDTH;
-    auto rec_height = HEIGHT/DISPLAY_HEIGHT;
+    auto rec_width  = WIDTH/display_width;
+    auto rec_height = HEIGHT/display_height;
 
     for (auto&& row: result) {
         for (auto& el: row) {
@@ -387,30 +514,34 @@ auto create_rects() {
         x = 0.0f;
         y += rec_height;
     }
-
     return result;
 }
 
 int main() {
     InitWindow(WIDTH, HEIGHT, "CHIP-8");
-    SetTargetFPS(500);
+    SetTargetFPS(300);
     auto target = LoadRenderTexture(WIDTH, HEIGHT);
 
     Chip8VM vm;
     vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/animalrace.ch8"));
 
-    auto rects = create_rects();
+    auto rects_64x32 = create_rects<CLASSIC_WIDTH, CLASSIC_HEIGHT>();
+    auto rects_128x64 = create_rects<SCHIP_WIDTH, SCHIP_HEIGHT>();
+
+    auto draw = [&](auto& arr) {
+        for (size_t i = 0, ei = vm.height(); i < ei; ++i) {
+            for (size_t j = 0, ej = vm.width(); j < ej; ++j) {
+                DrawRectangleRec(arr[i][j], vm.display[i][j] ? GREEN : BLACK);
+            }
+       }
+    };
 
     auto render = [&]{
         BeginTextureMode(target);
             ClearBackground(RAYWHITE);
             vm.key_handle();
             vm.step();
-            for (size_t i = 0, e = vm.display.size(); i < e; ++i) {
-                for (size_t j = 0, e = vm.display[i].size(); j < e; ++j) {
-                    DrawRectangleRec(rects[i][j], vm.display[i][j] ? GREEN : BLACK);
-                }
-            }
+            vm.current_mode == Chip8VM::Mode::Classic ? draw(rects_64x32) : draw(rects_128x64);
         EndTextureMode();
     };
 
