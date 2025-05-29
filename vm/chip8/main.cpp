@@ -448,14 +448,12 @@ struct Chip8VM {
                 mem[index + 2] = val % 10;         //  3
                 break;} // Store BCD representation of Vx in memory locations I, I+1, and I+2.
             case LD_Fx55: {
-                auto current = index;
-                for (int k = 0; k <= readx(i); ++k, ++current)
-                    mem[current] = regs[k];
+                for (int k = 0; k <= readx(i); ++k, ++index)
+                    mem[index] = regs[k];
                 break;} // Store registers V0 through Vx in memory starting at location I
             case LD_Fx65: {
-                auto current = index;
-                for (int k = 0; k <= readx(i); ++k, ++current)
-                    regs[k] = mem[current];
+                for (int k = 0; k <= readx(i); ++k, ++index)
+                    regs[k] = mem[index];
                 break;} // Read registers V0 through Vx from memory starting at location I.    
 
 
@@ -519,7 +517,7 @@ auto create_rects() {
 
 int main() {
     InitWindow(WIDTH, HEIGHT, "CHIP-8");
-    SetTargetFPS(300);
+    SetTargetFPS(500);
     auto target = LoadRenderTexture(WIDTH, HEIGHT);
 
     Chip8VM vm;
