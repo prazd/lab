@@ -35,7 +35,6 @@ struct Chip8VM {
     // x - A 4-bit value, the lower 4 bits of the high byte of the instruction
     // y - A 4-bit value, the upper 4 bits of the low byte of the instruction
     // kk or byte - An 8-bit value, the lowest 8 bits of the instruction
-
     enum Instruction{
         SYS_0nnn,
         CLS_00E0,
@@ -190,17 +189,17 @@ struct Chip8VM {
     }
 
     std::array<unsigned char, 16> keyboard = {
-         1,  2,  3,  0xC,
-         4,  5,  6,  0xD,
-         7,  8,  9,  0xE,
-        0xA, 0, 0xB, 0xF,
+        0,  1,  2,  3,
+        4,  5,  6,  7,
+        8,  9,  0xa, 0xb,
+        0xc, 0xd, 0xe, 0xf,
     };
 
     std::array<unsigned char, 16> raylib_keyboard = {
-        KEY_ONE, KEY_TWO, KEY_THREE, KEY_FOUR,
-        KEY_Q, KEY_W, KEY_E, KEY_R,
-        KEY_A, KEY_S, KEY_D, KEY_F, 
-        KEY_Z, KEY_X, KEY_C, KEY_V,
+        KEY_X, KEY_ONE, KEY_TWO, KEY_THREE,
+        KEY_Q, KEY_W, KEY_E, KEY_A,
+        KEY_S, KEY_D, KEY_Z, KEY_C,
+        KEY_FOUR, KEY_R, KEY_F, KEY_V,
     };
 
     std::array<bool, 16> key_pressed_list;
@@ -230,7 +229,7 @@ struct Chip8VM {
         }
     }
 
-    void wait_for_press(unsigned short i) {
+    void wait_for_press(unsigned short i) { // todo: test
         if (IsKeyPressed(raylib_keyboard[i])) {
             regs[readx(i)] = keyboard[i];
             key_pressed_list[i] = true;
