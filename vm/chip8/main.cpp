@@ -125,7 +125,7 @@ struct Chip8VM {
         {LD_Fx65,   "LD_Fx65"  },
         {Invalid,   "Invalid"  },
     }; 
-#endif    
+#endif
     bool press_wait = false;
     unsigned short index{};                   // index register
     unsigned short pc{};                      // program counter
@@ -143,7 +143,7 @@ struct Chip8VM {
     std::array<unsigned char, 8> rpl{};     // super chip
 
     // 64 x 32
-    std::array<std::array<bool, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display;
+    std::array<std::array<bool, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display{};
 
     std::array<unsigned char, 80> fonts{
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -229,12 +229,12 @@ struct Chip8VM {
         }
     }
 
-    void wait_for_press(unsigned short i) { // todo: test
-        if (IsKeyPressed(raylib_keyboard[i])) {
-            regs[readx(i)] = keyboard[i];
-            key_pressed_list[i] = true;
-            press_wait = false;
-            return;
+    void wait_for_press(unsigned short i) {
+        for (size_t k = 0, e = std::size(key_pressed_list); k < e; ++k) {
+            if (key_pressed_list[k]) {
+                press_wait = false;
+                return;
+            }
         }
     }
 
@@ -381,12 +381,12 @@ struct Chip8VM {
         #endif  
 
         switch(decoded) {
-            case SYS_0nnn: { /* check */ break;}
+            case SYS_0nnn: {/* ignored */ break;}
             case CLS_00E0: { clear_screen(); break;};
             case RET_00EE: { pc = stack[sp--]; break;}
             case JP_1nnn:  { pc = (0xFFF & i);
                 break;} 
-            case CALL_2nnn:{ ++sp; stack[sp] = pc; pc = 0xFFF & i; break;}
+            case CALL_2nnn:{stack[++sp] = std::exchange(pc, 0xFFF & i); break;}
             case SE_3xkk:  { pc += regs[readx(i)] == (i & 0xFF) ? 2 : 0; break;}
             case SNE_4xkk: { pc += regs[readx(i)] == (i & 0xFF) ? 0 : 2; break;}
             case SE_5xy0:  { pc += regs[readx(i)] == regs[ready(i)] ? 2 : 0; break;}
@@ -396,10 +396,10 @@ struct Chip8VM {
             case OR_8xy1:  {regs[readx(i)] |= regs[ready(i)]; break;}
             case AND_8xy2: {regs[readx(i)] &= regs[ready(i)]; break;}
             case XOR_8xy3: {regs[readx(i)] ^= regs[ready(i)]; break;}
-            case ADD_8xy4: {int val = regs[readx(i)] + regs[ready(i)]; regs[VF] = val > 255; regs[readx(i)] = val & 0xff; break;}
-            case SUB_8xy5: {regs[VF] = regs[readx(i)] > regs[ready(i)]; regs[readx(i)] -= regs[ready(i)]; break;}
-            case SHR_8xy6: {regs[VF] = (regs[readx(i)] & 1); regs[readx(i)]>>=1; break;}
-            case SUBN_8xy7:{regs[VF] = regs[ready(i)] > regs[readx(i)]; regs[readx(i)] = regs[ready(i)] - regs[readx(i)]; break;}
+            case ADD_8xy4: {int val = regs[readx(i)] + regs[ready(i)]; regs[VF] = val > 0xff; regs[readx(i)] = val & 0xff; break;}
+            case SUB_8xy5: {regs[VF] = (regs[readx(i)] >= regs[ready(i)]); regs[readx(i)] -= regs[ready(i)]; break;}
+            case SHR_8xy6: {regs[VF] = (regs[readx(i)] & 1); regs[readx(i)] >>= 1; break;}
+            case SUBN_8xy7:{regs[VF] = regs[ready(i)] >= regs[readx(i)]; regs[readx(i)] = ((regs[ready(i)] - regs[readx(i)]) & 0xff); break;}
             case SHL_8xyE: {regs[VF] = (regs[readx(i)] & 0x80); regs[readx(i)] <<= 1; break;}
             case SNE_9xy0: {pc += regs[readx(i)] != regs[ready(i)] ? 2 : 0; break;}
             case LD_Annn:  {
@@ -407,7 +407,8 @@ struct Chip8VM {
                 break;}
             case JP_Bnnn:  {pc = (0xFFF & i) + regs[V0]; break;}
             case RND_Cxkk: { regs[readx(i)] = ((rand() % 256) & (0xFF & i)); break;} // todo: update rand
-            case DRW_Dxyn: { 
+            case DRW_Dxyn: {
+                // std::cout << "DXYN: VX=" << (int)regs[readx(i)] << ", VY=" << (int)regs[ready(i)] << ", I=" << index << ", N=" << (i & 0xF) << "\n";
                 auto x = regs[readx(i)];
                 auto y = regs[ready(i)];
                 auto nibble = i & 0xF;
@@ -520,7 +521,7 @@ int main() {
     auto target = LoadRenderTexture(WIDTH, HEIGHT);
 
     Chip8VM vm;
-    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/animalrace.ch8"));
+    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/4-flags.ch8"));
 
     auto rects_64x32 = create_rects<CLASSIC_WIDTH, CLASSIC_HEIGHT>();
     auto rects_128x64 = create_rects<SCHIP_WIDTH, SCHIP_HEIGHT>();
