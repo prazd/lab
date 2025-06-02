@@ -4,7 +4,9 @@
 #include <fstream>
 #include <filesystem>
 
-#define DEBUG 0
+#define DEBUG 1
+
+constexpr bool LEGACY_SHIFT = true;
 
 constexpr float HEIGHT = 600;
 constexpr float WIDTH = 1200;
@@ -232,6 +234,7 @@ struct Chip8VM {
     void wait_for_press(unsigned short i) {
         for (size_t k = 0, e = std::size(key_pressed_list); k < e; ++k) {
             if (key_pressed_list[k]) {
+                regs[readx(i)] = k;
                 press_wait = false;
                 return;
             }
@@ -381,30 +384,47 @@ struct Chip8VM {
         #endif  
 
         switch(decoded) {
-            case SYS_0nnn: {/* ignored */ break;}
-            case CLS_00E0: { clear_screen(); break;};
+            case SYS_0nnn: {/* ignored */      break;}
+            case CLS_00E0: { clear_screen();   break;}
             case RET_00EE: { pc = stack[sp--]; break;}
-            case JP_1nnn:  { pc = (0xFFF & i);
-                break;} 
-            case CALL_2nnn:{stack[++sp] = std::exchange(pc, 0xFFF & i); break;}
-            case SE_3xkk:  { pc += regs[readx(i)] == (i & 0xFF) ? 2 : 0; break;}
-            case SNE_4xkk: { pc += regs[readx(i)] == (i & 0xFF) ? 0 : 2; break;}
+            case JP_1nnn:  { pc = (0xFFF & i); break;} 
+            case CALL_2nnn:{stack[++sp] = std::exchange(pc, 0xfff & i); break;}
+            case SE_3xkk:  { pc += regs[readx(i)] == (i & 0xff) ? 2 : 0; break;}
+            case SNE_4xkk: { pc += regs[readx(i)] == (i & 0xff) ? 0 : 2; break;}
             case SE_5xy0:  { pc += regs[readx(i)] == regs[ready(i)] ? 2 : 0; break;}
-            case LD_6xkk:  {regs[readx(i)] = (i & 0xFF);     break;}
-            case ADD_7xkk: {regs[readx(i)] += (i & 0xFF);     break;}
+            case LD_6xkk:  {regs[readx(i)] = (i & 0xff);      break;}
+            case ADD_7xkk: {regs[readx(i)] += (i & 0xff);     break;}
             case LD_8xy0:  {regs[readx(i)] = regs[ready(i)];  break;}
             case OR_8xy1:  {regs[readx(i)] |= regs[ready(i)]; break;}
             case AND_8xy2: {regs[readx(i)] &= regs[ready(i)]; break;}
             case XOR_8xy3: {regs[readx(i)] ^= regs[ready(i)]; break;}
             case ADD_8xy4: {int val = regs[readx(i)] + regs[ready(i)]; regs[VF] = val > 0xff; regs[readx(i)] = val & 0xff; break;}
             case SUB_8xy5: {regs[VF] = (regs[readx(i)] >= regs[ready(i)]); regs[readx(i)] -= regs[ready(i)]; break;}
-            case SHR_8xy6: {regs[VF] = (regs[readx(i)] & 1); regs[readx(i)] >>= 1; break;}
-            case SUBN_8xy7:{regs[VF] = regs[ready(i)] >= regs[readx(i)]; regs[readx(i)] = ((regs[ready(i)] - regs[readx(i)]) & 0xff); break;}
-            case SHL_8xyE: {regs[VF] = (regs[readx(i)] & 0x80); regs[readx(i)] <<= 1; break;}
-            case SNE_9xy0: {pc += regs[readx(i)] != regs[ready(i)] ? 2 : 0; break;}
-            case LD_Annn:  {
-                index = (0xFFF & i);
+            case SHR_8xy6: {
+                auto& x = regs[readx(i)];
+                auto y = regs[ready(i)];
+                if constexpr (LEGACY_SHIFT) {
+                    regs[VF] = (y & 1);
+                    x = (y >> 1);
+                } else {
+                    regs[VF] = (x & 1);
+                    x >>= 1;
+                }
                 break;}
+            case SUBN_8xy7:{regs[VF] = (regs[ready(i)] >= regs[readx(i)]); regs[readx(i)] = ((regs[ready(i)] - regs[readx(i)]) & 0xff); break;}
+            case SHL_8xyE: {
+                auto& x = regs[readx(i)];
+                auto y = regs[ready(i)];
+                if constexpr (LEGACY_SHIFT) {
+                    regs[VF] = ((y & 0x80) >> 7);
+                    x = (y << 1);
+                } else {
+                    regs[VF] = ((x & 0x80) >> 7);
+                    x <<= 1;
+                }
+                break;}
+            case SNE_9xy0: {pc += regs[readx(i)] != regs[ready(i)] ? 2 : 0; break;}
+            case LD_Annn:  {index = (0xFFF & i);break;}
             case JP_Bnnn:  {pc = (0xFFF & i) + regs[V0]; break;}
             case RND_Cxkk: { regs[readx(i)] = ((rand() % 256) & (0xFF & i)); break;} // todo: update rand
             case DRW_Dxyn: {
@@ -440,7 +460,6 @@ struct Chip8VM {
             case LD_Fx18: {sound_timer = regs[readx(i)]; break;}
             case LD_Fx1E: {index += regs[readx(i)]; break;}
             case LD_Fx29: {index = (regs[readx(i)] * 5) + FONT_OFFSET; break;} // Set I = location of sprite for digit Vx (0 - 0, 1 - 5 ...)
-            
             case LD_Fx33: {
                 auto val = regs[readx(i)];         //  val = 123
                 mem[index] = val / 100;            //  1
@@ -517,7 +536,7 @@ auto create_rects() {
 
 int main() {
     InitWindow(WIDTH, HEIGHT, "CHIP-8");
-    SetTargetFPS(500);
+    SetTargetFPS(300);
     auto target = LoadRenderTexture(WIDTH, HEIGHT);
 
     Chip8VM vm;
