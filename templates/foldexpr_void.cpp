@@ -25,6 +25,9 @@ struct System {
             case Level::first:  {return VerifierF{}(value);}
             case Level::second: {return VerifierS{}(value);}
             case Level::third:  {return VerifierT{}(value);}
+            default: {
+                throw std::invalid_argument("Invalid lvl");
+            }
         }
     }
 };
