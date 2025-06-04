@@ -3,13 +3,14 @@
 #include "raylib.h"
 #include <fstream>
 #include <filesystem>
+#include <random>
 
 #define DEBUG 1
 
 constexpr bool LEGACY_SHIFT = true;
 
-constexpr float HEIGHT = 600;
-constexpr float WIDTH = 1200;
+constexpr float HEIGHT = 600.f;
+constexpr float WIDTH = 1200.f;
 
 constexpr size_t CLASSIC_HEIGHT = 32;
 constexpr size_t CLASSIC_WIDTH = 64;
@@ -19,6 +20,17 @@ constexpr size_t SCHIP_WIDTH = 128;
 
 constexpr size_t DISPLAY_HEIGHT = 64;
 constexpr size_t DISPLAY_WIDTH = 128;
+
+template <std::integral T, T begin, T end>
+class RandomInt {
+    static inline std::random_device rd;
+    static inline std::mt19937 gen{rd()};
+    static inline std::uniform_int_distribution<int> dis = std::uniform_int_distribution<T>(begin, end);
+public:
+    static auto rand() {
+        return dis(gen);
+    }
+};
 
 struct Chip8VM {
     enum GRegisters {V0, V1, V2, V3, V4, V5, V6, V7, V8, V9, VA, VB, VC, VD, VE, VF};
@@ -426,9 +438,8 @@ struct Chip8VM {
             case SNE_9xy0: {pc += regs[readx(i)] != regs[ready(i)] ? 2 : 0; break;}
             case LD_Annn:  {index = (0xFFF & i);break;}
             case JP_Bnnn:  {pc = (0xFFF & i) + regs[V0]; break;}
-            case RND_Cxkk: { regs[readx(i)] = ((rand() % 256) & (0xFF & i)); break;} // todo: update rand
+            case RND_Cxkk: { regs[readx(i)] = ((RandomInt<int, 0,255>::rand()) & (0xFF & i)); break;}
             case DRW_Dxyn: {
-                // std::cout << "DXYN: VX=" << (int)regs[readx(i)] << ", VY=" << (int)regs[ready(i)] << ", I=" << index << ", N=" << (i & 0xF) << "\n";
                 auto x = regs[readx(i)];
                 auto y = regs[ready(i)];
                 auto nibble = i & 0xF;
