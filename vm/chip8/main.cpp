@@ -404,36 +404,40 @@ struct Chip8VM {
             case SE_3xkk:  { pc += regs[readx(i)] == (i & 0xff) ? 2 : 0; break;}
             case SNE_4xkk: { pc += regs[readx(i)] == (i & 0xff) ? 0 : 2; break;}
             case SE_5xy0:  { pc += regs[readx(i)] == regs[ready(i)] ? 2 : 0; break;}
-            case LD_6xkk:  {regs[readx(i)] = (i & 0xff);      break;}
-            case ADD_7xkk: {regs[readx(i)] += (i & 0xff);     break;}
-            case LD_8xy0:  {regs[readx(i)] = regs[ready(i)];  break;}
-            case OR_8xy1:  {regs[readx(i)] |= regs[ready(i)]; break;}
-            case AND_8xy2: {regs[readx(i)] &= regs[ready(i)]; break;}
-            case XOR_8xy3: {regs[readx(i)] ^= regs[ready(i)]; break;}
-            case ADD_8xy4: {int val = regs[readx(i)] + regs[ready(i)]; regs[VF] = val > 0xff; regs[readx(i)] = val & 0xff; break;}
-            case SUB_8xy5: {regs[VF] = (regs[readx(i)] >= regs[ready(i)]); regs[readx(i)] -= regs[ready(i)]; break;}
+            case LD_6xkk:  {regs[readx(i)]  = (i & 0xff);       break;}
+            case ADD_7xkk: {regs[readx(i)] += (i & 0xff);      break;}
+            case LD_8xy0:  {regs[readx(i)]  = regs[ready(i)];  break;}
+            case OR_8xy1:  {regs[readx(i)] |= regs[ready(i)];  break;}
+            case AND_8xy2: {regs[readx(i)] &= regs[ready(i)];  break;}
+            case XOR_8xy3: {regs[readx(i)] ^= regs[ready(i)];  break;}
+            case ADD_8xy4: {int val = regs[readx(i)] + regs[ready(i)]; auto vf_after = val > 0xff; regs[readx(i)] = val & 0xff; regs[VF] = vf_after; break;}
+            case SUB_8xy5: {auto vf_after = (regs[readx(i)] >= regs[ready(i)]); regs[readx(i)] -= regs[ready(i)]; regs[VF] = vf_after; break;}
             case SHR_8xy6: {
                 auto& x = regs[readx(i)];
                 auto y = regs[ready(i)];
+                unsigned char vf_after{};
                 if constexpr (LEGACY_SHIFT) {
-                    regs[VF] = (y & 1);
+                    vf_after = (y & 1);
                     x = (y >> 1);
                 } else {
-                    regs[VF] = (x & 1);
+                    vf_after = (x & 1);
                     x >>= 1;
                 }
+                regs[VF] = vf_after;
                 break;}
-            case SUBN_8xy7:{regs[VF] = (regs[ready(i)] >= regs[readx(i)]); regs[readx(i)] = ((regs[ready(i)] - regs[readx(i)]) & 0xff); break;}
+            case SUBN_8xy7:{auto vf_after = (regs[ready(i)] >= regs[readx(i)]); regs[readx(i)] = ((regs[ready(i)] - regs[readx(i)]) & 0xff); regs[VF] = vf_after; break;}
             case SHL_8xyE: {
                 auto& x = regs[readx(i)];
                 auto y = regs[ready(i)];
+                unsigned char vf_after{};
                 if constexpr (LEGACY_SHIFT) {
-                    regs[VF] = ((y & 0x80) >> 7);
+                    vf_after = ((y & 0x80) >> 7);
                     x = (y << 1);
                 } else {
-                    regs[VF] = ((x & 0x80) >> 7);
+                    vf_after = ((x & 0x80) >> 7);
                     x <<= 1;
                 }
+                regs[VF] = vf_after;
                 break;}
             case SNE_9xy0: {pc += regs[readx(i)] != regs[ready(i)] ? 2 : 0; break;}
             case LD_Annn:  {index = (0xFFF & i);break;}
