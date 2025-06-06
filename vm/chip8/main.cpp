@@ -7,8 +7,12 @@
 
 #define DEBUG 1
 
-constexpr bool LEGACY_SHIFT = true;
+// Quircks
+constexpr bool LEGACY_SHIFT = false;
+constexpr bool FX_65_55_CHANGE_INDEX = false;
+constexpr bool Bnnn_USE_VX = false;
 
+constexpr unsigned short INSTRUCTION_START = 0x200;
 constexpr float HEIGHT = 600.f;
 constexpr float WIDTH = 1200.f;
 
@@ -137,7 +141,17 @@ struct Chip8VM {
         {LD_Fx33,   "LD_Fx33"  },
         {LD_Fx55,   "LD_Fx55"  },
         {LD_Fx65,   "LD_Fx65"  },
-        {Invalid,   "Invalid"  },
+        // super chip
+        {SCR_00FB,    "SCR_00FB"},
+        {SCD_00CN,    "SCD_00CN"},
+        {SCL_00FC,    "SCL_00FC"},
+        {EXIT_00FD,   "EXIT_00FD"},
+        {LOW_00FE,    "LOW_00FE"},
+        {HIGH_00FF,   "HIGH_00FF"},
+        {LD_Fx30,     "LD_Fx30"},
+        {LD_Fx75,     "LD_Fx75"},
+        {LD_Fx85,     "LD_Fx85"},
+        {Invalid,     "Invalid"},
     }; 
 #endif
     bool press_wait = false;
@@ -230,7 +244,7 @@ struct Chip8VM {
 
     template <typename Ctr>
     void load_instructions(const Ctr& instructions) {
-        pc = 0x200;
+        pc = INSTRUCTION_START;
         clear_screen();
         std::memcpy(mem.data() + pc, instructions.data(), std::size(instructions) * sizeof(typename Ctr::value_type));
         std::copy(fonts.begin(), fonts.end(), mem.data() + FONT_OFFSET);
@@ -256,7 +270,7 @@ struct Chip8VM {
     Instruction decode (unsigned short i) {
         switch(i >> 12) {
             case 0: {
-                if (((0xf0 & i) >> 1) == 0xC) {
+                if (((0xf0 & i) >> 4) == 0xc) {
                     return SCD_00CN;
                 }
                 switch(i & 0xff) {
@@ -375,7 +389,7 @@ struct Chip8VM {
     }
 
     void draw16x16(size_t x, size_t y) {
-        for (size_t j = 0; j < 32; j+=2){
+        for (size_t j = 0; j < 16; ++j){
             unsigned short current = (mem[index + j*2] << 8| mem[index + j*2 + 1]);
             auto cx = x;                           
             for (size_t k = 0; k < 16; ++k) {      
@@ -384,6 +398,14 @@ struct Chip8VM {
                 if (before && !display[(y + j) % height()][cx % width()]) regs[VF] = 1;
                 ++cx;
             }
+        }
+    }
+
+    decltype(auto) get_fx55_65_index() {
+        if constexpr(FX_65_55_CHANGE_INDEX) {
+            return (index);
+        } else {
+            return index;
         }
     }
 
@@ -441,7 +463,7 @@ struct Chip8VM {
                 break;}
             case SNE_9xy0: {pc += regs[readx(i)] != regs[ready(i)] ? 2 : 0; break;}
             case LD_Annn:  {index = (0xFFF & i);break;}
-            case JP_Bnnn:  {pc = (0xFFF & i) + regs[V0]; break;}
+            case JP_Bnnn:  {pc = (0xFFF & i) + (Bnnn_USE_VX ? regs[readx(i)] : regs[V0]); break;} // todo: check
             case RND_Cxkk: { regs[readx(i)] = ((RandomInt<int, 0,255>::rand()) & (0xFF & i)); break;}
             case DRW_Dxyn: {
                 auto x = regs[readx(i)];
@@ -474,7 +496,7 @@ struct Chip8VM {
             case LD_Fx15: {delay_timer = regs[readx(i)]; break;}
             case LD_Fx18: {sound_timer = regs[readx(i)]; break;}
             case LD_Fx1E: {index += regs[readx(i)]; break;}
-            case LD_Fx29: {index = (regs[readx(i)] * 5) + FONT_OFFSET; break;} // Set I = location of sprite for digit Vx (0 - 0, 1 - 5 ...)
+            case LD_Fx29: {index = current_mode == Classic ? (regs[readx(i)] * 5) + FONT_OFFSET : (regs[readx(i)] * 10) + HR_FONT_OFFSET; break;} // Set I = location of sprite for digit Vx (0 - 0, 1 - 5 ...)
             case LD_Fx33: {
                 auto val = regs[readx(i)];         //  val = 123
                 mem[index] = val / 100;            //  1
@@ -482,12 +504,14 @@ struct Chip8VM {
                 mem[index + 2] = val % 10;         //  3
                 break;} // Store BCD representation of Vx in memory locations I, I+1, and I+2.
             case LD_Fx55: {
-                for (int k = 0; k <= readx(i); ++k, ++index)
-                    mem[index] = regs[k];
+                decltype(auto) current = get_fx55_65_index(); 
+                for (int k = 0; k <= readx(i); ++k, ++current)
+                    mem[current] = regs[k];
                 break;} // Store registers V0 through Vx in memory starting at location I
             case LD_Fx65: {
-                for (int k = 0; k <= readx(i); ++k, ++index)
-                    regs[k] = mem[index];
+                decltype(auto) current = get_fx55_65_index(); 
+                for (int k = 0; k <= readx(i); ++k, ++current)
+                    regs[k] = mem[current];
                 break;} // Read registers V0 through Vx from memory starting at location I.    
 
 
@@ -496,7 +520,7 @@ struct Chip8VM {
             case SCD_00CN: { scroll_screen_down(i & 0xf); break;}
             case SCR_00FB: { scroll_screen_right(4); break;}
             case SCL_00FC: { scroll_screen_left(4);  break;}
-            case EXIT_00FD: { break;} // todo
+            case EXIT_00FD: { clear_screen(); pc = INSTRUCTION_START; break;} // todo
             case LOW_00FE:  {current_mode = Classic; break;}
             case HIGH_00FF: {current_mode = SCHIP; break;}
             case LD_Fx75: {
@@ -535,8 +559,8 @@ auto create_rects() {
     float x = 0.0f;
     float y = 0.0f;
     
-    auto rec_width  = WIDTH/display_width;
-    auto rec_height = HEIGHT/display_height;
+    auto rec_width  = WIDTH / display_width;
+    auto rec_height = HEIGHT / display_height;
 
     for (auto&& row: result) {
         for (auto& el: row) {
@@ -551,11 +575,11 @@ auto create_rects() {
 
 int main() {
     InitWindow(WIDTH, HEIGHT, "CHIP-8");
-    SetTargetFPS(300);
+    // SetTargetFPS(1000);
     auto target = LoadRenderTexture(WIDTH, HEIGHT);
 
     Chip8VM vm;
-    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/4-flags.ch8"));
+    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/ant.ch8"));
 
     auto rects_64x32 = create_rects<CLASSIC_WIDTH, CLASSIC_HEIGHT>();
     auto rects_128x64 = create_rects<SCHIP_WIDTH, SCHIP_HEIGHT>();
