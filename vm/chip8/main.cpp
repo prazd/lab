@@ -5,11 +5,11 @@
 #include <filesystem>
 #include <random>
 
-#define DEBUG 1
+#define DEBUG 0
 
 // Quircks
-constexpr bool LEGACY_SHIFT = false;
-constexpr bool FX_65_55_CHANGE_INDEX = false;
+constexpr bool LEGACY_SHIFT = true;
+constexpr bool FX_65_55_CHANGE_INDEX = true;
 constexpr bool Bnnn_USE_VX = false;
 
 constexpr unsigned short INSTRUCTION_START = 0x200;
@@ -171,7 +171,7 @@ struct Chip8VM {
     std::array<unsigned char, 8> rpl{};     // super chip
 
     // 64 x 32
-    std::array<std::array<bool, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display{};
+    std::array<std::bitset<DISPLAY_WIDTH>, DISPLAY_HEIGHT> display{};
 
     std::array<unsigned char, 80> fonts{
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -339,7 +339,7 @@ struct Chip8VM {
 
     void clear_screen(){
         for (auto&& row: display)
-            row.fill(false);
+            row.reset();
     }
 
     template <typename Ctr>
@@ -352,7 +352,7 @@ struct Chip8VM {
     }
 
     void step() {
-        if (sound_timer) { std::cout << "BEEP!\n"; --sound_timer;}
+        if (sound_timer) { /*std::cout << "BEEP!\n";*/ --sound_timer;}
         if (delay_timer) --delay_timer;
         if ((mem[pc + 1] | mem[pc] << 8)) {
             auto current_pc = std::exchange(pc, pc + 2);
@@ -371,31 +371,28 @@ struct Chip8VM {
 
     void scroll_screen_down(size_t n) {
         std::shift_right(display.begin(), display.end(), n);
-        for (size_t i = 0; i < n; ++i) display[i].fill(false);
+        for (size_t i = 0; i < n; ++i) display[i].reset();
     }
 
     void scroll_screen_right(size_t n) {
-        for (auto&& row: display){
-            std::shift_right(row.begin(), row.end(), n);
-            for (size_t i = 0; i < n; ++i) row[i] = false;
-        }
+        for (auto&& row: display) row <<= n;
     }
 
     void scroll_screen_left(size_t n) {
-        for (auto&& row: display){
-            std::shift_left(row.begin(), row.end(), n);
-            for (size_t i = width() - n; i < width(); ++i) row[i] = false;
-        }
+        for (auto&& row: display) row >>= n;
     }
 
     void draw16x16(size_t x, size_t y) {
         for (size_t j = 0; j < 16; ++j){
             unsigned short current = (mem[index + j*2] << 8| mem[index + j*2 + 1]);
-            auto cx = x;                           
-            for (size_t k = 0; k < 16; ++k) {      
-                auto before = display[(y + j) % height()][cx % width()];
-                display[(y + j) % height()][cx % width()] ^= ((current >> (15 - k)) & 1);
-                if (before && !display[(y + j) % height()][cx % width()]) regs[VF] = 1;
+            auto cx = x;
+            auto& row = display[(y + j) % height()];
+            for (size_t k = 0; k < 16; ++k) {
+                auto pos = (cx % width());
+                bool el = row.test(pos);
+                bool cel = el ^ ((current >> (15 - k)) & 1);
+                row.set(pos, cel);
+                if (el && !cel) regs[VF] = 1;
                 ++cx;
             }
         }
@@ -474,13 +471,17 @@ struct Chip8VM {
                     draw16x16(x, y);
                     break;
                 }
+                unsigned char current{};
+                unsigned char cx{};
                 for (size_t j = 0; j < nibble; ++j){
-                    unsigned char current = mem[index + j];      // X = 10, y = 20; n = 2; mem[index] = 0b01001111, mem[index + 1] = 0b10011000
-                    auto cx = x;                                 // y[20]: ... x[10] = 0, x[11] = 1 ... x[17] = 1
-                    for (size_t k = 0; k < CHAR_BIT; ++k) {      // y[21]: ... x[10] = 1, x[11] = 0 ... x[17] = 0
-                        auto before = display[(y + j) % height()][cx % width()];
-                        display[(y + j) % height()][cx % width()] ^= ((current >> (7 - k)) & 1);
-                        if (before && !display[(y + j) % height()][cx % width()]) regs[VF] = 1;
+                    current = mem[index + j];                                           // X = 10, y = 20; n = 2; mem[index] = 0b01001111, mem[index + 1] = 0b10011000
+                    cx = x;                                                             // y[20]: ... x[10] = 0, x[11] = 1 ... x[17] = 1
+                    auto& row = display[(y + j) % height()];                            // y[21]: ... x[10] = 1, x[11] = 0 ... x[17] = 0 
+                    for (size_t k = 0; k < CHAR_BIT; ++k) {                            
+                        auto pos = (cx % width());
+                        auto el = row.test(pos);
+                        row.set(pos, el ^ ((current >> (7 - k)) & 1));
+                        if (el && !row.test(pos)) regs[VF] = 1;
                         ++cx;
                     }
                 }
@@ -516,13 +517,13 @@ struct Chip8VM {
 
 
             // super chip
-            case LD_Fx30: {index = (regs[readx(i)] * 10) + HR_FONT_OFFSET; break;}
-            case SCD_00CN: { scroll_screen_down(i & 0xf); break;}
-            case SCR_00FB: { scroll_screen_right(4); break;}
-            case SCL_00FC: { scroll_screen_left(4);  break;}
+            case LD_Fx30:   { index = (regs[readx(i)] * 10) + HR_FONT_OFFSET; break;}
+            case SCD_00CN:  { scroll_screen_down(i & 0xf); break;}
+            case SCR_00FB:  { scroll_screen_right(4); break;}
+            case SCL_00FC:  { scroll_screen_left(4);  break;}
             case EXIT_00FD: { clear_screen(); pc = INSTRUCTION_START; break;} // todo
-            case LOW_00FE:  {current_mode = Classic; break;}
-            case HIGH_00FF: {current_mode = SCHIP; break;}
+            case LOW_00FE:  { current_mode = Classic; break;}
+            case HIGH_00FF: { current_mode = SCHIP; break;}
             case LD_Fx75: {
                 for (int k = 0; k <= readx(i); ++k)
                     rpl[k] = regs[k];
@@ -575,11 +576,11 @@ auto create_rects() {
 
 int main() {
     InitWindow(WIDTH, HEIGHT, "CHIP-8");
-    // SetTargetFPS(1000);
+    // SetTargetFPS(300);
     auto target = LoadRenderTexture(WIDTH, HEIGHT);
 
     Chip8VM vm;
-    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/ant.ch8"));
+    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/animalrace.ch8"));
 
     auto rects_64x32 = create_rects<CLASSIC_WIDTH, CLASSIC_HEIGHT>();
     auto rects_128x64 = create_rects<SCHIP_WIDTH, SCHIP_HEIGHT>();
@@ -587,7 +588,7 @@ int main() {
     auto draw = [&](auto& arr) {
         for (size_t i = 0, ei = vm.height(); i < ei; ++i) {
             for (size_t j = 0, ej = vm.width(); j < ej; ++j) {
-                DrawRectangleRec(arr[i][j], vm.display[i][j] ? GREEN : BLACK);
+                DrawRectangleRec(arr[i][j], vm.display[i].test(j) ? GREEN : BLACK);
             }
        }
     };
@@ -606,7 +607,7 @@ int main() {
         BeginDrawing();
             ClearBackground(RAYWHITE);
             DrawTextureRec(target.texture, {0, 0, (float)target.texture.width, -(float)target.texture.height}, {0, 0}, WHITE);
-            // DrawFPS(1000, 10);
+            DrawFPS(1000, 10);
         EndDrawing();
     }
 }
