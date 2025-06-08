@@ -4,9 +4,11 @@
 #include <fstream>
 #include <filesystem>
 #include <random>
+#include <memory_resource>
+#include <vector>
 
 #define DEBUG 0
-
+#define BUFFER_LOGS 0
 // Quircks
 constexpr bool LEGACY_SHIFT = false;
 constexpr bool FX_65_55_CHANGE_INDEX = false;
@@ -170,8 +172,12 @@ class Chip8VM {
 
     std::array<unsigned char, 8> rpl{};     // super chip
 
-    // 64 x 32
+    // 128 x 64
+    unsigned char display_buffer[DISPLAY_HEIGHT];
+    std::pmr::monotonic_buffer_resource mb = std::pmr::monotonic_buffer_resource(display_buffer, DISPLAY_HEIGHT);
+    std::pmr::vector<unsigned char> updated_lines_coord = std::pmr::vector<unsigned char>{&mb};
     std::array<std::bitset<DISPLAY_WIDTH>, DISPLAY_HEIGHT> display{};
+    
 
     std::array<unsigned char, 80> fonts{
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -322,19 +328,31 @@ class Chip8VM {
     void clear_screen(){
         for (auto&& row: display)
             row.reset();
+        fill_lines();
     }
 
     void scroll_screen_down(size_t n) {
+        refresh_lines();
         std::shift_right(display.begin(), display.end(), n);
         for (size_t i = 0; i < n; ++i) display[i].reset();
+        for (int i = 0; i < n; ++i) updated_lines_coord.push_back(i);
+    }
+
+    void fill_lines() {
+       updated_lines_coord.resize(DISPLAY_HEIGHT);
+       std::iota(updated_lines_coord.begin(), updated_lines_coord.end(), 0);
     }
 
     void scroll_screen_right(size_t n) {
+        refresh_lines();
         for (auto&& row: display) row <<= n;
+        fill_lines();
     }
 
     void scroll_screen_left(size_t n) {
+        refresh_lines();
         for (auto&& row: display) row >>= n;
+        fill_lines();
     }
 
     void draw16x16(size_t x, size_t y) {
@@ -350,6 +368,7 @@ class Chip8VM {
                 if (el && !cel) regs[VF] = 1;
                 ++cx;
             }
+            updated_lines_coord.push_back((y + j) % height());
         }
     }
 
@@ -418,6 +437,7 @@ class Chip8VM {
             case JP_Bnnn:  {pc = (0xFFF & i) + (Bnnn_USE_VX ? regs[readx(i)] : regs[V0]); break;} // todo: check
             case RND_Cxkk: { regs[readx(i)] = ((RandomInt<int, 0,255>::rand()) & (0xFF & i)); break;}
             case DRW_Dxyn: {
+                refresh_lines();
                 auto x = regs[readx(i)];
                 auto y = regs[ready(i)];
                 auto nibble = i & 0xF;
@@ -439,6 +459,7 @@ class Chip8VM {
                         if (el && !row.test(pos)) regs[VF] = 1;
                         ++cx;
                     }
+                    updated_lines_coord.push_back((y + j) % height());
                 }
                 break;} // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
             case SKP_Ex9E:  {pc += (key_pressed_list[regs[readx(i)]]) ? 2 : 0; break;} // Skip next instruction if key with the value of Vx is pressed.
@@ -496,7 +517,16 @@ class Chip8VM {
             }    
         }
     }
+
+    void refresh_lines() {
+        updated_lines_coord.clear();
+    }
 public:
+
+    Chip8VM(){
+        updated_lines_coord.reserve(DISPLAY_HEIGHT);
+        fill_lines();
+    }
 
     template <typename Ctr>
     void run(const Ctr& instructions) {
@@ -528,6 +558,10 @@ public:
 
     const auto& cdisplay() const {
         return display;
+    }
+
+    const auto& cupdated_lines() const {
+        return updated_lines_coord;
     }
 
     size_t width() const {
@@ -572,10 +606,24 @@ int main() {
     
     std::array<std::array<Color, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display_buffer;
 
+    const auto& lines = vm.cupdated_lines();
     const auto& display = vm.cdisplay();
 
+    // init display
+    for (size_t i = 0, ei = DISPLAY_HEIGHT; i < ei; ++i) {
+        for (size_t j = 0, ej = DISPLAY_WIDTH; j < ej; ++j) {
+            display_buffer[i][j] = BLACK;
+        }
+    }
+    UpdateTexture(target, display_buffer.data());
+
     auto draw = [&]() {
-        for (size_t i = 0, ei = vm.height(); i < ei; ++i) {
+        if (lines.empty()) return;
+        #if BUFFER_LOGS
+        std::cout << "Address:" <<  (void*)(&lines[lines.size()-1]) << '\n';
+        std::cout << "Updated sz:" << lines.size() << '\n';
+        #endif
+        for(auto i: lines) {
             for (size_t j = 0, ej = vm.width(); j < ej; ++j) {
                 display_buffer[i][j] = display[i].test(j) ? GREEN : BLACK;
             }
