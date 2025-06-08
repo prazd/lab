@@ -8,8 +8,8 @@
 #define DEBUG 0
 
 // Quircks
-constexpr bool LEGACY_SHIFT = true;
-constexpr bool FX_65_55_CHANGE_INDEX = true;
+constexpr bool LEGACY_SHIFT = false;
+constexpr bool FX_65_55_CHANGE_INDEX = false;
 constexpr bool Bnnn_USE_VX = false;
 
 constexpr unsigned short INSTRUCTION_START = 0x200;
@@ -36,7 +36,7 @@ public:
     }
 };
 
-struct Chip8VM {
+class Chip8VM {
     enum GRegisters {V0, V1, V2, V3, V4, V5, V6, V7, V8, V9, VA, VB, VC, VD, VE, VF};
 
     enum Mode {Classic, SCHIP};
@@ -212,10 +212,6 @@ struct Chip8VM {
         0xF0,0xF0,0x80,0x80,0xF0,0xF0,0x80,0x80,0x80,0x80  // F
     };
 
-    const auto& cdisplay() const {
-        return display;
-    }
-
     std::array<unsigned char, 16> keyboard = {
         0,  1,  2,  3,
         4,  5,  6,  7,
@@ -242,20 +238,6 @@ struct Chip8VM {
         return 0xF & (i >> 4);
     }
 
-    template <typename Ctr>
-    void load_instructions(const Ctr& instructions) {
-        pc = INSTRUCTION_START;
-        clear_screen();
-        std::memcpy(mem.data() + pc, instructions.data(), std::size(instructions) * sizeof(typename Ctr::value_type));
-        std::copy(fonts.begin(), fonts.end(), mem.data() + FONT_OFFSET);
-        std::copy(high_res_font.begin(), high_res_font.end(), mem.data() + HR_FONT_OFFSET);
-    }
-
-    void key_handle() {
-        for (size_t i = 0; i < 16; ++i){
-            key_pressed_list[i] = IsKeyDown(raylib_keyboard[i]);
-        }
-    }
 
     void wait_for_press(unsigned short i) {
         for (size_t k = 0, e = std::size(key_pressed_list); k < e; ++k) {
@@ -340,33 +322,6 @@ struct Chip8VM {
     void clear_screen(){
         for (auto&& row: display)
             row.reset();
-    }
-
-    template <typename Ctr>
-    void run(const Ctr& instructions) {
-        load_instructions(instructions);
-        while((mem[pc + 1] | mem[pc] << 8)) {
-            auto current_pc = std::exchange(pc, pc + 2);
-            dec_exec((mem[current_pc + 1] | mem[current_pc] << 8)); 
-        }
-    }
-
-    void step() {
-        if (sound_timer) { /*std::cout << "BEEP!\n";*/ --sound_timer;}
-        if (delay_timer) --delay_timer;
-        if ((mem[pc + 1] | mem[pc] << 8)) {
-            auto current_pc = std::exchange(pc, pc + 2);
-            dec_exec((mem[current_pc + 1] | mem[current_pc] << 8));
-            if (press_wait) pc = current_pc;
-        }
-    }
-
-    size_t width() const {
-        return current_mode == Classic ? CLASSIC_WIDTH : SCHIP_WIDTH;
-    }
-
-    size_t height() const {
-        return current_mode == Classic ? CLASSIC_HEIGHT : SCHIP_HEIGHT;
     }
 
     void scroll_screen_down(size_t n) {
@@ -541,6 +496,53 @@ struct Chip8VM {
             }    
         }
     }
+public:
+
+    template <typename Ctr>
+    void run(const Ctr& instructions) {
+        load_instructions(instructions);
+        while((mem[pc + 1] | mem[pc] << 8)) {
+            auto current_pc = std::exchange(pc, pc + 2);
+            dec_exec((mem[current_pc + 1] | mem[current_pc] << 8)); 
+        }
+    }
+
+    void step() {
+        if (sound_timer) { /*std::cout << "BEEP!\n";*/ --sound_timer;}
+        if (delay_timer) --delay_timer;
+        if ((mem[pc + 1] | mem[pc] << 8)) {
+            auto current_pc = std::exchange(pc, pc + 2);
+            dec_exec((mem[current_pc + 1] | mem[current_pc] << 8));
+            if (press_wait) pc = current_pc;
+        }
+    }
+
+    template <typename Ctr>
+    void load_instructions(const Ctr& instructions) {
+        pc = INSTRUCTION_START;
+        clear_screen();
+        std::memcpy(mem.data() + pc, instructions.data(), std::size(instructions) * sizeof(typename Ctr::value_type));
+        std::copy(fonts.begin(), fonts.end(), mem.data() + FONT_OFFSET);
+        std::copy(high_res_font.begin(), high_res_font.end(), mem.data() + HR_FONT_OFFSET);
+    }
+
+    const auto& cdisplay() const {
+        return display;
+    }
+
+    size_t width() const {
+        return current_mode == Classic ? CLASSIC_WIDTH : SCHIP_WIDTH;
+    }
+
+    size_t height() const {
+        return current_mode == Classic ? CLASSIC_HEIGHT : SCHIP_HEIGHT;
+    }
+
+    void key_handle() {
+        for (size_t i = 0; i < 16; ++i){
+            key_pressed_list[i] = IsKeyDown(raylib_keyboard[i]);
+        }
+    }
 };
 
 auto read_rom(const std::string_view& path) {
@@ -556,10 +558,10 @@ auto read_rom(const std::string_view& path) {
 
 int main() {
     InitWindow(WIDTH, HEIGHT, "CHIP-8");
-    SetTargetFPS(300);
+    // SetTargetFPS(300);
 
     Chip8VM vm;
-    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/TETRIS"));
+    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/ant.ch8"));
 
     std::array<Color, DISPLAY_HEIGHT * DISPLAY_WIDTH> pixel_buffer;
 
@@ -569,10 +571,13 @@ int main() {
     UnloadImage(img);
     
     std::array<std::array<Color, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display_buffer;
+
+    const auto& display = vm.cdisplay();
+
     auto draw = [&]() {
         for (size_t i = 0, ei = vm.height(); i < ei; ++i) {
             for (size_t j = 0, ej = vm.width(); j < ej; ++j) {
-                display_buffer[i][j] = vm.display[i].test(j) ? GREEN : BLACK;
+                display_buffer[i][j] = display[i].test(j) ? GREEN : BLACK;
             }
        }
        UpdateTexture(target, display_buffer.data());
