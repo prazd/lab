@@ -554,59 +554,42 @@ auto read_rom(const std::string_view& path) {
     return result;
 }
 
-template <size_t display_width, size_t display_height>
-auto create_rects() {
-    std::array<std::array<Rectangle, display_width>, display_height> result{};
-    float x = 0.0f;
-    float y = 0.0f;
-    
-    auto rec_width  = WIDTH / display_width;
-    auto rec_height = HEIGHT / display_height;
-
-    for (auto&& row: result) {
-        for (auto& el: row) {
-            el = Rectangle{x,y,rec_width, rec_height};
-            x += rec_width;
-        }
-        x = 0.0f;
-        y += rec_height;
-    }
-    return result;
-}
-
 int main() {
     InitWindow(WIDTH, HEIGHT, "CHIP-8");
-    // SetTargetFPS(300);
-    auto target = LoadRenderTexture(WIDTH, HEIGHT);
+    SetTargetFPS(300);
 
     Chip8VM vm;
-    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/animalrace.ch8"));
+    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/TETRIS"));
 
-    auto rects_64x32 = create_rects<CLASSIC_WIDTH, CLASSIC_HEIGHT>();
-    auto rects_128x64 = create_rects<SCHIP_WIDTH, SCHIP_HEIGHT>();
+    std::array<Color, DISPLAY_HEIGHT * DISPLAY_WIDTH> pixel_buffer;
 
-    auto draw = [&](auto& arr) {
+    // texture init
+    Image img = GenImageColor(DISPLAY_WIDTH, DISPLAY_HEIGHT, BLACK);
+    Texture2D target = LoadTextureFromImage(img);
+    UnloadImage(img);
+    
+    std::array<std::array<Color, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display_buffer;
+    auto draw = [&]() {
         for (size_t i = 0, ei = vm.height(); i < ei; ++i) {
             for (size_t j = 0, ej = vm.width(); j < ej; ++j) {
-                DrawRectangleRec(arr[i][j], vm.display[i].test(j) ? GREEN : BLACK);
+                display_buffer[i][j] = vm.display[i].test(j) ? GREEN : BLACK;
             }
        }
+       UpdateTexture(target, display_buffer.data());
     };
 
     auto render = [&]{
-        BeginTextureMode(target);
-            ClearBackground(RAYWHITE);
-            vm.key_handle();
-            vm.step();
-            vm.current_mode == Chip8VM::Mode::Classic ? draw(rects_64x32) : draw(rects_128x64);
-        EndTextureMode();
+        ClearBackground(RAYWHITE);
+        vm.key_handle();
+        vm.step();
+        draw();
     };
-
+    
     while(!WindowShouldClose()){
         render();
         BeginDrawing();
             ClearBackground(RAYWHITE);
-            DrawTextureRec(target.texture, {0, 0, (float)target.texture.width, -(float)target.texture.height}, {0, 0}, WHITE);
+            DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, DISPLAY_WIDTH * (WIDTH/vm.width()), DISPLAY_HEIGHT * (HEIGHT/vm.height())}, {0, 0}, 0.0f, WHITE);
             DrawFPS(1000, 10);
         EndDrawing();
     }
