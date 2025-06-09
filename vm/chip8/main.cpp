@@ -5,10 +5,10 @@
 #include <filesystem>
 #include <random>
 #include <memory_resource>
-#include <vector>
 
 #define DEBUG 0
 #define BUFFER_LOGS 0
+
 // Quircks
 constexpr bool LEGACY_SHIFT = false;
 constexpr bool FX_65_55_CHANGE_INDEX = false;
@@ -27,6 +27,7 @@ constexpr size_t SCHIP_WIDTH = 128;
 constexpr size_t DISPLAY_HEIGHT = 64;
 constexpr size_t DISPLAY_WIDTH = 128;
 
+
 template <std::integral T, T begin, T end>
 class RandomInt {
     static inline std::random_device rd;
@@ -37,6 +38,29 @@ public:
         return dis(gen);
     }
 };
+
+unsigned short bit_reverse_u16(unsigned short x) {
+    x = ((x & 0x5555) << 1) | ((x & 0xAAAA) >> 1);  
+    x = ((x & 0x3333) << 2) | ((x & 0xCCCC) >> 2);  
+    x = ((x & 0x0F0F) << 4) | ((x & 0xF0F0) >> 4);  
+    x = (x << 8) | (x >> 8);                     
+    return x;
+}
+
+unsigned char bit_reverse_u8(unsigned char x) {
+    x = ((x & 0x55) << 1) | ((x & 0xAA) >> 1);  
+    x = ((x & 0x33) << 2) | ((x & 0xCC) >> 2);  
+    x = ((x & 0x0F) << 4) | ((x & 0xF0) >> 4); 
+    return x;
+}
+
+
+template <size_t N>
+auto brotl(const std::bitset<N>& val, size_t shift) {
+    shift %= N;
+    if (shift == 0) return val;
+    return (val << shift) | (val >> (N - shift));
+}
 
 class Chip8VM {
     enum GRegisters {V0, V1, V2, V3, V4, V5, V6, V7, V8, V9, VA, VB, VC, VD, VE, VF};
@@ -177,7 +201,9 @@ class Chip8VM {
     std::pmr::monotonic_buffer_resource mb = std::pmr::monotonic_buffer_resource(display_buffer, DISPLAY_HEIGHT);
     std::pmr::vector<unsigned char> updated_lines_coord = std::pmr::vector<unsigned char>{&mb};
     std::array<std::bitset<DISPLAY_WIDTH>, DISPLAY_HEIGHT> display{};
-    
+    std::bitset<DISPLAY_WIDTH> updated_bs{};
+    std::bitset<DISPLAY_WIDTH> tmp_bs{};
+
 
     std::array<unsigned char, 80> fonts{
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -356,18 +382,15 @@ class Chip8VM {
     }
 
     void draw16x16(size_t x, size_t y) {
+        unsigned short current{};
         for (size_t j = 0; j < 16; ++j){
-            unsigned short current = (mem[index + j*2] << 8| mem[index + j*2 + 1]);
-            auto cx = x;
+            current = bit_reverse_u16(mem[index + j*2] << 8 | mem[index + j*2 + 1]);
             auto& row = display[(y + j) % height()];
-            for (size_t k = 0; k < 16; ++k) {
-                auto pos = (cx % width());
-                bool el = row.test(pos);
-                bool cel = el ^ ((current >> (15 - k)) & 1);
-                row.set(pos, cel);
-                if (el && !cel) regs[VF] = 1;
-                ++cx;
-            }
+            tmp_bs = row;
+            // todo: handle classic
+            updated_bs = brotl<DISPLAY_WIDTH>(current, x);
+            row ^= updated_bs;
+            if (((tmp_bs) & ~row).any()) regs[VF] = 1;
             updated_lines_coord.push_back((y + j) % height());
         }
     }
@@ -447,18 +470,15 @@ class Chip8VM {
                     break;
                 }
                 unsigned char current{};
-                unsigned char cx{};
                 for (size_t j = 0; j < nibble; ++j){
-                    current = mem[index + j];                                           // X = 10, y = 20; n = 2; mem[index] = 0b01001111, mem[index + 1] = 0b10011000
-                    cx = x;                                                             // y[20]: ... x[10] = 0, x[11] = 1 ... x[17] = 1
-                    auto& row = display[(y + j) % height()];                            // y[21]: ... x[10] = 1, x[11] = 0 ... x[17] = 0 
-                    for (size_t k = 0; k < CHAR_BIT; ++k) {                            
-                        auto pos = (cx % width());
-                        auto el = row.test(pos);
-                        row.set(pos, el ^ ((current >> (7 - k)) & 1));
-                        if (el && !row.test(pos)) regs[VF] = 1;
-                        ++cx;
-                    }
+                    current = bit_reverse_u8(mem[index + j]);                                           // X = 10, y = 20; n = 2; mem[index] = 0b01001111, mem[index + 1] = 0b10011000
+                    auto& row = display[(y + j) % height()];                                            // y[20]: ... x[10] = 0, x[11] = 1 ... x[17] = 1
+                    tmp_bs = row;                                                                       // y[21]: ... x[10] = 1, x[11] = 0 ... x[17] = 0
+
+                    // todo: handle classic
+                    updated_bs = brotl<DISPLAY_WIDTH>(current, x);
+                    row ^= updated_bs;
+                    if (((tmp_bs) & ~row).any()) regs[VF] = 1;
                     updated_lines_coord.push_back((y + j) % height());
                 }
                 break;} // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
