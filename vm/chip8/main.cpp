@@ -62,6 +62,14 @@ auto brotl(const std::bitset<N>& val, size_t shift) {
     return (val << shift) | (val >> (N - shift));
 }
 
+template <size_t N>
+auto brotl_classic(const std::bitset<N>& val, size_t shift) {
+    static std::bitset<DISPLAY_WIDTH> mask{std::numeric_limits<std::uint64_t>::max()};
+    shift %= CLASSIC_WIDTH;
+    if (shift == 0) return val;
+    return  mask & ((val << shift) | (val >> (CLASSIC_WIDTH - shift)));
+}
+
 class Chip8VM {
     enum GRegisters {V0, V1, V2, V3, V4, V5, V6, V7, V8, V9, VA, VB, VC, VD, VE, VF};
 
@@ -387,7 +395,6 @@ class Chip8VM {
             current = bit_reverse_u16(mem[index + j*2] << 8 | mem[index + j*2 + 1]);
             auto& row = display[(y + j) % height()];
             tmp_bs = row;
-            // todo: handle classic
             updated_bs = brotl<DISPLAY_WIDTH>(current, x);
             row ^= updated_bs;
             if (((tmp_bs) & ~row).any()) regs[VF] = 1;
@@ -474,9 +481,7 @@ class Chip8VM {
                     current = bit_reverse_u8(mem[index + j]);                                           // X = 10, y = 20; n = 2; mem[index] = 0b01001111, mem[index + 1] = 0b10011000
                     auto& row = display[(y + j) % height()];                                            // y[20]: ... x[10] = 0, x[11] = 1 ... x[17] = 1
                     tmp_bs = row;                                                                       // y[21]: ... x[10] = 1, x[11] = 0 ... x[17] = 0
-
-                    // todo: handle classic
-                    updated_bs = brotl<DISPLAY_WIDTH>(current, x);
+                    updated_bs = current_mode == Classic ? brotl_classic<DISPLAY_WIDTH>(current, x) : brotl<DISPLAY_WIDTH>(current, x);
                     row ^= updated_bs;
                     if (((tmp_bs) & ~row).any()) regs[VF] = 1;
                     updated_lines_coord.push_back((y + j) % height());
