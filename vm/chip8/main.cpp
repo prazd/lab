@@ -10,8 +10,8 @@
 #define BUFFER_LOGS 0
 
 // Quircks
-constexpr bool LEGACY_SHIFT = false;
-constexpr bool FX_65_55_CHANGE_INDEX = false;
+constexpr bool LEGACY_SHIFT = true;
+constexpr bool FX_65_55_CHANGE_INDEX = true;
 constexpr bool Bnnn_USE_VX = false;
 
 constexpr unsigned short INSTRUCTION_START = 0x200;
@@ -369,7 +369,7 @@ class Chip8VM {
         refresh_lines();
         std::shift_right(display.begin(), display.end(), n);
         for (size_t i = 0; i < n; ++i) display[i].reset();
-        for (int i = 0; i < n; ++i) updated_lines_coord.push_back(i);
+        fill_lines();
     }
 
     void fill_lines() {
@@ -464,7 +464,14 @@ class Chip8VM {
                 break;}
             case SNE_9xy0: {pc += regs[readx(i)] != regs[ready(i)] ? 2 : 0; break;}
             case LD_Annn:  {index = (0xFFF & i);break;}
-            case JP_Bnnn:  {pc = (0xFFF & i) + (Bnnn_USE_VX ? regs[readx(i)] : regs[V0]); break;} // todo: check
+            case JP_Bnnn:  {
+                unsigned char v{};
+                if constexpr(Bnnn_USE_VX)
+                    v = regs[readx(i)];
+                else
+                    v = regs[V0];
+                pc = (0xFFF & i) + v;
+                break;}
             case RND_Cxkk: { regs[readx(i)] = ((RandomInt<int, 0,255>::rand()) & (0xFF & i)); break;}
             case DRW_Dxyn: {
                 refresh_lines();
@@ -615,12 +622,16 @@ auto read_rom(const std::string_view& path) {
     return result;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cout << "Need path to ROM\n";
+        return 1;
+    }
     InitWindow(WIDTH, HEIGHT, "CHIP-8");
     // SetTargetFPS(300);
 
     Chip8VM vm;
-    vm.load_instructions(read_rom("/Users/prazd/Desktop/books/cpp/cpp/vm/chip8/test-roms/ant.ch8"));
+    vm.load_instructions(read_rom(argv[1]));
 
     std::array<Color, DISPLAY_HEIGHT * DISPLAY_WIDTH> pixel_buffer;
 
