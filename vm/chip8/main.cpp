@@ -4,7 +4,6 @@
 #include <fstream>
 #include <filesystem>
 #include <random>
-#include <memory_resource>
 
 #define DEBUG 0
 #define BUFFER_LOGS 0
@@ -13,6 +12,9 @@
 constexpr bool LEGACY_SHIFT = true;
 constexpr bool FX_65_55_CHANGE_INDEX = true;
 constexpr bool Bnnn_USE_VX = false;
+
+constexpr double CPU_FREQUENCY = 1000.0;
+constexpr double CPU_CYCLE_TIME = 1/CPU_FREQUENCY;
 
 constexpr unsigned short INSTRUCTION_START = 0x200;
 constexpr float HEIGHT = 600.f;
@@ -204,10 +206,6 @@ class Chip8VM {
 
     std::array<unsigned char, 8> rpl{};     // super chip
 
-    // 128 x 64
-    unsigned char display_buffer[DISPLAY_HEIGHT];
-    std::pmr::monotonic_buffer_resource mb = std::pmr::monotonic_buffer_resource(display_buffer, DISPLAY_HEIGHT);
-    std::pmr::vector<unsigned char> updated_lines_coord = std::pmr::vector<unsigned char>{&mb};
     std::array<std::bitset<DISPLAY_WIDTH>, DISPLAY_HEIGHT> display{};
     std::bitset<DISPLAY_WIDTH> updated_bs{};
     std::bitset<DISPLAY_WIDTH> tmp_bs{};
@@ -362,31 +360,19 @@ class Chip8VM {
     void clear_screen(){
         for (auto&& row: display)
             row.reset();
-        fill_lines();
     }
 
     void scroll_screen_down(size_t n) {
-        refresh_lines();
         std::shift_right(display.begin(), display.end(), n);
         for (size_t i = 0; i < n; ++i) display[i].reset();
-        fill_lines();
-    }
-
-    void fill_lines() {
-       updated_lines_coord.resize(DISPLAY_HEIGHT);
-       std::iota(updated_lines_coord.begin(), updated_lines_coord.end(), 0);
     }
 
     void scroll_screen_right(size_t n) {
-        refresh_lines();
         for (auto&& row: display) row <<= n;
-        fill_lines();
     }
 
     void scroll_screen_left(size_t n) {
-        refresh_lines();
         for (auto&& row: display) row >>= n;
-        fill_lines();
     }
 
     void draw16x16(size_t x, size_t y) {
@@ -398,7 +384,6 @@ class Chip8VM {
             updated_bs = brotl<DISPLAY_WIDTH>(current, x);
             row ^= updated_bs;
             if (((tmp_bs) & ~row).any()) regs[VF] = 1;
-            updated_lines_coord.push_back((y + j) % height());
         }
     }
 
@@ -474,7 +459,7 @@ class Chip8VM {
                 break;}
             case RND_Cxkk: { regs[readx(i)] = ((RandomInt<int, 0,255>::rand()) & (0xFF & i)); break;}
             case DRW_Dxyn: {
-                refresh_lines();
+                // refresh_lines();
                 auto x = regs[readx(i)];
                 auto y = regs[ready(i)];
                 auto nibble = i & 0xF;
@@ -491,7 +476,6 @@ class Chip8VM {
                     updated_bs = current_mode == Classic ? brotl_classic<DISPLAY_WIDTH>(current, x) : brotl<DISPLAY_WIDTH>(current, x);
                     row ^= updated_bs;
                     if (((tmp_bs) & ~row).any()) regs[VF] = 1;
-                    updated_lines_coord.push_back((y + j) % height());
                 }
                 break;} // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
             case SKP_Ex9E:  {pc += (key_pressed_list[regs[readx(i)]]) ? 2 : 0; break;} // Skip next instruction if key with the value of Vx is pressed.
@@ -550,15 +534,8 @@ class Chip8VM {
         }
     }
 
-    void refresh_lines() {
-        updated_lines_coord.clear();
-    }
-public:
 
-    Chip8VM(){
-        updated_lines_coord.reserve(DISPLAY_HEIGHT);
-        fill_lines();
-    }
+public:
 
     template <typename Ctr>
     void run(const Ctr& instructions) {
@@ -569,9 +546,10 @@ public:
         }
     }
 
+    void update_sound_timer() {if (sound_timer) /*BEEP*/--sound_timer;}
+    void update_delay_timer() {if (delay_timer) --delay_timer;}
+
     void step() {
-        if (sound_timer) { /*std::cout << "BEEP!\n";*/ --sound_timer;}
-        if (delay_timer) --delay_timer;
         if ((mem[pc + 1] | mem[pc] << 8)) {
             auto current_pc = std::exchange(pc, pc + 2);
             dec_exec((mem[current_pc + 1] | mem[current_pc] << 8));
@@ -590,10 +568,6 @@ public:
 
     const auto& cdisplay() const {
         return display;
-    }
-
-    const auto& cupdated_lines() const {
-        return updated_lines_coord;
     }
 
     size_t width() const {
@@ -628,7 +602,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     InitWindow(WIDTH, HEIGHT, "CHIP-8");
-    // SetTargetFPS(300);
+    SetTargetFPS(120);
 
     Chip8VM vm;
     vm.load_instructions(read_rom(argv[1]));
@@ -642,7 +616,6 @@ int main(int argc, char* argv[]) {
     
     std::array<std::array<Color, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display_buffer;
 
-    const auto& lines = vm.cupdated_lines();
     const auto& display = vm.cdisplay();
 
     // init display
@@ -654,12 +627,7 @@ int main(int argc, char* argv[]) {
     UpdateTexture(target, display_buffer.data());
 
     auto draw = [&]() {
-        if (lines.empty()) return;
-        #if BUFFER_LOGS
-        std::cout << "Address:" <<  (void*)(&lines[lines.size()-1]) << '\n';
-        std::cout << "Updated sz:" << lines.size() << '\n';
-        #endif
-        for(auto i: lines) {
+        for (size_t i = 0, ei = vm.height(); i < ei; ++i) {
             for (size_t j = 0, ej = vm.width(); j < ej; ++j) {
                 display_buffer[i][j] = display[i].test(j) ? GREEN : BLACK;
             }
@@ -667,15 +635,19 @@ int main(int argc, char* argv[]) {
        UpdateTexture(target, display_buffer.data());
     };
 
-    auto render = [&]{
-        ClearBackground(RAYWHITE);
-        vm.key_handle();
-        vm.step();
-        draw();
-    };
-    
+    double cpu_accumulator = 0.0;
     while(!WindowShouldClose()){
-        render();
+        vm.update_sound_timer();
+        vm.update_delay_timer();
+        vm.key_handle();
+        cpu_accumulator += GetFrameTime();
+
+        while(cpu_accumulator >= CPU_CYCLE_TIME) {
+            vm.step();
+            cpu_accumulator-=CPU_CYCLE_TIME;
+        }
+
+        draw();
         BeginDrawing();
             ClearBackground(RAYWHITE);
             DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, DISPLAY_WIDTH * (WIDTH/vm.width()), DISPLAY_HEIGHT * (HEIGHT/vm.height())}, {0, 0}, 0.0f, WHITE);
