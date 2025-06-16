@@ -7,11 +7,14 @@ struct GameBoyVM{
     unsigned char regs[8]{};
 
     unsigned char mem[8192]{}; // 8kib
+    unsigned char rst_vec[8]{0x00,0x08,0x10,0x18,0x20,0x28,0x30,0x38};
 
     unsigned char ir{};
     unsigned char ie{};
     unsigned short pc{};
     unsigned short sp{};
+    
+    bool ime = false;
 
     enum Instruction {
         LD_0b01xxxyyy,
@@ -109,6 +112,19 @@ struct GameBoyVM{
         JP_0b110xx010,
         JR_0b00011000,
         JR_0b001xx000,
+        CALL_0b11001101,
+        CALL_0b110xx100,
+        RET_0b11001001,
+        RET_0b110xx000,
+        RETI_0b11011001,
+        RST_0b11xxx111,
+
+        // Miscellaneous instructions
+        HALT,
+        STOP,
+        DI_0b11110011,
+        EI_0b11111011,
+        NOP_0b00000000,
 
     };
 
@@ -454,16 +470,77 @@ struct GameBoyVM{
                 unsigned char val = read34(i);
                 auto jmp = [&]{pc += 2 + (char)(mem[pc+1]);};
                 if (val == 0b00) {
-                    if(!get_flag(Zf)) {jmp();}else{pc+= 2;} break;
+                    if(!get_flag(Zf)) {jmp();}else{pc+= 2;}
                 } else if (val == 0b01) {
-                    if(get_flag(Zf)) {jmp();}else{pc+= 2;} break;
+                    if(get_flag(Zf)) {jmp();}else{pc+= 2;}
                 } else if (val == 0b10) {
-                    if(!get_flag(Cf)) {jmp();}else{pc+= 2;} break;
+                    if(!get_flag(Cf)) {jmp();}else{pc+= 2;}
                 } else if (val == 0b11) {
-                    if(get_flag(Cf)) {jmp();}else{pc+= 2;} break;
+                    if(get_flag(Cf)) {jmp();}else{pc+= 2;}
                 }
+                break;
             }
-            // page 116
+            case CALL_0b11001101: {
+                unsigned short nn = ((mem[pc + 2] << 8) | mem[pc + 1]);
+                sp-=2;
+                mem[sp] = (pc + 3) & 0xff;
+                mem[sp+1] = ((pc + 3) >> 8);
+                pc = nn;
+                break;
+            }
+            case CALL_0b110xx100: {
+                auto val = read34(i);
+                unsigned short nn = ((mem[pc + 2] << 8) | mem[pc + 1]);
+                auto call = [&]{
+                    sp-=2;
+                    mem[sp] = (pc + 3) & 0xff;
+                    mem[sp+1] = ((pc + 3) >> 8);
+                    pc = nn;
+                };
+                if (val == 0b00) {
+                    if(!get_flag(Zf)) {call();}else{pc+= 3;} 
+                } else if (val == 0b01) {
+                    if(get_flag(Zf)) {call();}else{pc+=3;}
+                } else if (val == 0b10) {
+                    if(!get_flag(Cf)) {call();}else{pc+=3;}
+                } else if (val == 0b11) {
+                    if(get_flag(Cf)) {call();}else{pc+=3;}
+                }
+                break;
+            }
+            case RET_0b11001001: { pc = ((mem[sp + 1] << 8) | mem[sp]); sp+=2; break;}
+            case RET_0b110xx000: {
+                auto val = read34(i);
+                auto ret = [&]{
+                    pc = ((mem[sp + 1] << 8) | mem[sp]); sp+=2;
+                };
+                if (val == 0b00) {
+                    if(!get_flag(Zf)) {ret();}else{++pc;} 
+                } else if (val == 0b01) {
+                    if(get_flag(Zf)) {ret();}else{++pc;}
+                } else if (val == 0b10) {
+                    if(!get_flag(Cf)) {ret();}else{++pc;}
+                } else if (val == 0b11) {
+                    if(get_flag(Cf)) {ret();}else{++pc;}
+                }
+                break;
+            }
+            case RETI_0b11011001: {pc = ((mem[sp + 1] << 8) | mem[sp]); sp+=2; ime = true; break;}
+            case RST_0b11xxx111: {
+                unsigned short nn = ((0x0 << 8) | rst_vec(read3_5(i)));
+                sp-=2;
+                mem[sp] = (pc + 1) & 0xff;
+                mem[sp+1] = ((pc + 1) >> 8);
+                pc = nn;
+                break;
+            }
+
+
+            case HALT: {/*todo*/ break;}
+            case STOP: {/*todo*/ break;}
+            case DI_0b11110011: {ime = false; ++pc; break;}
+            case EI_0b11111011: {ime = true; ++pc; break;} // todo: check
+            case NOP_0b00000000: {++pc; break;}
     }
 }
 
