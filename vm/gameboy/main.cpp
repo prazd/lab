@@ -5,8 +5,21 @@
 struct GameBoyVM{
     enum Register {A, F, B, C, D, E, H, L};
     unsigned char regs[8]{};
-
-    unsigned char mem[8192]{}; // 8kib
+    
+    // 0x0000–0x3FFF: 16 KiB ROM Bank 00 (Fixed Bank)
+    // 0x4000–0x7FFF: 16 KiB ROM Bank 01–NN (Switchable Bank)
+    // 0x8000–0x9FFF: 8 KiB Video RAM (VRAM)
+    // 0xA000–0xBFFF: 8 KiB External RAM
+    // 0xC000–0xCFFF: 4 KiB Work RAM (WRAM)
+    // 0xD000–0xDFFF: 4 KiB Work RAM (WRAM, Switchable in CGB)
+    // 0xE000–0xFDFF: Echo RAM (Mirror of 0xC000–0xDDFF)
+    // 0xFE00–0xFE9F: Object Attribute Memory (OAM)
+    // 0xFEA0–0xFEFF: Not Usable
+    // 0xFF00–0xFF7F: I/O Registers
+    // 0xFF80–0xFFFE: High RAM (HRAM)
+    // 0xFFFF: Interrupt Enable Register (IE)
+    unsigned char mem[65536]{}; // 8kib
+    
     unsigned char rst_vec[8]{0x00,0x08,0x10,0x18,0x20,0x28,0x30,0x38};
 
     unsigned char ir{};
@@ -15,6 +28,7 @@ struct GameBoyVM{
     unsigned short sp{};
     
     bool ime = false;
+    bool stop_button_active = false;
 
     enum Instruction {
         LD_0b01xxxyyy,
@@ -83,28 +97,29 @@ struct GameBoyVM{
         RRCA_0b00001111,
         RLA_0b00010111,
         RRA_0b00011111,
-        RLC_0b00000xxx,
-        RLC_0b00000110,
-        RRC_0b00001xxx,
-        RRC_0b00001110,
-        RL_0b00010xxx,
-        RL_0b00010110,
-        RR_0b00011xxx,
-        RR_0b00011110,
-        SLA_0b00100xxx,
-        SLA_0b00100110,
-        SRA_0b00101xxx,
-        SRA_0b00101110,
-        SWAP_0b00110xxx,
-        SWAP_0b00110110,
-        SRL_0b00111xxx,
-        SRL_0b00111110,
-        BIT_0b01xxxxxx,
-        BIT_0b01xxx110,
-        RES_0b10xxxxxx,
-        RES_0b10xxx110,
-        SET_0b11xxxxxx,
-        SET_0b11xxx110,
+
+        RLC_0xCB_0b00000xxx,
+        // RLC_0b00000110,
+        RRC_0xCB_0b00001xxx,
+        // RRC_0b00001110,
+        RL_0xCB_0b00010xxx,
+        // RL_0b00010110,
+        RR_0xCB_0b00011xxx,
+        // RR_0b00011110,
+        SLA_0xCB_0b00100xxx,
+        // SLA_0b00100110,
+        SRA_0xCB_0b00101xxx,
+        // SRA_0b00101110,
+        SWAP_0xCB_0b00110xxx,
+        // SWAP_0b00110110,
+        SRL_0xCB_0b00111xxx,
+        // SRL_0b00111110,
+        BIT_0xCB_0b01xxxxxx,
+        // BIT_0xCB_0b01xxx110,
+        RES_0xCB_0b10xxxxxx,
+        // RES_0xCB_0b10xxx110,
+        SET_0xCB_0b11xxxxxx,
+        // SET_0xCB_0b11xxx110,
         
         // Control flow
         JP_0b11000011,
@@ -428,34 +443,139 @@ struct GameBoyVM{
                 pc+=2;
                 break;
             }
-            case RLCA_0b00000111: {/*todo*/ ++pc;  break;}
-            case RRCA_0b00001111: {/*todo*/ ++pc;  break;}
-            case RLA_0b00010111:  {/*todo*/ ++pc;  break;}
-            case RRA_0b00011111:  {/*todo*/ ++pc;  break;}
-            case RLC_0b00000xxx:  {/*todo*/ pc+=2; break;}
-            case RLC_0b00000110:  {/*todo*/ pc+=2; break;}
-            case RRC_0b00001xxx:  {/*todo*/ pc+=2; break;}
-            case RRC_0b00001110:  {/*todo*/ pc+=2; break;}
-            case RL_0b00010xxx:   {/*todo*/ pc+=2; break;}
-            case RL_0b00010110:   {/*todo*/ pc+=2; break;}
-            case RR_0b00011xxx:   {/*todo*/ pc+=2; break;}
-            case RR_0b00011110:   {/*todo*/ pc+=2; break;}
-            case SLA_0b00100xxx:  {/*todo*/ pc+=2; break;}
-            case SLA_0b00100110:  {/*todo*/ pc+=2; break;}
-            case SRA_0b00101xxx:  {/*todo*/ pc+=2; break;}
-            case SRA_0b00101110:  {/*todo*/ pc+=2; break;}
-            case SWAP_0b00110xxx: {/*todo*/ pc+=2; break;}
-            case SWAP_0b00110110: {/*todo*/ pc+=2; break;}
-            case SRL_0b00111xxx:  {/*todo*/ pc+=2; break;}
-            case SRL_0b00111110:  {/*todo*/ pc+=2; break;}
-            case BIT_0b01xxxxxx:  {/*todo*/ pc+=2; break;}
-            case BIT_0b01xxx110:  {/*todo*/ pc+=2; break;}
-            case RES_0b10xxxxxx:  {/*todo*/ pc+=2; break;}
-            case RES_0b10xxx110:  {/*todo*/ pc+=2; break;}
-            case SET_0b11xxxxxx:  {/*todo*/ pc+=2; break;}
-            case SET_0b11xxx110:  {/*todo*/ pc+=2; break;}
-            // Control flow
+            case RLCA_0b00000111: {
+                auto res = std::rotl(regs[A], 1);
+                set_flag(Zf, 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                set_flag(Cf, regs[A] & 0x80);
+                regs[A] = res;
+                ++pc;  
+                break;}
+            case RRCA_0b00001111: {
+                auto res = std::rotr(regs[A], 1);
+                set_flag(Zf, 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                set_flag(Cf, regs[A] & 1);
+                regs[A] = res;
+                ++pc;  
+                break;}
+            case RLA_0b00010111:  {
+                auto carry = get_flag(Cf);
+                auto res = ((regs[A] << 1) | carry);
+                set_flag(Cf, regs[A] & 0x80);
+                set_flag(Zf, 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                regs[A] = res;
+                ++pc; break;}
+            case RRA_0b00011111:  {
+                auto carry = get_flag(Cf);
+                auto res = ((regs[A] >> 1) | carry << 7);
+                set_flag(Cf, regs[A] & 1);
+                set_flag(Zf, 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                regs[A] = res;
+                ++pc;  break;}
+            case RLC_0xCB_0b00000xxx:  {
+                auto& ref = reg_ref(read0_2(mem[pc+1]));
+                auto res = std::rotl(ref, 1);
+                set_flag(Zf, res == 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                set_flag(Cf, ref & 0x80);
+                ref = res;
+                pc+=2; break;}
+            case RRC_0xCB_0b00001xxx:  {
+                auto& ref = reg_ref(read0_2(mem[pc+1]));
+                auto res = std::rotr(ref, 1);
+                set_flag(Zf, res == 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                set_flag(Cf, ref & 1);
+                ref = res;
+                pc+=2; break;}
+            case RL_0xCB_0b00010xxx:   {
+                auto& ref = reg_ref(read0_2(mem[pc+1]));
+                auto carry = get_flag(Cf);
+                auto res = ((ref << 1) | carry);
+                set_flag(Cf, ref & 0x80);
+                set_flag(Zf, res == 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                ref = res;
+                pc+=2; break;}
+            case RR_0xCB_0b00011xxx:   {
+                auto& ref = reg_ref(read0_2(mem[pc+1]));
+                auto carry = get_flag(Cf);
+                auto res = ((ref >> 1) | carry << 7);
+                set_flag(Cf, ref & 1);
+                set_flag(Zf, res == 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                ref = res;
+                pc+=2; break;}
+            case SLA_0xCB_0b00100xxx:  {
+                auto& ref = reg_ref(read0_2(mem[pc+1]));
+                auto res = ref << 1;
+                set_flag(Cf, ref & 0x80);
+                set_flag(Zf, res == 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                ref = res;
+                pc+=2; break;}
+            case SRA_0xCB_0b00101xxx:  {
+                auto& ref = reg_ref(read0_2(mem[pc+1]));
+                auto sign_bit = ref & 0x80;
+                auto res = ((ref >> 1) | sign_bit);
+                set_flag(Cf, ref & 1);
+                set_flag(Zf, res == 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                ref = res;
+                pc+=2; break;}
+            case SWAP_0xCB_0b00110xxx: {
+                auto& ref = reg_ref(read0_2(mem[pc+1]));
+                auto l = ref & 0x0f;
+                auto h = ref & 0xf0;
+                auto res = (l << 4 | h >> 4);
+                set_flag(Zf, res == 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                set_flag(Cf, 0);
+                ref = res;
+                pc+=2; break;}
+            case SRL_0xCB_0b00111xxx:  {
+                auto& ref = reg_ref(read0_2(mem[pc+1]));
+                auto res = ref >> 1;
+                set_flag(Cf, ref & 1);
+                set_flag(Zf, res == 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                ref = res;
+                pc+=2; break;}
+            case BIT_0xCB_0b01xxxxxx:  {
+                auto bit_n = read3_5(mem[pc+1]);
+                auto& ref = reg_ref(read0_2(mem[pc+1]));
+                set_flag(Zf, !((ref >> bit_n) & 1));
+                set_flag(Nf, 0);
+                set_flag(Hf, 1);
+                pc+=2; break;}
+            case RES_0xCB_0b10xxxxxx:  {
+                auto bit_n = read3_5(mem[pc+1]);
+                auto& ref = reg_ref(read0_2(mem[pc+1]));
+                ref &= ~(1 << bit_n);
+                pc+=2; break;}
+            case SET_0xCB_0b11xxxxxx:  {
+                auto bit_n = read3_5(mem[pc+1]);
+                auto& ref = reg_ref(read0_2(mem[pc+1]));
+                ref |= (1 << bit_n);
+                pc+=2; break;}
 
+
+            // Control flow
             case JP_0b11000011: { pc = ((mem[pc+2] << 8) | mem[pc + 1]); break;}
             case JP_0b11101001: { pc = reg_ref(HL); break;}
             case JP_0b110xx010: { 
@@ -527,7 +647,7 @@ struct GameBoyVM{
             }
             case RETI_0b11011001: {pc = ((mem[sp + 1] << 8) | mem[sp]); sp+=2; ime = true; break;}
             case RST_0b11xxx111: {
-                unsigned short nn = ((0x0 << 8) | rst_vec(read3_5(i)));
+                unsigned short nn = ((0x0 << 8) | rst_vec[read3_5(i)]);
                 sp-=2;
                 mem[sp] = (pc + 1) & 0xff;
                 mem[sp+1] = ((pc + 1) >> 8);
@@ -537,7 +657,7 @@ struct GameBoyVM{
 
 
             case HALT: {/*todo*/ break;}
-            case STOP: {/*todo*/ break;}
+            case STOP: { /*todo*/ break;}
             case DI_0b11110011: {ime = false; ++pc; break;}
             case EI_0b11111011: {ime = true; ++pc; break;} // todo: check
             case NOP_0b00000000: {++pc; break;}
@@ -547,5 +667,4 @@ struct GameBoyVM{
 };
 
 int main() {
-
 }
