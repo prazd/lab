@@ -1,6 +1,11 @@
 #include <iostream>
 #include "raylib.h"
 
+constexpr size_t BANK_ROM_SZ = 16384; // 16KiB
+constexpr size_t EXTERNAL_RAM_SZ = 8192; // 8KiB
+
+
+
 struct PPU {
     enum Mode {
         Mode0, // H-Blank (Горизонтальная синхронизация)
@@ -12,119 +17,116 @@ struct PPU {
 };
 
 struct RAM {
+    // 0xE000–0xFDFF: Echo RAM (Mirror of 0xC000–0xDDFF) Nintendo says use of this area is prohibited.
     // 0xFEA0–0xFEFF: Not Usable
-    // 0xFFFF: Interrupt Enable Register (IE)
-    unsigned char rom_bank00[16384];             // 0x0000–0x3FFF: 16 KiB ROM Bank 00 (Fixed Bank)
-    unsigned char rom_bank01[16384];             // 0x4000–0x7FFF: 16 KiB ROM Bank 01–NN (Switchable Bank)
+    // 0x0000–0x3FFF: 16 KiB ROM Bank 00 (Fixed Bank)
+    // 0x4000–0x7FFF: 16 KiB ROM Bank 01–NN (Switchable Bank)
+    // 0x8000–0x9FFF: 8 KiB Video RAM (VRAM)
+    // 0xA000–0xBFFF: 8 KiB External RAM
+    // 0xC000–0xCFFF: 4 KiB Work RAM (WRAM)
+    // 0xD000–0xDFFF: 4 KiB Work RAM (WRAM, Switchable in CGB)
+    // 0xFE00–0xFE9F: Object Attribute Memory (OAM)
+    // 0xFF00–0xFF7F: I/O Registers
+    // 0xFF80–0xFFFE: High RAM (HRAM)
+    const size_t ECHO_RAM_BEGIN = 0xE000;
+    const size_t ECHO_RAM_END = 0xFDFF;
+    const size_t NOT_USABLE_BEGIN = 0xFEA0;
+    const size_t NOT_USABLE_END = 0xFEFF;
+    const size_t ROM_BANK_00_BEGIN = 0x0000;
+    const size_t ROM_BANK_00_END = 0x3FFF;
+    const size_t ROM_BANK_01_BEGIN = 0x4000;
+    const size_t ROM_BANK_01_END = 0x7FFF;
+    const size_t VRAM_BEGIN = 0x8000;
+    const size_t VRAM_END = 0x9FFF;
+    const size_t EXTERNAL_RAM_BEGIN = 0xA000;
+    const size_t EXTERNAL_RAM_END = 0xBFFF;
+    const size_t WRAM1_BEGIN = 0xC000;
+    const size_t WRAM1_END = 0xCFFF;
+    const size_t WRAM2_BEGIN = 0xD000;
+    const size_t WRAM2_END = 0xDFFF;
+    const size_t OAM_BEGIN = 0xFE00;
+    const size_t OAM_END = 0xFE9F;
+    const size_t IO_REGISTERS_BEGIN = 0xFF00;
+    const size_t IO_REGISTERS_END = 0xFF7F;
+    const size_t HRAM_BEGIN = 0xFF80;
+    const size_t HRAM_END = 0xFFFE;
+
+    unsigned char mem[0x10000]{}; // 64KiB
+
     size_t current_rom_bank = 1;
     std::vector<unsigned char> rom{};
-    
     void update_rom_bank01(size_t bank) {
         current_rom_bank = bank;
-        memcpy(rom_bank01, rom.data() + (16384 * current_rom_bank), 16384);
+        memcpy(mem + BANK_ROM_SZ, rom.data() + (BANK_ROM_SZ * current_rom_bank), BANK_ROM_SZ);
     }
-
-    
-    unsigned char vram[8192];                   // 0x8000–0x9FFF: 8 KiB Video RAM (VRAM)
+                   
     std::vector<unsigned char> cart_ram{};
-    size_t current_cart_ram = 1;
-    unsigned char external_ram[8192];           // 0xA000–0xBFFF: 8 KiB External RAM
-    
+    size_t current_cart_ram = 0;
     void update_cart_ram(size_t n) {
         current_cart_ram = n;
-        memcpy(external_ram, cart_ram.data() + (8192 * current_cart_ram), 8192);
+        memcpy(mem + 0xA000, cart_ram.data() + (EXTERNAL_RAM_SZ * current_cart_ram), EXTERNAL_RAM_SZ);
     }
 
-    unsigned char wram1[4096];                  // 0xC000–0xCFFF: 4 KiB Work RAM (WRAM)
-    unsigned char wram2[4096];                  // 0xD000–0xDFFF: 4 KiB Work RAM (WRAM, Switchable in CGB)
-
-    unsigned char oam[160];                     // 0xFE00–0xFE9F: Object Attribute Memory (OAM)
-    unsigned char io_regs[128];                 // 0xFF00–0xFF7F: I/O Registers
-    unsigned char hram[127];                    // 0xFF80–0xFFFE: High RAM (HRAM)
-    unsigned char ie = {};
     unsigned char dummy_reg = 0xFF;
 
     bool lcd_enabled() {
-        return io_regs[0x40] & 0x80;
+        return mem[0xFF00 + 0x40] & 0x80;
     }
 
-    bool cart_ram_enables = false;
+    enum BankingMode {
+        Simple, 
+        Advanced,
+    }
+    current_banking_mode = Simple;
+    
+    bool external_ram_enabled = false;
+
     void handle_mbc(unsigned short index, unsigned char value) {
-        if (index <= 0x7FFF) {
-            if (value == 0) value = 1;
-            update_rom_bank01(value);
+        // MBC-1
+        if (index >= 0x0000 && index <= 0x1FFF) {
+            external_ram_enabled = (value & 0x0f) == 0x0A;
+        } else if (index >= 0x2000 && index <= ROM_BANK_00_END) {
+            auto v = value & 0x1f;
+            if (v == 0) v = 1;
+            update_rom_bank01(v);
+        } else if (index >= ROM_BANK_01_BEGIN && index <= 0x5FFF) {
+            if (current_banking_mode == Simple) {
+                auto h = value & 0x03;
+                update_rom_bank01(h << 5 | current_rom_bank & 0x1f);
+            } else {
+                update_cart_ram(value & 0x03);
+            }
+        } else if (index >= 0x6000 && index <= ROM_BANK_01_END) {
+            if (value & 1) current_banking_mode = Advanced;
+            else current_banking_mode = Simple;
         }
     }
 
-    // 0xE000–0xFDFF: Echo RAM (Mirror of 0xC000–0xDDFF)
+    bool is_ram_avaliable(unsigned short index) {
+        if (((index >= VRAM_BEGIN && index <= VRAM_END)  && (PPU::current_mode == PPU::Mode3 && lcd_enabled())) || 
+            ((index >= EXTERNAL_RAM_BEGIN && index <= EXTERNAL_RAM_END)) && (cart_ram.empty() || !external_ram_enabled) ||
+            ((index >= OAM_BEGIN && index <= OAM_END)) && ((PPU::current_mode == PPU::Mode2 || PPU::current_mode == PPU::Mode3) && lcd_enabled()) ||
+            ((index >= NOT_USABLE_BEGIN && index <= NOT_USABLE_END))
+        ) return false;
+        return true;
+    }
+
     void write(unsigned short index, unsigned char value){
-        if (index <= 0x7FFF)
-            handle_mbc(index, value);            
-        else if (index >= 0x8000 && index <= 0x9FFF){
-            if (PPU::current_mode != PPU::Mode3 || !lcd_enabled())
-                vram[index-0x8000] = value;
+        if (index <= ROM_BANK_01_END){
+            handle_mbc(index, value);
+            return;
         }
-        else if (index >= 0xA000 && index <= 0xBFFF){
-            if (!cart_ram.empty()) external_ram[index-0xA000] = value;
-        }
-            
-        else if (index >= 0xC000 && index <= 0xCFFF)
-            wram1[index-0xC000] = value;
-        else if (index >= 0xD000 && index <= 0xDFFF) 
-            wram2[index-0xD000] = value;
-        else if (index >= 0xE000 && index <= 0xFDFF) {
-            index-=0x2000;
-            if (index <= 0xCFFF) wram1[index - 0xC000] = value;
-            wram2[index-0xD000] = value;
-        }    
-        else if (index >= 0xFE00 && index <= 0xFE9F){
-            if ((PPU::current_mode != PPU::Mode2 && PPU::current_mode != PPU::Mode3) || !lcd_enabled())
-                oam[index-0xFE00] = value;
-        }
-        else if (index >= 0xFF00 && index <= 0xFF7F)
-            io_regs[index-0xFF00] = value;
-        else if (index >= 0xFF80 && index <= 0xFFFE)
-            hram[index-0xFF80] = value;
-        else if (index == 0xFFFF)
-            ie = value;
+        if (index >= ECHO_RAM_BEGIN && index <= ECHO_RAM_END)
+            index -= 0x2000;
+        if (is_ram_avaliable(index))
+            mem[index] = value;
     };
 
     unsigned char read(unsigned short index){
-        if (index >= 0x0000 && index <= 0x3FFF)
-            return rom_bank00[index];
-        if (index >= 0x4000 && index <= 0x7FFF)
-            return rom_bank01[index-0x4000];
-        if (index >= 0x8000 && index <= 0x9FFF){
-            if (PPU::current_mode == PPU::Mode3 && lcd_enabled()) {
-                return dummy_reg;
-            }
-            return vram[index-0x8000];
-        }
-        if (index >= 0xA000 && index <= 0xBFFF){
-            if (!cart_ram.empty()) return external_ram[index-0xA000];
-            return dummy_reg;
-        }
-        if (index >= 0xC000 && index <= 0xCFFF)
-            return wram1[index-0xC000];
-        if (index >= 0xD000 && index <= 0xDFFF) 
-            return wram2[index-0xD000];
-        if (index >= 0xE000 && index <= 0xFDFF) {
-            index-=0x2000;
-            if (index <= 0xCFFF) return wram1[index - 0xC000];
-            return wram2[index-0xD000];
-        }    
-        if (index >= 0xFE00 && index <= 0xFE9F){
-            if ((PPU::current_mode == PPU::Mode2 || PPU::current_mode == PPU::Mode3) && lcd_enabled())
-                return dummy_reg;
-            else
-                return oam[index-0xFE00];
-        }
-        if (index >= 0xFF00 && index <= 0xFF7F)
-            return io_regs[index-0xFF00];
-        if (index >= 0xFF80 && index <= 0xFFFE)
-            return hram[index-0xFF80];
-        if (index == 0xFFFF)
-            return ie;
+        if (index >= ECHO_RAM_BEGIN && index <= ECHO_RAM_END)
+            index -= 0x2000;
+        if (is_ram_avaliable(index))
+            return mem[index];
         return dummy_reg;
     };
 };
@@ -444,26 +446,26 @@ struct CPU {
 
     void exec(unsigned char i, Instruction itype, RAM& ram) {
         switch(itype) {
-            case LD_0b01xxxyyy: { update_regs(read3_5(i), ram, read_regs(read0_2(i), ram)); ++pc; break;}
-            case LD_0b01xxx110: { update_regs(read3_5(i), ram, read_regs(HL, ram)); ++pc;  break;}
-            case LD_0b00xxx110: { update_regs(read3_5(i), ram, ram.read(pc + 1)); pc+=2; break;} 
-            case LD_0b01110xxx: { update_regs(HL, ram, read_regs(read0_2(i), ram)); ++pc; break;}
-            case LD_0b00110110: { update_regs(HL, ram, ram.read(pc + 1));  pc+=2; break;};
-            case LD_0b00001010: { regs[A] = ram.read(((regs[B] << 8)| regs[C])); ++pc; break;}
-            case LD_0b00011010: { regs[A] = ram.read(((regs[D] << 8)| regs[E])); ++pc; break;}
-            case LD_0b00000010: { ram.write(((regs[B] << 8)| regs[C]), regs[A]); ++pc; break;}
-            case LD_0b00010010: { ram.write(((regs[D] << 8)| regs[E]), regs[A]); ++pc; break;}
-            case LD_0b11111010: { regs[A] = ram.read(ram.read(pc + 1) | (ram.read(pc + 2) << 8)); pc+=3; break;}
-            case LD_0b11101010: { ram.write((ram.read(pc + 1) | (ram.read(pc + 2) << 8)), regs[A]); pc+=3; break;}
-            case LDH_0b11110010: {regs[A] = ram.read(0xff00 | regs[C]); ++pc; break;}
-            case LDH_0b11100010: {ram.write((0xff00 | regs[C]), regs[A]); ++pc; break;}
-            case LDH_0b11110000: {regs[A] = ram.read(0xff00 | ram.read(pc+1)); pc+=2;  break;}
-            case LDH_0b11100000: {ram.write((0xff00 | ram.read(pc+1)), regs[A]); pc+=2;  break;}
-            case LD_0b00111010:  {regs[A] = read_regs(HL, ram); decrement_pair(L, H);  ++pc;  break;}
-            case LD_0b00110010:  {update_regs(HL, ram, regs[A]); decrement_pair(L, H); ++pc; break;}
-            case LD_0b00101010:  {regs[A] = read_regs(HL, ram); increment_pair(L, H);  ++pc;  break;}
-            case LD_0b00100010:  {update_regs(HL, ram, regs[A]); increment_pair(L, H); ++pc; break;}
-            case LD_0b00xx0001:  {update_pair_ld(ram.read(pc + 1), ram.read(pc+2), read45(i)); pc+=3; break;}
+            case LD_0b01xxxyyy:  { update_regs(read3_5(i), ram, read_regs(read0_2(i), ram)); ++pc; break;}
+            case LD_0b01xxx110:  { update_regs(read3_5(i), ram, read_regs(HL, ram)); ++pc;  break;}
+            case LD_0b00xxx110:  { update_regs(read3_5(i), ram, ram.read(pc + 1)); pc+=2; break;} 
+            case LD_0b01110xxx:  { update_regs(HL, ram, read_regs(read0_2(i), ram)); ++pc; break;}
+            case LD_0b00110110:  { update_regs(HL, ram, ram.read(pc + 1));  pc+=2; break;};
+            case LD_0b00001010:  { regs[A] = ram.read(((regs[B] << 8)| regs[C])); ++pc; break;}
+            case LD_0b00011010:  { regs[A] = ram.read(((regs[D] << 8)| regs[E])); ++pc; break;}
+            case LD_0b00000010:  { ram.write(((regs[B] << 8)| regs[C]), regs[A]); ++pc; break;}
+            case LD_0b00010010:  { ram.write(((regs[D] << 8)| regs[E]), regs[A]); ++pc; break;}
+            case LD_0b11111010:  { regs[A] = ram.read(ram.read(pc + 1) | (ram.read(pc + 2) << 8)); pc+=3; break;}
+            case LD_0b11101010:  { ram.write((ram.read(pc + 1) | (ram.read(pc + 2) << 8)), regs[A]); pc+=3; break;}
+            case LDH_0b11110010: { regs[A] = ram.read(0xff00 | regs[C]); ++pc; break;}
+            case LDH_0b11100010: { ram.write((0xff00 | regs[C]), regs[A]); ++pc; break;}
+            case LDH_0b11110000: { regs[A] = ram.read(0xff00 | ram.read(pc+1)); pc+=2;  break;}
+            case LDH_0b11100000: { ram.write((0xff00 | ram.read(pc+1)), regs[A]); pc+=2;  break;}
+            case LD_0b00111010:  { regs[A] = read_regs(HL, ram); decrement_pair(L, H);  ++pc;  break;}
+            case LD_0b00110010:  { update_regs(HL, ram, regs[A]); decrement_pair(L, H); ++pc; break;}
+            case LD_0b00101010:  { regs[A] = read_regs(HL, ram); increment_pair(L, H);  ++pc;  break;}
+            case LD_0b00100010:  { update_regs(HL, ram, regs[A]); increment_pair(L, H); ++pc; break;}
+            case LD_0b00xx0001:  { update_pair_ld(ram.read(pc + 1), ram.read(pc+2), read45(i)); pc+=3; break;}
             case LD_0b00001000:  {
                 auto addess = (ram.read(pc + 1) | (ram.read(pc + 2) << 8));
                 ram.write(addess, sp & 0xff);
