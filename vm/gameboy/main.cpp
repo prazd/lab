@@ -1,19 +1,73 @@
 #include <iostream>
 #include "raylib.h"
 
-constexpr size_t BANK_ROM_SZ = 16384; // 16KiB
-constexpr size_t EXTERNAL_RAM_SZ = 8192; // 8KiB
-
-
-
 struct PPU {
     enum Mode {
-        Mode0, // H-Blank (Горизонтальная синхронизация)
-        Mode1, // V-Blank (Вертикальная синхронизация)
-        Mode2, // OAM Search (Поиск спрайтов)
-        Mode3  // Pixel Transfer (Передача пикселей)
+        HBlank = 0b00, // H-Blank (Горизонтальная синхронизация)
+        VBlank = 0b01, // V-Blank (Вертикальная синхронизация)
+        OAM = 0b10,    // OAM Search (Поиск спрайтов)
+        Drawing = 0b11 // Pixel Transfer (Передача пикселей)
     };
-    static inline Mode current_mode = Mode2;
+    Mode current_mode = OAM;
+    
+    const size_t LCDC_ADDRESS = 0xFF40;
+    const size_t STAT_ADDRESS = 0xFF41;
+    const size_t SCY_ADDRESS =  0xFF42;
+    const size_t SCX_ADDRESS =  0xFF43;
+    const size_t LY_ADDRESS =   0xFF44;
+    const size_t LYC_ADDRESS =  0xFF45;
+    const size_t WY_ADDRESS =   0xFF4A;
+    const size_t WX_ADDRESS =   0xFF4B;
+
+    bool lcd_enable = false;
+    bool window_enable = false;
+    bool obj_enable = false; // sprites
+    bool bg_enable = false;
+
+    template <typename RAM>
+    void update_ppu_mode(RAM& ram) {
+        ram.write(STAT_ADDRESS, (current_mode | ram.read(STAT_ADDRESS)));
+    }
+
+    template <typename RAM>
+    void update_ly_lyc_compare_flag(RAM& ram) {
+        /* set 2 bit of STAT_ADDRESS to LY == LYC */
+    }
+    
+    template <typename RAM>
+    void update_lcd(const RAM& ram) {
+        lcd_enable = (((ram.read(LCDC_ADDRESS)) >> 7) & 1);
+    }
+
+    template <typename RAM>
+    void update_window(const RAM& ram) {
+        window_enable = (((ram.read(LCDC_ADDRESS)) >> 5) & 1);
+    }
+
+    template <typename RAM>
+    void update_obj(const RAM& ram) {
+        obj_enable = (((ram.read(LCDC_ADDRESS)) >> 1) & 1);
+    }
+
+    template <typename RAM>
+    void update_bg(const RAM& ram) {
+        bg_enable = ((ram.read(LCDC_ADDRESS)) & 1);
+    }
+
+
+    template <typename RAM>
+    auto get_window_tile_map_area(const RAM& ram) {
+        if (((ram.read(LCDC_ADDRESS) >> 6) & 1))
+            return 0x9C00;
+        return 0x9800;
+    }
+
+    template <typename RAM>
+    auto get_tile_data_area(const RAM& ram) {
+        if (((ram.read(LCDC_ADDRESS) >> 4) & 1))
+            return 0x8800;
+        return 0x8000;
+    }
 };
 
 struct RAM {
@@ -28,6 +82,12 @@ struct RAM {
     // 0xFE00–0xFE9F: Object Attribute Memory (OAM)
     // 0xFF00–0xFF7F: I/O Registers
     // 0xFF80–0xFFFE: High RAM (HRAM)
+
+    const size_t STAT_ADDRESS = 0xFF41;
+
+    const size_t BANK_ROM_SZ = 16384; // 16KiB
+    const size_t EXTERNAL_RAM_SZ = 8192; // 8KiB
+    
     const size_t ECHO_RAM_BEGIN = 0xE000;
     const size_t ECHO_RAM_END = 0xFDFF;
     const size_t NOT_USABLE_BEGIN = 0xFEA0;
@@ -102,10 +162,21 @@ struct RAM {
         }
     }
 
+    PPU::Mode get_ppu_mode() {
+        switch(mem[STAT_ADDRESS] & 0x03) {
+            case 0b00: return PPU::Mode::HBlank;
+            case 0b01: return PPU::Mode::VBlank;
+            case 0b10: return PPU::Mode::OAM;
+            default:
+                return PPU::Mode::Drawing;
+        }
+    }
+
     bool is_ram_avaliable(unsigned short index) {
-        if (((index >= VRAM_BEGIN && index <= VRAM_END)  && (PPU::current_mode == PPU::Mode3 && lcd_enabled())) || 
+        auto current_ppu_mode = get_ppu_mode();
+        if (((index >= VRAM_BEGIN && index <= VRAM_END)  && (current_ppu_mode == PPU::Drawing && lcd_enabled())) || 
             ((index >= EXTERNAL_RAM_BEGIN && index <= EXTERNAL_RAM_END)) && (cart_ram.empty() || !external_ram_enabled) ||
-            ((index >= OAM_BEGIN && index <= OAM_END)) && ((PPU::current_mode == PPU::Mode2 || PPU::current_mode == PPU::Mode3) && lcd_enabled()) ||
+            ((index >= OAM_BEGIN && index <= OAM_END)) && ((current_ppu_mode == PPU::OAM || current_ppu_mode == PPU::Drawing) && lcd_enabled()) ||
             ((index >= NOT_USABLE_BEGIN && index <= NOT_USABLE_END))
         ) return false;
         return true;
@@ -791,7 +862,7 @@ struct CPU {
                 break;
             }
 
-            case HALT: {/*todo*/ break;}
+            case HALT: { /*todo*/ break;}
             case STOP: { /*todo*/ break;}
             case DI_0b11110011: {ime = false; ++pc; break;}
             case EI_0b11111011: {ime = true; ++pc; break;} // todo: check
@@ -806,5 +877,59 @@ struct GameBoyVM{
     RAM ram;
 };
 
+void draw_tiles(auto& arr) {
+    std::vector<std::vector<int>> colors;
+    for (size_t i = 0; i < 16; i+=2){
+            auto l = arr[i];
+            auto h = arr[i+1];
+            std::vector<int> tmp{};
+        for (int j = 0; j < 8; ++j) {
+            auto lc = (l >> (7 - j)) & 1;
+            auto hc = (h >> (7 - j)) & 1;
+            tmp.push_back((hc << 1 | lc));
+        }
+        colors.push_back(tmp);
+    }
+    for (auto&& row: colors){
+        for (auto el: row)
+            std::cout << el;
+        std::cout << '\n';
+    }
+
+    InitWindow(300, 300, "DrawTileTest");
+    SetTargetFPS(60);
+    auto get_color = [](int i){  
+        switch(i){
+            case 0: return WHITE;
+            case 1: return GRAY;
+            case 2: return DARKGRAY;
+            default:
+                return BLACK;
+        }
+    };
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        ClearBackground(WHITE);
+        float xstep = 300.f/8.f;
+        float ystep = 300.f/8.f;
+        float x = 0.0f;
+        float y = 0.0f;
+        for (auto&& row: colors){
+            for (auto el: row) {
+                DrawRectangle(x, y, xstep, ystep, get_color(el));
+                x+=xstep;
+            }
+            y += ystep;
+            x = 0.0f;
+        }
+        EndDrawing();
+    }
+
+    CloseWindow();
+}
+
 int main() {
+    // test tiles draw
+    unsigned char data[16]{0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF};
+    draw_tiles(data);
 }
