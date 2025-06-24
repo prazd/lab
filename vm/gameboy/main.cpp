@@ -46,14 +46,18 @@ struct PPU {
         Drawing = 0b11     // Pixel Transfer (Передача пикселей)
     };
     Mode current_mode = OAM;
+
+    Mode get_current_mode() const {
+        return current_mode;
+    }
     
-    bool lcd_enable = false;
+    bool lcd_enable = true;
     bool window_enable = false;
     bool obj_enable = false; // sprites
     bool bg_enable = false;
 
     template <typename RAM>
-    void update_ppu_mode(RAM& ram) {
+    void set_ppu_mode(RAM& ram) {
         ram.write(STAT_ADDRESS, (current_mode | ram.read(STAT_ADDRESS)));
     }
 
@@ -61,7 +65,7 @@ struct PPU {
     void update_ly_lyc_compare_flag(RAM& ram) {
         /* set 2 bit of STAT_ADDRESS to LY == LYC */
     }
-    
+
     template <typename RAM>
     void update_lcd(const RAM& ram) {
         lcd_enable = (((ram.read(LCDC_ADDRESS)) >> 7) & 1);
@@ -78,13 +82,21 @@ struct PPU {
     }
 
     template <typename RAM>
-    auto get_obj_size(const RAM& ram) {
-        return (((ram.read(LCDC_ADDRESS)) >> 2) & 1) ? 8 : 16;
+    void update_bg(const RAM& ram) {
+        bg_enable = ((ram.read(LCDC_ADDRESS)) & 1);
     }
 
     template <typename RAM>
-    void update_bg(const RAM& ram) {
-        bg_enable = ((ram.read(LCDC_ADDRESS)) & 1);
+    void update_regs(RAM& ram) {
+        update_lcd(ram);
+        update_window(ram);
+        update_obj(ram);
+        update_bg(ram);
+    }
+    
+    template <typename RAM>
+    auto get_obj_size(const RAM& ram) {
+        return (((ram.read(LCDC_ADDRESS)) >> 2) & 1) ? 8 : 16;
     }
 
     template <typename RAM>
@@ -112,7 +124,7 @@ struct PPU {
         unsigned char y_pos{};
         unsigned char x_pos{};
         unsigned char index_tile{};
-        unsigned char attrib;
+        unsigned char attrib{};
     };
 
     template <typename RAM>
@@ -150,27 +162,45 @@ struct PPU {
         return pixels;
     }
 
-    std::queue<int> bg_fifo{}; // loaded with background/window data pixels
+    std::queue<int> bg_fifo{};    // loaded with background/window data pixels
     std::queue<int> sprite_fifo{};
-    
+
+    template <typename RAM>
+    void execute(RAM& ram) {
+        if (mode_finished) return;
+        switch (current_mode) {
+            case OAM:     {oam_scan(ram); break;}
+            case VBlank:  {/*todo*/ break;}
+            case Drawing: {/*todo*/ break;}
+            case HBlank:  {/*todo*/ break;}
+        }
+        mode_finished = true;
+    }
 
     template <typename RAM>
     void draw(const std::array<Sprite, 10>& sprites, RAM& ram) {
         /*todo*/
     }
 
-    int x_pixel = {}; // count of drawed pixel in line
+    int x_pixel = {};    // count of drawed pixel in line
     int current_line = {};
     int current_t_cycle_count = {};
     bool longest_line = false;
-    
-    void handle_t_cycle(int t_cycle) {
-        current_t_cycle_count += t_cycle;  
+    bool mode_finished = false;
+
+    template <typename RAM>
+    void handle_t_cycle(int t_cycle, RAM& ram) {
+        update_regs(ram);
+        current_t_cycle_count += t_cycle;
         // write_memory(0xFF44, current_line); // Update LY - todo
-        if (current_mode == OAM && current_t_cycle_count >= 80){ // maybe handle 
+        if (current_mode == OAM && current_t_cycle_count >= 80){ // maybe handle
             current_mode = Drawing;
+            mode_finished = false;
+            set_ppu_mode(ram);
         } else if (current_mode == Drawing && ((longest_line && current_t_cycle_count >= 289) || (!longest_line && current_t_cycle_count >= 172))) { 
             current_mode = HBlank;
+            mode_finished = false;
+            set_ppu_mode(ram);
         } else if (current_mode == HBlank && ((!longest_line && current_t_cycle_count >= 204) || (longest_line && current_t_cycle_count >= 87))) {
             ++current_line;
             current_t_cycle_count = 0;
@@ -179,12 +209,16 @@ struct PPU {
                 // request_interrupt(VBLANK_INTERRUPT); // todo:
             else
                 current_mode = OAM;
-        
+            mode_finished = false;
+            set_ppu_mode(ram);
         } else if (current_mode == VBlank && current_t_cycle_count >= 4560) {
             current_mode = OAM;
             current_line = 0;
             current_t_cycle_count = 0;
+            mode_finished = false;
+            set_ppu_mode(ram);
         }
+
     }
 
 };
@@ -718,7 +752,16 @@ struct CPU {
                      val == 0b11 && get_flag(Cf));
     }
 
-    int exec(unsigned char i, Instruction itype, RAM& ram) {
+    unsigned char fetch(RAM& ram) {
+        return ram.read(pc);
+    }
+
+    Instruction decode(unsigned char ins) {
+        /*todo*/
+        return ADD_0b00xx1001;
+    }
+
+    int execute(unsigned char i, Instruction itype, RAM& ram) {
         switch(itype) {
             case LD_0b01xxxyyy:  { update_regs(read3_5(i), ram, read_regs(read0_2(i), ram)); ++pc; return t_cycle_by_ins(itype);}
             case LD_0b01xxx110:  { update_regs(read3_5(i), ram, read_regs(HL, ram)); ++pc;  return t_cycle_by_ins(itype);}
@@ -1074,9 +1117,67 @@ struct CPU {
 };
 
 
+constexpr size_t DISPLAY_WIDTH = 1200;
+constexpr size_t DISPLAY_HEIGHT = 600;
+constexpr double CPU_FREQUENCY = 4194304.0;
+constexpr double CPU_CYCLE_TIME = 1/CPU_FREQUENCY;
+
 struct GameBoyVM{
     CPU cpu;
     RAM ram;
+    PPU ppu;
+    /*todo finish other components*/
+    // Timer
+    // Interrupts
+    // Input
+    // Sount
+
+    void render(){/*todo*/}
+    
+    void run() {
+        InitWindow(DISPLAY_WIDTH, DISPLAY_HEIGHT, "GameBoy");
+        SetTargetFPS(60); // 59.7275 FPS
+
+        // texture init
+        Image img = GenImageColor(DISPLAY_WIDTH, DISPLAY_HEIGHT, BLACK);
+        Texture2D target = LoadTextureFromImage(img);
+        UnloadImage(img);
+        std::array<std::array<Color, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display_buffer;
+
+        // init display
+        for (size_t i = 0, ei = DISPLAY_HEIGHT; i < ei; ++i) {
+            for (size_t j = 0, ej = DISPLAY_WIDTH; j < ej; ++j) {
+                display_buffer[i][j] = BLACK;
+            }
+        }
+        UpdateTexture(target, display_buffer.data());
+
+        auto draw = [&]() {
+             BeginDrawing();
+                ClearBackground(RAYWHITE);
+                // DrawFPS(1000, 10);
+            EndDrawing();
+        };
+    
+        int current_t_cycle = 0;
+        double cpu_accumulator = 0.0;
+        while(!WindowShouldClose()){
+            cpu_accumulator += GetFrameTime();
+            while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
+                auto next_ins = cpu.fetch(ram); 
+                auto decoded_ins = cpu.decode(next_ins);
+                auto t_cycle = cpu.execute(next_ins, decoded_ins, ram);        
+                ppu.handle_t_cycle(t_cycle);
+                current_t_cycle+=t_cycle;
+                cpu_accumulator-=CPU_CYCLE_TIME;
+            }
+
+            if (ppu.get_current_mode() == PPU::VBlank) render();
+            current_t_cycle = 0;
+
+            draw();
+        }
+    }
 };
 
 void draw_tiles(auto& arr) {
