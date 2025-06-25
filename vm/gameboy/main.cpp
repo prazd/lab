@@ -3,7 +3,7 @@
 #include <queue>
 #include <array>
 
-constexpr size_t STAT_ADDRESS = 0xFF41;
+// RAM segments
 constexpr size_t BANK_ROM_SZ = 16384; // 16KiB
 constexpr size_t EXTERNAL_RAM_SZ = 8192; // 8KiB
 constexpr size_t ECHO_RAM_BEGIN = 0xE000;
@@ -29,13 +29,16 @@ constexpr size_t IO_REGISTERS_END = 0xFF7F;
 constexpr size_t HRAM_BEGIN = 0xFF80;
 constexpr size_t HRAM_END = 0xFFFE;
 
+// https://gbdev.io/pandocs/Hardware_Reg_List.html?highlight=FF42#hardware-registers
+// Hardware registers
 constexpr size_t LCDC_ADDRESS = 0xFF40;
-constexpr size_t SCY_ADDRESS =  0xFF42;
-constexpr size_t SCX_ADDRESS =  0xFF43;
-constexpr size_t LY_ADDRESS =   0xFF44;
+constexpr size_t STAT_ADDRESS = 0xFF41;
+constexpr size_t SCY_ADDRESS =  0xFF42; // bg x
+constexpr size_t SCX_ADDRESS =  0xFF43; // bg y
+constexpr size_t LY_ADDRESS =   0xFF44; // scanline y
 constexpr size_t LYC_ADDRESS =  0xFF45;
-constexpr size_t WY_ADDRESS =   0xFF4A;
-constexpr size_t WX_ADDRESS =   0xFF4B;
+constexpr size_t WY_ADDRESS =   0xFF4A; // window x
+constexpr size_t WX_ADDRESS =   0xFF4B; // window y
 
 
 struct PPU {
@@ -52,69 +55,63 @@ struct PPU {
     }
     
     bool lcd_enable = true;
-    bool window_enable = false;
+    bool window_visible = false;
     bool obj_enable = false; // sprites
     bool bg_enable = false;
+    size_t window_line_counter = 0;
 
-    template <typename RAM>
-    void set_ppu_mode(RAM& ram) {
+    void set_ppu_reg(unsigned short address, unsigned char value, auto& ram) {
+        ram.write(address, value);
+    }
+
+    void set_ppu_mode(auto& ram) {
         ram.write(STAT_ADDRESS, (current_mode | ram.read(STAT_ADDRESS)));
     }
 
-    template <typename RAM>
-    void update_ly_lyc_compare_flag(RAM& ram) {
+    void update_ly_lyc_compare_flag(auto& ram) {
         /* set 2 bit of STAT_ADDRESS to LY == LYC */
     }
 
-    template <typename RAM>
-    void update_lcd(const RAM& ram) {
+    void update_lcd(const auto& ram) {
         lcd_enable = (((ram.read(LCDC_ADDRESS)) >> 7) & 1);
     }
 
-    template <typename RAM>
-    void update_window(const RAM& ram) {
-        window_enable = (((ram.read(LCDC_ADDRESS)) >> 5) & 1);
+    void update_window(const auto& ram) {
+        window_visible = (((ram.read(LCDC_ADDRESS)) >> 5) & 1);
     }
 
-    template <typename RAM>
-    void update_obj(const RAM& ram) {
+    void update_obj(const auto& ram) {
         obj_enable = (((ram.read(LCDC_ADDRESS)) >> 1) & 1);
     }
 
-    template <typename RAM>
-    void update_bg(const RAM& ram) {
+    void update_bg(const auto& ram) {
         bg_enable = ((ram.read(LCDC_ADDRESS)) & 1);
     }
 
-    template <typename RAM>
-    void update_regs(RAM& ram) {
+    void update_regs(auto& ram) {
         update_lcd(ram);
         update_window(ram);
         update_obj(ram);
         update_bg(ram);
     }
     
-    template <typename RAM>
-    auto get_obj_size(const RAM& ram) {
+    auto get_obj_size(const auto& ram) {
         return (((ram.read(LCDC_ADDRESS)) >> 2) & 1) ? 8 : 16;
     }
 
-    template <typename RAM>
-    auto get_window_tile_map_area(const RAM& ram) {
+    auto get_window_tile_map_area(const auto& ram) {
         if (((ram.read(LCDC_ADDRESS) >> 6) & 1))
             return 0x9C00;
         return 0x9800;
     }
 
-    template <typename RAM>
-    auto get_bg_tile_map_area(const RAM& ram) {
+    auto get_bg_tile_map_area(const auto& ram) {
         if (((ram.read(LCDC_ADDRESS) >> 3) & 1))
             return 0x9C00;
         return 0x9800;
     }
 
-    template <typename RAM>
-    auto get_tile_data_area(const RAM& ram) {
+    auto get_tile_data_area(const auto& ram) {
         if (((ram.read(LCDC_ADDRESS) >> 4) & 1))
             return 0x8800;
         return 0x8000;
@@ -127,8 +124,58 @@ struct PPU {
         unsigned char attrib{};
     };
 
-    template <typename RAM>
-    auto oam_scan(RAM& ram) {
+    struct Pixel {
+        Color color{};      // The color number (IGNORING the palette, this value is the color value from the tile data)
+        bool pallete{};     // Palette: OBP0 / OBP1 for DMG, a value between 0 and 7 on CGB
+                            // Sprite Priority: Only relevant for Sprites on CGB
+        bool bg_priority{}; // Only relevant for Sprites, keeps the value of Bit 7 (OBJ-to-BG Priority) of the Attributes byte of the sprite
+        
+    };
+    std::queue<Pixel> bg_fifo{};    // loaded with background/window data pixels
+    std::queue<Pixel> sprite_fifo{};
+    std::array<Sprite, 10> sprite_buffer{};
+
+    size_t current_pixel_x = 0;
+    size_t current_window_line = 0;
+    size_t fetcher_current_tile_x = {};
+    size_t fetcher_current_tile_y = {};
+
+    void pixel_fetching(const auto& ram) {
+        update_window(ram); // check widow visibility
+
+        auto wy = ram.get(WY_ADDRESS);
+        auto wx = ram.get(WX_ADDRESS);
+        auto scy = ram.get(SCY_ADDRESS);
+        auto ly  = current_line; // ram.get(LY_ADDRESS);
+        auto scx = ram.get(SCX_ADDRESS);
+
+        bool inside_window_y = (ly >= wy);
+        bool inside_window_x = (current_pixel_x >= wx - 7);
+        
+        unsigned short tilemap_base{};
+        unsigned char  tilemap_x{};
+        unsigned char  tilemap_y{};
+
+        // todo: check + continue
+        if (window_visible && inside_window_x && inside_window_y) {
+            tilemap_base = get_window_tile_map_area(ram);
+            current_window_line = ly - wy; // todo: check
+            tilemap_x = (current_pixel_x - (wx - 7)) / 8;
+            tilemap_y = 32 * current_window_line/8;
+        } else {                                              
+            tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F. 
+            tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
+            tilemap_y = 32 * (((ly + scy) & 0xff) / 8);                // Because of this formula, fetcherY can be between 0 and 255.
+            
+        }
+        unsigned short tilemap_address = tilemap_x + tilemap_y + tilemap_base;
+        unsigned char tile_id = ram.get(tilemap_address);
+
+        ++fetcher_current_tile_x;
+        // ...
+    }
+    
+    void oam_scan(auto& ram) {
         auto ly = ram.read(LY_ADDRESS);
         std::array<Sprite, 10> result{};
         size_t count{};
@@ -136,7 +183,7 @@ struct PPU {
         for (int i = 0; i < 160; i+=4){
             auto val = ram.read(OAM_BEGIN + i);
             auto top = val - 16;
-            if (ly >= top && ly < top + obj_sz){
+            if (current_line >= top && current_line < top + obj_sz){
                 result[count++] = Sprite{
                     .y_pos = val,
                     .x_pos = ram.read(OAM_BEGIN + i + 1),
@@ -147,7 +194,7 @@ struct PPU {
             if (count == 10) break;
         }
         std::sort(result.begin(), result.begin() + count, [](auto& l, auto& r){return l.x_pos < r.x_pos;});
-        return result;
+        sprite_buffer = result; // todo: check
     }
 
     auto tile_data_to_pixels(unsigned short tile_data) {
@@ -162,11 +209,7 @@ struct PPU {
         return pixels;
     }
 
-    std::queue<int> bg_fifo{};    // loaded with background/window data pixels
-    std::queue<int> sprite_fifo{};
-
-    template <typename RAM>
-    void execute(RAM& ram) {
+    void execute(auto& ram) {
         if (mode_finished) return;
         switch (current_mode) {
             case OAM:     {oam_scan(ram); break;}
@@ -177,25 +220,20 @@ struct PPU {
         mode_finished = true;
     }
 
-    template <typename RAM>
-    void draw(const std::array<Sprite, 10>& sprites, RAM& ram) {
+    void draw(const std::array<Sprite, 10>& sprites, auto& ram) {
         /*todo*/
     }
-
-    int x_pixel = {};    // count of drawed pixel in line
     int current_line = {};
     int current_t_cycle_count = {};
     bool longest_line = false;
     bool mode_finished = false;
 
-    template <typename RAM>
-    void handle_t_cycle(int t_cycle, RAM& ram) {
+    void handle_t_cycle(int t_cycle, auto& ram) {
         update_regs(ram);
         current_t_cycle_count += t_cycle;
         // write_memory(0xFF44, current_line); // Update LY - todo
         if (current_mode == OAM && current_t_cycle_count >= 80){ // maybe handle
             current_mode = Drawing;
-            mode_finished = false;
             set_ppu_mode(ram);
         } else if (current_mode == Drawing && ((longest_line && current_t_cycle_count >= 289) || (!longest_line && current_t_cycle_count >= 172))) { 
             current_mode = HBlank;
@@ -203,6 +241,8 @@ struct PPU {
             set_ppu_mode(ram);
         } else if (current_mode == HBlank && ((!longest_line && current_t_cycle_count >= 204) || (longest_line && current_t_cycle_count >= 87))) {
             ++current_line;
+            current_pixel_x = 0;
+            set_ppu_reg(LY_ADDRESS, current_line, ram);
             current_t_cycle_count = 0;
             if (current_line == 144)
                 current_mode = VBlank;
@@ -210,10 +250,13 @@ struct PPU {
             else
                 current_mode = OAM;
             mode_finished = false;
+            window_line_counter = 0;
             set_ppu_mode(ram);
         } else if (current_mode == VBlank && current_t_cycle_count >= 4560) {
             current_mode = OAM;
             current_line = 0;
+            set_ppu_reg(LY_ADDRESS, current_line, ram);
+            current_window_line = 0;
             current_t_cycle_count = 0;
             mode_finished = false;
             set_ppu_mode(ram);
@@ -235,7 +278,6 @@ struct RAM {
     // 0xFE00–0xFE9F: Object Attribute Memory (OAM)
     // 0xFF00–0xFF7F: I/O Registers
     // 0xFF80–0xFFFE: High RAM (HRAM)
-
     unsigned char mem[0x10000]{}; // 64KiB
 
     size_t current_rom_bank = 1;
@@ -254,7 +296,7 @@ struct RAM {
 
     unsigned char dummy_reg = 0xFF;
 
-    bool lcd_enabled() {
+    bool lcd_enabled() const {
         return mem[0xFF00 + 0x40] & 0x80;
     }
 
@@ -288,7 +330,7 @@ struct RAM {
         }
     }
 
-    PPU::Mode get_ppu_mode() {
+    PPU::Mode get_ppu_mode() const {
         switch(mem[STAT_ADDRESS] & 0x03) {
             case 0b00: return PPU::Mode::HBlank;
             case 0b01: return PPU::Mode::VBlank;
@@ -298,7 +340,7 @@ struct RAM {
         }
     }
 
-    bool is_ram_avaliable(unsigned short index) {
+    bool is_ram_avaliable(unsigned short index) const {
         auto current_ppu_mode = get_ppu_mode();
         if (((index >= VRAM_BEGIN && index <= VRAM_END)  && (current_ppu_mode == PPU::Drawing && lcd_enabled())) ||
             ((index >= EXTERNAL_RAM_BEGIN && index <= EXTERNAL_RAM_END)) && (cart_ram.empty() || !external_ram_enabled) || // todo: check external RAM 
@@ -319,7 +361,7 @@ struct RAM {
             mem[index] = value;
     };
 
-    unsigned char read(unsigned short index){
+    unsigned char read(unsigned short index) const {
         if (index >= ECHO_RAM_BEGIN && index <= ECHO_RAM_END)
             index -= 0x2000;
         if (is_ram_avaliable(index))
@@ -1167,7 +1209,7 @@ struct GameBoyVM{
                 auto next_ins = cpu.fetch(ram); 
                 auto decoded_ins = cpu.decode(next_ins);
                 auto t_cycle = cpu.execute(next_ins, decoded_ins, ram);        
-                ppu.handle_t_cycle(t_cycle);
+                ppu.handle_t_cycle(t_cycle, ram);
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
