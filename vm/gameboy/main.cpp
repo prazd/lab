@@ -40,7 +40,6 @@ constexpr size_t LYC_ADDRESS =  0xFF45;
 constexpr size_t WY_ADDRESS =   0xFF4A; // window x
 constexpr size_t WX_ADDRESS =   0xFF4B; // window y
 
-
 struct PPU {
     enum Mode {
         HBlank =  0b00,    // H-Blank (Горизонтальная синхронизация)
@@ -140,6 +139,29 @@ struct PPU {
     size_t fetcher_current_tile_x = {};
     size_t fetcher_current_tile_y = {};
 
+    Color get_pixel_color(unsigned char id) {
+        switch(id){
+            case 0: return WHITE;
+            case 1: return LIGHTGRAY;
+            case 2: return DARKGRAY;
+            default:
+                return BLACK;
+        };
+    }
+    
+    auto tile_row_to_pixel_arr(unsigned short row) {
+        auto l = row & 0xff;
+        auto h = (row >> 8) & 0xff;
+        std::array<Pixel, 8> result{};
+        for (int i = 0; i < 8; ++i) {
+            auto lc = (l >> (7 - i)) & 1;
+            auto hc = (h >> (7 - i)) & 1;
+            auto color = get_pixel_color((hc << 1 | lc));
+            result[i] = Pixel{.color = color};
+        }
+        return result;
+    }
+
     void pixel_fetching(const auto& ram) {
         update_window(ram); // check widow visibility
 
@@ -148,6 +170,7 @@ struct PPU {
         auto scy = ram.get(SCY_ADDRESS);
         auto ly  = current_line; // ram.get(LY_ADDRESS);
         auto scx = ram.get(SCX_ADDRESS);
+        auto tile_base = get_tile_data_area(ram);
 
         bool inside_window_y = (ly >= wy);
         bool inside_window_x = (current_pixel_x >= wx - 7);
@@ -159,18 +182,33 @@ struct PPU {
         // todo: check + continue
         if (window_visible && inside_window_x && inside_window_y) {
             tilemap_base = get_window_tile_map_area(ram);
-            current_window_line = ly - wy; // todo: check
-            tilemap_x = (current_pixel_x - (wx - 7)) / 8;
-            tilemap_y = 32 * current_window_line/8;
+            current_window_line = ly - wy; // local window line 
+            tilemap_x = fetcher_current_tile_x; // todo: check
+            tilemap_y = current_window_line/8;
         } else {                                              
-            tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F. 
+            tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
             tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
-            tilemap_y = 32 * (((ly + scy) & 0xff) / 8);                // Because of this formula, fetcherY can be between 0 and 255.
-            
+            tilemap_y = ((ly + scy) & 0xff) / 8;                       // Because of this formula, fetcherY can be between 0 and 255
         }
-        unsigned short tilemap_address = tilemap_x + tilemap_y + tilemap_base;
-        unsigned char tile_id = ram.get(tilemap_address);
 
+        unsigned short tilemap_address = (tilemap_x + tilemap_y * 32) + tilemap_base;
+        unsigned char tile_index = ram.get(tilemap_address);
+        unsigned short tile_address{};
+
+        if (tile_base == 0x8000)
+            tile_address = tile_base + (tile_index * 16);
+        else
+            tile_address = tile_base + ((char)tile_index * 16);
+        
+        // Using the Tile Number from the previous step the fetcher now fetches the first byte of tile data (with an offset of 2 * ((LY + SCY) mod 8)) and stores it
+        auto global_y = (scy + ly) % 256;   
+        auto line_address = tile_address +  (2 * (((scy + ly) % 256) % 8));
+        unsigned short current_tile_data = (ram.get(line_address + 1) << 8 | ram.get(line_address));
+
+        auto pixels_row = tile_row_to_pixel_arr(current_tile_data);
+        for (auto el: pixels_row) {
+            bg_fifo.push(el); // maybe check if empty
+        }
         ++fetcher_current_tile_x;
         // ...
     }
