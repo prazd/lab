@@ -52,7 +52,9 @@ struct PPU {
     Mode get_current_mode() const {
         return current_mode;
     }
-    
+
+    Color LCD[256][256]{};
+
     bool lcd_enable = true;
     bool window_visible = false;
     bool obj_enable = false; // sprites
@@ -124,6 +126,7 @@ struct PPU {
     };
 
     struct Pixel {
+        bool is_sprite;
         Color color{};      // The color number (IGNORING the palette, this value is the color value from the tile data)
         bool pallete{};     // Palette: OBP0 / OBP1 for DMG, a value between 0 and 7 on CGB
                             // Sprite Priority: Only relevant for Sprites on CGB
@@ -139,79 +142,108 @@ struct PPU {
     size_t fetcher_current_tile_x = {};
     size_t fetcher_current_tile_y = {};
 
-    Color get_pixel_color(unsigned char id) {
-        switch(id){
-            case 0: return WHITE;
-            case 1: return LIGHTGRAY;
-            case 2: return DARKGRAY;
-            default:
-                return BLACK;
-        };
-    }
+    struct PixelFetcher {
+        enum class FetcherState {GetTile, Low, High, ToPixels, Push};
+        unsigned short tile_address {};
+        unsigned char current_pixel_x{};
+        unsigned char fetcher_current_tile_x{};
+        unsigned char low {};
+        unsigned char high {};
+        unsigned char current_window_line{};        
+        std::queue<Pixel> pixels{};
+
+        // todo: add to static class like ram ranges
+        auto get_window_tile_map_area(const auto& ram) {
+            if (((ram.read(LCDC_ADDRESS) >> 6) & 1))
+                return 0x9C00;
+            return 0x9800;
+        }
+
+        auto get_bg_tile_map_area(const auto& ram) {
+            if (((ram.read(LCDC_ADDRESS) >> 3) & 1))
+                return 0x9C00;
+            return 0x9800;
+        }
+
+        auto get_tile_data_area(const auto& ram) {
+            if (((ram.read(LCDC_ADDRESS) >> 4) & 1))
+                return 0x8800;
+            return 0x8000;
+        }
+
+        Color get_pixel_color(unsigned char id) {
+            switch(id){
+                case 0: return WHITE;
+                case 1: return LIGHTGRAY;
+                case 2: return DARKGRAY;
+                default:
+                    return BLACK;
+            };
+        }
+
+        bool window_visible(const auto& ram) {
+            return (((ram.read(LCDC_ADDRESS)) >> 5) & 1);
+        }
+
+        auto tile_row_to_pixel_arr(unsigned short row) {
+            auto l = row & 0xff;
+            auto h = (row >> 8) & 0xff;
+            std::queue<Pixel> result{};
+            unsigned char lc{};
+            unsigned char hc{};
+            Color color;
+            for (int i = 0; i < 8; ++i) {
+                lc = (l >> (7 - i)) & 1;
+                hc = (h >> (7 - i)) & 1;
+                color = get_pixel_color((hc << 1 | lc));
+                result.push(Pixel{.color = color, .is_sprite = false});
+            }
+            return result;
+        }
+
+        void update_tile_address(auto& ram) {
+            auto wy = ram.get(WY_ADDRESS);
+            auto wx = ram.get(WX_ADDRESS);
+            auto scy = ram.get(SCY_ADDRESS);
+            auto ly  = ram.get(LY_ADDRESS);
+            auto scx = ram.get(SCX_ADDRESS);
+            auto tile_base = get_tile_data_area(ram);
+            bool inside_window_y = (ly >= wy);
+            bool inside_window_x = (current_pixel_x >= wx - 7);
+            
+            unsigned short tilemap_base{};
+            unsigned char  tilemap_x{};
+            unsigned char  tilemap_y{};
+            // Get Tile
+            if (window_visible(ram) && inside_window_x && inside_window_y) {
+                tilemap_base = get_window_tile_map_area(ram);
+                current_window_line = ly - wy; // local window line 
+                tilemap_x = fetcher_current_tile_x; // todo: check
+                tilemap_y = current_window_line/8;
+            } else {                                              
+                tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
+                tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
+                tilemap_y = ((ly + scy) & 0xff) / 8;                       // Because of this formula, fetcherY can be between 0 and 255
+            }
+
+            unsigned short tilemap_address = (tilemap_x + tilemap_y * 32) + tilemap_base;
+            unsigned char tile_index = ram.get(tilemap_address);
+            if (tile_base == 0x8000)
+                tile_address = tile_base + (tile_index * 16);
+            else
+                tile_address = tile_base + ((char)tile_index * 16);
+            }
     
-    auto tile_row_to_pixel_arr(unsigned short row) {
-        auto l = row & 0xff;
-        auto h = (row >> 8) & 0xff;
-        std::array<Pixel, 8> result{};
-        for (int i = 0; i < 8; ++i) {
-            auto lc = (l >> (7 - i)) & 1;
-            auto hc = (h >> (7 - i)) & 1;
-            auto color = get_pixel_color((hc << 1 | lc));
-            result[i] = Pixel{.color = color};
-        }
-        return result;
-    }
-
-    void pixel_fetching(const auto& ram) {
-        update_window(ram); // check widow visibility
-
-        auto wy = ram.get(WY_ADDRESS);
-        auto wx = ram.get(WX_ADDRESS);
-        auto scy = ram.get(SCY_ADDRESS);
-        auto ly  = current_line; // ram.get(LY_ADDRESS);
-        auto scx = ram.get(SCX_ADDRESS);
-        auto tile_base = get_tile_data_area(ram);
-
-        bool inside_window_y = (ly >= wy);
-        bool inside_window_x = (current_pixel_x >= wx - 7);
-        
-        unsigned short tilemap_base{};
-        unsigned char  tilemap_x{};
-        unsigned char  tilemap_y{};
-
-        // todo: check + continue
-        if (window_visible && inside_window_x && inside_window_y) {
-            tilemap_base = get_window_tile_map_area(ram);
-            current_window_line = ly - wy; // local window line 
-            tilemap_x = fetcher_current_tile_x; // todo: check
-            tilemap_y = current_window_line/8;
-        } else {                                              
-            tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
-            tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
-            tilemap_y = ((ly + scy) & 0xff) / 8;                       // Because of this formula, fetcherY can be between 0 and 255
-        }
-
-        unsigned short tilemap_address = (tilemap_x + tilemap_y * 32) + tilemap_base;
-        unsigned char tile_index = ram.get(tilemap_address);
-        unsigned short tile_address{};
-
-        if (tile_base == 0x8000)
-            tile_address = tile_base + (tile_index * 16);
-        else
-            tile_address = tile_base + ((char)tile_index * 16);
-        
-        // Using the Tile Number from the previous step the fetcher now fetches the first byte of tile data (with an offset of 2 * ((LY + SCY) mod 8)) and stores it
-        auto global_y = (scy + ly) % 256;   
-        auto line_address = tile_address +  (2 * (((scy + ly) % 256) % 8));
-        unsigned short current_tile_data = (ram.get(line_address + 1) << 8 | ram.get(line_address));
-
-        auto pixels_row = tile_row_to_pixel_arr(current_tile_data);
-        for (auto el: pixels_row) {
-            bg_fifo.push(el); // maybe check if empty
-        }
-        ++fetcher_current_tile_x;
-        // ...
-    }
+            void step(FetcherState state, auto& ram) {
+                switch(state) {
+                    case FetcherState::GetTile:  {update_tile_address(ram);         break;}
+                    case FetcherState::Low:      {low  = ram.get(tile_address);     break;}
+                    case FetcherState::High:     {high = ram.get(tile_address + 1); break;}
+                    case FetcherState::ToPixels: {pixels = tile_row_to_pixel_arr((high << 8 | low)); break;}
+                    case FetcherState::Push:     {/*todo*/ break;}
+                }
+            }
+    };
     
     void oam_scan(auto& ram) {
         auto ly = ram.read(LY_ADDRESS);
