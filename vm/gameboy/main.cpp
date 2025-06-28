@@ -3,6 +3,13 @@
 #include <queue>
 #include <array>
 
+bool operator==(Color lhs, Color rhs) {
+    return lhs.r == rhs.r && 
+           lhs.g == rhs.g && 
+           lhs.b == rhs.b && 
+           lhs.a == rhs.a;
+}
+
 // RAM segments
 constexpr size_t BANK_ROM_SZ = 16384; // 16KiB
 constexpr size_t EXTERNAL_RAM_SZ = 8192; // 8KiB
@@ -131,10 +138,45 @@ struct PPU {
         bool pallete{};     // Palette: OBP0 / OBP1 for DMG, a value between 0 and 7 on CGB
                             // Sprite Priority: Only relevant for Sprites on CGB
         bool bg_priority{}; // Only relevant for Sprites, keeps the value of Bit 7 (OBJ-to-BG Priority) of the Attributes byte of the sprite
+
+       static Color get_pixel_color(unsigned char id) {
+            switch(id){
+                case 0: return WHITE;
+                case 1: return LIGHTGRAY;
+                case 2: return DARKGRAY;
+                default:
+                    return BLACK;
+            };
+        }
+
+        static int get_color_id(Color c) {
+            if (c == WHITE)
+                return 0;
+            if (c == LIGHTGRAY)
+                return 1;
+            if (c == DARKGRAY)
+                return 2;
+            return 3;
+        }
+
+        static auto tile_row_to_pixel_arr(unsigned short row) {
+            auto l = row & 0xff;
+            auto h = (row >> 8) & 0xff;
+            std::queue<Pixel> result{};
+            unsigned char lc{};
+            unsigned char hc{};
+            Color color;
+            for (int i = 0; i < 8; ++i) {
+                lc = (l >> (7 - i)) & 1;
+                hc = (h >> (7 - i)) & 1;
+                color = Pixel::get_pixel_color((hc << 1 | lc));
+                result.push(Pixel{.color = color, .is_sprite = false});
+            }
+            return result;
+        }
         
     };
-    std::queue<Pixel> bg_fifo{};    // loaded with background/window data pixels
-    std::queue<Pixel> sprite_fifo{};
+
     std::array<Sprite, 10> sprite_buffer{};
 
     size_t current_pixel_x = 0;
@@ -142,16 +184,24 @@ struct PPU {
     size_t fetcher_current_tile_x = {};
     size_t fetcher_current_tile_y = {};
 
-    struct PixelFetcher {
-        enum class FetcherState {GetTile, Low, High, ToPixels, Push};
-        unsigned short tile_address {};
+    template <typename Fetcher, typename ... Args>
+    struct BaseFetcher {
+        enum class FetcherState {
+            GetTile, Low, High, ToPixels, Push
+        } current_state = FetcherState::GetTile;
+
+        unsigned short tile_address{};
         unsigned char current_pixel_x{};
         unsigned char fetcher_current_tile_x{};
         unsigned char low {};
         unsigned char high {};
-        unsigned char current_window_line{};        
+        
         std::queue<Pixel> pixels{};
+        std::queue<Pixel> fifo{};
 
+        void set_current_pixel_x(unsigned char x) {
+            current_pixel_x = x;
+        }
         // todo: add to static class like ram ranges
         auto get_window_tile_map_area(const auto& ram) {
             if (((ram.read(LCDC_ADDRESS) >> 6) & 1))
@@ -171,80 +221,82 @@ struct PPU {
             return 0x8000;
         }
 
-        Color get_pixel_color(unsigned char id) {
-            switch(id){
-                case 0: return WHITE;
-                case 1: return LIGHTGRAY;
-                case 2: return DARKGRAY;
-                default:
-                    return BLACK;
-            };
-        }
 
         bool window_visible(const auto& ram) {
             return (((ram.read(LCDC_ADDRESS)) >> 5) & 1);
         }
 
-        auto tile_row_to_pixel_arr(unsigned short row) {
-            auto l = row & 0xff;
-            auto h = (row >> 8) & 0xff;
-            std::queue<Pixel> result{};
-            unsigned char lc{};
-            unsigned char hc{};
-            Color color;
-            for (int i = 0; i < 8; ++i) {
-                lc = (l >> (7 - i)) & 1;
-                hc = (h >> (7 - i)) & 1;
-                color = get_pixel_color((hc << 1 | lc));
-                result.push(Pixel{.color = color, .is_sprite = false});
+        void step(auto& ram, Args&&... args) {
+            switch(current_state) {
+                case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(ram, std::forward<Args>(args)...); break;}
+                case FetcherState::Low:      {low  = ram.read(tile_address);      break;}
+                case FetcherState::High:     {high = ram.read(tile_address + 1);  break;}
+                case FetcherState::ToPixels: {pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low)); break;}
+                case FetcherState::Push:     {
+                    if (fifo.size() < 8 && !pixels.empty()) {
+                        fifo.push(pixels.front());
+                        pixels.pop();
+                    }
+                    if (pixels.empty()){
+                        ++fetcher_current_tile_x;
+                    }
+                break;}
             }
-            return result;
         }
 
-        void update_tile_address(auto& ram) {
-            auto wy = ram.get(WY_ADDRESS);
-            auto wx = ram.get(WX_ADDRESS);
-            auto scy = ram.get(SCY_ADDRESS);
-            auto ly  = ram.get(LY_ADDRESS);
-            auto scx = ram.get(SCX_ADDRESS);
-            auto tile_base = get_tile_data_area(ram);
-            bool inside_window_y = (ly >= wy);
-            bool inside_window_x = (current_pixel_x >= wx - 7);
-            
-            unsigned short tilemap_base{};
-            unsigned char  tilemap_x{};
-            unsigned char  tilemap_y{};
-            // Get Tile
-            if (window_visible(ram) && inside_window_x && inside_window_y) {
-                tilemap_base = get_window_tile_map_area(ram);
-                current_window_line = ly - wy; // local window line 
-                tilemap_x = fetcher_current_tile_x; // todo: check
-                tilemap_y = current_window_line/8;
-            } else {                                              
-                tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
-                tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
-                tilemap_y = ((ly + scy) & 0xff) / 8;                       // Because of this formula, fetcherY can be between 0 and 255
+        void fetch(auto& ram, Args&&... args) {
+            switch(current_state) {
+                case FetcherState::GetTile:  {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Low;      break;}
+                case FetcherState::Low:      {step(ram, std::forward<Args>(args)...); current_state = FetcherState::High;     break;}
+                case FetcherState::High:     {step(ram, std::forward<Args>(args)...); current_state = FetcherState::ToPixels; break;}
+                case FetcherState::ToPixels: {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Push;     break;}
+                case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); if (pixels.empty()) current_state = FetcherState::GetTile; break;}
             }
-
-            unsigned short tilemap_address = (tilemap_x + tilemap_y * 32) + tilemap_base;
-            unsigned char tile_index = ram.get(tilemap_address);
-            if (tile_base == 0x8000)
-                tile_address = tile_base + (tile_index * 16);
-            else
-                tile_address = tile_base + ((char)tile_index * 16);
-            }
-    
-            void step(FetcherState state, auto& ram) {
-                switch(state) {
-                    case FetcherState::GetTile:  {update_tile_address(ram);         break;}
-                    case FetcherState::Low:      {low  = ram.get(tile_address);     break;}
-                    case FetcherState::High:     {high = ram.get(tile_address + 1); break;}
-                    case FetcherState::ToPixels: {pixels = tile_row_to_pixel_arr((high << 8 | low)); break;}
-                    case FetcherState::Push:     {/*todo*/ break;}
-                }
-            }
+        }
     };
-    
+
+    struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
+            unsigned char current_window_line{};
+            unsigned short update_tile_base(auto& ram, unsigned char current_pixel_x) {
+                auto wy = ram.read(WY_ADDRESS);
+                auto wx = ram.read(WX_ADDRESS);
+                auto scy = ram.read(SCY_ADDRESS);
+                auto ly  = ram.read(LY_ADDRESS);
+                auto scx = ram.read(SCX_ADDRESS);
+                unsigned short tile_base = ((ram.read(LCDC_ADDRESS) >> 4) & 1) ? 0x8800 : 0x8000;
+                bool inside_window_y = (ly >= wy);
+                bool inside_window_x = (current_pixel_x >= wx - 7);
+
+                unsigned short tilemap_base{};
+                unsigned char  tilemap_x{};
+                unsigned char  tilemap_y{};
+
+                if (window_visible(ram) && inside_window_x && inside_window_y) {
+                    tilemap_base = get_window_tile_map_area(ram);
+                    current_window_line = ly - wy; // local window line 
+                    tilemap_x = fetcher_current_tile_x; // todo: check
+                    tilemap_y = current_window_line/8;
+                } else {                                              
+                    tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
+                    tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
+                    tilemap_y = ((ly + scy) & 0xff) / 8;                       // Because of this formula, fetcherY can be between 0 and 255
+                }
+
+                unsigned short tilemap_address = (tilemap_x + tilemap_y * 32) + tilemap_base;
+                unsigned char tile_index = ram.read(tilemap_address);
+                if (tile_base == 0x8000)
+                    return (tile_base + (tile_index * 16));
+                else
+                    return (tile_base + ((char)tile_index * 16));
+                }
+    } pixel_fetcher;
+
+    struct SpriteFetcher: BaseFetcher<SpriteFetcher, const Sprite&> {
+        unsigned short update_tile_base(auto& ram, const Sprite& sprite) {
+            return (sprite.index_tile * 16) + VRAM_BEGIN;
+        }
+    } sprite_fetcher;
+
     void oam_scan(auto& ram) {
         auto ly = ram.read(LY_ADDRESS);
         std::array<Sprite, 10> result{};
@@ -256,7 +308,7 @@ struct PPU {
             if (current_line >= top && current_line < top + obj_sz){
                 result[count++] = Sprite{
                     .y_pos = val,
-                    .x_pos = ram.read(OAM_BEGIN + i + 1),
+                    .x_pos = static_cast<unsigned char>(ram.read(OAM_BEGIN + i + 1) - 8), // todo: check
                     .index_tile = ram.read(OAM_BEGIN + i + 2),
                     .attrib = ram.read(OAM_BEGIN + i + 3),
                 };
@@ -279,61 +331,108 @@ struct PPU {
         return pixels;
     }
 
-    void execute(auto& ram) {
-        if (mode_finished) return;
-        switch (current_mode) {
-            case OAM:     {oam_scan(ram); break;}
-            case VBlank:  {/*todo*/ break;}
-            case Drawing: {/*todo*/ break;}
-            case HBlank:  {/*todo*/ break;}
-        }
-        mode_finished = true;
-    }
 
-    void draw(const std::array<Sprite, 10>& sprites, auto& ram) {
-        /*todo*/
-    }
     int current_line = {};
     int current_t_cycle_count = {};
     bool longest_line = false;
     bool mode_finished = false;
 
+    Pixel pixel_mixing(auto& ram) {    
+        auto bg_pixel = pixel_fetcher.fifo.front();pixel_fetcher.fifo.pop();
+        if (sprite_fetcher.fifo.empty()) {
+            return bg_pixel;
+        }
+        auto sprite_pixel = sprite_fetcher.fifo.front();sprite_fetcher.fifo.pop();
+
+        //  If the color number of the Sprite Pixel is 0, the Background Pixel is pushed to the LCD.
+        if (Pixel::get_color_id(sprite_pixel.color) == 0)
+            return bg_pixel;
+        //  If the BG-to-OBJ-Priority bit is 1 and the color number of the Background Pixel is anything other than 0, 
+        //  the Background Pixel is pushed to the LCD
+        if (bg_pixel.bg_priority && Pixel::get_color_id(bg_pixel.color) != 0)
+            return bg_pixel;
+        return sprite_pixel;
+    }
+
+    std::optional<Sprite> sprite_on_x(auto& ram) {
+        for (auto& sprite: sprite_buffer) {
+            if (sprite.x_pos <= current_pixel_x + 8) {
+                return sprite;
+            }
+        }
+        return {};
+    }
+
+    void draw(auto& ram) {
+        LCD[current_line][current_pixel_x++] = pixel_mixing(ram).color;
+    }
+
+    bool oam_scan_finished = false;
+
     void handle_t_cycle(int t_cycle, auto& ram) {
         update_regs(ram);
         current_t_cycle_count += t_cycle;
         // write_memory(0xFF44, current_line); // Update LY - todo
-        if (current_mode == OAM && current_t_cycle_count >= 80){ // maybe handle
-            current_mode = Drawing;
-            set_ppu_mode(ram);
-        } else if (current_mode == Drawing && ((longest_line && current_t_cycle_count >= 289) || (!longest_line && current_t_cycle_count >= 172))) { 
-            current_mode = HBlank;
-            mode_finished = false;
-            set_ppu_mode(ram);
-        } else if (current_mode == HBlank && ((!longest_line && current_t_cycle_count >= 204) || (longest_line && current_t_cycle_count >= 87))) {
-            ++current_line;
-            current_pixel_x = 0;
-            set_ppu_reg(LY_ADDRESS, current_line, ram);
-            current_t_cycle_count = 0;
-            if (current_line == 144)
-                current_mode = VBlank;
+        if (current_mode == OAM){ //
+            if (current_t_cycle_count < 80) {
+                if (!oam_scan_finished) {
+                    oam_scan(ram);
+                    oam_scan_finished = true;
+                }
+            } else {
+                current_mode = Drawing;
+                set_ppu_mode(ram);
+            } 
+            return;
+        }
+
+        if (current_mode == Drawing) {
+            if (((longest_line && current_t_cycle_count < 289) || (!longest_line && current_t_cycle_count < 172))) {
+                pixel_fetcher.fetch(ram, current_pixel_x);
+                auto sprite = sprite_on_x(ram);
+                if (sprite.has_value())
+                    sprite_fetcher.fetch(ram, sprite.value());
+                draw(ram);
+            } else {
+                current_mode = HBlank;
+                set_ppu_mode(ram);
+            }
+            return;
+        }
+
+        if (current_mode == HBlank) {
+            if (((!longest_line && current_t_cycle_count >= 204) || (longest_line && current_t_cycle_count >= 87))) {
+                ++current_line;
+                current_pixel_x = 0;
+                pixel_fetcher.set_current_pixel_x(current_pixel_x);
+                sprite_fetcher.set_current_pixel_x(current_pixel_x);
+                set_ppu_reg(LY_ADDRESS, current_line, ram);
+                current_t_cycle_count = 0;
+                if (current_line == 144)
+                    current_mode = VBlank;
                 // request_interrupt(VBLANK_INTERRUPT); // todo:
-            else
+                else
+                     current_mode = OAM;
+                window_line_counter = 0;
+                set_ppu_mode(ram);
+            }
+            return;
+        }
+
+        if (current_mode == VBlank) {
+            if (current_t_cycle_count >= 4560) {
                 current_mode = OAM;
-            mode_finished = false;
-            window_line_counter = 0;
-            set_ppu_mode(ram);
-        } else if (current_mode == VBlank && current_t_cycle_count >= 4560) {
-            current_mode = OAM;
-            current_line = 0;
-            set_ppu_reg(LY_ADDRESS, current_line, ram);
-            current_window_line = 0;
-            current_t_cycle_count = 0;
-            mode_finished = false;
-            set_ppu_mode(ram);
+                current_line = 0;
+                current_pixel_x = 0;
+                set_ppu_reg(LY_ADDRESS, current_line, ram);
+                current_window_line = 0;
+                current_t_cycle_count = 0;
+                mode_finished = false;
+                set_ppu_mode(ram);
+            }
         }
 
     }
-
 };
 
 struct RAM {
