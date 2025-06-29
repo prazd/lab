@@ -55,7 +55,7 @@ struct CPU {
         SBC_0b10011110,
         SBC_0b11011110,
         CP_0b10111xxx,
-        CP_0b10011110,
+        CP_0b10111110,
         CP_0b11111110,
         INC_0b00xxx100,
         INC_0b00110100,
@@ -84,17 +84,7 @@ struct CPU {
         RLA_0b00010111,
         RRA_0b00011111,
 
-        RLC_0xCB_0b00000xxx,
-        RRC_0xCB_0b00001xxx,
-        RL_0xCB_0b00010xxx,
-        RR_0xCB_0b00011xxx,
-        SLA_0xCB_0b00100xxx,
-        SRA_0xCB_0b00101xxx,
-        SWAP_0xCB_0b00110xxx,
-        SRL_0xCB_0b00111xxx,
-        BIT_0xCB_0b01xxxxxx,
-        RES_0xCB_0b10xxxxxx,
-        SET_0xCB_0b11xxxxxx,
+        _0xCB,
 
 
         // Control flow
@@ -118,11 +108,25 @@ struct CPU {
         NOP_0b00000000,
     };
 
-    int t_cycle_by_ins(Instruction ins, unsigned char value = 0);
-    Register greg(unsigned char i);
+    enum Instruction0xCB{
+        RLC_0xCB_0b00000xxx,
+        RRC_0xCB_0b00001xxx,
+        RL_0xCB_0b00010xxx,
+        RR_0xCB_0b00011xxx,
+        SLA_0xCB_0b00100xxx,
+        SRA_0xCB_0b00101xxx,
+        SWAP_0xCB_0b00110xxx,
+        SRL_0xCB_0b00111xxx,
+        BIT_0xCB_0b01xxxxxx,
+        RES_0xCB_0b10xxxxxx,
+        SET_0xCB_0b11xxxxxx,
 
-    unsigned char read3_5(unsigned char i);
-    unsigned char read0_2(unsigned char i);
+        NOP_0xCB_0b00000000
+    };
+
+
+    int t_cycle_by_ins(Instruction ins, unsigned char value = 0);
+    int t_cycle_by_ins_0xCB(Instruction0xCB ins, unsigned char value = 0);
 
     void set_flag(Flag f, bool val);
     unsigned char get_flag(Flag f);
@@ -136,6 +140,8 @@ struct CPU {
 
     unsigned char read45(unsigned char i);
     unsigned char read34(unsigned char i);
+    unsigned char read345(unsigned char i);
+    unsigned char read012(unsigned char i);
 
     void add_reg_A(unsigned char val);
     void add_reg_HL(unsigned short val);
@@ -157,6 +163,7 @@ struct CPU {
 
     unsigned char fetch(const RAM& ram) const;
     Instruction decode(unsigned char ins);
+    Instruction0xCB decode_0xCB(unsigned char ins);
     int execute(unsigned char i, Instruction itype, RAM& ram);
 };
 

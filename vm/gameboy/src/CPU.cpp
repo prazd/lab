@@ -1,9 +1,9 @@
 #include "CPU.h"
 
-unsigned char CPU::read3_5(unsigned char i)  {
+unsigned char CPU::read345(unsigned char i)  {
     return (0x7 & (i >> 3));
 }
-unsigned char CPU::read0_2(unsigned char i)  {
+unsigned char CPU::read012(unsigned char i)  {
     return (0x7 & i);
 }
 
@@ -138,9 +138,147 @@ unsigned char CPU::fetch(const RAM &ram) const  {
     return ram.read(pc);
 }
 
+enum Ins {
+
+    // Control flow,
+
+    // Miscellaneous instructions
+    HALT,
+    STOP,
+};
+
 CPU::Instruction CPU::decode(unsigned char ins)  {
-    /*todo*/
-    return ADD_0b00xx1001;
+    switch (ins) {
+        case 0b00110110: return LD_0b00110110;
+        case 0b00001010: return LD_0b00001010;
+        case 0b00011010: return LD_0b00011010;
+        case 0b00000010: return LD_0b00000010;
+        case 0b00010010: return LD_0b00010010;
+        case 0b11111010: return LD_0b11111010;
+        case 0b11101010: return LD_0b11101010;
+        case 0b11110010: return LDH_0b11110010;
+        case 0b11100010: return LDH_0b11100010;
+        case 0b11110000: return LDH_0b11110000;
+        case 0b11100000: return LDH_0b11100000;
+        case 0b00111010: return LD_0b00111010;
+        case 0b00110010: return LD_0b00110010;
+        case 0b00101010: return LD_0b00101010;
+        case 0b00100010: return LD_0b00100010;
+        case 0b00001000: return LD_0b00001000;
+        case 0b11111001: return LD_0b11111001;
+        case 0b11111000: return LD_0b11111000;
+        case 0b10000110: return ADD_0b10000110;
+        case 0b11000110: return ADD_0b11000110;
+        case 0b10001110: return ADC_0b10001110;
+        case 0b11001110: return ADC_0b11001110;
+        case 0b10010110: return SUB_0b10010110;
+        case 0b11010110: return SUB_0b11010110;
+        case 0b10011110: return SBC_0b10011110;
+        case 0b11011110: return SBC_0b11011110;
+        case 0b10111110: return CP_0b10111110;
+        case 0b11111110: return CP_0b11111110;
+        case 0b00110100: return INC_0b00110100;
+        case 0b00110101: return DEC_0b00110101;
+        case 0b10100110: return AND_0b10100110;
+        case 0b11100110: return AND_0b11100110;
+        case 0b10110110: return OR_0b10110110;
+        case 0b11110110: return OR_0b11110110;
+        case 0b10101110: return XOR_0b10101110;
+        case 0b11101110: return XOR_0b11101110;
+        case 0b00111111: return CCF_0b00111111;
+        case 0b00110111: return SCF_0b00110111;
+        case 0b00100111: return DAA_0b00100111;
+        case 0b00101111: return CPL_0b00101111;
+        case 0b11101000: return ADD_0b11101000;
+        case 0b00000111: return RLCA_0b00000111;
+        case 0b00001111: return RRCA_0b00001111;
+        case 0b00010111: return RLA_0b00010111;
+        case 0b00011111: return RRA_0b00011111;
+
+        case 0b11000011: return JP_0b11000011;
+        case 0b11101001: return JP_0b11101001;
+        case 0b00011000: return JR_0b00011000;
+        case 0b11001101: return CALL_0b11001101;
+        case 0b11001001: return RET_0b11001001;
+        case 0b11011001: return RETI_0b11011001;
+        case 0b11110011: return DI_0b11110011;
+        case 0b11111011: return EI_0b11111011;
+        case 0b00000000: return NOP_0b00000000;
+
+        case 0xCB: return _0xCB;
+        case 0x76: return HALT;
+        case 0x10: return STOP;
+    }
+
+    if (((ins >> 5) & 0x7) == 0b110) {
+        if ((ins & 0x7) == 0b010) return JP_0b110xx010;
+        if ((ins & 0x7) == 0b100) return CALL_0b110xx100;
+        if ((ins & 0x7) == 0b000) return RET_0b110xx000;
+
+    }
+
+    if (((ins >> 5) & 0x7) == 0b001) {
+        if ((ins & 0x7) == 0b000) return JR_0b001xx000;
+    }
+
+    switch ((ins >> 3) & 0x1f) {
+        case 0b10000: return ADD_0b10000xxx;
+        case 0b10001: return ADC_0b10001xxx;
+        case 0b10010: return SUB_0b10010xxx;
+        case 0b10011: return SBC_0b10011xxx;
+        case 0b10111: return CP_0b10111xxx;
+        case 0b10100: return AND_0b10100xxx;
+        case 0b10110: return OR_0b10110xxx;
+        case 0b10101: return XOR_0b10101xxx;
+    }
+
+    if ((ins >> 6 & 0x3) == 0b11) {
+        if ((ins & 0xf) == 0b0101) return PUSH_0b11xx0101;
+        if ((ins & 0xf) == 0b0001) return POP_0b11xx0001;
+        if ((ins & 0x7) == 0b111) return RST_0b11xxx111;
+    }
+
+    if ((ins >> 6 & 0x3) == 0b01) {
+        if ((ins & 0x7) == 0b110) return LD_0b01xxx110;
+        if ((ins >> 3 & 0x7) == 0b110) return LD_0b01110xxx;
+        return LD_0b01xxxyyy;
+    }
+
+    if ((ins >> 6 & 0x3) == 0b00) {
+
+        if ((ins & 0x7) == 0b101) return DEC_0b00xxx101;
+        if ((ins & 0x7) == 0b100) return INC_0b00xxx100;
+        if ((ins & 0x7) == 0b110) return LD_0b00xxx110;
+
+
+        if ((ins & 0xf) == 0b0001) return LD_0b00xx0001;
+        if ((ins & 0xf) == 0b0011) return INC_0b00xx0011;
+        if ((ins & 0xf) == 0b1011) return DEC_0b00xx1011;
+        if ((ins & 0xf) == 0b1001) return ADD_0b00xx1001;
+    }
+
+    std::cout << "Unknown opcode: " << ins << '\n';
+    return NOP_0b00000000;
+}
+
+CPU::Instruction0xCB CPU::decode_0xCB(unsigned char ins) {
+    switch ((ins >> 6) & 0x3) {
+        case 0b01: return BIT_0xCB_0b01xxxxxx;
+        case 0b10: return RES_0xCB_0b10xxxxxx;
+        case 0b11: return SET_0xCB_0b11xxxxxx;
+    }
+    switch ((ins >> 3) & 0x1f) {
+        case 0b00000: return RLC_0xCB_0b00000xxx;
+        case 0b00001: return RRC_0xCB_0b00001xxx;
+        case 0b00010: return RL_0xCB_0b00010xxx;
+        case 0b00011: return RR_0xCB_0b00011xxx;
+        case 0b00100: return SLA_0xCB_0b00100xxx;
+        case 0b00101: return SRA_0xCB_0b00101xxx;
+        case 0b00110: return SWAP_0xCB_0b00110xxx;
+        case 0b00111: return SRL_0xCB_0b00111xxx;
+    }
+    std::cout << "Unknown opcode: " << ins << '\n';
+    return NOP_0xCB_0b00000000;
 }
 
 unsigned short CPU::HL_data() const {
@@ -201,6 +339,23 @@ unsigned short CPU::getpair(unsigned char i)  {
     throw std::invalid_argument("Unknown register");
 }
 
+int CPU::t_cycle_by_ins_0xCB(CPU::Instruction0xCB ins, unsigned char value) {
+    switch (ins) {
+        case RLC_0xCB_0b00000xxx: {return value == 0x06 ? 4 : 2;} // RLC (HL): Rotate left circular (indirect HL) - 4 (0x06)
+        case RRC_0xCB_0b00001xxx: {return value == 0x0E ? 4 : 2;} // RRC (HL): Rotate right circular (indirect HL) - 4 (0x0E)
+        case RL_0xCB_0b00010xxx:  {return value == 0x16 ? 4 : 2;} // RL (HL): Rotate left (indirect HL) - 4 (0x16)
+        case RR_0xCB_0b00011xxx:  {return value == 0x1E ? 4 : 2;} // RR (HL): Rotate right (indirect HL) - 4 (0x1E)
+        case SLA_0xCB_0b00100xxx: {return value == 0x26 ? 4 : 2;} // SLA (HL): Shift left arithmetic (indirect HL) - 4 (0x26)
+        case SRA_0xCB_0b00101xxx: {return value == 0x2E ? 4 : 2;} // SRA (HL): Shift right arithmetic (indirect HL) - 4 (0x2E)
+        case SWAP_0xCB_0b00110xxx:{return value == 0x36 ? 4 : 2;} // SWAP (HL): Swap nibbles (indirect HL) - 4 (0x36)
+        case SRL_0xCB_0b00111xxx: {return value == 0x3E ? 4 : 2;} // SRL (HL): Shift right logical (indirect HL) - 4 (0x3E)
+        case BIT_0xCB_0b01xxxxxx: {return (value & 0x07) == 6 ? 3 : 2;} // BIT b, (HL): Test bit (indirect HL) - 3(0b01xxx110)
+        case RES_0xCB_0b10xxxxxx: {return (value & 0x07) == 6 ? 4 : 2;} // RES b, (HL): Reset bit (indirect HL) - 4(0b10xxx110)
+        case SET_0xCB_0b11xxxxxx: {return (value & 0x07) == 6 ? 4 : 2;} // SET b, (HL): Set bit (indirect HL) - 4 (0b11xxx110)
+        case NOP_0xCB_0b00000000: {return 1;}
+    }
+}
+
 int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value - 0xCB pc + 1 / cc_flag
     switch(ins) {
         case LD_0b01xxxyyy:       {return 1;}
@@ -241,7 +396,7 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
         case SBC_0b10011110:      {return 2;}
         case SBC_0b11011110:      {return 2;}
         case CP_0b10111xxx:       {return 1;}
-        case CP_0b10011110:       {return 2;}
+        case CP_0b10111110:       {return 2;}
         case CP_0b11111110:       {return 2;}
         case INC_0b00xxx100:      {return 1;}
         case INC_0b00110100:      {return 3;}
@@ -268,19 +423,7 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
         case RRCA_0b00001111:     {return 1;}
         case RLA_0b00010111:      {return 1;}
         case RRA_0b00011111:      {return 1;}
-
-        case RLC_0xCB_0b00000xxx: {return value == 0x06 ? 4 : 2;} // RLC (HL): Rotate left circular (indirect HL) - 4 (0x06)
-        case RRC_0xCB_0b00001xxx: {return value == 0x0E ? 4 : 2;} // RRC (HL): Rotate right circular (indirect HL) - 4 (0x0E)
-        case RL_0xCB_0b00010xxx:  {return value == 0x16 ? 4 : 2;} // RL (HL): Rotate left (indirect HL) - 4 (0x16)
-        case RR_0xCB_0b00011xxx:  {return value == 0x1E ? 4 : 2;} // RR (HL): Rotate right (indirect HL) - 4 (0x1E)
-        case SLA_0xCB_0b00100xxx: {return value == 0x26 ? 4 : 2;} // SLA (HL): Shift left arithmetic (indirect HL) - 4 (0x26)
-        case SRA_0xCB_0b00101xxx: {return value == 0x2E ? 4 : 2;} // SRA (HL): Shift right arithmetic (indirect HL) - 4 (0x2E)
-        case SWAP_0xCB_0b00110xxx:{return value == 0x36 ? 4 : 2;} // SWAP (HL): Swap nibbles (indirect HL) - 4 (0x36)
-        case SRL_0xCB_0b00111xxx: {return value == 0x3E ? 4 : 2;} // SRL (HL): Shift right logical (indirect HL) - 4 (0x3E)
-        case BIT_0xCB_0b01xxxxxx: {return (value & 0x07) == 6 ? 3 : 2;} // BIT b, (HL): Test bit (indirect HL) - 3(0b01xxx110)
-        case RES_0xCB_0b10xxxxxx: {return (value & 0x07) == 6 ? 4 : 2;} // RES b, (HL): Reset bit (indirect HL) - 4(0b10xxx110)
-        case SET_0xCB_0b11xxxxxx: {return (value & 0x07) == 6 ? 4 : 2;} // SET b, (HL): Set bit (indirect HL) - 4 (0b11xxx110)
-
+        case _0xCB:               {return 0;} // use 0xCB version
         case JP_0b11000011:       {return 4;}
         case JP_0b11101001:       {return 1;}
         case JP_0b110xx010:       {return value ? 4 : 3;} // n 4 machine cycles (cc=true) / 3 machine cycles (cc=false)
@@ -301,12 +444,14 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
     }
 }
 
+
+
 int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
     switch(itype) {
-        case LD_0b01xxxyyy:  { update_regs(read3_5(i), ram, read_regs(read0_2(i), ram)); ++pc; return t_cycle_by_ins(itype);}
-        case LD_0b01xxx110:  { update_regs(read3_5(i), ram, read_regs(HL, ram)); ++pc;  return t_cycle_by_ins(itype);}
-        case LD_0b00xxx110:  { update_regs(read3_5(i), ram, ram.read(pc + 1)); pc+=2; return t_cycle_by_ins(itype);}
-        case LD_0b01110xxx:  { update_regs(HL, ram, read_regs(read0_2(i), ram)); ++pc; return t_cycle_by_ins(itype);}
+        case LD_0b01xxxyyy:  { update_regs(read345(i), ram, read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
+        case LD_0b01xxx110:  { update_regs(read345(i), ram, read_regs(HL, ram)); ++pc;  return t_cycle_by_ins(itype);}
+        case LD_0b00xxx110:  { update_regs(read345(i), ram, ram.read(pc + 1)); pc+=2; return t_cycle_by_ins(itype);}
+        case LD_0b01110xxx:  { update_regs(HL, ram, read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case LD_0b00110110:  { update_regs(HL, ram, ram.read(pc + 1));  pc+=2; return t_cycle_by_ins(itype);};
         case LD_0b00001010:  { regs[A] = ram.read(((regs[B] << 8)| regs[C])); ++pc; return t_cycle_by_ins(itype);}
         case LD_0b00011010:  { regs[A] = ram.read(((regs[D] << 8)| regs[E])); ++pc; return t_cycle_by_ins(itype);}
@@ -360,32 +505,32 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             return t_cycle_by_ins(itype);
         }
 
-        case ADD_0b10000xxx: { add_reg_A(read_regs(read0_2(i), ram)); ++pc; return t_cycle_by_ins(itype);}
+        case ADD_0b10000xxx: { add_reg_A(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case ADD_0b10000110: { add_reg_A(read_regs(HL, ram)); ++pc;  return t_cycle_by_ins(itype);}
         case ADD_0b11000110: { add_reg_A(ram.read(pc+1)); pc+=2; return t_cycle_by_ins(itype);}
-        case ADC_0b10001xxx: { add_reg_A(read_regs(read0_2(i), ram) + get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);}
+        case ADC_0b10001xxx: { add_reg_A(read_regs(read012(i), ram) + get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);}
         case ADC_0b10001110: { add_reg_A(read_regs(HL, ram) + get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);}
         case ADC_0b11001110: { add_reg_A(ram.read(pc+1) + get_flag(Cf)); pc+=2; return t_cycle_by_ins(itype);}
-        case SUB_0b10010xxx: { sub_reg_A(read_regs(read0_2(i), ram)); ++pc; return t_cycle_by_ins(itype);}
+        case SUB_0b10010xxx: { sub_reg_A(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case SUB_0b10010110: { sub_reg_A(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
         case SUB_0b11010110: { sub_reg_A(ram.read(pc+1)); pc+=2; return t_cycle_by_ins(itype);}
-        case SBC_0b10011xxx: { sub_reg_A(read_regs(read0_2(i), ram) + get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);} // (reg[A] - r - reg[C]) == reg[A] - (r + reg[C])
+        case SBC_0b10011xxx: { sub_reg_A(read_regs(read012(i), ram) + get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);} // (reg[A] - r - reg[C]) == reg[A] - (r + reg[C])
         case SBC_0b10011110: { sub_reg_A(read_regs(HL, ram) + get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);}
         case SBC_0b11011110: { sub_reg_A(ram.read(pc+1) + get_flag(Cf)); pc+=2; return t_cycle_by_ins(itype);}
-        case CP_0b10111xxx:  { sub_reg_A_flags_only(read_regs(read0_2(i), ram)); ++pc; return t_cycle_by_ins(itype);}
-        case CP_0b10011110:  { sub_reg_A_flags_only(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
+        case CP_0b10111xxx:  { sub_reg_A_flags_only(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
+        case CP_0b10111110:  { sub_reg_A_flags_only(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
         case CP_0b11111110:  { sub_reg_A_flags_only(ram.read(pc+1)); pc+=2; return t_cycle_by_ins(itype);}
-        case INC_0b00xxx100: { inc_reg(read3_5(i), ram); ++pc; return t_cycle_by_ins(itype);}
+        case INC_0b00xxx100: { inc_reg(read345(i), ram); ++pc; return t_cycle_by_ins(itype);}
         case INC_0b00110100: { inc_reg(HL, ram); ++pc; return t_cycle_by_ins(itype);}
-        case DEC_0b00xxx101: { dec_reg(read3_5(i), ram); ++pc; return t_cycle_by_ins(itype);}
+        case DEC_0b00xxx101: { dec_reg(read345(i), ram); ++pc; return t_cycle_by_ins(itype);}
         case DEC_0b00110101: { dec_reg(HL, ram); ++pc; return t_cycle_by_ins(itype);}
-        case AND_0b10100xxx: { and_reg_A(read_regs(read0_2(i), ram)); ++pc; return t_cycle_by_ins(itype);}
+        case AND_0b10100xxx: { and_reg_A(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case AND_0b10100110: { and_reg_A(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
         case AND_0b11100110: { and_reg_A(ram.read(pc+1)); pc+=2; return t_cycle_by_ins(itype);}
-        case OR_0b10110xxx:  { or_reg_A(read_regs(read0_2(i), ram)); ++pc; return t_cycle_by_ins(itype);}
+        case OR_0b10110xxx:  { or_reg_A(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case OR_0b10110110:  { or_reg_A(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
         case OR_0b11110110:  { or_reg_A(ram.read(pc+1)); pc+=2; return t_cycle_by_ins(itype);}
-        case XOR_0b10101xxx: { xor_reg_A(read_regs(read0_2(i), ram)); ++pc; return t_cycle_by_ins(itype);}
+        case XOR_0b10101xxx: { xor_reg_A(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case XOR_0b10101110: { xor_reg_A(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
         case XOR_0b11101110: { xor_reg_A(ram.read(pc+1)); pc+=2; return t_cycle_by_ins(itype);}
         case CCF_0b00111111: { set_flag(Cf, !get_flag(Cf)); set_flag(Nf, 0); set_flag(Hf, 0); ++pc; return t_cycle_by_ins(itype);}
@@ -456,126 +601,117 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             set_flag(Hf, 0);
             regs[A] = res;
             ++pc;  return t_cycle_by_ins(itype);}
-
-        case RLC_0xCB_0b00000xxx:  {
+        case _0xCB: {
             auto pc_next = ram.read(pc+1);
-            auto rid = read0_2(pc_next);
-            auto reg = read_regs(rid, ram);
-            auto res = std::rotl(reg, 1);
-            set_flag(Zf, res == 0);
-            set_flag(Nf, 0);
-            set_flag(Hf, 0);
-            set_flag(Cf, reg & 0x80);
-            update_regs(rid, ram, res);
-            pc+=2; return t_cycle_by_ins(itype, pc_next);}
-        case RRC_0xCB_0b00001xxx:  {
-            auto pc_next = ram.read(pc+1);
-            auto rid = read0_2(pc_next);
-            auto reg = read_regs(rid, ram);
-            auto res = std::rotr(reg, 1);
-            set_flag(Zf, res == 0);
-            set_flag(Nf, 0);
-            set_flag(Hf, 0);
-            set_flag(Cf, reg & 1);
-            update_regs(rid, ram, res);
-            pc+=2; return t_cycle_by_ins(itype, pc_next);}
-        case RL_0xCB_0b00010xxx:   {
-            auto pc_next = ram.read(pc+1);
-            auto rid = read0_2(pc_next);
-            auto reg = read_regs(rid, ram);
-            auto carry = get_flag(Cf);
-            auto res = ((reg << 1) | carry);
-            set_flag(Cf, reg & 0x80);
-            set_flag(Zf, res == 0);
-            set_flag(Nf, 0);
-            set_flag(Hf, 0);
-            update_regs(rid, ram, res);
-            pc+=2; return t_cycle_by_ins(itype, pc_next);}
-        case RR_0xCB_0b00011xxx:   {
-            auto pc_next = ram.read(pc+1);
-            auto rid = read0_2(pc_next);
-            auto reg = read_regs(rid, ram);
-            auto carry = get_flag(Cf);
-            auto res = ((reg >> 1) | carry << 7);
-            set_flag(Cf, reg & 1);
-            set_flag(Zf, res == 0);
-            set_flag(Nf, 0);
-            set_flag(Hf, 0);
-            update_regs(rid, ram, res);
-            pc+=2; return t_cycle_by_ins(itype, pc_next);}
-        case SLA_0xCB_0b00100xxx:  {
-            auto pc_next = ram.read(pc+1);
-            auto rid = read0_2(pc_next);
-            auto reg = read_regs(rid, ram);
-            auto res = reg << 1;
-            set_flag(Cf, reg & 0x80);
-            set_flag(Zf, res == 0);
-            set_flag(Nf, 0);
-            set_flag(Hf, 0);
-            update_regs(rid, ram, res);
-            pc+=2; return t_cycle_by_ins(itype, pc_next);}
-        case SRA_0xCB_0b00101xxx:  {
-            auto pc_next = ram.read(pc+1);
-            auto rid = read0_2(pc_next);
-            auto reg = read_regs(rid, ram);
-            auto sign_bit = reg & 0x80;
-            auto res = ((reg >> 1) | sign_bit);
-            set_flag(Cf, reg & 1);
-            set_flag(Zf, res == 0);
-            set_flag(Nf, 0);
-            set_flag(Hf, 0);
-            update_regs(rid, ram, res);
-            pc+=2; return t_cycle_by_ins(itype, pc_next);}
-        case SWAP_0xCB_0b00110xxx: {
-            auto pc_next = ram.read(pc+1);
-            auto rid = read0_2(pc_next);
-            auto reg = read_regs(rid, ram);
-            auto l = reg & 0x0f;
-            auto h = reg & 0xf0;
-            auto res = (l << 4 | h >> 4);
-            set_flag(Zf, res == 0);
-            set_flag(Nf, 0);
-            set_flag(Hf, 0);
-            set_flag(Cf, 0);
-            update_regs(rid, ram, res);
-            pc+=2; return t_cycle_by_ins(itype, pc_next);}
-
-        case SRL_0xCB_0b00111xxx:  {
-            auto pc_next = ram.read(pc+1);
-            auto rid = read0_2(pc_next);
-            auto reg = read_regs(rid, ram);
-            auto res = reg >> 1;
-            set_flag(Cf, reg & 1);
-            set_flag(Zf, res == 0);
-            set_flag(Nf, 0);
-            set_flag(Hf, 0);
-            update_regs(rid, ram, res);
-            pc+=2; return t_cycle_by_ins(itype, pc_next);}
-
-        case BIT_0xCB_0b01xxxxxx:  {
-            auto pc_next = ram.read(pc+1);
-            auto bit_n = read3_5(pc_next);
-            auto reg = read_regs(read0_2(pc_next), ram);
-            set_flag(Zf, !((reg >> bit_n) & 1));
-            set_flag(Nf, 0);
-            set_flag(Hf, 1);
-            pc+=2; return t_cycle_by_ins(itype, pc_next);}
-        case RES_0xCB_0b10xxxxxx:  {
-            auto pc_next = ram.read(pc+1);
-            auto bit_n = read3_5(pc_next);
-            auto rid = read0_2(pc_next);
-            auto reg = read_regs(rid, ram);
-            update_regs(rid, ram, reg & ~(1 << bit_n));
-            pc+=2; return t_cycle_by_ins(itype, pc_next);}
-        case SET_0xCB_0b11xxxxxx:  {
-            auto pc_next = ram.read(pc+1);
-            auto bit_n = read3_5(pc_next);
-            auto rid = read0_2(pc_next);
-            auto reg = read_regs(rid, ram);
-            update_regs(rid, ram, reg | (1 << bit_n));
-            pc+=2; return t_cycle_by_ins(itype, pc_next);}
-
-
+            auto ins = decode_0xCB(pc_next);
+            switch (ins) {
+                case NOP_0xCB_0b00000000: {++pc; return t_cycle_by_ins(itype);}
+                case RLC_0xCB_0b00000xxx: {
+                    auto rid = read012(pc_next);
+                    auto reg = read_regs(rid, ram);
+                    auto res = std::rotl(reg, 1);
+                    set_flag(Zf, res == 0);
+                    set_flag(Nf, 0);
+                    set_flag(Hf, 0);
+                    set_flag(Cf, reg & 0x80);
+                    update_regs(rid, ram, res);
+                    pc+=2; return t_cycle_by_ins_0xCB(ins, pc_next);}
+                case RRC_0xCB_0b00001xxx: {
+                    auto rid = read012(pc_next);
+                    auto reg = read_regs(rid, ram);
+                    auto res = std::rotr(reg, 1);
+                    set_flag(Zf, res == 0);
+                    set_flag(Nf, 0);
+                    set_flag(Hf, 0);
+                    set_flag(Cf, reg & 1);
+                    update_regs(rid, ram, res);
+                    pc+=2; return t_cycle_by_ins_0xCB(ins, pc_next);}
+                case RL_0xCB_0b00010xxx:   {
+                    auto rid = read012(pc_next);
+                    auto reg = read_regs(rid, ram);
+                    auto carry = get_flag(Cf);
+                    auto res = ((reg << 1) | carry);
+                    set_flag(Cf, reg & 0x80);
+                    set_flag(Zf, res == 0);
+                    set_flag(Nf, 0);
+                    set_flag(Hf, 0);
+                    update_regs(rid, ram, res);
+                    pc+=2; return t_cycle_by_ins_0xCB(ins, pc_next);}
+                case RR_0xCB_0b00011xxx: {
+                    auto rid = read012(pc_next);
+                    auto reg = read_regs(rid, ram);
+                    auto carry = get_flag(Cf);
+                    auto res = ((reg >> 1) | carry << 7);
+                    set_flag(Cf, reg & 1);
+                    set_flag(Zf, res == 0);
+                    set_flag(Nf, 0);
+                    set_flag(Hf, 0);
+                    update_regs(rid, ram, res);
+                    pc+=2; return t_cycle_by_ins_0xCB(ins, pc_next);}
+                case SLA_0xCB_0b00100xxx:  {
+                    auto rid = read012(pc_next);
+                    auto reg = read_regs(rid, ram);
+                    auto res = reg << 1;
+                    set_flag(Cf, reg & 0x80);
+                    set_flag(Zf, res == 0);
+                    set_flag(Nf, 0);
+                    set_flag(Hf, 0);
+                    update_regs(rid, ram, res);
+                    pc+=2; return t_cycle_by_ins_0xCB(ins, pc_next);}
+                case SRA_0xCB_0b00101xxx:  {
+                    auto rid = read012(pc_next);
+                    auto reg = read_regs(rid, ram);
+                    auto sign_bit = reg & 0x80;
+                    auto res = ((reg >> 1) | sign_bit);
+                    set_flag(Cf, reg & 1);
+                    set_flag(Zf, res == 0);
+                    set_flag(Nf, 0);
+                    set_flag(Hf, 0);
+                    update_regs(rid, ram, res);
+                    pc+=2; return t_cycle_by_ins_0xCB(ins, pc_next);}
+                case SWAP_0xCB_0b00110xxx: {
+                    auto rid = read012(pc_next);
+                    auto reg = read_regs(rid, ram);
+                    auto l = reg & 0x0f;
+                    auto h = reg & 0xf0;
+                    auto res = (l << 4 | h >> 4);
+                    set_flag(Zf, res == 0);
+                    set_flag(Nf, 0);
+                    set_flag(Hf, 0);
+                    set_flag(Cf, 0);
+                    update_regs(rid, ram, res);
+                    pc+=2; return t_cycle_by_ins_0xCB(ins, pc_next);}
+                case SRL_0xCB_0b00111xxx:  {
+                    auto rid = read012(pc_next);
+                    auto reg = read_regs(rid, ram);
+                    auto res = reg >> 1;
+                    set_flag(Cf, reg & 1);
+                    set_flag(Zf, res == 0);
+                    set_flag(Nf, 0);
+                    set_flag(Hf, 0);
+                    update_regs(rid, ram, res);
+                    pc+=2; return t_cycle_by_ins_0xCB(ins, pc_next);}
+                case BIT_0xCB_0b01xxxxxx:  {
+                    auto bit_n = read345(pc_next);
+                    auto reg = read_regs(read012(pc_next), ram);
+                    set_flag(Zf, !((reg >> bit_n) & 1));
+                    set_flag(Nf, 0);
+                    set_flag(Hf, 1);
+                    pc+=2; return t_cycle_by_ins_0xCB(ins, pc_next);}
+                case RES_0xCB_0b10xxxxxx:  {
+                    auto bit_n = read345(pc_next);
+                    auto rid = read012(pc_next);
+                    auto reg = read_regs(rid, ram);
+                    update_regs(rid, ram, reg & ~(1 << bit_n));
+                    pc+=2; return t_cycle_by_ins_0xCB(ins, pc_next);}
+                case SET_0xCB_0b11xxxxxx:  {
+                    auto bit_n = read345(pc_next);
+                    auto rid = read012(pc_next);
+                    auto reg = read_regs(rid, ram);
+                    update_regs(rid, ram, reg | (1 << bit_n));
+                    pc+=2; return t_cycle_by_ins_0xCB(ins, pc_next);}
+                }
+        };
             // Control flow
         case JP_0b11000011: { pc = ((ram.read(pc+2) << 8) | ram.read(pc + 1)); return t_cycle_by_ins(itype);}
         case JP_0b11101001: { pc = read_regs(HL, ram); return t_cycle_by_ins(itype);}
@@ -639,7 +775,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         }
         case RETI_0b11011001: {pc = ((ram.read(sp + 1) << 8) | ram.read(sp)); sp+=2; ime = true; return t_cycle_by_ins(itype);}
         case RST_0b11xxx111: {
-            unsigned short nn = ((0x0 << 8) | rst_vec[read3_5(i)]);
+            unsigned short nn = ((0x0 << 8) | rst_vec[read345(i)]);
             sp-=2;
             ram.write(sp, (pc + 1) & 0xff);
             ram.write(sp + 1, ((pc + 1) >> 8));
@@ -653,17 +789,4 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case NOP_0b00000000: {++pc; return t_cycle_by_ins(itype);}
     }
     return 0;
-}
-
-CPU::Register CPU::greg(unsigned char i)  {
-    switch(i){
-        case 0b000: {return B;}
-        case 0b001: {return C;}
-        case 0b010: {return D;}
-        case 0b011: {return E;}
-        case 0b100: {return H;}
-        case 0b101: {return L;}
-        case 0b111: {return A;}
-    }
-    throw std::invalid_argument("Unknown register");
 }
