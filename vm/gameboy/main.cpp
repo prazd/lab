@@ -5,11 +5,33 @@
 #include <array>
 #include "RAM.h"
 #include "CPU.h"
+#include <filesystem>
+#include <fstream>
 
-constexpr size_t DISPLAY_WIDTH = 1200;
-constexpr size_t DISPLAY_HEIGHT = 600;
+constexpr size_t WIDTH = 1200;
+constexpr size_t HEIGHT = 600;
+constexpr size_t DISPLAY_WIDTH = 144;
+constexpr size_t DISPLAY_HEIGHT = 160;
 constexpr double CPU_FREQUENCY = 4194304.0;
 constexpr double CPU_CYCLE_TIME = 1/CPU_FREQUENCY;
+
+struct ROMReader {
+    std::vector<char> raw{};
+    ROMReader(const std::string_view& path) {
+        std::ifstream f{path, std::ios::binary | std::ios::in};
+        if (!f.is_open()) {
+            std::cout << "Cannot open file";
+            std::abort();
+        }
+        auto sz = std::filesystem::file_size(path);
+        std::vector<char> res(sz);
+        f.seekg(0, std::ios::beg);
+        f.read(res.data(), sz);
+        f.close();
+        raw = std::move(res);
+        std::cout << raw.size();
+    }
+};
 
 struct GameBoyVM{
     CPU cpu;
@@ -21,31 +43,37 @@ struct GameBoyVM{
     // Input
     // Sound
 
-    void render(){/*todo*/}
+    void render(){
+
+    }
     
     void run() {
-        InitWindow(DISPLAY_WIDTH, DISPLAY_HEIGHT, "GameBoy");
+        InitWindow(WIDTH, HEIGHT, "GameBoy");
         SetTargetFPS(60); // 59.7275 FPS
 
         // texture init
-        Image img = GenImageColor(DISPLAY_WIDTH, DISPLAY_HEIGHT, BLACK);
+        Image img = GenImageColor(WIDTH, HEIGHT, BLACK);
         Texture2D target = LoadTextureFromImage(img);
         UnloadImage(img);
         std::array<std::array<Color, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display_buffer;
 
         // init display
-        for (size_t i = 0, ei = DISPLAY_HEIGHT; i < ei; ++i) {
-            for (size_t j = 0, ej = DISPLAY_WIDTH; j < ej; ++j) {
+        for (size_t i = 0, ei = HEIGHT; i < ei; ++i) {
+            for (size_t j = 0, ej = WIDTH; j < ej; ++j) {
                 display_buffer[i][j] = BLACK;
             }
         }
         UpdateTexture(target, display_buffer.data());
 
         auto draw = [&]() {
-             BeginDrawing();
-                ClearBackground(RAYWHITE);
-                // DrawFPS(1000, 10);
-            EndDrawing();
+                auto scy = ram.read(constants::SCY_ADDRESS);
+                auto scx = ram.read(constants::SCX_ADDRESS);
+                auto& display = ppu.read_lcd();
+                for (int i = 0; i < DISPLAY_HEIGHT; ++i)
+                    for (int j = 0; j < DISPLAY_WIDTH; ++j) {
+                        display_buffer[i][j] = display[(scy + i)%DISPLAY_HEIGHT][(scx + j)%DISPLAY_WIDTH];
+                    }
+                UpdateTexture(target, display_buffer.data());
         };
     
         int current_t_cycle = 0;
@@ -60,11 +88,15 @@ struct GameBoyVM{
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
-
             if (ppu.get_current_mode() == PPU::VBlank) render();
             current_t_cycle = 0;
-
             draw();
+            BeginDrawing();
+                ClearBackground(BLACK);
+                // todo: check
+                DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, DISPLAY_WIDTH * WIDTH, DISPLAY_HEIGHT * (HEIGHT)}, {0, 0}, 0.0f, WHITE);
+                DrawFPS(1000, 10);
+            EndDrawing();
         }
     }
 };
@@ -152,6 +184,9 @@ int get_ram_size(const auto& data) {
 
 int main() {
     // test tiles draw
-    unsigned char data[16]{0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF};
-    draw_tiles(data);
+//    unsigned char data[16]{0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF};
+//    draw_tiles(data);
+    ROMReader reader("/Users/prazd/Desktop/dev/cpu_instrs/cpu_instrs.gb");
+    std::cout << "\nRAM sz:" << get_ram_size(reader.raw) << '\n';
+    std::cout << "\nROM sz:" <<get_rom_size(reader.raw) << '\n';
 }

@@ -195,6 +195,7 @@ private:
     std::optional<Sprite> sprite_on_x(RAM& ram);
     void draw(RAM& ram);
 public:
+    auto  read_lcd() const -> const Color(&)[256][256];
     void handle_t_cycle(int t_cycle, RAM& ram);
     Mode get_current_mode() const;
 };

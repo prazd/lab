@@ -209,3 +209,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 
 }
 
+auto PPU::read_lcd() const -> const Color(&)[256][256] {
+    return LCD;
+}
+
