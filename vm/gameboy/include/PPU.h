@@ -151,6 +151,7 @@ public:
 private:
     Mode current_mode = OAM;
     Color LCD[256][256]{};
+
     bool lcd_enable = true;
     bool window_visible = false;
     bool obj_enable = false; // sprites
@@ -195,6 +196,7 @@ private:
     std::optional<Sprite> sprite_on_x(RAM& ram);
     void draw(RAM& ram);
 public:
+    void print_lcd()const;
     auto  read_lcd() const -> const Color(&)[256][256];
     void handle_t_cycle(int t_cycle, RAM& ram);
     Mode get_current_mode() const;

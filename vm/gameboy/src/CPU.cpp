@@ -1,4 +1,7 @@
 #include "CPU.h"
+#include <chrono>
+
+#define DEBUG 1
 
 unsigned char CPU::read345(unsigned char i)  {
     return (0x7 & (i >> 3));
@@ -114,14 +117,14 @@ unsigned char CPU::read_regs(unsigned char i, RAM &ram)  {
 
 void CPU::update_regs(unsigned char i, RAM &ram, unsigned char value)  {
     switch(i){
-        case 0b000: {regs[B] = value; break;}
-        case 0b001: {regs[C] = value; break;}
-        case 0b010: {regs[D] = value; break;}
-        case 0b011: {regs[E] = value; break;}
-        case 0b100: {regs[H] = value; break;}
-        case 0b101: {regs[L] = value; break;}
-        case 0b110: {ram.write(HL_data(), value); break;}
-        case 0b111: {regs[A] = value; break;}
+        case 0b000: {regs[B] = value; return;}
+        case 0b001: {regs[C] = value; return;}
+        case 0b010: {regs[D] = value; return;}
+        case 0b011: {regs[E] = value; return;}
+        case 0b100: {regs[H] = value; return;}
+        case 0b101: {regs[L] = value; return;}
+        case 0b110: {ram.write(HL_data(), value); return;}
+        case 0b111: {regs[A] = value; return;}
     }
     throw std::invalid_argument("Unknown register");
 }
@@ -137,15 +140,6 @@ bool CPU::get_cc_flag(unsigned char val)  {
 unsigned char CPU::fetch(const RAM &ram) const  {
     return ram.read(pc);
 }
-
-enum Ins {
-
-    // Control flow,
-
-    // Miscellaneous instructions
-    HALT,
-    STOP,
-};
 
 CPU::Instruction CPU::decode(unsigned char ins)  {
     switch (ins) {
@@ -444,9 +438,21 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
     }
 }
 
-
-
 int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
+#if DEBUG
+    auto print_range = [&](int n){
+        while(n--) std::cout << "mem[" << pc + n << "] :" << (unsigned)ram.read(pc + n) << '\n';
+    };
+
+    std::cout << "\n==============================\n";
+    std::cout << instruction_str[itype] << '\n';
+    std::cout << std::hex << "PC: " << pc << '\n';
+    std::cout << "MEM:\n";
+    print_range(3);
+    std::cout << std::dec;
+    std::cout << "\n==============================\n";
+
+#endif
     switch(itype) {
         case LD_0b01xxxyyy:  { update_regs(read345(i), ram, read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case LD_0b01xxx110:  { update_regs(read345(i), ram, read_regs(HL, ram)); ++pc;  return t_cycle_by_ins(itype);}
@@ -461,7 +467,16 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case LD_0b11101010:  { ram.write((ram.read(pc + 1) | (ram.read(pc + 2) << 8)), regs[A]); pc+=3; return t_cycle_by_ins(itype);}
         case LDH_0b11110010: { regs[A] = ram.read(0xff00 | regs[C]); ++pc; return t_cycle_by_ins(itype);}
         case LDH_0b11100010: { ram.write((0xff00 | regs[C]), regs[A]); ++pc; return t_cycle_by_ins(itype);}
-        case LDH_0b11110000: { regs[A] = ram.read(0xff00 | ram.read(pc+1)); pc+=2;  return t_cycle_by_ins(itype);}
+        case LDH_0b11110000: {
+            auto address = (0xff00 | ram.read(pc+1));
+//            std::cout << rand() % 1000;
+//            std::cout << std::hex << "ADDRESS:" << address << '\n';
+//            std::cout << std::dec;
+//            std::cout << "VALUE:" << (unsigned)ram.read(address) << '\n';
+            regs[A] = ram.read(address);
+            pc+=2;
+            return t_cycle_by_ins(itype);
+        }
         case LDH_0b11100000: { ram.write((0xff00 | ram.read(pc+1)), regs[A]); pc+=2;  return t_cycle_by_ins(itype);}
         case LD_0b00111010:  { regs[A] = read_regs(HL, ram); decrement_pair(L, H);  ++pc;  return t_cycle_by_ins(itype);}
         case LD_0b00110010:  { update_regs(HL, ram, regs[A]); decrement_pair(L, H); ++pc; return t_cycle_by_ins(itype);}

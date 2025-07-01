@@ -147,6 +147,10 @@ void PPU::draw(RAM &ram)  {
 
 void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     update_regs(ram);
+//    if (!lcd_enable) {
+//        return;
+//    }
+    // std::cout << "CURRENT_LINE_PPU:" << current_line << '\n';
     current_t_cycle_count += t_cycle;
     // write_memory(0xFF44, current_line); // Update LY - todo
     if (current_mode == OAM){ //
@@ -168,7 +172,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
             auto sprite = sprite_on_x(ram);
             if (sprite.has_value())
                 sprite_fetcher.fetch(ram, sprite.value());
-            draw(ram);
+            if (!pixel_fetcher.fifo.empty()) draw(ram);
         } else {
             current_mode = HBlank;
             set_ppu_mode(ram);
@@ -179,10 +183,10 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     if (current_mode == HBlank) {
         if (((!longest_line && current_t_cycle_count >= 204) || (longest_line && current_t_cycle_count >= 87))) {
             ++current_line;
+            set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
             current_pixel_x = 0;
             pixel_fetcher.set_current_pixel_x(current_pixel_x);
             sprite_fetcher.set_current_pixel_x(current_pixel_x);
-            set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
             current_t_cycle_count = 0;
             if (current_line == 144)
                 current_mode = VBlank;
@@ -196,11 +200,12 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     }
 
     if (current_mode == VBlank) {
+//        set_ppu_reg(constants::LY_ADDRESS, current_line += current_line < 160 ? 1 : 0, ram);
+        set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
         if (current_t_cycle_count >= 4560) {
             current_mode = OAM;
             current_line = 0;
             current_pixel_x = 0;
-            set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
             current_window_line = 0;
             current_t_cycle_count = 0;
             set_ppu_mode(ram);
@@ -211,5 +216,14 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 
 auto PPU::read_lcd() const -> const Color(&)[256][256] {
     return LCD;
+}
+
+void PPU::print_lcd() const {
+    for (auto&& raw: read_lcd()){
+        for (auto& el: raw){
+            std::cout << Pixel::get_color_id(el);
+        }
+        std::cout << '\n';
+    }
 }
 
