@@ -52,7 +52,7 @@ void PPU::set_ppu_reg(unsigned short address, unsigned char value, RAM& ram) {
 }
 
 void PPU::set_ppu_mode(RAM &ram) {
-    ram.write(constants::STAT_ADDRESS, (current_mode | ram.read(constants::STAT_ADDRESS)));
+    ram.write(constants::STAT_ADDRESS, (current_mode | ram.read(constants::STAT_ADDRESS)) & 0xFC);
 }
 void PPU::update_lcd(const RAM &ram) {
     lcd_enable = (((ram.read(constants::LCDC_ADDRESS)) >> 7) & 1);
@@ -147,12 +147,15 @@ void PPU::draw(RAM &ram)  {
 
 void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     update_regs(ram);
-//    if (!lcd_enable) {
-//        return;
-//    }
-    // std::cout << "CURRENT_LINE_PPU:" << current_line << '\n';
+//    std::cout << "\n=========================\n";
+//    std::cout << "PPU:\n";
+//    std::cout << "T-Cycle: " << current_t_cycle_count << '\n';
+//    std::cout << "CURRENT_LINE:" << current_line << '\n';
+//    std::cout << "CURRENT_MODE:" << current_mode << '\n';
+//    std::cout << "\n=========================\n";
+    if (current_mode == VBlank)
+        current_v_blank_t_cycle_count += t_cycle;
     current_t_cycle_count += t_cycle;
-    // write_memory(0xFF44, current_line); // Update LY - todo
     if (current_mode == OAM){ //
         if (current_t_cycle_count < 80) {
             if (!oam_scan_finished) {
@@ -167,7 +170,8 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     }
 
     if (current_mode == Drawing) {
-        if (((longest_line && current_t_cycle_count < 289) || (!longest_line && current_t_cycle_count < 172))) {
+//        if (((longest_line && current_t_cycle_count < 289) || (!longest_line && current_t_cycle_count < 172))) {
+        if (current_t_cycle_count < 289){
             pixel_fetcher.fetch(ram, current_pixel_x);
             auto sprite = sprite_on_x(ram);
             if (sprite.has_value())
@@ -181,7 +185,8 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     }
 
     if (current_mode == HBlank) {
-        if (((!longest_line && current_t_cycle_count >= 204) || (longest_line && current_t_cycle_count >= 87))) {
+    //        if (((!longest_line && current_t_cycle_count >= 204) || (longest_line && current_t_cycle_count >= 87))) {
+    if (current_t_cycle_count > 456){
             ++current_line;
             set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
             current_pixel_x = 0;
@@ -191,8 +196,10 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
             if (current_line == 144)
                 current_mode = VBlank;
                 // request_interrupt(VBLANK_INTERRUPT); // todo:
-            else
+            else{
                 current_mode = OAM;
+                oam_scan_finished = false;
+            }
             window_line_counter = 0;
             set_ppu_mode(ram);
         }
@@ -200,8 +207,11 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     }
 
     if (current_mode == VBlank) {
-//        set_ppu_reg(constants::LY_ADDRESS, current_line += current_line < 160 ? 1 : 0, ram);
-        set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
+        if (current_v_blank_t_cycle_count >= 456){
+            ++current_line;
+            current_v_blank_t_cycle_count = 0;
+            set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
+        }
         if (current_t_cycle_count >= 4560) {
             current_mode = OAM;
             current_line = 0;

@@ -1,7 +1,7 @@
 #include "CPU.h"
 #include <chrono>
 
-#define DEBUG 1
+#define DEBUG 0
 
 unsigned char CPU::read345(unsigned char i)  {
     return (0x7 & (i >> 3));
@@ -74,17 +74,17 @@ void CPU::xor_reg_A(unsigned char val)  {
 
 void CPU::sub_reg_A_flags_only(unsigned char val)  {
     auto res = (unsigned short)regs[A] - (unsigned short)val;
-    auto res8 = res & 0xff;
+    auto res8 = (unsigned char)(res & 0xff);
     set_flag(Nf, 1);
     set_flag(Zf, (res8 == 0));
     set_flag(Cf, (val > regs[A]));
-    set_flag(Hf, ((val & 0xf) > (regs[A] & 0xf)));
+    set_flag(Hf, ((regs[A] & 0xf) - (val & 0xf) < 0)); // todo: check((val & 0xf) > (regs[A] & 0xf)));
 }
 
 void CPU::inc_reg(unsigned char i, RAM &ram)  {
     auto reg = read_regs(i, ram);
     auto cp = reg;
-    auto result = reg + 1;
+    unsigned char result = reg + 1;
     set_flag(Nf, 0);
     set_flag(Zf, result == 0);
     set_flag(Hf, (cp & 0xf) == 0xf);
@@ -94,7 +94,7 @@ void CPU::inc_reg(unsigned char i, RAM &ram)  {
 void CPU::dec_reg(unsigned char i, RAM &ram)  {
     auto reg = read_regs(i, ram);
     auto cp = reg;
-    auto result = reg - 1;
+    unsigned char result = reg - 1;
     set_flag(Nf, 1);
     set_flag(Zf, result == 0);
     set_flag(Hf, (cp & 0xf) == 0);
@@ -250,8 +250,9 @@ CPU::Instruction CPU::decode(unsigned char ins)  {
         if ((ins & 0xf) == 0b1011) return DEC_0b00xx1011;
         if ((ins & 0xf) == 0b1001) return ADD_0b00xx1001;
     }
-
+#if DEBUG
     std::cout << "Unknown opcode: " << ins << '\n';
+#endif
     return NOP_0b00000000;
 }
 
@@ -271,7 +272,9 @@ CPU::Instruction0xCB CPU::decode_0xCB(unsigned char ins) {
         case 0b00110: return SWAP_0xCB_0b00110xxx;
         case 0b00111: return SRL_0xCB_0b00111xxx;
     }
+#if DEBUG
     std::cout << "Unknown opcode: " << ins << '\n';
+#endif
     return NOP_0xCB_0b00000000;
 }
 
@@ -280,15 +283,25 @@ unsigned short CPU::HL_data() const {
 }
 
 void CPU::set_flag(CPU::Flag f, bool val)  {
+#if DEBUG
+    std::cout << "Set Flag :" << f << ": " << val << " Old F: " << (unsigned)regs[F];
+#endif
     if (val) {
         regs[F] |= (1 << flags_pos[f]);
     } else {
         regs[F] &= ~(1 << flags_pos[f]);
     }
+#if DEBUG
+     std::cout << " New F: " << (unsigned)regs[F] << '\n';
+#endif
 }
 
 unsigned char CPU::get_flag(CPU::Flag f)  {
-    return (regs[F] >> flags_pos[f]) & 1;
+    unsigned char value = (regs[F] >> flags_pos[f]) & 1;
+#if DEBUG
+    std::cout << "Get Flag " << f << ": " << (int)value << " F: " << (unsigned)regs[F] << '\n';
+#endif
+    return value;
 }
 
 void CPU::decrement_pair(CPU::Register l, CPU::Register h)  {
@@ -325,121 +338,123 @@ void CPU::update_pair_pop(unsigned char l, unsigned char h, unsigned char pair) 
 
 unsigned short CPU::getpair(unsigned char i)  {
     switch(i) {
-        case 0b00: {return  (regs[C] | (regs[B] << 8)); break;}
-        case 0b01: {return  (regs[E] | (regs[D] << 8)); break;}
-        case 0b10: {return  (regs[L] | (regs[H] << 8)); break;}
-        case 0b11: {return sp; break;}
+        case 0b00: {return  (regs[C] | (regs[B] << 8));}
+        case 0b01: {return  (regs[E] | (regs[D] << 8));}
+        case 0b10: {return  (regs[L] | (regs[H] << 8));}
+        case 0b11: {return sp;}
     }
     throw std::invalid_argument("Unknown register");
 }
 
 int CPU::t_cycle_by_ins_0xCB(CPU::Instruction0xCB ins, unsigned char value) {
     switch (ins) {
-        case RLC_0xCB_0b00000xxx: {return value == 0x06 ? 4 : 2;} // RLC (HL): Rotate left circular (indirect HL) - 4 (0x06)
-        case RRC_0xCB_0b00001xxx: {return value == 0x0E ? 4 : 2;} // RRC (HL): Rotate right circular (indirect HL) - 4 (0x0E)
-        case RL_0xCB_0b00010xxx:  {return value == 0x16 ? 4 : 2;} // RL (HL): Rotate left (indirect HL) - 4 (0x16)
-        case RR_0xCB_0b00011xxx:  {return value == 0x1E ? 4 : 2;} // RR (HL): Rotate right (indirect HL) - 4 (0x1E)
-        case SLA_0xCB_0b00100xxx: {return value == 0x26 ? 4 : 2;} // SLA (HL): Shift left arithmetic (indirect HL) - 4 (0x26)
-        case SRA_0xCB_0b00101xxx: {return value == 0x2E ? 4 : 2;} // SRA (HL): Shift right arithmetic (indirect HL) - 4 (0x2E)
-        case SWAP_0xCB_0b00110xxx:{return value == 0x36 ? 4 : 2;} // SWAP (HL): Swap nibbles (indirect HL) - 4 (0x36)
-        case SRL_0xCB_0b00111xxx: {return value == 0x3E ? 4 : 2;} // SRL (HL): Shift right logical (indirect HL) - 4 (0x3E)
-        case BIT_0xCB_0b01xxxxxx: {return (value & 0x07) == 6 ? 3 : 2;} // BIT b, (HL): Test bit (indirect HL) - 3(0b01xxx110)
-        case RES_0xCB_0b10xxxxxx: {return (value & 0x07) == 6 ? 4 : 2;} // RES b, (HL): Reset bit (indirect HL) - 4(0b10xxx110)
-        case SET_0xCB_0b11xxxxxx: {return (value & 0x07) == 6 ? 4 : 2;} // SET b, (HL): Set bit (indirect HL) - 4 (0b11xxx110)
+        case RLC_0xCB_0b00000xxx: {return value == 0x06 ? 16 : 8;} // RLC (HL): Rotate left circular (indirect HL) - 4 (0x06)
+        case RRC_0xCB_0b00001xxx: {return value == 0x0E ? 16 : 8;} // RRC (HL): Rotate right circular (indirect HL) - 4 (0x0E)
+        case RL_0xCB_0b00010xxx:  {return value == 0x16 ? 16 : 8;} // RL (HL): Rotate left (indirect HL) - 4 (0x16)
+        case RR_0xCB_0b00011xxx:  {return value == 0x1E ? 16 : 8;} // RR (HL): Rotate right (indirect HL) - 4 (0x1E)
+        case SLA_0xCB_0b00100xxx: {return value == 0x26 ? 16 : 8;} // SLA (HL): Shift left arithmetic (indirect HL) - 4 (0x26)
+        case SRA_0xCB_0b00101xxx: {return value == 0x2E ? 16 : 8;} // SRA (HL): Shift right arithmetic (indirect HL) - 4 (0x2E)
+        case SWAP_0xCB_0b00110xxx:{return value == 0x36 ? 16 : 8;} // SWAP (HL): Swap nibbles (indirect HL) - 4 (0x36)
+        case SRL_0xCB_0b00111xxx: {return value == 0x3E ? 16 : 8;} // SRL (HL): Shift right logical (indirect HL) - 4 (0x3E)
+        case BIT_0xCB_0b01xxxxxx: {return (value & 0x07) == 6 ? 12 : 8;} // BIT b, (HL): Test bit (indirect HL) - 3(0b01xxx110)
+        case RES_0xCB_0b10xxxxxx: {return (value & 0x07) == 6 ? 16 : 8;} // RES b, (HL): Reset bit (indirect HL) - 4(0b10xxx110)
+        case SET_0xCB_0b11xxxxxx: {return (value & 0x07) == 6 ? 16 : 8;} // SET b, (HL): Set bit (indirect HL) - 4 (0b11xxx110)
         case NOP_0xCB_0b00000000: {return 1;}
     }
 }
 
 int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value - 0xCB pc + 1 / cc_flag
     switch(ins) {
-        case LD_0b01xxxyyy:       {return 1;}
-        case LD_0b00xxx110:       {return 2;}
-        case LD_0b01xxx110:       {return 2;}
-        case LD_0b01110xxx:       {return 2;}
-        case LD_0b00110110:       {return 3;}
-        case LD_0b00001010:       {return 2;}
-        case LD_0b00011010:       {return 2;}
-        case LD_0b00000010:       {return 2;}
-        case LD_0b00010010:       {return 2;}
-        case LD_0b11111010:       {return 4;}
-        case LD_0b11101010:       {return 4;}
-        case LDH_0b11110010:      {return 2;}
-        case LDH_0b11100010:      {return 2;}
-        case LDH_0b11110000:      {return 3;}
-        case LDH_0b11100000:      {return 3;}
-        case LD_0b00111010:       {return 2;}
-        case LD_0b00110010:       {return 2;}
-        case LD_0b00101010:       {return 2;}
-        case LD_0b00100010:       {return 2;}
-        case LD_0b00xx0001:       {return 3;}
-        case LD_0b00001000:       {return 5;}
-        case LD_0b11111001:       {return 2;}
-        case PUSH_0b11xx0101:     {return 4;}
-        case POP_0b11xx0001:      {return 3;}
-        case LD_0b11111000:       {return 3;}
-        case ADD_0b10000xxx:      {return 1;}
-        case ADD_0b10000110:      {return 2;}
-        case ADD_0b11000110:      {return 2;}
-        case ADC_0b10001xxx:      {return 1;}
-        case ADC_0b10001110:      {return 2;}
-        case ADC_0b11001110:      {return 2;}
-        case SUB_0b10010xxx:      {return 1;}
-        case SUB_0b10010110:      {return 2;}
-        case SUB_0b11010110:      {return 2;}
-        case SBC_0b10011xxx:      {return 1;}
-        case SBC_0b10011110:      {return 2;}
-        case SBC_0b11011110:      {return 2;}
-        case CP_0b10111xxx:       {return 1;}
-        case CP_0b10111110:       {return 2;}
-        case CP_0b11111110:       {return 2;}
-        case INC_0b00xxx100:      {return 1;}
-        case INC_0b00110100:      {return 3;}
-        case DEC_0b00xxx101:      {return 1;}
-        case DEC_0b00110101:      {return 3;}
-        case AND_0b10100xxx:      {return 1;}
-        case AND_0b10100110:      {return 2;}
-        case AND_0b11100110:      {return 2;}
-        case OR_0b10110xxx:       {return 1;}
-        case OR_0b10110110:       {return 2;}
-        case OR_0b11110110:       {return 2;}
-        case XOR_0b10101xxx:      {return 1;}
-        case XOR_0b10101110:      {return 2;}
-        case XOR_0b11101110:      {return 2;}
-        case CCF_0b00111111:      {return 1;}
-        case SCF_0b00110111:      {return 1;}
-        case DAA_0b00100111:      {return 1;}
-        case CPL_0b00101111:      {return 1;}
-        case INC_0b00xx0011:      {return 2;}
-        case DEC_0b00xx1011:      {return 2;}
-        case ADD_0b00xx1001:      {return 2;}
-        case ADD_0b11101000:      {return 4;}
-        case RLCA_0b00000111:     {return 1;}
-        case RRCA_0b00001111:     {return 1;}
-        case RLA_0b00010111:      {return 1;}
-        case RRA_0b00011111:      {return 1;}
+        case LD_0b01xxxyyy:       {return 4;}
+        case LD_0b00xxx110:       {return 8;}
+        case LD_0b01xxx110:       {return 8;}
+        case LD_0b01110xxx:       {return 8;}
+        case LD_0b00110110:       {return 12;}
+        case LD_0b00001010:       {return 8;}
+        case LD_0b00011010:       {return 8;}
+        case LD_0b00000010:       {return 8;}
+        case LD_0b00010010:       {return 8;}
+        case LD_0b11111010:       {return 16;}
+        case LD_0b11101010:       {return 16;}
+        case LDH_0b11110010:      {return 8;}
+        case LDH_0b11100010:      {return 8;}
+        case LDH_0b11110000:      {return 12;}
+        case LDH_0b11100000:      {return 12;}
+        case LD_0b00111010:       {return 8;}
+        case LD_0b00110010:       {return 8;}
+        case LD_0b00101010:       {return 8;}
+        case LD_0b00100010:       {return 8;}
+        case LD_0b00xx0001:       {return 12;}
+        case LD_0b00001000:       {return 20;}
+        case LD_0b11111001:       {return 8;}
+        case PUSH_0b11xx0101:     {return 16;}
+        case POP_0b11xx0001:      {return 12;}
+        case LD_0b11111000:       {return 12;}
+        case ADD_0b10000xxx:      {return 4;}
+        case ADD_0b10000110:      {return 8;}
+        case ADD_0b11000110:      {return 8;}
+        case ADC_0b10001xxx:      {return 4;}
+        case ADC_0b10001110:      {return 8;}
+        case ADC_0b11001110:      {return 8;}
+        case SUB_0b10010xxx:      {return 4;}
+        case SUB_0b10010110:      {return 8;}
+        case SUB_0b11010110:      {return 8;}
+        case SBC_0b10011xxx:      {return 4;}
+        case SBC_0b10011110:      {return 8;}
+        case SBC_0b11011110:      {return 8;}
+        case CP_0b10111xxx:       {return 4;}
+        case CP_0b10111110:       {return 8;}
+        case CP_0b11111110:       {return 8;}
+        case INC_0b00xxx100:      {return 4;}
+        case INC_0b00110100:      {return 12;}
+        case DEC_0b00xxx101:      {return 4;}
+        case DEC_0b00110101:      {return 12;}
+        case AND_0b10100xxx:      {return 4;}
+        case AND_0b10100110:      {return 8;}
+        case AND_0b11100110:      {return 8;}
+        case OR_0b10110xxx:       {return 4;}
+        case OR_0b10110110:       {return 8;}
+        case OR_0b11110110:       {return 8;}
+        case XOR_0b10101xxx:      {return 4;}
+        case XOR_0b10101110:      {return 8;}
+        case XOR_0b11101110:      {return 8;}
+        case CCF_0b00111111:      {return 4;}
+        case SCF_0b00110111:      {return 4;}
+        case DAA_0b00100111:      {return 4;}
+        case CPL_0b00101111:      {return 4;}
+        case INC_0b00xx0011:      {return 8;}
+        case DEC_0b00xx1011:      {return 8;}
+        case ADD_0b00xx1001:      {return 8;}
+        case ADD_0b11101000:      {return 16;}
+        case RLCA_0b00000111:     {return 4;}
+        case RRCA_0b00001111:     {return 4;}
+        case RLA_0b00010111:      {return 4;}
+        case RRA_0b00011111:      {return 4;}
         case _0xCB:               {return 0;} // use 0xCB version
-        case JP_0b11000011:       {return 4;}
-        case JP_0b11101001:       {return 1;}
-        case JP_0b110xx010:       {return value ? 4 : 3;} // n 4 machine cycles (cc=true) / 3 machine cycles (cc=false)
-        case JR_0b00011000:       {return 3;}
-        case JR_0b001xx000:       {return value ? 3 : 2;} // 3 machine cycles (cc=true)/ 2 machine cycles (cc=false)
-        case CALL_0b11001101:     {return 6;}
-        case CALL_0b110xx100:     {return value ? 6 : 3;} // 6 machine cycles (cc=true) / 3 machine cycles (cc=false)
-        case RET_0b11001001:      {return 4;}
-        case RET_0b110xx000:      {return value ? 5 : 2;} // n 5 machine cycles (cc=true)/2 machine cycles (cc=false)
-        case RETI_0b11011001:     {return 4;}
-        case RST_0b11xxx111:      {return 4;}
+        case JP_0b11000011:       {return 16;}
+        case JP_0b11101001:       {return 4;}
+        case JP_0b110xx010:       {return value ? 16 : 12;} // n 4 machine cycles (cc=true) / 3 machine cycles (cc=false)
+        case JR_0b00011000:       {return 12;}
+        case JR_0b001xx000:       {return value ? 12 : 8;} // 3 machine cycles (cc=true)/ 2 machine cycles (cc=false)
+        case CALL_0b11001101:     {return 24;}
+        case CALL_0b110xx100:     {return value ? 24 : 12;} // 6 machine cycles (cc=true) / 3 machine cycles (cc=false)
+        case RET_0b11001001:      {return 16;}
+        case RET_0b110xx000:      {return value ? 20 : 8;} // n 5 machine cycles (cc=true)/2 machine cycles (cc=false)
+        case RETI_0b11011001:     {return 16;}
+        case RST_0b11xxx111:      {return 16;}
 
         case HALT:                {return 0;}
         case STOP:                {return 0;}
-        case DI_0b11110011:       {return 1;}
-        case EI_0b11111011:       {return 1;}
-        case NOP_0b00000000:      {return 1;}
+        case DI_0b11110011:       {return 4;}
+        case EI_0b11111011:       {return 4;}
+        case NOP_0b00000000:      {return 4;}
     }
 }
 
 int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
 #if DEBUG
+    std::cout << "HL value:" << HL_data() << '\n';
+    std::cout << "RAM value by HL_address:" << (unsigned)ram.read(HL_data()) << '\n';
     auto print_range = [&](int n){
         while(n--) std::cout << "mem[" << pc + n << "] :" << (unsigned)ram.read(pc + n) << '\n';
     };
@@ -469,10 +484,15 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case LDH_0b11100010: { ram.write((0xff00 | regs[C]), regs[A]); ++pc; return t_cycle_by_ins(itype);}
         case LDH_0b11110000: {
             auto address = (0xff00 | ram.read(pc+1));
-//            std::cout << rand() % 1000;
-//            std::cout << std::hex << "ADDRESS:" << address << '\n';
-//            std::cout << std::dec;
-//            std::cout << "VALUE:" << (unsigned)ram.read(address) << '\n';
+#if DEBUG
+            std::cout << rand() % 1000;
+            std::cout << std::hex << "ADDRESS:" << address << '\n';
+#endif
+            auto value = (unsigned)ram.read(address);
+#if DEBUG
+            std::cout << std::dec;
+            std::cout << "LY: " << (unsigned)value << " BC: " << (short)getpair(0) << '\n';
+#endif
             regs[A] = ram.read(address);
             pc+=2;
             return t_cycle_by_ins(itype);
@@ -534,15 +554,30 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case SBC_0b11011110: { sub_reg_A(ram.read(pc+1) + get_flag(Cf)); pc+=2; return t_cycle_by_ins(itype);}
         case CP_0b10111xxx:  { sub_reg_A_flags_only(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case CP_0b10111110:  { sub_reg_A_flags_only(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
-        case CP_0b11111110:  { sub_reg_A_flags_only(ram.read(pc+1)); pc+=2; return t_cycle_by_ins(itype);}
-        case INC_0b00xxx100: { inc_reg(read345(i), ram); ++pc; return t_cycle_by_ins(itype);}
+        case CP_0b11111110:  {
+            sub_reg_A_flags_only(ram.read(pc+1));
+#if DEBUG
+            std::cout << "CP 0x90, A: " << (unsigned)regs[A] << " Zf: " << (unsigned)get_flag(Zf) << '\n';
+#endif
+            pc+=2;
+            return t_cycle_by_ins(itype);}
+        case INC_0b00xxx100: {
+            inc_reg(read345(i), ram);
+            ++pc;
+            return t_cycle_by_ins(itype);}
         case INC_0b00110100: { inc_reg(HL, ram); ++pc; return t_cycle_by_ins(itype);}
         case DEC_0b00xxx101: { dec_reg(read345(i), ram); ++pc; return t_cycle_by_ins(itype);}
         case DEC_0b00110101: { dec_reg(HL, ram); ++pc; return t_cycle_by_ins(itype);}
         case AND_0b10100xxx: { and_reg_A(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case AND_0b10100110: { and_reg_A(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
         case AND_0b11100110: { and_reg_A(ram.read(pc+1)); pc+=2; return t_cycle_by_ins(itype);}
-        case OR_0b10110xxx:  { or_reg_A(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
+        case OR_0b10110xxx:  {
+            or_reg_A(read_regs(read012(i), ram));
+#if DEBUG
+            std::cout << "OR C, Zf: " << (unsigned)get_flag(Zf) << " BC: " << (short)getpair(0) << '\n';
+#endif
+            ++pc;
+            return t_cycle_by_ins(itype);}
         case OR_0b10110110:  { or_reg_A(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
         case OR_0b11110110:  { or_reg_A(ram.read(pc+1)); pc+=2; return t_cycle_by_ins(itype);}
         case XOR_0b10101xxx: { xor_reg_A(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}

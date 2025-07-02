@@ -136,6 +136,8 @@ struct GameBoyVM{
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
 //            if (ppu.get_current_mode() == PPU::VBlank) render();
+            std::cout << "Data in segments by HL (10 byte):\n";
+            print_segment(cpu.HL_data(), 10);
             current_t_cycle = 0;
             draw();
 //            ppu.print_lcd();

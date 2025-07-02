@@ -168,6 +168,7 @@ private:
     size_t fetcher_current_tile_y = {};
     int current_line = {};
     int current_t_cycle_count = {};
+    int current_v_blank_t_cycle_count = {};
     bool longest_line = false;
 
     PixelFetcher pixel_fetcher;
