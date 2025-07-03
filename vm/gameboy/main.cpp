@@ -11,8 +11,8 @@
 
 constexpr size_t WIDTH = 1200;
 constexpr size_t HEIGHT = 600;
-constexpr size_t DISPLAY_WIDTH = 144;
-constexpr size_t DISPLAY_HEIGHT = 160;
+constexpr size_t DISPLAY_HEIGHT = 144;
+constexpr size_t DISPLAY_WIDTH = 160;
 constexpr double CPU_FREQUENCY = 4194304.0;
 constexpr double CPU_CYCLE_TIME = 1/CPU_FREQUENCY;
 
@@ -98,7 +98,7 @@ struct GameBoyVM{
         SetTargetFPS(60); // 59.7275 FPS
 
         // texture init
-        Image img = GenImageColor(DISPLAY_WIDTH, DISPLAY_HEIGHT, BLACK);
+        Image img = GenImageColor(DISPLAY_WIDTH, DISPLAY_HEIGHT, WHITE);
         Texture2D target = LoadTextureFromImage(img);
         UnloadImage(img);
         std::array<std::array<Color, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display_buffer{};
@@ -124,7 +124,7 @@ struct GameBoyVM{
     
         int current_t_cycle = 0;
         double cpu_accumulator = 0.0;
-        print_segment(0x0430, 50);
+//        print_segment(0x0430, 50);
         while(!WindowShouldClose()){
             cpu_accumulator += GetFrameTime();
             while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
@@ -136,8 +136,16 @@ struct GameBoyVM{
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
 //            if (ppu.get_current_mode() == PPU::VBlank) render();
-            std::cout << "Data in segments by HL (10 byte):\n";
-            print_segment(cpu.HL_data(), 10);
+//            std::cout << "Data in segments by HL (10 byte):\n";
+//            print_segment(constants::OAM_BEGIN, 30);
+//            std::cout << "\n===========================\n";
+            std::cout << "LCDC_ADDRESS value:" << (unsigned)ram.read(constants::LCDC_ADDRESS) << '\n';
+//            std::cout << "SCY address:" << (unsigned)ram.read(constants::SCY_ADDRESS) << '\n';
+//            std::cout << "WY address:" << (unsigned)ram.read(constants::WY_ADDRESS) << '\n';
+//            std::cout << "SCX address:" << (unsigned)ram.read(constants::SCX_ADDRESS) << '\n';
+//            std::cout << "LY address:" <<  (unsigned)ram.read(constants::LY_ADDRESS) << '\n';
+//            std::cout << "Window visible:" << (((ram.read(constants::LCDC_ADDRESS)) >> 5) & 1) << '\n';
+//            std::cout << "\n===========================\n";
             current_t_cycle = 0;
             draw();
 //            ppu.print_lcd();

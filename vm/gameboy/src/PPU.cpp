@@ -94,13 +94,12 @@ unsigned short PPU::get_tile_data_area(const RAM &ram)  {
 }
 
 void PPU::oam_scan(RAM &ram)  {
-    auto ly = ram.read(constants::LY_ADDRESS);
     std::array<Sprite, 10> result{};
     size_t count{};
     auto obj_sz = get_obj_size(ram);
     for (int i = 0; i < 160; i+=4){
         auto val = ram.read(constants::OAM_BEGIN + i);
-        auto top = val - 16;
+        int top = val - 16;
         if (current_line >= top && current_line < top + obj_sz){
             result[count++] = Sprite{
                     .y_pos = val,
@@ -116,7 +115,15 @@ void PPU::oam_scan(RAM &ram)  {
 }
 
 Pixel PPU::pixel_mixing(RAM &ram)  {
-    auto bg_pixel = pixel_fetcher.fifo.front();pixel_fetcher.fifo.pop();
+//    if (current_line == 120){
+//        std::cout << 123;
+//    }
+    if (pixel_fetcher.fifo.empty() && sprite_fetcher.fifo.empty()){
+        return Pixel{.color = Pixel::get_pixel_color(rand() % 4)};
+    }
+
+    auto bg_pixel = pixel_fetcher.fifo.front();
+    pixel_fetcher.fifo.pop();
     if (sprite_fetcher.fifo.empty()) {
         return bg_pixel;
     }
@@ -153,6 +160,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 //    std::cout << "CURRENT_LINE:" << current_line << '\n';
 //    std::cout << "CURRENT_MODE:" << current_mode << '\n';
 //    std::cout << "\n=========================\n";
+//    std::cout << "BG fifo:" << pixel_fetcher.fifo.size() << " Sprite fifo: " << sprite_fetcher.fifo.size() <<  '\n';
     if (current_mode == VBlank)
         current_v_blank_t_cycle_count += t_cycle;
     current_t_cycle_count += t_cycle;
@@ -171,12 +179,14 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 
     if (current_mode == Drawing) {
 //        if (((longest_line && current_t_cycle_count < 289) || (!longest_line && current_t_cycle_count < 172))) {
-        if (current_t_cycle_count < 289){
+        if (current_pixel_x < 160){
+//            std::cout << "CurrentLine drawing:" << current_line << '\n';
+//            std::cout << "CurrentPixel drawing:" << current_pixel_x << '\n';
             pixel_fetcher.fetch(ram, current_pixel_x);
             auto sprite = sprite_on_x(ram);
             if (sprite.has_value())
                 sprite_fetcher.fetch(ram, sprite.value());
-            if (!pixel_fetcher.fifo.empty()) draw(ram);
+            draw(ram);
         } else {
             current_mode = HBlank;
             set_ppu_mode(ram);
@@ -229,11 +239,13 @@ auto PPU::read_lcd() const -> const Color(&)[256][256] {
 }
 
 void PPU::print_lcd() const {
+    std::cout << "\n---------------------------------------\n";
     for (auto&& raw: read_lcd()){
         for (auto& el: raw){
             std::cout << Pixel::get_color_id(el);
         }
         std::cout << '\n';
     }
+    std::cout << "\n---------------------------------------\n";
 }
 

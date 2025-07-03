@@ -95,6 +95,9 @@ struct BaseFetcher {
             case FetcherState::ToPixels: {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Push;     break;}
             case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); if (pixels.empty()) current_state = FetcherState::GetTile; break;}
         }
+        if (ram.read(constants::LY_ADDRESS) == ram.read(constants::SCY_ADDRESS)) {
+            std::cout << "MATCH: TILE_BASE:" <<  tile_address << '\n';
+        }
     }
 };
 
