@@ -94,7 +94,8 @@ unsigned short PPU::get_tile_data_area(const RAM &ram)  {
 }
 
 void PPU::oam_scan(RAM &ram)  {
-    std::array<Sprite, 10> result{};
+    std::vector<Sprite> result{};
+    result.reserve(10);
     size_t count{};
     auto obj_sz = get_obj_size(ram);
     for (int i = 0; i < 160; i+=4){
@@ -110,32 +111,36 @@ void PPU::oam_scan(RAM &ram)  {
         }
         if (count == 10) break;
     }
-    std::sort(result.begin(), result.begin() + count, [](auto& l, auto& r){return l.x_pos < r.x_pos;});
-    sprite_buffer = result; // todo: check
+//    std::sort(result.begin(), result.begin() + count, [](auto& l, auto& r){return l.x_pos < r.x_pos;});
+    sprite_buffer = std::move(result); // todo: check
 }
 
 Pixel PPU::pixel_mixing(RAM &ram)  {
-//    if (current_line == 120){
-//        std::cout << 123;
-//    }
     if (pixel_fetcher.fifo.empty() && sprite_fetcher.fifo.empty()){
-        return Pixel{.color = Pixel::get_pixel_color(rand() % 4)};
+        return Pixel{.color = WHITE};
     }
 
     auto bg_pixel = pixel_fetcher.fifo.front();
     pixel_fetcher.fifo.pop();
     if (sprite_fetcher.fifo.empty()) {
+//        std::cout << "bg_pixel1 return" << '\n' << " Color:" << Pixel::get_color_id(bg_pixel.color) << "\n";
         return bg_pixel;
     }
     auto sprite_pixel = sprite_fetcher.fifo.front();sprite_fetcher.fifo.pop();
 
-    //  If the color number of the Sprite Pixel is 0, the Background Pixel is pushed to the LCD.
-    if (Pixel::get_color_id(sprite_pixel.color) == 0)
+    //  If the color number of the Sprite Pixel is 0, the Background Pixel is pushed to the buffer.
+    if (Pixel::get_color_id(sprite_pixel.color) == 0){
+//        std::cout << "bg_pixel2 return" << '\n';
         return bg_pixel;
+    }
+
     //  If the BG-to-OBJ-Priority bit is 1 and the color number of the Background Pixel is anything other than 0,
-    //  the Background Pixel is pushed to the LCD
-    if (bg_pixel.bg_priority && Pixel::get_color_id(bg_pixel.color) != 0)
+    //  the Background Pixel is pushed to the buffer
+    if (bg_pixel.bg_priority && Pixel::get_color_id(bg_pixel.color) != 0){
+//        std::cout << "bg_pixel3 return" << '\n';
         return bg_pixel;
+    }
+//    std::cout << "SPRITE PIXEL RETURN" << '\n';
     return sprite_pixel;
 }
 
@@ -149,7 +154,8 @@ std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
 }
 
 void PPU::draw(RAM &ram)  {
-    LCD[current_line][current_pixel_x++] = pixel_mixing(ram).color;
+    auto res = pixel_mixing(ram).color;
+    buffer[current_line][current_pixel_x++] = res;
 }
 
 void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
@@ -198,10 +204,8 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     //        if (((!longest_line && current_t_cycle_count >= 204) || (longest_line && current_t_cycle_count >= 87))) {
     if (current_t_cycle_count > 456){
             ++current_line;
-            set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
             current_pixel_x = 0;
-            pixel_fetcher.set_current_pixel_x(current_pixel_x);
-            sprite_fetcher.set_current_pixel_x(current_pixel_x);
+            set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
             current_t_cycle_count = 0;
             if (current_line == 144)
                 current_mode = VBlank;
@@ -234,15 +238,17 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 
 }
 
-auto PPU::read_lcd() const -> const Color(&)[256][256] {
-    return LCD;
+auto PPU::read_lcd() const -> const Color(&)[144][160] {
+    return buffer;
 }
 
-void PPU::print_lcd() const {
+void PPU::print_lcd(const RAM& ram) const {
+    auto scy = ram.read(constants::SCY_ADDRESS);
+    auto scx = ram.read(constants::SCX_ADDRESS);
     std::cout << "\n---------------------------------------\n";
-    for (auto&& raw: read_lcd()){
-        for (auto& el: raw){
-            std::cout << Pixel::get_color_id(el);
+    for (int i = 0; i < 144; ++i) {
+        for (int j = 0; j < 160; ++j) {
+            std::cout << Pixel::get_color_id(buffer[(scy + i) % 144][(scx + j) % 160]);
         }
         std::cout << '\n';
     }

@@ -111,20 +111,54 @@ struct GameBoyVM{
         }
         UpdateTexture(target, display_buffer.data());
 
+        auto draw_tiles = [&] {
+            static int counter = 0;
+            static std::array<unsigned char, 16> arr{};
+            std::cout << "Counter:" << counter << '\n';
+            for (int i = 0; i < 16; ++i){
+                arr[i] = ram.read(ppu.pixel_fetcher.tile_address + i + counter);
+            }
+            std::vector<std::vector<int>> colors;
+            for (size_t i = 0; i < 16; i+=2){
+                auto l = arr[i];
+                auto h = arr[i+1];
+                std::vector<int> tmp{};
+                for (int j = 0; j < 8; ++j) {
+                    auto lc = (l >> (7 - j)) & 1;
+                    auto hc = (h >> (7 - j)) & 1;
+                    tmp.push_back((hc << 1 | lc));
+                }
+                colors.push_back(tmp);
+            }
+
+            float xstep = 300.f/8.f;
+            float ystep = 300.f/8.f;
+            float x = 0.0f;
+            float y = 0.0f;
+            for (auto&& row: colors){
+                for (auto el: row) {
+                    DrawRectangle(x, y, xstep, ystep, Pixel::get_pixel_color(el));
+                    x+=xstep;
+                }
+                y += ystep;
+                x = 0.0f;
+            }
+            counter+=16;
+        };
+
         auto draw = [&]() {
-                auto scy = ram.read(constants::SCY_ADDRESS);
-                auto scx = ram.read(constants::SCX_ADDRESS);
                 auto& display = ppu.read_lcd();
-                for (int i = 0; i < DISPLAY_HEIGHT; ++i)
+                for (int i = 0; i < DISPLAY_HEIGHT; ++i) {
                     for (int j = 0; j < DISPLAY_WIDTH; ++j) {
-                        display_buffer[i][j] = display[(scy + i)%DISPLAY_HEIGHT][(scx + j)%DISPLAY_WIDTH];
+                        display_buffer[i][j] = display[i][j];
                     }
+                }
                 UpdateTexture(target, display_buffer.data());
         };
     
         int current_t_cycle = 0;
         double cpu_accumulator = 0.0;
-//        print_segment(0x0430, 50);
+
         while(!WindowShouldClose()){
             cpu_accumulator += GetFrameTime();
             while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
@@ -135,11 +169,13 @@ struct GameBoyVM{
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
+//            print_segment(0x8800, 50);
 //            if (ppu.get_current_mode() == PPU::VBlank) render();
 //            std::cout << "Data in segments by HL (10 byte):\n";
 //            print_segment(constants::OAM_BEGIN, 30);
 //            std::cout << "\n===========================\n";
-            std::cout << "LCDC_ADDRESS value:" << (unsigned)ram.read(constants::LCDC_ADDRESS) << '\n';
+             std::cout << "CURRENT_TILE_X:" << (unsigned)ppu.pixel_fetcher.fetcher_current_tile_x << '\n';
+//             std::cout << "LCDC_ADDRESS value:" << (unsigned)ram.read(constants::LCDC_ADDRESS) << '\n';
 //            std::cout << "SCY address:" << (unsigned)ram.read(constants::SCY_ADDRESS) << '\n';
 //            std::cout << "WY address:" << (unsigned)ram.read(constants::WY_ADDRESS) << '\n';
 //            std::cout << "SCX address:" << (unsigned)ram.read(constants::SCX_ADDRESS) << '\n';
@@ -148,11 +184,12 @@ struct GameBoyVM{
 //            std::cout << "\n===========================\n";
             current_t_cycle = 0;
             draw();
-//            ppu.print_lcd();
+//            ppu.print_lcd(ram);
             BeginDrawing();
                 ClearBackground(BLACK);
+//                draw_tiles();
                 // todo: check
-                DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, DISPLAY_WIDTH * WIDTH, DISPLAY_HEIGHT * (HEIGHT)}, {0, 0}, 0.0f, WHITE);
+                DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
                 DrawFPS(1000, 10);
             EndDrawing();
         }
@@ -206,20 +243,24 @@ void draw_tiles(auto& arr) {
         }
         EndDrawing();
     }
-
     CloseWindow();
 }
 
 
 
+constexpr bool draw = true;
 
 
 int main() {
     // test tiles draw
-//    unsigned char data[16]{0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF};
-//    draw_tiles(data);
-    GameBoyVM vm("/Users/prazd/Desktop/dev/cpu_instrs/cpu_instrs.gb");
-    std::cout << "\nRAM sz:" << vm.get_ram_size(vm.row_rom) << '\n';
-    std::cout << "\nROM sz:" << vm.get_rom_size(vm.row_rom) << '\n';
-    vm.run();
+//    if (draw) {
+//        unsigned char data[16]{0xff,0xff,0xe7,0xe7,0xe7,0xe7,0x81,0x81,0xe7,0xe7,0xe7,0xe7,0xff,0xff,0xff,0xff};
+//        draw_tiles(data);
+//    } else {
+        GameBoyVM vm("/Users/prazd/Desktop/dev/cpu_instrs/cpu_instrs.gb");
+        std::cout << "\nRAM sz:" << vm.get_ram_size(vm.row_rom) << '\n';
+        std::cout << "\nROM sz:" << vm.get_rom_size(vm.row_rom) << '\n';
+        vm.run();
+//    }
+
 }

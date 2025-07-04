@@ -8,6 +8,24 @@
 
 bool operator==(Color lhs, Color rhs);
 
+void print_segment(unsigned short address, auto n, RAM& ram) {
+    std::cout << "\n=============================\n";
+    for (int i = 0; i < n; ++i){
+        std::cout << std::hex << address + i <<  ":" << (unsigned)ram.mem[address + i] << '\n';
+    }
+    std::cout << "\n=============================\n";
+    std::cout << std::dec;
+}
+
+void print_bytes(unsigned short address, auto n, RAM& ram) {
+    std::cout << "\n=============================\n";
+    for (int i = 0; i < n; ++i){
+        std::cout << std::hex << "0x" << (unsigned)ram.mem[address + i] << ',';
+    }
+    std::cout << "\n=============================\n";
+    std::cout << std::dec;
+}
+
 struct Pixel {
     bool is_sprite;
     Color color{};      // The color number (IGNORING the palette, this value is the color value from the tile data)
@@ -34,17 +52,15 @@ struct BaseFetcher {
     } current_state = FetcherState::GetTile;
 
     unsigned short tile_address{};
-    unsigned char current_pixel_x{};
     unsigned char fetcher_current_tile_x{};
     unsigned char low {};
     unsigned char high {};
 
     std::queue<Pixel> pixels{};
     std::queue<Pixel> fifo{};
-
-    void set_current_pixel_x(unsigned char x) {
-        current_pixel_x = x;
-    }
+    unsigned char line_in_tile{};
+    bool is_window = false;
+    unsigned char scx_offset{};
 
     // todo: add to static class like ram ranges
     auto get_window_tile_map_area(const RAM& ram) {
@@ -72,16 +88,21 @@ struct BaseFetcher {
     void step(RAM& ram, Args&&... args) {
         switch(current_state) {
             case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(ram, std::forward<Args>(args)...); break;}
-            case FetcherState::Low:      {low  = ram.read(tile_address);      break;}
-            case FetcherState::High:     {high = ram.read(tile_address + 1);  break;}
-            case FetcherState::ToPixels: {pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low)); break;}
+            case FetcherState::Low:      {low  = ram.read(tile_address + (line_in_tile * 2));      break;}
+            case FetcherState::High:     {high = ram.read(tile_address + (line_in_tile * 2) + 1);  break;}
+            case FetcherState::ToPixels: {
+                pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low));
+//                SCX at a Sub-Tile-Layer
+                if (!is_window && fetcher_current_tile_x == 0) {
+                    for (int i = 0; i < scx_offset; ++i){
+                        pixels.pop();
+                    }
+                }
+                break;}
             case FetcherState::Push:     {
-                if (fifo.size() < 8 && !pixels.empty()) {
+                while (fifo.size() < 8 && !pixels.empty()) {
                     fifo.push(pixels.front());
                     pixels.pop();
-                }
-                if (pixels.empty()){
-                    ++fetcher_current_tile_x;
                 }
                 break;}
         }
@@ -93,10 +114,10 @@ struct BaseFetcher {
             case FetcherState::Low:      {step(ram, std::forward<Args>(args)...); current_state = FetcherState::High;     break;}
             case FetcherState::High:     {step(ram, std::forward<Args>(args)...); current_state = FetcherState::ToPixels; break;}
             case FetcherState::ToPixels: {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Push;     break;}
-            case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); if (pixels.empty()) current_state = FetcherState::GetTile; break;}
+            case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); if (pixels.empty()){++fetcher_current_tile_x; current_state = FetcherState::GetTile;} break;}
         }
         if (ram.read(constants::LY_ADDRESS) == ram.read(constants::SCY_ADDRESS)) {
-            std::cout << "MATCH: TILE_BASE:" <<  tile_address << '\n';
+//            std::cout << "MATCH: TILE_BASE:" <<  tile_address << '\n';
         }
     }
 };
@@ -109,9 +130,11 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
         auto scy = ram.read(constants::SCY_ADDRESS);
         auto ly  = ram.read(constants::LY_ADDRESS);
         auto scx = ram.read(constants::SCX_ADDRESS);
+        scx_offset = ram.read(constants::SCX_ADDRESS) % 8;
         unsigned short tile_base = ((ram.read(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8800 : 0x8000;
+
         bool inside_window_y = (ly >= wy);
-        bool inside_window_x = (current_pixel_x >= wx - 7);
+        bool inside_window_x = (wx >= 7 && current_pixel_x >= wx - 7);
 
         unsigned short tilemap_base{};
         unsigned char  tilemap_x{};
@@ -120,20 +143,27 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
         if (window_visible(ram) && inside_window_x && inside_window_y) {
             tilemap_base = get_window_tile_map_area(ram);
             current_window_line = ly - wy; // local window line
-            tilemap_x = fetcher_current_tile_x; // todo: check
+            tilemap_x = (current_pixel_x - (wx - 7)) / 8; // todo: check
             tilemap_y = current_window_line/8;
+            line_in_tile = current_window_line % 8;
+            is_window = true;
         } else {
             tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
             tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
             tilemap_y = ((ly + scy) & 0xff) / 8;                       // Because of this formula, fetcherY can be between 0 and 255
+            line_in_tile = (ly + scy) % 8;
+            is_window = false;
         }
 
         unsigned short tilemap_address = (tilemap_x + tilemap_y * 32) + tilemap_base;
         unsigned char tile_index = ram.read(tilemap_address);
+        unsigned short res{};
         if (tile_base == 0x8000)
-            return (tile_base + (tile_index * 16));
+            res = (tile_base + (tile_index * 16));
         else
-            return (tile_base + ((char)tile_index * 16));
+            res = (tile_base + ((char)tile_index * 16));
+//        print_bytes(res + 64 + 16 + 16 + 16 + 16 + 16 + 16 + 16, 16, ram);
+        return res;
     }
 };
 
@@ -151,9 +181,9 @@ public:
         OAM =     0b10,    // OAM Search (Поиск спрайтов)
         Drawing = 0b11     // Pixel Transfer (Передача пикселей)
     };
-private:
+//public:
     Mode current_mode = OAM;
-    Color LCD[256][256]{};
+    Color buffer[144][160]{};
 
     bool lcd_enable = true;
     bool window_visible = false;
@@ -162,7 +192,8 @@ private:
     size_t window_line_counter = 0;
     bool oam_scan_finished = false;
 
-    std::array<Sprite, 10> sprite_buffer{};
+    // todo: optimize
+    std::vector<Sprite> sprite_buffer;
 
     // coordinates
     size_t current_pixel_x = 0;
@@ -200,8 +231,8 @@ private:
     std::optional<Sprite> sprite_on_x(RAM& ram);
     void draw(RAM& ram);
 public:
-    void print_lcd()const;
-    auto  read_lcd() const -> const Color(&)[256][256];
+    void print_lcd(const RAM& ram)const;
+    auto  read_lcd() const -> const Color(&)[144][160];
     void handle_t_cycle(int t_cycle, RAM& ram);
     Mode get_current_mode() const;
 };
