@@ -156,7 +156,9 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
         }
 
         unsigned short tilemap_address = (tilemap_x + tilemap_y * 32) + tilemap_base;
+//        std::cout << "TileMap address:" << tilemap_address << '\n';
         unsigned char tile_index = ram.read(tilemap_address);
+//        std::cout << "Tile index:" << (int)tile_index << '\n';
         unsigned short res{};
         if (tile_base == 0x8000)
             res = (tile_base + (tile_index * 16));
@@ -198,7 +200,7 @@ public:
     // coordinates
     size_t current_pixel_x = 0;
     size_t current_window_line = 0;
-    size_t fetcher_current_tile_x = {};
+//    size_t fetcher_current_tile_x = {};
     size_t fetcher_current_tile_y = {};
     int current_line = {};
     int current_t_cycle_count = {};
@@ -231,8 +233,7 @@ public:
     std::optional<Sprite> sprite_on_x(RAM& ram);
     void draw(RAM& ram);
 public:
-    void print_lcd(const RAM& ram)const;
-    auto  read_lcd() const -> const Color(&)[144][160];
+    auto  read_buffer() const -> const Color(&)[144][160];
     void handle_t_cycle(int t_cycle, RAM& ram);
     Mode get_current_mode() const;
 };

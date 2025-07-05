@@ -146,16 +146,6 @@ struct GameBoyVM{
             counter+=16;
         };
 
-        auto draw = [&]() {
-                auto& display = ppu.read_lcd();
-                for (int i = 0; i < DISPLAY_HEIGHT; ++i) {
-                    for (int j = 0; j < DISPLAY_WIDTH; ++j) {
-                        display_buffer[i][j] = display[i][j];
-                    }
-                }
-                UpdateTexture(target, display_buffer.data());
-        };
-    
         int current_t_cycle = 0;
         double cpu_accumulator = 0.0;
 
@@ -169,24 +159,28 @@ struct GameBoyVM{
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
-//            print_segment(0x8800, 50);
+//            print_segment(0x9800, 1024);
 //            if (ppu.get_current_mode() == PPU::VBlank) render();
 //            std::cout << "Data in segments by HL (10 byte):\n";
 //            print_segment(constants::OAM_BEGIN, 30);
 //            std::cout << "\n===========================\n";
-             std::cout << "CURRENT_TILE_X:" << (unsigned)ppu.pixel_fetcher.fetcher_current_tile_x << '\n';
+
 //             std::cout << "LCDC_ADDRESS value:" << (unsigned)ram.read(constants::LCDC_ADDRESS) << '\n';
+//            std::cout << "TileBase:" << ppu.pixel_fetcher.tile_address << '\n';
 //            std::cout << "SCY address:" << (unsigned)ram.read(constants::SCY_ADDRESS) << '\n';
+//            std::cout << "SCX address:" << (unsigned)ram.read(constants::SCX_ADDRESS) << '\n';
 //            std::cout << "WY address:" << (unsigned)ram.read(constants::WY_ADDRESS) << '\n';
 //            std::cout << "SCX address:" << (unsigned)ram.read(constants::SCX_ADDRESS) << '\n';
 //            std::cout << "LY address:" <<  (unsigned)ram.read(constants::LY_ADDRESS) << '\n';
 //            std::cout << "Window visible:" << (((ram.read(constants::LCDC_ADDRESS)) >> 5) & 1) << '\n';
 //            std::cout << "\n===========================\n";
             current_t_cycle = 0;
-            draw();
+
+            // Render
+            UpdateTexture(target, ppu.read_buffer());
 //            ppu.print_lcd(ram);
             BeginDrawing();
-                ClearBackground(BLACK);
+//                ClearBackground(WHITE);
 //                draw_tiles();
                 // todo: check
                 DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);

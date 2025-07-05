@@ -54,7 +54,7 @@ void RAM::write(unsigned short index, unsigned char value) {
 //    if (index >= constants::VRAM_BEGIN && index <= constants::VRAM_END) {
 //        std::cout << "Writing to VRAM: Address 0x" << std::hex << index << " Value 0x" << (unsigned)value << std::dec << '\n';
 //    }
-    std::cout << std::dec;
+//    std::cout << std::dec;
     if (index <=  constants::ROM_BANK_01_END){
         handle_mbc(index, value);
         return;

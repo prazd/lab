@@ -154,8 +154,7 @@ std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
 }
 
 void PPU::draw(RAM &ram)  {
-    auto res = pixel_mixing(ram).color;
-    buffer[current_line][current_pixel_x++] = res;
+    buffer[current_line][current_pixel_x++] = pixel_mixing(ram).color;
 }
 
 void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
@@ -185,14 +184,17 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 
     if (current_mode == Drawing) {
 //        if (((longest_line && current_t_cycle_count < 289) || (!longest_line && current_t_cycle_count < 172))) {
-        if (current_pixel_x < 160){
-//            std::cout << "CurrentLine drawing:" << current_line << '\n';
-//            std::cout << "CurrentPixel drawing:" << current_pixel_x << '\n';
-            pixel_fetcher.fetch(ram, current_pixel_x);
+        if (current_pixel_x < 160 ) {
+            if (pixel_fetcher.fifo.size() < 8){
+                pixel_fetcher.fetch(ram, current_pixel_x);
+            }
             auto sprite = sprite_on_x(ram);
             if (sprite.has_value())
                 sprite_fetcher.fetch(ram, sprite.value());
-            draw(ram);
+
+            if (!pixel_fetcher.fifo.empty()) {
+                draw(ram);
+            }
         } else {
             current_mode = HBlank;
             set_ppu_mode(ram);
@@ -204,6 +206,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     //        if (((!longest_line && current_t_cycle_count >= 204) || (longest_line && current_t_cycle_count >= 87))) {
     if (current_t_cycle_count > 456){
             ++current_line;
+            pixel_fetcher.fetcher_current_tile_x = 0;
             current_pixel_x = 0;
             set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
             current_t_cycle_count = 0;
@@ -238,20 +241,6 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 
 }
 
-auto PPU::read_lcd() const -> const Color(&)[144][160] {
+auto PPU::read_buffer() const -> const Color(&)[144][160] {
     return buffer;
 }
-
-void PPU::print_lcd(const RAM& ram) const {
-    auto scy = ram.read(constants::SCY_ADDRESS);
-    auto scx = ram.read(constants::SCX_ADDRESS);
-    std::cout << "\n---------------------------------------\n";
-    for (int i = 0; i < 144; ++i) {
-        for (int j = 0; j < 160; ++j) {
-            std::cout << Pixel::get_color_id(buffer[(scy + i) % 144][(scx + j) % 160]);
-        }
-        std::cout << '\n';
-    }
-    std::cout << "\n---------------------------------------\n";
-}
-
