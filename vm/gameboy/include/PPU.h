@@ -131,6 +131,9 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
         auto ly  = ram.read(constants::LY_ADDRESS);
         auto scx = ram.read(constants::SCX_ADDRESS);
         scx_offset = ram.read(constants::SCX_ADDRESS) % 8;
+//        std::cout << "LY:" << (unsigned)ly << '\n';
+//        std::cout << "scy:" << (unsigned)scy << '\n';
+//        std::cout << "scx:" << (unsigned)scx << '\n';
         unsigned short tile_base = ((ram.read(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8800 : 0x8000;
 
         bool inside_window_y = (ly >= wy);
@@ -153,6 +156,8 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
             tilemap_y = ((ly + scy) & 0xff) / 8;                       // Because of this formula, fetcherY can be between 0 and 255
             line_in_tile = (ly + scy) % 8;
             is_window = false;
+            std::cout << "TilemapX:" << (unsigned)tilemap_x << '\n';
+            std::cout << "TilemapY:" << (unsigned)tilemap_y << '\n';
         }
 
         unsigned short tilemap_address = (tilemap_x + tilemap_y * 32) + tilemap_base;
@@ -165,7 +170,7 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
         else
             res = (tile_base + ((char)tile_index * 16));
 //        print_bytes(res + 64 + 16 + 16 + 16 + 16 + 16 + 16 + 16, 16, ram);
-        return res;
+        return 0x8000;
     }
 };
 
@@ -187,7 +192,7 @@ public:
     Mode current_mode = OAM;
     Color buffer[144][160]{};
 
-    bool lcd_enable = true;
+    bool lcd_enable = false;
     bool window_visible = false;
     bool obj_enable = false; // sprites
     bool bg_enable = false;
@@ -236,6 +241,7 @@ public:
     auto  read_buffer() const -> const Color(&)[144][160];
     void handle_t_cycle(int t_cycle, RAM& ram);
     Mode get_current_mode() const;
+    void print_buffer() const;
 };
 
 #endif //GAMEBOY_PPU_H

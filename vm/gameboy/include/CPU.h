@@ -129,7 +129,7 @@ struct CPU {
     int t_cycle_by_ins_0xCB(Instruction0xCB ins, unsigned char value = 0);
 
     void set_flag(Flag f, bool val);
-    unsigned char get_flag(Flag f);
+    unsigned char get_flag(Flag f) const;
 
     void decrement_pair(Register l, Register h);
     void increment_pair(Register l, Register h);
@@ -165,6 +165,7 @@ struct CPU {
     Instruction decode(unsigned char ins);
     Instruction0xCB decode_0xCB(unsigned char ins);
     int execute(unsigned char i, Instruction itype, RAM& ram);
+    void print_regs() const;
 
     std::unordered_map<Instruction, std::string_view> instruction_str = {
             {LD_0b01xxxyyy,"LD_0b01xxxyyy"},

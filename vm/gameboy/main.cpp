@@ -7,10 +7,9 @@
 #include "CPU.h"
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 
-constexpr size_t WIDTH = 1200;
-constexpr size_t HEIGHT = 600;
+constexpr size_t WIDTH = 800;
+constexpr size_t HEIGHT = 720;
 constexpr size_t DISPLAY_HEIGHT = 144;
 constexpr size_t DISPLAY_WIDTH = 160;
 constexpr double CPU_FREQUENCY = 4194304.0;
@@ -115,8 +114,9 @@ struct GameBoyVM{
             static int counter = 0;
             static std::array<unsigned char, 16> arr{};
             std::cout << "Counter:" << counter << '\n';
+            std::cout << ppu.pixel_fetcher.tile_address << '\n';
             for (int i = 0; i < 16; ++i){
-                arr[i] = ram.read(ppu.pixel_fetcher.tile_address + i + counter);
+                arr[i] = ram.read(0x8000 + i + counter);
             }
             std::vector<std::vector<int>> colors;
             for (size_t i = 0; i < 16; i+=2){
@@ -143,7 +143,7 @@ struct GameBoyVM{
                 y += ystep;
                 x = 0.0f;
             }
-            counter+=16;
+//            counter+=16;
         };
 
         int current_t_cycle = 0;
@@ -158,8 +158,9 @@ struct GameBoyVM{
                 ppu.handle_t_cycle(t_cycle, ram);
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
+//                ppu.print_buffer();
             }
-//            print_segment(0x9800, 1024);
+//            print_segment(constLCDC_ADDRESS, 16);
 //            if (ppu.get_current_mode() == PPU::VBlank) render();
 //            std::cout << "Data in segments by HL (10 byte):\n";
 //            print_segment(constants::OAM_BEGIN, 30);
@@ -167,20 +168,22 @@ struct GameBoyVM{
 
 //             std::cout << "LCDC_ADDRESS value:" << (unsigned)ram.read(constants::LCDC_ADDRESS) << '\n';
 //            std::cout << "TileBase:" << ppu.pixel_fetcher.tile_address << '\n';
-//            std::cout << "SCY address:" << (unsigned)ram.read(constants::SCY_ADDRESS) << '\n';
-//            std::cout << "SCX address:" << (unsigned)ram.read(constants::SCX_ADDRESS) << '\n';
 //            std::cout << "WY address:" << (unsigned)ram.read(constants::WY_ADDRESS) << '\n';
 //            std::cout << "SCX address:" << (unsigned)ram.read(constants::SCX_ADDRESS) << '\n';
+//            std::cout << "SCY address:" << (unsigned)ram.read(constants::SCY_ADDRESS) << '\n';
 //            std::cout << "LY address:" <<  (unsigned)ram.read(constants::LY_ADDRESS) << '\n';
 //            std::cout << "Window visible:" << (((ram.read(constants::LCDC_ADDRESS)) >> 5) & 1) << '\n';
 //            std::cout << "\n===========================\n";
             current_t_cycle = 0;
+//            cpu.print_regs();
+            std::cout << std::dec;
+
 
             // Render
             UpdateTexture(target, ppu.read_buffer());
-//            ppu.print_lcd(ram);
+
             BeginDrawing();
-//                ClearBackground(WHITE);
+                ClearBackground(WHITE);
 //                draw_tiles();
                 // todo: check
                 DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
@@ -251,7 +254,7 @@ int main() {
 //        unsigned char data[16]{0xff,0xff,0xe7,0xe7,0xe7,0xe7,0x81,0x81,0xe7,0xe7,0xe7,0xe7,0xff,0xff,0xff,0xff};
 //        draw_tiles(data);
 //    } else {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/cpu_instrs/cpu_instrs.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/text.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.row_rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.row_rom) << '\n';
         vm.run();

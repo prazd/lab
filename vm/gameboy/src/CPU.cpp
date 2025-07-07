@@ -296,7 +296,7 @@ void CPU::set_flag(CPU::Flag f, bool val)  {
 #endif
 }
 
-unsigned char CPU::get_flag(CPU::Flag f)  {
+unsigned char CPU::get_flag(CPU::Flag f) const {
     unsigned char value = (regs[F] >> flags_pos[f]) & 1;
 #if DEBUG
     std::cout << "Get Flag " << f << ": " << (int)value << " F: " << (unsigned)regs[F] << '\n';
@@ -839,4 +839,19 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case NOP_0b00000000: {++pc; return t_cycle_by_ins(itype);}
     }
     return 0;
+}
+
+void CPU::print_regs() const {
+    std::cout << "RegA:" << std::hex << (unsigned)regs[CPU::A] << '\n';
+    std::cout << "RegB:" << std::hex << (unsigned)regs[CPU::B] << '\n';
+    std::cout << "RegC:" << std::hex << (unsigned)regs[CPU::C] << '\n';
+    std::cout << "RegD:" << std::hex << (unsigned)regs[CPU::D] << '\n';
+    std::cout << "RegE:" << std::hex << (unsigned )regs[CPU::E] << '\n';
+    std::cout << "RegF:" << std::hex << (unsigned)regs[CPU::F] << '\n';
+    std::cout << "Zero:" << (unsigned)get_flag(Zf) << std::endl;
+    std::cout << "Negative:" << (unsigned)get_flag(Nf) << std::endl;
+    std::cout << "Carry" << (unsigned)get_flag(Cf) << std::endl;
+    std::cout << "HalfCarry" << (unsigned)get_flag(Hf) << std::endl;
+    std::cout << "PC:" << pc << std::endl;
+    std::cout << "SP:" << sp << '\n';
 }

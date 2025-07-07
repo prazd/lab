@@ -2,16 +2,16 @@
 
 Color Pixel::get_pixel_color(unsigned char id)  {
     switch(id){
-        case 0: return WHITE;
+        case 0: return BLACK;
         case 1: return LIGHTGRAY;
         case 2: return DARKGRAY;
         default:
-            return BLACK;
+            return WHITE;
     };
 }
 
 int Pixel::get_color_id(Color c)  {
-    if (c == WHITE)
+    if (c == BLACK)
         return 0;
     if (c == LIGHTGRAY)
         return 1;
@@ -243,4 +243,15 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 
 auto PPU::read_buffer() const -> const Color(&)[144][160] {
     return buffer;
+}
+
+void PPU::print_buffer() const {
+    std::cout << "\n=======================================\n";
+    for (auto&& row: buffer){
+        for (auto& el: row) {
+            std::cout << Pixel::get_color_id(el);
+        }
+        std::cout << '\n';
+    }
+    std::cout << "\n=======================================\n";
 }
