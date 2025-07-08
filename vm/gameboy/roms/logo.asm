@@ -1,28 +1,42 @@
-SECTION "Header", ROM0[$100]
-; Входная точка
-nop
-jp Start
+; File: logo.asm
+SECTION "Header", ROM0[$0000]
+  ; Nintendo logo data (from 0100 to 0133)
+  jp start
+  nop
+  ; ... (rest of the Nintendo logo bytes) ...
 
-; Данные логотипа Nintendo (0x104–0x133)
-DB $CE, $ED, $66, $66, $CC, $0D, $00, $0B, $03, $73, $00, $83, $00, $0C, $00, $0D
-DB $00, $08, $11, $1F, $88, $89, $00, $0E, $DC, $CC, $6E, $E6, $DD, $DD, $D9, $99
-DB $BB, $BB, $67, $63, $6E, $0E, $EC, $CC, $DD, $DC, $99, $9F, $BB, $B9, $33, $3E
-
-; Заголовок (название, тип картриджа и т.д.)
-DB "LOGO TEST" ; Название (до 15 символов)
-DS 4        ; Зарезервировано
-DB $00      ; Тип картриджа (MBC0, без RAM)
-DB $00      ; Размер ROM (32 КБ)
-DB $00      ; Размер RAM (нет)
-DB $01      ; Код региона (не Япония)
-DB $33      ; Лицензиат (новый)
-DB $00      ; Версия
-DB $00      ; Контрольная сумма заголовка (вычисляется позже)
-DW $0000    ; Глобальная контрольная сумма (вычисляется позже)
-
-SECTION "Start", ROM0[$150]
-Start:
-    ; Простой бесконечный цикл для теста
-    di
-    halt
-    jr Start
+SECTION "Code", ROM0[$0100]
+start:
+  ; Disable boot ROM
+  ld sp, $FFFE
+  ld hl, $9FFF
+  ld (hl), $00 ; Disable boot ROM
+  ; Initialize LCD
+  ldh a, [$FF40] ; LCD Control Register
+  or %10000000  ; Turn on LCD
+  ldh ($FF40), a
+  ; Initialize scroll registers
+  xor a
+  ldh ($FF42), a ; Scroll Y
+  ldh ($FF43), a ; Scroll X
+  ; Display the logo
+  call display_logo
+  ; Stay in a loop forever
+  jp $
+; --- Function to display the logo ---
+display_logo:
+  ; ... (Logic to copy logo data to VRAM) ...
+  ; Example: Copying 16x8 logo from $0104 to $8000
+  ld hl, $0104
+  ld de, $8000 ; Start of VRAM for tiles
+  ld bc, $100 ; Number of bytes to copy (16x8 tiles)
+  ld a, (hl)
+  ld (de), a
+  inc hl
+  inc de
+  dec bc
+  ld a, b
+  or c
+  jr nz, $-7 ; Loop until all bytes are copied
+  ; --- End of copy ---
+  ret

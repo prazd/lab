@@ -114,9 +114,10 @@ struct GameBoyVM{
             static int counter = 0;
             static std::array<unsigned char, 16> arr{};
             std::cout << "Counter:" << counter << '\n';
+
             std::cout << ppu.pixel_fetcher.tile_address << '\n';
             for (int i = 0; i < 16; ++i){
-                arr[i] = ram.read(0x8000 + i + counter);
+                arr[i] = ram.read((0x8000 + 0x63 * 16) + i);
             }
             std::vector<std::vector<int>> colors;
             for (size_t i = 0; i < 16; i+=2){
@@ -149,6 +150,7 @@ struct GameBoyVM{
         int current_t_cycle = 0;
         double cpu_accumulator = 0.0;
 
+
         while(!WindowShouldClose()){
             cpu_accumulator += GetFrameTime();
             while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
@@ -160,7 +162,20 @@ struct GameBoyVM{
                 cpu_accumulator-=CPU_CYCLE_TIME;
 //                ppu.print_buffer();
             }
-//            print_segment(constLCDC_ADDRESS, 16);
+
+            // CPU instrs debug
+            ram.write(0x9800, 0x63);
+            ram.write(0x9801, 0x70);
+            ram.write(0x9802, 0x75);
+            ram.write(0x9803, 0x5f);
+            ram.write(0x9804, 0x69);
+            ram.write(0x9805, 0x6E);
+            ram.write(0x9806, 0x73);
+            ram.write(0x9807, 0x74);
+            ram.write(0x9808, 0x72);
+            ram.write(0x9809, 0x73);
+
+//            print_segment(0x8000, 8176);
 //            if (ppu.get_current_mode() == PPU::VBlank) render();
 //            std::cout << "Data in segments by HL (10 byte):\n";
 //            print_segment(constants::OAM_BEGIN, 30);
@@ -254,7 +269,7 @@ int main() {
 //        unsigned char data[16]{0xff,0xff,0xe7,0xe7,0xe7,0xe7,0x81,0x81,0xe7,0xe7,0xe7,0xe7,0xff,0xff,0xff,0xff};
 //        draw_tiles(data);
 //    } else {
-        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/text.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.row_rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.row_rom) << '\n';
         vm.run();

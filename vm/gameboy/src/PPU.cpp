@@ -206,7 +206,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     //        if (((!longest_line && current_t_cycle_count >= 204) || (longest_line && current_t_cycle_count >= 87))) {
     if (current_t_cycle_count > 456){
             ++current_line;
-            pixel_fetcher.fetcher_current_tile_x = 0;
+//            pixel_fetcher.fetcher_current_tile_x = 0;
             current_pixel_x = 0;
             set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
             current_t_cycle_count = 0;
