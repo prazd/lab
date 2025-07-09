@@ -123,24 +123,21 @@ Pixel PPU::pixel_mixing(RAM &ram)  {
     auto bg_pixel = pixel_fetcher.fifo.front();
     pixel_fetcher.fifo.pop();
     if (sprite_fetcher.fifo.empty()) {
-//        std::cout << "bg_pixel1 return" << '\n' << " Color:" << Pixel::get_color_id(bg_pixel.color) << "\n";
         return bg_pixel;
     }
     auto sprite_pixel = sprite_fetcher.fifo.front();sprite_fetcher.fifo.pop();
 
     //  If the color number of the Sprite Pixel is 0, the Background Pixel is pushed to the buffer.
     if (Pixel::get_color_id(sprite_pixel.color) == 0){
-//        std::cout << "bg_pixel2 return" << '\n';
         return bg_pixel;
     }
 
     //  If the BG-to-OBJ-Priority bit is 1 and the color number of the Background Pixel is anything other than 0,
     //  the Background Pixel is pushed to the buffer
     if (bg_pixel.bg_priority && Pixel::get_color_id(bg_pixel.color) != 0){
-//        std::cout << "bg_pixel3 return" << '\n';
         return bg_pixel;
     }
-//    std::cout << "SPRITE PIXEL RETURN" << '\n';
+
     return sprite_pixel;
 }
 
@@ -184,7 +181,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 
     if (current_mode == Drawing) {
 //        if (((longest_line && current_t_cycle_count < 289) || (!longest_line && current_t_cycle_count < 172))) {
-        if (current_pixel_x < 160 ) {
+        if (current_pixel_x < 160) {
             if (pixel_fetcher.fifo.size() < 8){
                 pixel_fetcher.fetch(ram, current_pixel_x);
             }
@@ -203,10 +200,8 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     }
 
     if (current_mode == HBlank) {
-    //        if (((!longest_line && current_t_cycle_count >= 204) || (longest_line && current_t_cycle_count >= 87))) {
     if (current_t_cycle_count > 456){
             ++current_line;
-//            pixel_fetcher.fetcher_current_tile_x = 0;
             current_pixel_x = 0;
             set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
             current_t_cycle_count = 0;
@@ -231,14 +226,15 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
         }
         if (current_t_cycle_count >= 4560) {
             current_mode = OAM;
+            set_ppu_mode(ram);
             current_line = 0;
+            set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
             current_pixel_x = 0;
             current_window_line = 0;
             current_t_cycle_count = 0;
-            set_ppu_mode(ram);
+            current_v_blank_t_cycle_count = 0;
         }
     }
-
 }
 
 auto PPU::read_buffer() const -> const Color(&)[144][160] {

@@ -94,7 +94,7 @@ struct GameBoyVM{
     
     void run() {
         InitWindow(WIDTH, HEIGHT, "GameBoy");
-        SetTargetFPS(60); // 59.7275 FPS
+        SetTargetFPS(1); // 59.7275 FPS
 
         // texture init
         Image img = GenImageColor(DISPLAY_WIDTH, DISPLAY_HEIGHT, WHITE);
@@ -164,16 +164,16 @@ struct GameBoyVM{
             }
 
             // CPU instrs debug
-            ram.write(0x9800, 0x63);
-            ram.write(0x9801, 0x70);
-            ram.write(0x9802, 0x75);
-            ram.write(0x9803, 0x5f);
-            ram.write(0x9804, 0x69);
-            ram.write(0x9805, 0x6E);
-            ram.write(0x9806, 0x73);
-            ram.write(0x9807, 0x74);
-            ram.write(0x9808, 0x72);
-            ram.write(0x9809, 0x73);
+//            ram.write(0x9800, 0x63);
+//            ram.write(0x9801, 0x70);
+//            ram.write(0x9802, 0x75);
+//            ram.write(0x9803, 0x5f);
+//            ram.write(0x9804, 0x69);
+//            ram.write(0x9805, 0x6E);
+//            ram.write(0x9806, 0x73);
+//            ram.write(0x9807, 0x74);
+//            ram.write(0x9808, 0x72);
+//            ram.write(0x9809, 0x73);
 
 //            print_segment(0x8000, 8176);
 //            if (ppu.get_current_mode() == PPU::VBlank) render();
@@ -269,7 +269,7 @@ int main() {
 //        unsigned char data[16]{0xff,0xff,0xe7,0xe7,0xe7,0xe7,0x81,0x81,0xe7,0xe7,0xe7,0xe7,0xff,0xff,0xff,0xff};
 //        draw_tiles(data);
 //    } else {
-        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/text.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.row_rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.row_rom) << '\n';
         vm.run();

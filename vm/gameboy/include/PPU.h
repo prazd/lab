@@ -91,10 +91,16 @@ struct BaseFetcher {
             case FetcherState::Low:      {low  = ram.read(tile_address + (line_in_tile * 2));      break;}
             case FetcherState::High:     {high = ram.read(tile_address + (line_in_tile * 2) + 1);  break;}
             case FetcherState::ToPixels: {
-                pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low));
-                if (tile_address == 34352) {
-                    std::cout << "TileAddress!" << '\n';
-                }
+//                if (fetcher_current_tile_x == 0) {
+//                    std::queue<Pixel> tmp;
+//                    std::array<Pixel, 8> arr{};
+//                    arr.fill(Pixel{.color = RED});
+//                    for (const auto& el: arr) tmp.push(el);
+//                    pixels = tmp;
+//                } else {
+                    pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low));
+
+
 //                SCX at a Sub-Tile-Layer
                 if (!is_window && fetcher_current_tile_x == 0) {
                     for (int i = 0; i < scx_offset; ++i){
@@ -171,18 +177,18 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
             res = (tile_base + (tile_index * 16));
         else
             res = (tile_base + ((char)tile_index * 16));
-        std::cout << "UpdateTileBase:\n";
-        std::cout << "RES:" << res << '\n';
-        std::cout << "SCX:" <<(unsigned )scx << '\n';
-        std::cout << "SCY:" << (unsigned)scy << '\n';
-        std::cout << "LY:" <<(unsigned)ly << '\n';
+//        std::cout << "UpdateTileBase:\n";
+//        std::cout << "RES:" << res << '\n';
+//        std::cout << "SCX:" <<(unsigned )scx << '\n';
+//        std::cout << "SCY:" << (unsigned)scy << '\n';
+//        std::cout << "LY:" <<(unsigned)ly << '\n';
 //        if (res == 0x8000 + 0x63 * 16) {
 //            std::cout << "RES" << '\n';
 //            std::cout << "SCX:" <<(unsigned )scx << '\n';
 //            std::cout << "SCY:" << (unsigned)scy << '\n';
 //            std::cout << "LY:" <<(unsigned)ly << '\n';
 //        }
-        return res;
+        return 0x8000;
     }
 };
 
@@ -195,10 +201,10 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, const Sprite&> {
 class PPU {
 public:
     enum Mode {
-        HBlank =  0b00,    // H-Blank (Горизонтальная синхронизация)
-        VBlank =  0b01,    // V-Blank (Вертикальная синхронизация)
-        OAM =     0b10,    // OAM Search (Поиск спрайтов)
-        Drawing = 0b11     // Pixel Transfer (Передача пикселей)
+        HBlank =  0b00,    // H-Blank
+        VBlank =  0b01,    // V-Blank
+        OAM =     0b10,    // OAM Search
+        Drawing = 0b11     // Pixel Transfer
     };
 //public:
     Mode current_mode = OAM;
