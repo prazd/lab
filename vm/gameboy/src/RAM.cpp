@@ -15,6 +15,17 @@ bool RAM::lcd_enabled() const {
 }
 
 void RAM::handle_mbc(unsigned short index, unsigned char value) {
+    switch (current_mbc) {
+        case MBC0: {handle_mbc0(index, value); break;}
+        case MBC1: {handle_mbc1(index, value); break;}
+    }
+}
+
+void RAM::handle_mbc0(unsigned short index, unsigned char value) {
+    if (index >= 0x0000 && index <= 0x1FFF) external_ram_enabled = (value & 0xf) == 0x0A;
+}
+
+void RAM::handle_mbc1(unsigned short index, unsigned char value) {
     // MBC-1
     // https://hacktix.github.io/GBEDG/mbcs/mbc1/
     if (index >= 0x0000 && index <= 0x1FFF) {
@@ -61,6 +72,7 @@ void RAM::write(unsigned short index, unsigned char value) {
     }
     if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END)
         index -= 0x2000;
+
     if (is_ram_avaliable(index))
         mem[index] = value;
 }

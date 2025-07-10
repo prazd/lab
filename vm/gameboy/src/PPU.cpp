@@ -67,7 +67,7 @@ void PPU::update_bg(const RAM &ram)  {
     bg_enable = ((ram.read(constants::LCDC_ADDRESS)) & 1);
 }
 void PPU::update_regs(const RAM &ram) {
-    update_lcd(ram);
+//    update_lcd(ram);
     update_window(ram);
     update_obj(ram);
     update_bg(ram);
@@ -163,8 +163,8 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 //    std::cout << "CURRENT_MODE:" << current_mode << '\n';
 //    std::cout << "\n=========================\n";
 //    std::cout << "BG fifo:" << pixel_fetcher.fifo.size() << " Sprite fifo: " << sprite_fetcher.fifo.size() <<  '\n';
-    if (current_mode == VBlank)
-        current_v_blank_t_cycle_count += t_cycle;
+    if (current_mode == VBlank) current_v_blank_t_cycle_count += t_cycle;
+
     current_t_cycle_count += t_cycle;
     if (current_mode == OAM){ //
         if (current_t_cycle_count < 80) {
@@ -173,6 +173,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
                 oam_scan_finished = true;
             }
         } else {
+            current_pixel_x = 0;
             current_mode = Drawing;
             set_ppu_mode(ram);
         }
@@ -200,29 +201,38 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     }
 
     if (current_mode == HBlank) {
-    if (current_t_cycle_count > 456){
-            ++current_line;
-            current_pixel_x = 0;
-            set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
-            current_t_cycle_count = 0;
-            if (current_line == 144)
-                current_mode = VBlank;
-                // request_interrupt(VBLANK_INTERRUPT); // todo:
-            else{
-                current_mode = OAM;
-                oam_scan_finished = false;
+        if (current_t_cycle_count > 456){
+                set_ppu_reg(constants::LY_ADDRESS, ++current_line, ram);
+                // LYC
+                auto lyc = ram.read(constants::LYC_ADDRESS);
+                unsigned char stat = ram.read(constants::STAT_ADDRESS);
+                if(current_line == lyc) {
+                    ram.write(constants::STAT_ADDRESS, (ram.read(constants::STAT_ADDRESS) | (1 << 2)));
+                    if (stat & (1 << 6)) ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | 1 << 1));
+                } else {
+                    ram.write(constants::STAT_ADDRESS, (ram.read(constants::STAT_ADDRESS) & (~(1 << 2))));
+                }
+
+                pixel_fetcher.fetcher_current_tile_x = 0; // todo: check
+                current_pixel_x = 0;
+                current_t_cycle_count = 0;
+                if (current_line == 144)
+                    current_mode = VBlank;
+                    // request_interrupt(VBLANK_INTERRUPT); // todo:
+                else{
+                    current_mode = OAM;
+                    oam_scan_finished = false;
+                }
+                window_line_counter = 0;
+                set_ppu_mode(ram);
             }
-            window_line_counter = 0;
-            set_ppu_mode(ram);
-        }
-        return;
+            return;
     }
 
     if (current_mode == VBlank) {
         if (current_v_blank_t_cycle_count >= 456){
-            ++current_line;
+            set_ppu_reg(constants::LY_ADDRESS, ++current_line, ram);
             current_v_blank_t_cycle_count = 0;
-            set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
         }
         if (current_t_cycle_count >= 4560) {
             current_mode = OAM;

@@ -6,6 +6,7 @@
 #include "RAM.h"
 #include "CPU.h"
 #include <filesystem>
+#include <sstream>
 #include <fstream>
 
 constexpr size_t WIDTH = 800;
@@ -88,13 +89,33 @@ struct GameBoyVM{
         std::memcpy(ram.mem + constants::ROM_BANK_01_BEGIN, row_rom.data() + 16384, 16384);
         cpu.pc = 0x0100;
         cpu.sp = 0xFFFE;
+        switch (get_rom_size(row_rom)) {
+            case 4: {ram.current_mbc = RAM::MBC1; break;}
+            default:
+                {ram.current_mbc = RAM::MBC0; break;}
+        }
     }
-
-    void render(){}
     
     void run() {
+
+
+        // Gamboy Doctor
+#if 1
+        cpu.regs[CPU::A] = 0x01;
+        cpu.regs[CPU::F] = 0xB0;
+        cpu.regs[CPU::B] = 0x00;
+        cpu.regs[CPU::C] = 0x13;
+        cpu.regs[CPU::D] = 0x00;
+        cpu.regs[CPU::E] = 0xD8;
+        cpu.regs[CPU::H] = 0x01;
+        cpu.regs[CPU::L] = 0x4D;
+        cpu.sp = 0xfffe;
+        cpu.pc = 0x0100;
+#endif
+
+
         InitWindow(WIDTH, HEIGHT, "GameBoy");
-        SetTargetFPS(1); // 59.7275 FPS
+        SetTargetFPS(60); // 59.7275 FPS
 
         // texture init
         Image img = GenImageColor(DISPLAY_WIDTH, DISPLAY_HEIGHT, WHITE);
@@ -154,16 +175,39 @@ struct GameBoyVM{
         while(!WindowShouldClose()){
             cpu_accumulator += GetFrameTime();
             while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
-                auto next_ins = cpu.fetch(ram); 
+#if 1
+                auto print_hex = [&](auto val){
+                    auto num_bytes = sizeof(val);
+                    std::stringstream ss("");
+                    ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
+                    return ss;
+                };
+                std::cout <<
+                          "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
+                          "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
+                          "B:" <<  print_hex(cpu.regs[CPU::B]).str() << " " <<
+                          "C:" <<  print_hex(cpu.regs[CPU::C]).str() << " " <<
+                          "D:" <<  print_hex(cpu.regs[CPU::D]).str() << " " <<
+                          "E:" <<  print_hex(cpu.regs[CPU::E]).str() << " " <<
+                          "H:" <<  print_hex(cpu.regs[CPU::H]).str() << " " <<
+                          "L:" <<  print_hex(cpu.regs[CPU::L]).str() << " " <<
+                          "SP:" <<  print_hex(cpu.sp).str() << " " <<
+                          "PC:" <<  print_hex(cpu.pc).str() << " " <<
+                          "PCMEM:" <<  print_hex(ram.read(cpu.pc)).str() << "," <<
+                          print_hex(ram.read(cpu.pc + 1)).str() << "," <<
+                          print_hex(ram.read(cpu.pc + 2)).str() << "," <<
+                          print_hex(ram.read(cpu.pc + 3)).str() << '\n';
+                std::cout << std::dec;
+#endif
+                auto next_ins = cpu.fetch(ram);
                 auto decoded_ins = cpu.decode(next_ins);
                 auto t_cycle = cpu.execute(next_ins, decoded_ins, ram);
                 ppu.handle_t_cycle(t_cycle, ram);
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
-//                ppu.print_buffer();
             }
 
-            // CPU instrs debug
+//             CPU instrs debug
 //            ram.write(0x9800, 0x63);
 //            ram.write(0x9801, 0x70);
 //            ram.write(0x9802, 0x75);
@@ -175,7 +219,7 @@ struct GameBoyVM{
 //            ram.write(0x9808, 0x72);
 //            ram.write(0x9809, 0x73);
 
-//            print_segment(0x8000, 8176);
+//            print_segment(0x9800, 7);
 //            if (ppu.get_current_mode() == PPU::VBlank) render();
 //            std::cout << "Data in segments by HL (10 byte):\n";
 //            print_segment(constants::OAM_BEGIN, 30);
@@ -202,7 +246,7 @@ struct GameBoyVM{
 //                draw_tiles();
                 // todo: check
                 DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
-                DrawFPS(1000, 10);
+                DrawFPS(700, 10);
             EndDrawing();
         }
     }
@@ -258,21 +302,9 @@ void draw_tiles(auto& arr) {
     CloseWindow();
 }
 
-
-
-constexpr bool draw = true;
-
-
 int main() {
-    // test tiles draw
-//    if (draw) {
-//        unsigned char data[16]{0xff,0xff,0xe7,0xe7,0xe7,0xe7,0x81,0x81,0xe7,0xe7,0xe7,0xe7,0xff,0xff,0xff,0xff};
-//        draw_tiles(data);
-//    } else {
-        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/text.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/cpu_instrs/individual/01-special.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.row_rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.row_rom) << '\n';
         vm.run();
-//    }
-
 }

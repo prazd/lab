@@ -16,6 +16,11 @@ struct RAM {
     // 0xFF80–0xFFFE: High RAM (HRAM)
     unsigned char mem[0x10000]{}; // 64KiB
 
+    enum MBC {
+        MBC0,
+        MBC1
+    } current_mbc = MBC1;
+
     size_t current_rom_bank = 1;
     std::vector<unsigned char> rom{};
     std::vector<unsigned char> cart_ram{};
@@ -31,6 +36,9 @@ struct RAM {
     void update_cart_ram(size_t n);
     bool lcd_enabled() const;
     void handle_mbc(unsigned short index, unsigned char value);
+    void handle_mbc0(unsigned short index, unsigned char value);
+    void handle_mbc1(unsigned short index, unsigned char value);
+
 
     // 0 - HBlank
     // 1 - VBlank

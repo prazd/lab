@@ -75,12 +75,6 @@ struct BaseFetcher {
         return 0x9800;
     }
 
-    auto get_tile_data_area(const RAM& ram) {
-        if (((ram.read(constants::LCDC_ADDRESS) >> 4) & 1))
-            return 0x8800;
-        return 0x8000;
-    }
-
     bool window_visible(const RAM& ram) {
         return (((ram.read(constants::LCDC_ADDRESS)) >> 5) & 1);
     }
@@ -91,16 +85,7 @@ struct BaseFetcher {
             case FetcherState::Low:      {low  = ram.read(tile_address + (line_in_tile * 2));      break;}
             case FetcherState::High:     {high = ram.read(tile_address + (line_in_tile * 2) + 1);  break;}
             case FetcherState::ToPixels: {
-//                if (fetcher_current_tile_x == 0) {
-//                    std::queue<Pixel> tmp;
-//                    std::array<Pixel, 8> arr{};
-//                    arr.fill(Pixel{.color = RED});
-//                    for (const auto& el: arr) tmp.push(el);
-//                    pixels = tmp;
-//                } else {
-                    pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low));
-
-
+                pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low));
 //                SCX at a Sub-Tile-Layer
                 if (!is_window && fetcher_current_tile_x == 0) {
                     for (int i = 0; i < scx_offset; ++i){
@@ -109,7 +94,7 @@ struct BaseFetcher {
                 }
                 break;}
             case FetcherState::Push:     {
-                while (fifo.size() < 8 && !pixels.empty()) {
+                if (fifo.size() < 8 && !pixels.empty()) {
                     fifo.push(pixels.front());
                     pixels.pop();
                 }
@@ -140,8 +125,7 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
 //        std::cout << "LY:" << (unsigned)ly << '\n';
 //        std::cout << "scy:" << (unsigned)scy << '\n';
 //        std::cout << "scx:" << (unsigned)scx << '\n';
-        unsigned short tile_base = ((ram.read(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8800 : 0x8000;
-//        unsigned short tile_base = 0x8000;
+        unsigned short tile_base = ((ram.read(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8000 : 0x8800; // TODO: check
 
         bool inside_window_y = (ly >= wy);
         bool inside_window_x = (wx >= 7 && current_pixel_x >= wx - 7);
@@ -163,14 +147,37 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
             tilemap_y = ((ly + scy) & 0xff) / 8;                       // Because of this formula, fetcherY can be between 0 and 255
             line_in_tile = (ly + scy) % 8;
             is_window = false;
-//            std::cout << "TilemapX:" << (unsigned)tilemap_x << '\n';
-//            std::cout << "TilemapY:" << (unsigned)tilemap_y << '\n';
         }
 
+//        if (fetcher_current_tile_x == 0) {
+//            std::cout << "\n===========================\n";
+//            std::cout << "LY:" << (unsigned)ly << '\n';
+//            std::cout << "SCY:" << (unsigned)scy << '\n';
+//            unsigned bg_y = (ly + scy) & 0xFF;
+//            std::cout << "fetcher_current_tile_x_0 line in tile: " << bg_y % 8 << '\n';
+//            std::cout << "\n===========================\n";
+//        }
+//
+//        if (fetcher_current_tile_x == 1) {
+//            std::cout << "\n===========================\n";
+//            std::cout << "LY:" << (unsigned)ly << '\n';
+//            std::cout << "SCY:" << (unsigned)scy << '\n';
+//            unsigned bg_y = (ly + scy) & 0xFF;
+//            std::cout << "fetcher_current_tile_x_1 line in tile: " << bg_y % 8 << '\n';
+//            std::cout << "\n===========================\n";
+//        }
+//
+//        if (fetcher_current_tile_x == 2) {
+//            std::cout << "\n===========================\n";
+//            std::cout << "LY:" << (unsigned)ly << '\n';
+//            std::cout << "SCY:" << (unsigned)scy << '\n';
+//            unsigned bg_y = (ly + scy) & 0xFF;
+//            std::cout << "fetcher_current_tile_x_2 line in tile: " << bg_y % 8 << '\n';
+//            std::cout << "\n===========================\n";
+//        }
+
         unsigned short tilemap_address = (tilemap_x + tilemap_y * 32) + tilemap_base;
-//        std::cout << "TileMap address:" << tilemap_address << '\n';
         unsigned char tile_index = ram.read(tilemap_address);
-//        std::cout << "Tile index:" << (int)tile_index << '\n';
 
         unsigned short res{};
         if (tile_base == 0x8000)
@@ -188,7 +195,7 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
 //            std::cout << "SCY:" << (unsigned)scy << '\n';
 //            std::cout << "LY:" <<(unsigned)ly << '\n';
 //        }
-        return 0x8000;
+        return res;
     }
 };
 
@@ -210,7 +217,7 @@ public:
     Mode current_mode = OAM;
     Color buffer[144][160]{};
 
-    bool lcd_enable = false;
+    bool lcd_enable = true;
     bool window_visible = false;
     bool obj_enable = false; // sprites
     bool bg_enable = false;
@@ -223,7 +230,7 @@ public:
     // coordinates
     size_t current_pixel_x = 0;
     size_t current_window_line = 0;
-    int current_line = {};
+    unsigned char current_line = {};
     int current_t_cycle_count = {};
     int current_v_blank_t_cycle_count = {};
     bool longest_line = false;

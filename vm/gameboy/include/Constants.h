@@ -38,6 +38,7 @@ namespace constants {
     constexpr size_t LYC_ADDRESS =  0xFF45;
     constexpr size_t WY_ADDRESS =   0xFF4A; // window x
     constexpr size_t WX_ADDRESS =   0xFF4B; // window y
+    constexpr size_t IF_ADDRESS =  0xFF0F;
 }
 
 #endif //GAMEBOY_CONSTANTS_H

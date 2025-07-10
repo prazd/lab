@@ -298,9 +298,9 @@ void CPU::set_flag(CPU::Flag f, bool val)  {
 
 unsigned char CPU::get_flag(CPU::Flag f) const {
     unsigned char value = (regs[F] >> flags_pos[f]) & 1;
-#if DEBUG
-    std::cout << "Get Flag " << f << ": " << (int)value << " F: " << (unsigned)regs[F] << '\n';
-#endif
+//#if DEBUG
+//    std::cout << "Get Flag " << f << ": " << (int)value << " F: " << (unsigned)regs[F] << '\n';
+//#endif
     return value;
 }
 
@@ -444,7 +444,7 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
         case RST_0b11xxx111:      {return 16;}
 
         case HALT:                {return 0;}
-        case STOP:                {return 0;}
+        case STOP:                {return 16;}
         case DI_0b11110011:       {return 4;}
         case EI_0b11111011:       {return 4;}
         case NOP_0b00000000:      {return 4;}
@@ -461,7 +461,18 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
 
     std::cout << "\n==============================\n";
     std::cout << instruction_str[itype] << '\n';
-    std::cout << std::hex << "PC: " << pc << '\n';
+    std::cout << std::hex << "REG[A]" << (unsigned)regs[A] << '\n';
+    std::cout <<"REG[B]: " << (unsigned)regs[B] << '\n';
+    std::cout <<"REG[C]: " << (unsigned)regs[C] << '\n';
+    std::cout <<"REG[D]: " << (unsigned)regs[D] << '\n';
+    std::cout <<"REG[E]: " << (unsigned)regs[E] << '\n';
+    std::cout <<"REG[F]: " << (unsigned)regs[F] << '\n';
+    std::cout << "Zero:" << (unsigned)get_flag(Zf) << '\n';
+    std::cout << "Negative: " << (unsigned)get_flag(Nf) << '\n';
+    std::cout << "HalfCarry: " << (unsigned)get_flag(Hf) << '\n';
+    std::cout << "Carry: " << (unsigned)get_flag(Cf) << '\n';
+    std::cout << "PC: " << pc << '\n';
+    std::cout << "SP: " << sp << '\n';
     std::cout << "MEM:\n";
     print_range(3);
     std::cout << std::dec;
@@ -833,7 +844,10 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             return t_cycle_by_ins(itype);
         }
         case HALT: { /*todo*/ return t_cycle_by_ins(itype);}
-        case STOP: { /*todo*/ return t_cycle_by_ins(itype);}
+        case STOP: {
+            std::cout << "LY address:" << (unsigned)ram.read(constants::LY_ADDRESS) << '\n';
+            if (ram.read(constants::LY_ADDRESS) == 144) ++pc;
+            return 4;}
         case DI_0b11110011: {ime = false; ++pc; return t_cycle_by_ins(itype);}
         case EI_0b11111011: {ime = true; ++pc; return t_cycle_by_ins(itype);} // todo: check
         case NOP_0b00000000: {++pc; return t_cycle_by_ins(itype);}
