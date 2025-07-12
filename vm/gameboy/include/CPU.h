@@ -139,6 +139,7 @@ struct CPU {
     unsigned short getpair(unsigned char i);
 
     unsigned char read45(unsigned char i);
+    unsigned char to_pair45(unsigned char i);
     unsigned char read34(unsigned char i);
     unsigned char read345(unsigned char i);
     unsigned char read012(unsigned char i);

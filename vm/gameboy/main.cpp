@@ -175,6 +175,8 @@ struct GameBoyVM{
         while(!WindowShouldClose()){
             cpu_accumulator += GetFrameTime();
             while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
+                auto next_ins = cpu.fetch(ram);
+                auto decoded_ins = cpu.decode(next_ins);
 #if 1
                 auto print_hex = [&](auto val){
                     auto num_bytes = sizeof(val);
@@ -182,6 +184,7 @@ struct GameBoyVM{
                     ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
                     return ss;
                 };
+//                std::cout  << cpu.instruction_str[decoded_ins] << " ";
                 std::cout <<
                           "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
                           "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
@@ -199,8 +202,6 @@ struct GameBoyVM{
                           print_hex(ram.read(cpu.pc + 3)).str() << '\n';
                 std::cout << std::dec;
 #endif
-                auto next_ins = cpu.fetch(ram);
-                auto decoded_ins = cpu.decode(next_ins);
                 auto t_cycle = cpu.execute(next_ins, decoded_ins, ram);
                 ppu.handle_t_cycle(t_cycle, ram);
                 current_t_cycle+=t_cycle;

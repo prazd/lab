@@ -1,7 +1,7 @@
 #include "CPU.h"
 #include <chrono>
 
-#define DEBUG 0
+#define DEBUG 1
 
 unsigned char CPU::read345(unsigned char i)  {
     return (0x7 & (i >> 3));
@@ -12,6 +12,15 @@ unsigned char CPU::read012(unsigned char i)  {
 
 unsigned char CPU::read45(unsigned char i)  {
     return ((0b0011'0000 & i) >> 4);
+}
+
+unsigned char CPU::to_pair45(unsigned char i) {
+    switch(i) {
+        case 0b11: {return 0b00;}
+        case 0b00: {return 0b01;}
+        case 0b01: {return 0b10;}
+        default: {return 0b11;} // todo: check
+    }
 }
 
 unsigned char CPU::read34(unsigned char i)  {
@@ -283,24 +292,15 @@ unsigned short CPU::HL_data() const {
 }
 
 void CPU::set_flag(CPU::Flag f, bool val)  {
-#if DEBUG
-    std::cout << "Set Flag :" << f << ": " << val << " Old F: " << (unsigned)regs[F];
-#endif
     if (val) {
         regs[F] |= (1 << flags_pos[f]);
     } else {
         regs[F] &= ~(1 << flags_pos[f]);
     }
-#if DEBUG
-     std::cout << " New F: " << (unsigned)regs[F] << '\n';
-#endif
 }
 
 unsigned char CPU::get_flag(CPU::Flag f) const {
     unsigned char value = (regs[F] >> flags_pos[f]) & 1;
-//#if DEBUG
-//    std::cout << "Get Flag " << f << ": " << (int)value << " F: " << (unsigned)regs[F] << '\n';
-//#endif
     return value;
 }
 
@@ -332,7 +332,7 @@ void CPU::update_pair_pop(unsigned char l, unsigned char h, unsigned char pair) 
         case 0b00: {regs[C] = l; regs[B] = h; break;}
         case 0b01: {regs[E] = l; regs[D] = h; break;}
         case 0b10: {regs[L] = l; regs[H] = h; break;}
-        case 0b11: {regs[F] = l & 0xf0; regs[A] = h; break;} // todo: check
+        case 0b11: {regs[F] = (l & 0xf0); regs[A] = h; break;} // todo: check
     }
 }
 
@@ -453,30 +453,30 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
 
 int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
 #if DEBUG
-    std::cout << "HL value:" << HL_data() << '\n';
-    std::cout << "RAM value by HL_address:" << (unsigned)ram.read(HL_data()) << '\n';
-    auto print_range = [&](int n){
-        while(n--) std::cout << "mem[" << pc + n << "] :" << (unsigned)ram.read(pc + n) << '\n';
-    };
+//    std::cout << "HL value:" << HL_data() << '\n';
+//    std::cout << "RAM value by HL_address:" << (unsigned)ram.read(HL_data()) << '\n';
+//    auto print_range = [&](int n){
+//        while(n--) std::cout << "mem[" << pc + n << "] :" << (unsigned)ram.read(pc + n) << '\n';
+//    };
 
-    std::cout << "\n==============================\n";
-    std::cout << instruction_str[itype] << '\n';
-    std::cout << std::hex << "REG[A]" << (unsigned)regs[A] << '\n';
-    std::cout <<"REG[B]: " << (unsigned)regs[B] << '\n';
-    std::cout <<"REG[C]: " << (unsigned)regs[C] << '\n';
-    std::cout <<"REG[D]: " << (unsigned)regs[D] << '\n';
-    std::cout <<"REG[E]: " << (unsigned)regs[E] << '\n';
-    std::cout <<"REG[F]: " << (unsigned)regs[F] << '\n';
-    std::cout << "Zero:" << (unsigned)get_flag(Zf) << '\n';
-    std::cout << "Negative: " << (unsigned)get_flag(Nf) << '\n';
-    std::cout << "HalfCarry: " << (unsigned)get_flag(Hf) << '\n';
-    std::cout << "Carry: " << (unsigned)get_flag(Cf) << '\n';
-    std::cout << "PC: " << pc << '\n';
-    std::cout << "SP: " << sp << '\n';
-    std::cout << "MEM:\n";
-    print_range(3);
-    std::cout << std::dec;
-    std::cout << "\n==============================\n";
+//    std::cout << "\n==============================\n";
+//    cstd::cout << instruction_str[itype];
+//    std::cout << std::hex << "REG[A]" << (unsigned)regs[A] << '\n';
+//    std::cout <<"REG[B]: " << (unsigned)regs[B] << '\n';
+//    std::cout <<"REG[C]: " << (unsigned)regs[C] << '\n';
+//    std::cout <<"REG[D]: " << (unsigned)regs[D] << '\n';
+//    std::cout <<"REG[E]: " << (unsigned)regs[E] << '\n';
+//    std::cout <<"REG[F]: " << (unsigned)regs[F] << '\n';
+//    std::cout << "Zero:" << (unsigned)get_flag(Zf) << '\n';
+//    std::cout << "Negative: " << (unsigned)get_flag(Nf) << '\n';
+//    std::cout << "HalfCarry: " << (unsigned)get_flag(Hf) << '\n';
+//    std::cout << "Carry: " << (unsigned)get_flag(Cf) << '\n';
+//    std::cout << "PC: " << pc << '\n';
+//    std::cout << "SP: " << sp << '\n';
+//    std::cout << "MEM:\n";
+//    print_range(3);
+//    std::cout << std::dec;
+//    std::cout << "\n==============================\n";
 
 #endif
     switch(itype) {
@@ -524,16 +524,27 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case LD_0b11111001: {sp = (regs[L] | (regs[H] << 8)); ++pc; return t_cycle_by_ins(itype);} // SP = HL
         case PUSH_0b11xx0101: {
             auto val = getpair(read45(i));
+//            std::cout << "PUSH AF: val=" << std::hex << val
+//                      << ", A=" << (int)regs[A]
+//                      << ", F=" << (int)regs[F]
+//                      << ", read45(i)=" << (int)read45(i) << '\n';
             sp-=2;
             ram.write(sp, ((val>>8) & 0xff));
-            if (read45(i) == 0b11)
-                ram.write(sp+1, (val & 0xf0));
-            else
+//            std::cout << "PUSH_0b11xx0101 L:" << std::hex << (unsigned)(((val>>8) & 0xff));
+            if (read45(i) == 0b11){
                 ram.write(sp+1, (val & 0xff));
+//                std::cout << " H: " << (unsigned)((val & 0xf0)) << '\n';
+            } else{
+                ram.write(sp+1, (val & 0xff));
+//                std::cout << " H: " << (unsigned)((val & 0xff)) << '\n';
+            }
+//            std::cout << "After PUSH AF: ram[" << sp << "]=" << (int)ram.read(sp)
+//                      << ", ram[" << sp + 1 << "]=" << (int)ram.read(sp + 1) << '\n';
             ++pc;
             return t_cycle_by_ins(itype);} // stack push xx
         case POP_0b11xx0001: {
-            update_pair_pop(ram.read(sp+1), ram.read(sp), read45(i));
+//            std::cout << std::hex <<  "POP_0b11xx0001 SP:" << (unsigned)ram.read(sp) << " SP + 1:" << (unsigned)ram.read(sp + 1) << "\n";
+            update_pair_pop(ram.read(sp) , ram.read(sp+1), read45(i));
             sp+=2;
             ++pc;
             return t_cycle_by_ins(itype);
@@ -543,7 +554,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             set_flag(Nf, 0);
             auto e = static_cast<char>(ram.read(pc+1));
             unsigned int result = e + sp;
-            set_flag(Cf, ((sp & 0xff) +  (unsigned char)(e) > 0xff));
+            set_flag(Cf, ((sp & 0xff) + (unsigned char)(e) > 0xff));
             set_flag(Hf, ((sp & 0xf) + ((unsigned char)(e) & 0xf) > 0xf));
             regs[H] = ((result >> 8) & 0xff);
             regs[L] = (result & 0xff);
@@ -869,3 +880,5 @@ void CPU::print_regs() const {
     std::cout << "PC:" << pc << std::endl;
     std::cout << "SP:" << sp << '\n';
 }
+
+
