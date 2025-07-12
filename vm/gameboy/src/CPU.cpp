@@ -1,7 +1,7 @@
 #include "CPU.h"
 #include <chrono>
 
-#define DEBUG 1
+#define DEBUG 0
 
 unsigned char CPU::read345(unsigned char i)  {
     return (0x7 & (i >> 3));
@@ -460,7 +460,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
 //    };
 
 //    std::cout << "\n==============================\n";
-//    cstd::cout << instruction_str[itype];
+
 //    std::cout << std::hex << "REG[A]" << (unsigned)regs[A] << '\n';
 //    std::cout <<"REG[B]: " << (unsigned)regs[B] << '\n';
 //    std::cout <<"REG[C]: " << (unsigned)regs[C] << '\n';
@@ -479,6 +479,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
 //    std::cout << "\n==============================\n";
 
 #endif
+    std::cout << instruction_str[itype] << " ";
     switch(itype) {
         case LD_0b01xxxyyy:  { update_regs(read345(i), ram, read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case LD_0b01xxx110:  { update_regs(read345(i), ram, read_regs(HL, ram)); ++pc;  return t_cycle_by_ins(itype);}
@@ -495,15 +496,15 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case LDH_0b11100010: { ram.write((0xff00 | regs[C]), regs[A]); ++pc; return t_cycle_by_ins(itype);}
         case LDH_0b11110000: {
             auto address = (0xff00 | ram.read(pc+1));
-#if DEBUG
-            std::cout << rand() % 1000;
-            std::cout << std::hex << "ADDRESS:" << address << '\n';
-#endif
+//#if DEBUG
+//            std::cout << rand() % 1000;
+//            std::cout << std::hex << "ADDRESS:" << address << '\n';
+//#endif
             auto value = (unsigned)ram.read(address);
-#if DEBUG
-            std::cout << std::dec;
-            std::cout << "LY: " << (unsigned)value << " BC: " << (short)getpair(0) << '\n';
-#endif
+//#if DEBUG
+//            std::cout << std::dec;
+//            std::cout << "LY: " << (unsigned)value << " BC: " << (short)getpair(0) << '\n';
+//#endif
             regs[A] = ram.read(address);
             pc+=2;
             return t_cycle_by_ins(itype);
@@ -515,36 +516,33 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case LD_0b00100010:  { update_regs(HL, ram, regs[A]); increment_pair(L, H); ++pc; return t_cycle_by_ins(itype);}
         case LD_0b00xx0001:  { update_pair_ld(ram.read(pc + 1), ram.read(pc+2), read45(i)); pc+=3; return t_cycle_by_ins(itype);}
         case LD_0b00001000:  {
-            auto addess = (ram.read(pc + 1) | (ram.read(pc + 2) << 8));
-            ram.write(addess, sp & 0xff);
-            ram.write(addess + 1, ((sp>>8) & 0xff));
+            auto address = (ram.read(pc + 1) | (ram.read(pc + 2) << 8));
+            ram.write(address, sp & 0xff);
+            ram.write(address + 1, ((sp>>8) & 0xff));
             pc+=3;
             return t_cycle_by_ins(itype);
         }
         case LD_0b11111001: {sp = (regs[L] | (regs[H] << 8)); ++pc; return t_cycle_by_ins(itype);} // SP = HL
         case PUSH_0b11xx0101: {
             auto val = getpair(read45(i));
-//            std::cout << "PUSH AF: val=" << std::hex << val
-//                      << ", A=" << (int)regs[A]
-//                      << ", F=" << (int)regs[F]
-//                      << ", read45(i)=" << (int)read45(i) << '\n';
             sp-=2;
-            ram.write(sp, ((val>>8) & 0xff));
-//            std::cout << "PUSH_0b11xx0101 L:" << std::hex << (unsigned)(((val>>8) & 0xff));
-            if (read45(i) == 0b11){
-                ram.write(sp+1, (val & 0xff));
-//                std::cout << " H: " << (unsigned)((val & 0xf0)) << '\n';
-            } else{
-                ram.write(sp+1, (val & 0xff));
-//                std::cout << " H: " << (unsigned)((val & 0xff)) << '\n';
-            }
-//            std::cout << "After PUSH AF: ram[" << sp << "]=" << (int)ram.read(sp)
-//                      << ", ram[" << sp + 1 << "]=" << (int)ram.read(sp + 1) << '\n';
+            ram.write(sp, (val & 0xff));
+            ram.write(sp + 1, ((val>>8) & 0xff));
+
+
+//            std::cout << "\n==================\n";
+//            std::cout << "PUSH_0b11xx0101:\n" <<
+//            std::hex <<  sp << " SP["<< sp << "]: " << (unsigned)(val & 0xff) << " (SP + 1)[" << sp + 1 << "]:" << (unsigned)((val>>8) & 0xff) << "\n";
+//            std::cout << "\n==================\n";
+
             ++pc;
             return t_cycle_by_ins(itype);} // stack push xx
         case POP_0b11xx0001: {
-//            std::cout << std::hex <<  "POP_0b11xx0001 SP:" << (unsigned)ram.read(sp) << " SP + 1:" << (unsigned)ram.read(sp + 1) << "\n";
             update_pair_pop(ram.read(sp) , ram.read(sp+1), read45(i));
+//            std::cout << "\n==================\n";
+//            std::cout << "POP_0b11xx0001:\n" <<
+//                      std::hex <<  sp << " SP["<< sp << "]: " << (unsigned)ram.read(sp) << " (SP + 1)[" << sp + 1 << "]:" << (unsigned )ram.read(sp+1) << "\n";
+//            std::cout << "\n==================\n";
             sp+=2;
             ++pc;
             return t_cycle_by_ins(itype);
@@ -856,7 +854,6 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         }
         case HALT: { /*todo*/ return t_cycle_by_ins(itype);}
         case STOP: {
-            std::cout << "LY address:" << (unsigned)ram.read(constants::LY_ADDRESS) << '\n';
             if (ram.read(constants::LY_ADDRESS) == 144) ++pc;
             return 4;}
         case DI_0b11110011: {ime = false; ++pc; return t_cycle_by_ins(itype);}
