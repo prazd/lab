@@ -66,6 +66,7 @@ void RAM::write(unsigned short index, unsigned char value) {
 //        std::cout << "Writing to VRAM: Address 0x" << std::hex << index << " Value 0x" << (unsigned)value << std::dec << '\n';
 //    }
 //    std::cout << std::dec;
+
     if (index <=  constants::ROM_BANK_01_END){
         handle_mbc(index, value);
         return;
@@ -75,12 +76,20 @@ void RAM::write(unsigned short index, unsigned char value) {
 
     if (is_ram_avaliable(index))
         mem[index] = value;
+
+//    if (index == 0xff44) {
+//        std::cout << "WRITE by :" <<  std::hex <<  index  << " value:" << (unsigned)value << '\n';
+//    }
 }
 
 unsigned char RAM::read(unsigned short index) const {
+//    if (index == 0x4244) {
+//        std::cout << "READ by 0x4244:" << std::hex << (unsigned)mem[index] << '\n';
+//    }
     if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END)
         index -= 0x2000;
     if (is_ram_avaliable(index))
         return mem[index];
+    std::cout << "DUMMY_REG!!!" << '\n';
     return dummy_reg;
 }

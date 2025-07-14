@@ -171,7 +171,16 @@ struct GameBoyVM{
         int current_t_cycle = 0;
         double cpu_accumulator = 0.0;
 
+        auto print_sp = [&](size_t n) {
+            if (cpu.sp == 0xfffe) return;
+            std::cout << "\n==============================\n";
+            for (int i = 0; i < n; ++i){
+                std::cout << "SP[" << i << "]" << std::hex << (unsigned)ram.read(cpu.sp + i) << '\n';
+            }
+            std::cout << "\n==============================\n";
+        };
 
+        size_t t_cycles_count = 0;
         while(!WindowShouldClose()){
             cpu_accumulator += GetFrameTime();
             while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
@@ -186,6 +195,7 @@ struct GameBoyVM{
                 };
 //                std::cout  << cpu.instruction_str[decoded_ins] << " ";
                 std::cout <<
+
                           "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
                           "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
                           "B:" <<  print_hex(cpu.regs[CPU::B]).str() << " " <<
@@ -202,7 +212,14 @@ struct GameBoyVM{
                           print_hex(ram.read(cpu.pc + 3)).str() << '\n';
                 std::cout << std::dec;
 #endif
+
                 auto t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+
+
+                t_cycles_count+=t_cycle;
+
+//                print_sp(30);
+//                std::cout << "MEM[0x4244]: " << std::hex << (unsigned)ram.read(0x4244) << '\n';
                 ppu.handle_t_cycle(t_cycle, ram);
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
@@ -304,7 +321,7 @@ void draw_tiles(auto& arr) {
 }
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/cpu_instrs/individual/01-special.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/01-special.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.row_rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.row_rom) << '\n';
         vm.run();

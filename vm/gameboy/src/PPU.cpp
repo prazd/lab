@@ -155,7 +155,12 @@ void PPU::draw(RAM &ram)  {
 }
 
 void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
-    update_regs(ram);
+    static size_t last_t_cycles = 0;
+    static size_t prev_t_cycles = 0;
+    while(t_cycle--){
+        ++current_t_cycle_count;
+        ++last_t_cycles;
+        update_regs(ram);
 //    std::cout << "\n=========================\n";
 //    std::cout << "PPU:\n";
 //    std::cout << "T-Cycle: " << current_t_cycle_count << '\n';
@@ -163,46 +168,43 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 //    std::cout << "CURRENT_MODE:" << current_mode << '\n';
 //    std::cout << "\n=========================\n";
 //    std::cout << "BG fifo:" << pixel_fetcher.fifo.size() << " Sprite fifo: " << sprite_fetcher.fifo.size() <<  '\n';
-    if (current_mode == VBlank) current_v_blank_t_cycle_count += t_cycle;
-
-    current_t_cycle_count += t_cycle;
-    if (current_mode == OAM){ //
-        if (current_t_cycle_count < 80) {
-            if (!oam_scan_finished) {
-                oam_scan(ram);
-                oam_scan_finished = true;
+        if (current_mode == OAM){ //
+            if (current_t_cycle_count <= 80) {
+                if (!oam_scan_finished) {
+                    oam_scan(ram);
+                    oam_scan_finished = true;
+                }
+            } else {
+                current_pixel_x = 0;
+                current_mode = Drawing;
+                set_ppu_mode(ram);
             }
-        } else {
-            current_pixel_x = 0;
-            current_mode = Drawing;
-            set_ppu_mode(ram);
-        }
-        return;
-    }
+        } else if (current_mode == Drawing) {
+                if (current_pixel_x < 160) {
+                    if (pixel_fetcher.fifo.size() < 8){
+                        for (int i = 0; i < 5; ++i) {
+                            pixel_fetcher.fetch(ram, current_pixel_x);
+                        }
+                    }
+                    auto sprite = sprite_on_x(ram);
+                    if (sprite.has_value()) {
+                        for (int i = 0; i < 5; ++i) {
+                            sprite_fetcher.fetch(ram, sprite.value());
+                        }
+                    }
 
-    if (current_mode == Drawing) {
-//        if (((longest_line && current_t_cycle_count < 289) || (!longest_line && current_t_cycle_count < 172))) {
-        if (current_pixel_x < 160) {
-            if (pixel_fetcher.fifo.size() < 8){
-                pixel_fetcher.fetch(ram, current_pixel_x);
+                    if (!pixel_fetcher.fifo.empty()) {
+                        draw(ram);
+                    }
+                } else {
+                    current_mode = HBlank;
+                    set_ppu_mode(ram);
             }
-            auto sprite = sprite_on_x(ram);
-            if (sprite.has_value())
-                sprite_fetcher.fetch(ram, sprite.value());
-
-            if (!pixel_fetcher.fifo.empty()) {
-                draw(ram);
-            }
-        } else {
-            current_mode = HBlank;
-            set_ppu_mode(ram);
-        }
-        return;
-    }
-
-    if (current_mode == HBlank) {
-        if (current_t_cycle_count > 456){
-                set_ppu_reg(constants::LY_ADDRESS, ++current_line, ram);
+        } else if (current_mode == HBlank) {
+            if (current_t_cycle_count == 456){
+                set_ppu_reg(constants::LY_ADDRESS, current_line++, ram);
+//                std::cout << std::dec <<"T_cycles:" << last_t_cycles - prev_t_cycles << '\n';
+//                prev_t_cycles = last_t_cycles;
                 // LYC
                 auto lyc = ram.read(constants::LYC_ADDRESS);
                 unsigned char stat = ram.read(constants::STAT_ADDRESS);
@@ -216,8 +218,10 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
                 pixel_fetcher.fetcher_current_tile_x = 0; // todo: check
                 current_pixel_x = 0;
                 current_t_cycle_count = 0;
-                if (current_line == 144)
+                if (current_line == 144){
                     current_mode = VBlank;
+                    current_v_blank_t_cycle_count = 0;
+                }
                     // request_interrupt(VBLANK_INTERRUPT); // todo:
                 else{
                     current_mode = OAM;
@@ -226,25 +230,29 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
                 window_line_counter = 0;
                 set_ppu_mode(ram);
             }
-            return;
+        } else if (current_mode == VBlank) {
+            if (current_v_blank_t_cycle_count++ == 456){
+                if (current_line == 154) {
+                    last_t_cycles = 0;
+                    current_mode = OAM;
+                    set_ppu_mode(ram);
+                    current_line = 0;
+                    set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
+//                    std::cout << std::dec <<"T_cycles:" << last_t_cycles - prev_t_cycles << '\n';
+                    current_pixel_x = 0;
+                    current_window_line = 0;
+                    current_t_cycle_count = 0;
+                    current_v_blank_t_cycle_count = 0;
+                } else {
+                    set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
+//                    std::cout << std::dec <<"T_cycles:" << last_t_cycles - prev_t_cycles << '\n';
+                    prev_t_cycles = last_t_cycles;
+                    current_v_blank_t_cycle_count = 0;
+                }
+            }
+        }
     }
 
-    if (current_mode == VBlank) {
-        if (current_v_blank_t_cycle_count >= 456){
-            set_ppu_reg(constants::LY_ADDRESS, ++current_line, ram);
-            current_v_blank_t_cycle_count = 0;
-        }
-        if (current_t_cycle_count >= 4560) {
-            current_mode = OAM;
-            set_ppu_mode(ram);
-            current_line = 0;
-            set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
-            current_pixel_x = 0;
-            current_window_line = 0;
-            current_t_cycle_count = 0;
-            current_v_blank_t_cycle_count = 0;
-        }
-    }
 }
 
 auto PPU::read_buffer() const -> const Color(&)[144][160] {
