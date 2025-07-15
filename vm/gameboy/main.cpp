@@ -100,7 +100,7 @@ struct GameBoyVM{
 
 
         // Gamboy Doctor
-#if 1
+#if 0
         cpu.regs[CPU::A] = 0x01;
         cpu.regs[CPU::F] = 0xB0;
         cpu.regs[CPU::B] = 0x00;
@@ -186,7 +186,7 @@ struct GameBoyVM{
             while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
                 auto next_ins = cpu.fetch(ram);
                 auto decoded_ins = cpu.decode(next_ins);
-#if 1
+#if 0
                 auto print_hex = [&](auto val){
                     auto num_bytes = sizeof(val);
                     std::stringstream ss("");

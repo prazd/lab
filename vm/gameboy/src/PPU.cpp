@@ -182,15 +182,11 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
         } else if (current_mode == Drawing) {
                 if (current_pixel_x < 160) {
                     if (pixel_fetcher.fifo.size() < 8){
-                        for (int i = 0; i < 5; ++i) {
-                            pixel_fetcher.fetch(ram, current_pixel_x);
-                        }
+                        pixel_fetcher.fetch(ram, current_pixel_x);
                     }
                     auto sprite = sprite_on_x(ram);
                     if (sprite.has_value()) {
-                        for (int i = 0; i < 5; ++i) {
-                            sprite_fetcher.fetch(ram, sprite.value());
-                        }
+                        sprite_fetcher.fetch(ram, sprite.value());
                     }
 
                     if (!pixel_fetcher.fifo.empty()) {
@@ -232,6 +228,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
             }
         } else if (current_mode == VBlank) {
             if (current_v_blank_t_cycle_count++ == 456){
+                ++current_line;
                 if (current_line == 154) {
                     last_t_cycles = 0;
                     current_mode = OAM;
