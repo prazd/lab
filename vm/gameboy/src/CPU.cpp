@@ -327,13 +327,23 @@ void CPU::update_pair_pop(unsigned char l, unsigned char h, unsigned char pair) 
     }
 }
 
-unsigned short CPU::getpair(unsigned char i)  {
+// todo: check for pop and inc
+unsigned short CPU::stack_getpair(unsigned char i)  {
     switch(i) {
         case 0b00: {return  (regs[C] | (regs[B] << 8));}
         case 0b01: {return  (regs[E] | (regs[D] << 8));}
         case 0b10: {return  (regs[L] | (regs[H] << 8));}
-//        case 0b11: {return sp;} // todo: check
         case 0b11: {return (regs[F] | regs[A] << 8);}
+    }
+    throw std::invalid_argument("Unknown register");
+}
+
+unsigned short CPU::inc_getpair(unsigned char i) {
+    switch(i) {
+        case 0b00: {return  (regs[C] | (regs[B] << 8));}
+        case 0b01: {return  (regs[E] | (regs[D] << 8));}
+        case 0b10: {return  (regs[L] | (regs[H] << 8));}
+        case 0b11: {return sp;}
     }
     throw std::invalid_argument("Unknown register");
 }
@@ -507,7 +517,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         }
         case LD_0b11111001: {sp = (regs[L] | (regs[H] << 8)); ++pc; return t_cycle_by_ins(itype);} // SP = HL
         case PUSH_0b11xx0101: {
-            auto val = getpair(read45(i));
+            auto val = stack_getpair(read45(i));
             sp-=2;
             ram.write(sp, (val & 0xff));
             ram.write(sp + 1, ((val>>8) & 0xff));
@@ -521,7 +531,6 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         };
         case LD_0b11111000: {
             set_flag(Zf, 0);
-            set_flag(Nf, 0);
             set_flag(Nf, 0);
             auto e = static_cast<char>(ram.read(pc+1));
             unsigned int result = e + sp;
@@ -597,7 +606,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case CPL_0b00101111: {regs[A] = ~regs[A]; set_flag(Nf, 1); set_flag(Hf, 1); ++pc; return t_cycle_by_ins(itype);}
         case INC_0b00xx0011: {
             auto rr = read45(i);
-            unsigned short pair = getpair(rr);
+            unsigned short pair = inc_getpair(rr);
             ++pair;
             update_pair_ld((pair & 0xff), ((pair >> 8) & 0xff), rr);
             ++pc;
@@ -605,13 +614,13 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         }
         case DEC_0b00xx1011: {
             auto rr = read45(i);
-            unsigned short pair = getpair(rr);
+            unsigned short pair = inc_getpair(rr);
             --pair;
             update_pair_ld((pair & 0xff), ((pair >> 8) & 0xff), rr);
             ++pc;
             return t_cycle_by_ins(itype);
         }
-        case ADD_0b00xx1001: { add_reg_HL(getpair(read45(i))); ++pc; return t_cycle_by_ins(itype);}
+        case ADD_0b00xx1001: { add_reg_HL(inc_getpair(read45(i))); ++pc; return t_cycle_by_ins(itype);}
         case ADD_0b11101000: {
             set_flag(Zf, 0);
             set_flag(Nf, 0);

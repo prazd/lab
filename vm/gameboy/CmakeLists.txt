@@ -4,7 +4,7 @@ project(GameBoy)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(SANITIZER_FLAGS "-fsanitize=address -fsanitize=undefined")
+#set(SANITIZER_FLAGS "-fsanitize=address -fsanitize=undefined")
 set(SANITIZER_FLAGS "-fsanitize=undefined -fsanitize=thread")
 set(OPTIMIZE_FLAGS  "-O2")
 

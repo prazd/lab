@@ -123,8 +123,6 @@ struct CPU {
         NOP_0xCB_0b00000000
     };
 
-
-
     int t_cycle_by_ins(Instruction ins, unsigned char value = 0);
     int t_cycle_by_ins_0xCB(Instruction0xCB ins, unsigned char value = 0);
 
@@ -136,7 +134,8 @@ struct CPU {
 
     void update_pair_ld(unsigned char l,unsigned char h, unsigned char pair);
     void update_pair_pop(unsigned char l, unsigned char h, unsigned char pair);
-    unsigned short getpair(unsigned char i);
+    unsigned short stack_getpair(unsigned char i);
+    unsigned short inc_getpair(unsigned char i);
 
     unsigned char read45(unsigned char i);
     unsigned char to_pair45(unsigned char i);
