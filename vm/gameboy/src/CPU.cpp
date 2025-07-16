@@ -453,6 +453,17 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
     }
 }
 
+void CPU::off_IF_value(CPU::InterruptFlag flag, RAM& ram) {
+    auto if_value = ram.read(constants::IF_ADDRESS);
+    switch (flag) {
+        case VBlank_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xfe);}
+        case LCD_I:      {ram.write(constants::IF_ADDRESS, if_value & 0xfd);}
+        case Timer_I:    {ram.write(constants::IF_ADDRESS, if_value & 0xfb);}
+        case Serial_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xf7);}
+        case Joypad_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xef);}
+    }
+    std::cout << "OFF IF value:" << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';
+}
 int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
 #if DEBUG
 //    std::cout << "HL value:" << HL_data() << '\n';
@@ -482,6 +493,33 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
 
 #endif
 //    std::cout << instruction_str[itype] << " ";
+
+
+    // interrupts handling
+    if (ime) {
+        unsigned char pc_l = pc & 0xff;
+        unsigned char pc_h = (pc >> 8) & 0xff;
+        ime = false; push_stack(pc_l, pc_h, ram);
+
+        fetch_IF_value(ram);
+        fetch_IE_value(ram);
+
+        if (vblank_interrupt_req && vblank_interrupt_enabled)
+            { vblank_interrupt_req = false; off_IF_value(VBlank_I, ram); pc = constants::VBLANK_INTERRUPT;}
+        else if (lcd_interrupt_req && lcd_interrupt_enabled)
+            { lcd_interrupt_req    = false; off_IF_value(LCD_I, ram);    pc = constants::STAT_INTERRUPT;}
+        else if (timer_interrupt_req && timer_interrupt_enabled)
+            { timer_interrupt_req  = false; off_IF_value(Timer_I, ram);  pc = constants::TIMER_INTERRUPT;}
+        else if (serial_interrupt_req && serial_interrupt_enabled)
+            { serial_interrupt_req = false; off_IF_value(Serial_I, ram); pc = constants::SERIAL_INTERRUPT;}
+        else if (joypad_interrupt_req && joypad_interrupt_enabled)
+            { joypad_interrupt_req = false; off_IF_value(Joypad_I, ram); pc = constants::JOYPAD_INTERRUPT;}
+
+        i = fetch(ram);
+        itype = decode(i);
+    }
+
+
     switch(itype) {
         case LD_0b01xxxyyy:  { update_regs(read345(i), ram, read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case LD_0b01xxx110:  { update_regs(read345(i), ram, read_regs(HL, ram)); ++pc;  return t_cycle_by_ins(itype);}
@@ -854,7 +892,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             if (ram.read(constants::LY_ADDRESS) == 144) ++pc;
             return 4;}
         case DI_0b11110011: {ime = false; ++pc; return t_cycle_by_ins(itype);}
-        case EI_0b11111011: {ime = true; ++pc; return t_cycle_by_ins(itype);} // todo: check
+        case EI_0b11111011: {ime = true; ++pc; std::cout << "IF:" << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';  return t_cycle_by_ins(itype);} // todo: check
         case NOP_0b00000000: {++pc; return t_cycle_by_ins(itype);}
     }
     return 0;
@@ -875,4 +913,26 @@ void CPU::print_regs() const {
     std::cout << "SP:" << sp << '\n';
 }
 
+void CPU::fetch_IF_value(const RAM& ram) {
+    auto if_value = ram.read(constants::IF_ADDRESS);
+    if (if_value & 1) vblank_interrupt_req = true;
+    if ((if_value >> 1) & 1) lcd_interrupt_req = true;
+    if ((if_value >> 2) & 1) timer_interrupt_req = true;
+    if ((if_value >> 3) & 1) serial_interrupt_req = true;
+    if ((if_value >> 4) & 1) joypad_interrupt_req = true;
+}
 
+void CPU::fetch_IE_value(const RAM& ram) {
+    auto if_value = ram.read(constants::IE_ADDRESS);
+    if (if_value & 1) vblank_interrupt_enabled = true;
+    if ((if_value >> 1) & 1) lcd_interrupt_enabled = true;
+    if ((if_value >> 2) & 1) timer_interrupt_enabled = true;
+    if ((if_value >> 3) & 1) serial_interrupt_enabled = true;
+    if ((if_value >> 4) & 1) joypad_interrupt_enabled = true;
+}
+
+void CPU::push_stack(unsigned char l, unsigned char h, RAM& ram) {
+    sp-=2;
+    ram.write(sp, l);
+    ram.write(sp + 1, h);
+}

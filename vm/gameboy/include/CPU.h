@@ -123,8 +123,27 @@ struct CPU {
         NOP_0xCB_0b00000000
     };
 
+    // Interrupts
+    bool vblank_interrupt_enabled = false;
+    bool lcd_interrupt_enabled = false;
+    bool timer_interrupt_enabled = false;
+    bool serial_interrupt_enabled = false;
+    bool joypad_interrupt_enabled = false;
+    void fetch_IE_value(const RAM& ram);
+
+    bool vblank_interrupt_req = false;
+    bool lcd_interrupt_req = false;
+    bool timer_interrupt_req = false;
+    bool serial_interrupt_req = false;
+    bool joypad_interrupt_req = false;
+    void fetch_IF_value(const RAM& ram);
+
+    enum InterruptFlag{VBlank_I, LCD_I, Timer_I, Serial_I, Joypad_I};
+    void off_IF_value(InterruptFlag, RAM&);
+
     int t_cycle_by_ins(Instruction ins, unsigned char value = 0);
     int t_cycle_by_ins_0xCB(Instruction0xCB ins, unsigned char value = 0);
+    void push_stack(unsigned char l, unsigned char h, RAM& ram);
 
     void set_flag(Flag f, bool val);
     unsigned char get_flag(Flag f) const;

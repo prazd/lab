@@ -97,10 +97,8 @@ struct GameBoyVM{
     }
     
     void run() {
-
-
         // Gamboy Doctor
-#if 0
+#if 1
         cpu.regs[CPU::A] = 0x01;
         cpu.regs[CPU::F] = 0xB0;
         cpu.regs[CPU::B] = 0x00;
@@ -186,14 +184,14 @@ struct GameBoyVM{
             while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
                 auto next_ins = cpu.fetch(ram);
                 auto decoded_ins = cpu.decode(next_ins);
-#if 0
+#if 1
                 auto print_hex = [&](auto val){
                     auto num_bytes = sizeof(val);
                     std::stringstream ss("");
                     ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
                     return ss;
                 };
-//                std::cout  << cpu.instruction_str[decoded_ins] << " ";
+                std::cout  << cpu.instruction_str[decoded_ins] << " ";
                 std::cout <<
 
                           "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
@@ -214,53 +212,19 @@ struct GameBoyVM{
 #endif
 
                 auto t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-
-
                 t_cycles_count+=t_cycle;
-
-//                print_sp(30);
-//                std::cout << "MEM[0x4244]: " << std::hex << (unsigned)ram.read(0x4244) << '\n';
                 ppu.handle_t_cycle(t_cycle, ram);
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
 
-//             CPU instrs debug
-//            ram.write(0x9800, 0x63);
-//            ram.write(0x9801, 0x70);
-//            ram.write(0x9802, 0x75);
-//            ram.write(0x9803, 0x5f);
-//            ram.write(0x9804, 0x69);
-//            ram.write(0x9805, 0x6E);
-//            ram.write(0x9806, 0x73);
-//            ram.write(0x9807, 0x74);
-//            ram.write(0x9808, 0x72);
-//            ram.write(0x9809, 0x73);
-
-//            print_segment(0x9800, 7);
-//            if (ppu.get_current_mode() == PPU::VBlank) render();
-//            std::cout << "Data in segments by HL (10 byte):\n";
-//            print_segment(constants::OAM_BEGIN, 30);
-//            std::cout << "\n===========================\n";
-
-//             std::cout << "LCDC_ADDRESS value:" << (unsigned)ram.read(constants::LCDC_ADDRESS) << '\n';
-//            std::cout << "TileBase:" << ppu.pixel_fetcher.tile_address << '\n';
-//            std::cout << "WY address:" << (unsigned)ram.read(constants::WY_ADDRESS) << '\n';
-//            std::cout << "SCX address:" << (unsigned)ram.read(constants::SCX_ADDRESS) << '\n';
-//            std::cout << "SCY address:" << (unsigned)ram.read(constants::SCY_ADDRESS) << '\n';
-//            std::cout << "LY address:" <<  (unsigned)ram.read(constants::LY_ADDRESS) << '\n';
-//            std::cout << "Window visible:" << (((ram.read(constants::LCDC_ADDRESS)) >> 5) & 1) << '\n';
-//            std::cout << "\n===========================\n";
             current_t_cycle = 0;
-//            cpu.print_regs();
             std::cout << std::dec;
-
-
             // Render
             UpdateTexture(target, ppu.read_buffer());
 
             BeginDrawing();
-                ClearBackground(WHITE);
+                ClearBackground(BLACK);
 //                draw_tiles();
                 // todo: check
                 DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
@@ -321,7 +285,7 @@ void draw_tiles(auto& arr) {
 }
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/01-special.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/02-interrupts.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.row_rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.row_rom) << '\n';
         vm.run();

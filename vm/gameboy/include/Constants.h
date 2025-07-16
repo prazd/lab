@@ -39,6 +39,14 @@ namespace constants {
     constexpr size_t WY_ADDRESS =   0xFF4A; // window x
     constexpr size_t WX_ADDRESS =   0xFF4B; // window y
     constexpr size_t IF_ADDRESS =  0xFF0F;
+    constexpr size_t IE_ADDRESS =  0xFFFF;
+
+// Interrupts addresses
+    constexpr size_t VBLANK_INTERRUPT = 0x40;
+    constexpr size_t STAT_INTERRUPT = 0x48;
+    constexpr size_t TIMER_INTERRUPT = 0x50;
+    constexpr size_t SERIAL_INTERRUPT = 0x58;
+    constexpr size_t JOYPAD_INTERRUPT = 0x60;
 }
 
 #endif //GAMEBOY_CONSTANTS_H
