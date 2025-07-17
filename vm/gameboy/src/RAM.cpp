@@ -67,6 +67,10 @@ void RAM::write(unsigned short index, unsigned char value) {
 //    }
 //    std::cout << std::dec;
 
+//    if (index == 0xFF0F) {
+//        std::cout << "WRITE 0xFF0F:" <<(unsigned)value << '\n';
+//    }
+
     if (index <=  constants::ROM_BANK_01_END){
         handle_mbc(index, value);
         return;

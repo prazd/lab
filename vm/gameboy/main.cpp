@@ -184,36 +184,50 @@ struct GameBoyVM{
             while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
                 auto next_ins = cpu.fetch(ram);
                 auto decoded_ins = cpu.decode(next_ins);
-#if 1
+#if 0
                 auto print_hex = [&](auto val){
                     auto num_bytes = sizeof(val);
                     std::stringstream ss("");
                     ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
                     return ss;
                 };
-                std::cout  << cpu.instruction_str[decoded_ins] << " ";
-                std::cout <<
+//                std::cout  << cpu.instruction_str[decoded_ins] << " ";
+                if (!cpu.halted) {
+                    std::cout <<
 
-                          "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
-                          "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
-                          "B:" <<  print_hex(cpu.regs[CPU::B]).str() << " " <<
-                          "C:" <<  print_hex(cpu.regs[CPU::C]).str() << " " <<
-                          "D:" <<  print_hex(cpu.regs[CPU::D]).str() << " " <<
-                          "E:" <<  print_hex(cpu.regs[CPU::E]).str() << " " <<
-                          "H:" <<  print_hex(cpu.regs[CPU::H]).str() << " " <<
-                          "L:" <<  print_hex(cpu.regs[CPU::L]).str() << " " <<
-                          "SP:" <<  print_hex(cpu.sp).str() << " " <<
-                          "PC:" <<  print_hex(cpu.pc).str() << " " <<
-                          "PCMEM:" <<  print_hex(ram.read(cpu.pc)).str() << "," <<
-                          print_hex(ram.read(cpu.pc + 1)).str() << "," <<
-                          print_hex(ram.read(cpu.pc + 2)).str() << "," <<
-                          print_hex(ram.read(cpu.pc + 3)).str() << '\n';
-                std::cout << std::dec;
+                              "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
+                              "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
+                              "B:" <<  print_hex(cpu.regs[CPU::B]).str() << " " <<
+                              "C:" <<  print_hex(cpu.regs[CPU::C]).str() << " " <<
+                              "D:" <<  print_hex(cpu.regs[CPU::D]).str() << " " <<
+                              "E:" <<  print_hex(cpu.regs[CPU::E]).str() << " " <<
+                              "H:" <<  print_hex(cpu.regs[CPU::H]).str() << " " <<
+                              "L:" <<  print_hex(cpu.regs[CPU::L]).str() << " " <<
+                              "SP:" <<  print_hex(cpu.sp).str() << " " <<
+                              "PC:" <<  print_hex(cpu.pc).str() << " " <<
+                              "PCMEM:" <<  print_hex(ram.read(cpu.pc)).str() << "," <<
+                              print_hex(ram.read(cpu.pc + 1)).str() << "," <<
+                              print_hex(ram.read(cpu.pc + 2)).str() << "," <<
+                              print_hex(ram.read(cpu.pc + 3)).str() << '\n';
+                    std::cout << std::dec;
+                }
 #endif
 
-                auto t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+
+                // todo: check
+                int t_cycle = 0;
+                if (cpu.halted && !cpu.ime) {
+                    if (ram.read(constants::IF_ADDRESS) != 0) {cpu.halted = false;}
+                    t_cycle = 4;
+                } else {
+                    t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                }
+
                 t_cycles_count+=t_cycle;
+
                 ppu.handle_t_cycle(t_cycle, ram);
+                cpu.handle_timer(t_cycle, ram);
+
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
@@ -285,7 +299,7 @@ void draw_tiles(auto& arr) {
 }
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/02-interrupts.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.row_rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.row_rom) << '\n';
         vm.run();

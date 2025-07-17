@@ -19,12 +19,22 @@ unsigned char CPU::read34(unsigned char i)  {
 }
 
 void CPU::add_reg_A(unsigned char val)  {
-    auto res = regs[A] + val;
+    unsigned res = regs[A] + val;
     auto res8 = res & 0xff;
     set_flag(Nf, 0);
     set_flag(Zf, (res8 == 0));
     set_flag(Cf, (res > 0xff));
     set_flag(Hf, ((regs[A] & 0xf) + (val & 0xf) > 0xf));
+    regs[A] = res8;
+}
+
+void CPU::add_reg_A_plus(unsigned char val, unsigned char f) {
+    unsigned res = regs[A] + val + f;
+    auto res8 = res & 0xff;
+    set_flag(Nf, 0);
+    set_flag(Zf, (res8 == 0));
+    set_flag(Cf, (res > 0xff));
+    set_flag(Hf, ((regs[A] & 0xf) + (val & 0xf) + f > 0xf));
     regs[A] = res8;
 }
 
@@ -43,10 +53,22 @@ void CPU::sub_reg_A(unsigned char val) {
     auto res8 = res & 0xff;
     set_flag(Nf, 1);
     set_flag(Zf, (res8 == 0));
-    set_flag(Cf, (val > regs[A]));
+    set_flag(Cf, (res < 0));
     set_flag(Hf, ((val & 0xf) > (regs[A] & 0xf)));
     regs[A] = res8;
 }
+
+void CPU::sub_reg_A_plus(unsigned char val, unsigned char f) {
+    int res = (int)regs[A] - ((int)val + f);
+    unsigned char res8 = res & 0xff;
+    set_flag(Nf, 1);
+    set_flag(Zf, (res8 == 0));
+    set_flag(Cf, (res < 0));
+    set_flag(Hf, ((val & 0xf) + f > (regs[A] & 0xf)));
+    regs[A] = res8;
+
+}
+
 
 void CPU::and_reg_A(unsigned char val)  {
     regs[A] &= val;
@@ -445,7 +467,7 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
         case RETI_0b11011001:     {return 16;}
         case RST_0b11xxx111:      {return 16;}
 
-        case HALT:                {return 0;}
+        case HALT:                {return 4;}
         case STOP:                {return 16;}
         case DI_0b11110011:       {return 4;}
         case EI_0b11111011:       {return 4;}
@@ -455,14 +477,15 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
 
 void CPU::off_IF_value(CPU::InterruptFlag flag, RAM& ram) {
     auto if_value = ram.read(constants::IF_ADDRESS);
+//    std::cout << "OFF IF value" << '\n';
     switch (flag) {
-        case VBlank_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xfe);}
-        case LCD_I:      {ram.write(constants::IF_ADDRESS, if_value & 0xfd);}
-        case Timer_I:    {ram.write(constants::IF_ADDRESS, if_value & 0xfb);}
-        case Serial_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xf7);}
-        case Joypad_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xef);}
+        case VBlank_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xfe); break;}
+        case LCD_I:      {ram.write(constants::IF_ADDRESS, if_value & 0xfd); break;}
+        case Timer_I:    {ram.write(constants::IF_ADDRESS, if_value & 0xfb); break;}
+        case Serial_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xf7); break;}
+        case Joypad_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xef); break;}
     }
-    std::cout << "OFF IF value:" << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';
+//    std::cout << "OFF IF value:" << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';
 }
 int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
 #if DEBUG
@@ -494,31 +517,28 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
 #endif
 //    std::cout << instruction_str[itype] << " ";
 
-
     // interrupts handling
     if (ime) {
         unsigned char pc_l = pc & 0xff;
         unsigned char pc_h = (pc >> 8) & 0xff;
-        ime = false; push_stack(pc_l, pc_h, ram);
 
         fetch_IF_value(ram);
         fetch_IE_value(ram);
 
         if (vblank_interrupt_req && vblank_interrupt_enabled)
-            { vblank_interrupt_req = false; off_IF_value(VBlank_I, ram); pc = constants::VBLANK_INTERRUPT;}
+            { if (halted) halted = false; ime = false; push_stack(pc_l, pc_h, ram); vblank_interrupt_req = false; off_IF_value(VBlank_I, ram); pc = constants::VBLANK_INTERRUPT;}
         else if (lcd_interrupt_req && lcd_interrupt_enabled)
-            { lcd_interrupt_req    = false; off_IF_value(LCD_I, ram);    pc = constants::STAT_INTERRUPT;}
+            { if (halted) halted = false; ime = false; push_stack(pc_l, pc_h, ram); lcd_interrupt_req    = false; off_IF_value(LCD_I, ram);    pc = constants::STAT_INTERRUPT;}
         else if (timer_interrupt_req && timer_interrupt_enabled)
-            { timer_interrupt_req  = false; off_IF_value(Timer_I, ram);  pc = constants::TIMER_INTERRUPT;}
+            { if (halted) halted = false; ime = false; push_stack(pc_l, pc_h, ram); timer_interrupt_req  = false; off_IF_value(Timer_I, ram);  pc = constants::TIMER_INTERRUPT;}
         else if (serial_interrupt_req && serial_interrupt_enabled)
-            { serial_interrupt_req = false; off_IF_value(Serial_I, ram); pc = constants::SERIAL_INTERRUPT;}
+            { if (halted) halted = false; ime = false; push_stack(pc_l, pc_h, ram); serial_interrupt_req = false; off_IF_value(Serial_I, ram); pc = constants::SERIAL_INTERRUPT;}
         else if (joypad_interrupt_req && joypad_interrupt_enabled)
-            { joypad_interrupt_req = false; off_IF_value(Joypad_I, ram); pc = constants::JOYPAD_INTERRUPT;}
+            { if (halted) halted = false; ime = false; push_stack(pc_l, pc_h, ram); joypad_interrupt_req = false; off_IF_value(Joypad_I, ram); pc = constants::JOYPAD_INTERRUPT;}
 
         i = fetch(ram);
         itype = decode(i);
     }
-
 
     switch(itype) {
         case LD_0b01xxxyyy:  { update_regs(read345(i), ram, read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
@@ -531,7 +551,10 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case LD_0b00000010:  { ram.write(((regs[B] << 8)| regs[C]), regs[A]); ++pc; return t_cycle_by_ins(itype);}
         case LD_0b00010010:  { ram.write(((regs[D] << 8)| regs[E]), regs[A]); ++pc; return t_cycle_by_ins(itype);}
         case LD_0b11111010:  { regs[A] = ram.read(ram.read(pc + 1) | (ram.read(pc + 2) << 8)); pc+=3; return t_cycle_by_ins(itype);}
-        case LD_0b11101010:  { ram.write((ram.read(pc + 1) | (ram.read(pc + 2) << 8)), regs[A]); pc+=3; return t_cycle_by_ins(itype);}
+        case LD_0b11101010:  {
+            ram.write((ram.read(pc + 1) | (ram.read(pc + 2) << 8)), regs[A]);
+            pc+=3;
+            return t_cycle_by_ins(itype);}
         case LDH_0b11110010: { regs[A] = ram.read(0xff00 | regs[C]); ++pc; return t_cycle_by_ins(itype);}
         case LDH_0b11100010: { ram.write((0xff00 | regs[C]), regs[A]); ++pc; return t_cycle_by_ins(itype);}
         case LDH_0b11110000: {
@@ -580,18 +603,21 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             return t_cycle_by_ins(itype);
         }
 
+//
         case ADD_0b10000xxx: { add_reg_A(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case ADD_0b10000110: { add_reg_A(read_regs(HL, ram)); ++pc;  return t_cycle_by_ins(itype);}
         case ADD_0b11000110: { add_reg_A(ram.read(pc+1)); pc+=2; return t_cycle_by_ins(itype);}
-        case ADC_0b10001xxx: { add_reg_A(read_regs(read012(i), ram) + get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);}
-        case ADC_0b10001110: { add_reg_A(read_regs(HL, ram) + get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);}
-        case ADC_0b11001110: { add_reg_A(ram.read(pc+1) + get_flag(Cf)); pc+=2; return t_cycle_by_ins(itype);}
+        case ADC_0b10001xxx: { add_reg_A_plus(read_regs(read012(i), ram) , get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);}
+        case ADC_0b10001110: { add_reg_A_plus(read_regs(HL, ram), get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);}
+            // A:00 F:10 B:12 C:34 D:56 E:78 H:DE L:F4 SP:DFF1 PC:DEF8 PCMEM:CE,0F,00,C3
+        case ADC_0b11001110: {
+            add_reg_A_plus(ram.read(pc + 1), get_flag(Cf)); pc+=2; return t_cycle_by_ins(itype);}
         case SUB_0b10010xxx: { sub_reg_A(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case SUB_0b10010110: { sub_reg_A(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
         case SUB_0b11010110: { sub_reg_A(ram.read(pc+1)); pc+=2; return t_cycle_by_ins(itype);}
-        case SBC_0b10011xxx: { sub_reg_A(read_regs(read012(i), ram) + get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);} // (reg[A] - r - reg[C]) == reg[A] - (r + reg[C])
-        case SBC_0b10011110: { sub_reg_A(read_regs(HL, ram) + get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);}
-        case SBC_0b11011110: { sub_reg_A(ram.read(pc+1) + get_flag(Cf)); pc+=2; return t_cycle_by_ins(itype);}
+        case SBC_0b10011xxx: { sub_reg_A_plus(read_regs(read012(i), ram), get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);} // (reg[A] - r - reg[C]) == reg[A] - (r + reg[C])
+        case SBC_0b10011110: { sub_reg_A_plus(read_regs(HL, ram), get_flag(Cf)); ++pc; return t_cycle_by_ins(itype);}
+        case SBC_0b11011110: { sub_reg_A_plus(ram.read(pc+1), get_flag(Cf)); pc+=2; return t_cycle_by_ins(itype);}
         case CP_0b10111xxx:  { sub_reg_A_flags_only(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case CP_0b10111110:  { sub_reg_A_flags_only(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
         case CP_0b11111110:  {
@@ -735,7 +761,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
                     auto rid = read012(pc_next);
                     auto reg = read_regs(rid, ram);
                     auto carry = get_flag(Cf);
-                    auto res = ((reg << 1) | carry);
+                    unsigned char res = ((reg << 1) | carry);
                     set_flag(Cf, reg & 0x80);
                     set_flag(Zf, res == 0);
                     set_flag(Nf, 0);
@@ -746,7 +772,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
                     auto rid = read012(pc_next);
                     auto reg = read_regs(rid, ram);
                     auto carry = get_flag(Cf);
-                    auto res = ((reg >> 1) | carry << 7);
+                    unsigned char res = ((reg >> 1) | carry << 7);
                     set_flag(Cf, reg & 1);
                     set_flag(Zf, res == 0);
                     set_flag(Nf, 0);
@@ -756,7 +782,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
                 case SLA_0xCB_0b00100xxx:  {
                     auto rid = read012(pc_next);
                     auto reg = read_regs(rid, ram);
-                    auto res = reg << 1;
+                    unsigned char res = reg << 1;
                     set_flag(Cf, reg & 0x80);
                     set_flag(Zf, res == 0);
                     set_flag(Nf, 0);
@@ -767,7 +793,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
                     auto rid = read012(pc_next);
                     auto reg = read_regs(rid, ram);
                     auto sign_bit = reg & 0x80;
-                    auto res = ((reg >> 1) | sign_bit);
+                    unsigned char res = ((reg >> 1) | sign_bit);
                     set_flag(Cf, reg & 1);
                     set_flag(Zf, res == 0);
                     set_flag(Nf, 0);
@@ -779,7 +805,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
                     auto reg = read_regs(rid, ram);
                     auto l = reg & 0x0f;
                     auto h = reg & 0xf0;
-                    auto res = (l << 4 | h >> 4);
+                    unsigned char res = (l << 4 | h >> 4);
                     set_flag(Zf, res == 0);
                     set_flag(Nf, 0);
                     set_flag(Hf, 0);
@@ -789,7 +815,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
                 case SRL_0xCB_0b00111xxx:  {
                     auto rid = read012(pc_next);
                     auto reg = read_regs(rid, ram);
-                    auto res = reg >> 1;
+                    unsigned char res = reg >> 1;
                     set_flag(Cf, reg & 1);
                     set_flag(Zf, res == 0);
                     set_flag(Nf, 0);
@@ -887,12 +913,14 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             pc = nn;
             return t_cycle_by_ins(itype);
         }
-        case HALT: { /*todo*/ return t_cycle_by_ins(itype);}
+        case HALT: {
+            if(!halted) {halted = true; ++pc;}
+            return t_cycle_by_ins(itype);}
         case STOP: {
             if (ram.read(constants::LY_ADDRESS) == 144) ++pc;
             return 4;}
         case DI_0b11110011: {ime = false; ++pc; return t_cycle_by_ins(itype);}
-        case EI_0b11111011: {ime = true; ++pc; std::cout << "IF:" << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';  return t_cycle_by_ins(itype);} // todo: check
+        case EI_0b11111011: {ime = true; ++pc; /*std::cout << "IF:" << (unsigned)ram.read(constants::IF_ADDRESS) << '\n'*/;  return t_cycle_by_ins(itype);} // todo: check
         case NOP_0b00000000: {++pc; return t_cycle_by_ins(itype);}
     }
     return 0;
@@ -936,3 +964,56 @@ void CPU::push_stack(unsigned char l, unsigned char h, RAM& ram) {
     ram.write(sp, l);
     ram.write(sp + 1, h);
 }
+
+static inline int tima_freq(RAM& ram) {
+    switch (ram.read(constants::TAC_REGISTER) & 3) {
+        case 0b00: return 1024;
+        case 0b01: return 16;
+        case 0b10: return 64;
+        default:
+            return 256;
+    }
+}
+
+
+// todo: maybe refactoring
+void CPU::handle_timer(int t_cycles, RAM& ram) {
+    static int div_t = 0;
+    static int tima_t = 0;
+    static bool tima_overflow = false;
+    static int overflow_counter = 0;
+
+    bool tima_enabled = (ram.read(constants::TAC_REGISTER) >> 2) & 1;
+    auto freq = tima_freq(ram);
+    while (t_cycles--) {
+        if (div_t == 256) {
+            ram.write(constants::DIV_REGISTER, ram.read(constants::DIV_REGISTER) + 1);
+            div_t = 0;
+        } else {
+            ++div_t;
+        }
+        if (tima_enabled) {
+            if (tima_overflow) {
+                if (overflow_counter != 4) {++overflow_counter; continue;}
+                overflow_counter = 0;
+                tima_overflow = false;
+
+                if (ram.read(constants::TIMA_REGISTER) == 0)
+                    ram.write(constants::TIMA_REGISTER, ram.read(constants::TMA_REGISTER));
+            }
+            if (tima_t == freq) {
+                unsigned char prev = ram.read(constants::TIMA_REGISTER);
+                ram.write(constants::TIMA_REGISTER, prev + 1);
+                if (prev == 0xff) {
+                    ram.write(constants::IF_ADDRESS, ram.read(constants::IF_ADDRESS) | (1 << 2));
+                    tima_overflow = true;
+                }
+                tima_t = 0;
+            } else {
+                ++tima_t;
+            }
+        }
+    }
+}
+
+

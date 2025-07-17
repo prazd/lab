@@ -15,6 +15,7 @@ struct CPU {
     unsigned short pc{};
     unsigned short sp{};
     bool ime = false;
+    bool halted = false;
 
     enum Instruction {
         LD_0b01xxxyyy,
@@ -129,6 +130,7 @@ struct CPU {
     bool timer_interrupt_enabled = false;
     bool serial_interrupt_enabled = false;
     bool joypad_interrupt_enabled = false;
+    void handle_timer(int t_cycles, RAM&);
     void fetch_IE_value(const RAM& ram);
 
     bool vblank_interrupt_req = false;
@@ -163,8 +165,10 @@ struct CPU {
     unsigned char read012(unsigned char i);
 
     void add_reg_A(unsigned char val);
+    void add_reg_A_plus(unsigned char, unsigned char);
     void add_reg_HL(unsigned short val);
     void sub_reg_A(unsigned char val);
+    void sub_reg_A_plus(unsigned char, unsigned char);
     void and_reg_A(unsigned char val);
     void or_reg_A(unsigned char val);
     void xor_reg_A(unsigned char val);

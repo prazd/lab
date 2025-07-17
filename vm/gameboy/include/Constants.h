@@ -47,6 +47,11 @@ namespace constants {
     constexpr size_t TIMER_INTERRUPT = 0x50;
     constexpr size_t SERIAL_INTERRUPT = 0x58;
     constexpr size_t JOYPAD_INTERRUPT = 0x60;
+
+    constexpr size_t DIV_REGISTER = 0xFF04;
+    constexpr size_t TIMA_REGISTER = 0xFF05;
+    constexpr size_t TMA_REGISTER = 0xFF06;
+    constexpr size_t TAC_REGISTER = 0xFF07;
 }
 
 #endif //GAMEBOY_CONSTANTS_H

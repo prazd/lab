@@ -157,10 +157,10 @@ void PPU::draw(RAM &ram)  {
 void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     static size_t last_t_cycles = 0;
     static size_t prev_t_cycles = 0;
-#if 1
-    ram.write(constants::LY_ADDRESS, 0x90);
-    return;
-#endif
+//#if 1
+//    ram.write(constants::LY_ADDRESS, 0x90);
+//    return;
+//#endif
 
     while(t_cycle--){
         ++current_t_cycle_count;
