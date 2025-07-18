@@ -30,7 +30,6 @@ struct GameBoyVM{
         std::cout << std::dec;
     }
 
-    std::vector<char> row_rom{};
     /*todo finish other components*/
     // Timer
     // Interrupts
@@ -78,18 +77,18 @@ struct GameBoyVM{
         f.seekg(0, std::ios::beg);
         f.read(res.data(), sz);
         f.close();
-        row_rom = std::move(res);
-        std::cout << row_rom.size();
+        ram.rom = std::move(res);
+        std::cout << ram.rom.size();
     }
 
     GameBoyVM(const std::string_view& path) {
         init_raw_rom(path);
         // init rom
-        std::memcpy(ram.mem + constants::ROM_BANK_00_BEGIN, row_rom.data(), 16384);
-        std::memcpy(ram.mem + constants::ROM_BANK_01_BEGIN, row_rom.data() + 16384, 16384);
+        std::memcpy(ram.mem + constants::ROM_BANK_00_BEGIN, ram.rom.data(), 16384);
+        std::memcpy(ram.mem + constants::ROM_BANK_01_BEGIN, ram.rom.data() + 16384, 16384);
         cpu.pc = 0x0100;
         cpu.sp = 0xFFFE;
-        switch (get_rom_size(row_rom)) {
+        switch (get_rom_size(ram.rom)) {
             case 4: {ram.current_mbc = RAM::MBC1; break;}
             default:
                 {ram.current_mbc = RAM::MBC0; break;}
@@ -191,7 +190,7 @@ struct GameBoyVM{
                     ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
                     return ss;
                 };
-//                std::cout  << cpu.instruction_str[decoded_ins] << " ";
+                std::cout  << cpu.instruction_str[decoded_ins] << " ";
                 if (!cpu.halted) {
                     std::cout <<
 
@@ -211,9 +210,33 @@ struct GameBoyVM{
                               print_hex(ram.read(cpu.pc + 3)).str() << '\n';
                     std::cout << std::dec;
                 }
+
+
+
+
+
+//                if (cpu.ime) {
+//                        unsigned char pc_l = cpu.pc & 0xff;
+//                        unsigned char pc_h = (cpu.pc >> 8) & 0xff;
+//
+//                        cpu.fetch_IF_value(ram);
+//                        cpu.fetch_IE_value(ram);
+//
+//                        if (cpu.vblank_interrupt_req && cpu.vblank_interrupt_enabled)
+//                        { if (cpu.halted) cpu.halted = false; cpu.ime = false; cpu.push_stack(pc_l, pc_h, ram); cpu.vblank_interrupt_req = false; cpu.off_IF_value(CPU::VBlank_I, ram); cpu.pc = constants::VBLANK_INTERRUPT;}
+//                        else if (cpu.lcd_interrupt_req && cpu.lcd_interrupt_enabled)
+//                        {if (cpu.halted) cpu.halted = false; cpu.ime = false; cpu.push_stack(pc_l, pc_h, ram); cpu.lcd_interrupt_req    = false; cpu.off_IF_value(CPU::LCD_I, ram);  cpu.pc = constants::STAT_INTERRUPT;}
+//                        else if (cpu.timer_interrupt_req && cpu.timer_interrupt_enabled)
+//                        { if (cpu.halted) cpu.halted = false; cpu.ime = false; cpu.push_stack(pc_l, pc_h, ram); cpu.timer_interrupt_req  = false; cpu.off_IF_value(CPU::Timer_I, ram);  cpu.pc = constants::TIMER_INTERRUPT;}
+//                        else if (cpu.serial_interrupt_req && cpu.serial_interrupt_enabled)
+//                        {if (cpu.halted) cpu.halted = false; cpu.ime = false; cpu.push_stack(pc_l, pc_h, ram); cpu.serial_interrupt_req = false; cpu.off_IF_value(CPU::Serial_I, ram); cpu.pc = constants::SERIAL_INTERRUPT;}
+//                        else if (cpu.joypad_interrupt_req && cpu.joypad_interrupt_enabled)
+//                        { if (cpu.halted) cpu.halted = false; cpu.ime = false; cpu.push_stack(pc_l, pc_h, ram); cpu.joypad_interrupt_req = false; cpu.off_IF_value(CPU::Joypad_I, ram); cpu.pc = constants::JOYPAD_INTERRUPT;}
+//
+//                        next_ins = cpu.fetch(ram);
+//                        decoded_ins = cpu.decode(next_ins);
+//                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
 #endif
-
-
                 // todo: check
                 int t_cycle = 0;
                 if (cpu.halted && !cpu.ime) {
@@ -299,8 +322,8 @@ void draw_tiles(auto& arr) {
 }
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb");
-        std::cout << "\nRAM sz:" << vm.get_ram_size(vm.row_rom) << '\n';
-        std::cout << "\nROM sz:" << vm.get_rom_size(vm.row_rom) << '\n';
+        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/hblank_ly_scx_timing-GS.gb");
+        std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
+        std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
 }

@@ -162,6 +162,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 //    return;
 //#endif
 
+    std::cout << "CurrentLine:" << (unsigned)current_line << '\n';
     while(t_cycle--){
         ++current_t_cycle_count;
         ++last_t_cycles;
@@ -203,7 +204,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
             }
         } else if (current_mode == HBlank) {
             if (current_t_cycle_count == 456){
-                set_ppu_reg(constants::LY_ADDRESS, current_line++, ram);
+                set_ppu_reg(constants::LY_ADDRESS, ++current_line, ram);
 //                std::cout << std::dec <<"T_cycles:" << last_t_cycles - prev_t_cycles << '\n';
 //                prev_t_cycles = last_t_cycles;
                 // LYC

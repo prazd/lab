@@ -560,6 +560,7 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case LDH_0b11110000: {
             unsigned short address = (0xff00 | ram.read(pc+1));
             regs[A] = ram.read(address);
+            std::cout << "LDH REG[A]:" << (unsigned)regs[A] << '\n';
             pc+=2;
             return t_cycle_by_ins(itype);
         }
@@ -917,8 +918,10 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             if(!halted) {halted = true; ++pc;}
             return t_cycle_by_ins(itype);}
         case STOP: {
-            if (ram.read(constants::LY_ADDRESS) == 144) ++pc;
-            return 4;}
+            if (ram.read(constants::LY_ADDRESS) == 144)
+                ++pc;
+            return 4;
+        }
         case DI_0b11110011: {ime = false; ++pc; return t_cycle_by_ins(itype);}
         case EI_0b11111011: {ime = true; ++pc; /*std::cout << "IF:" << (unsigned)ram.read(constants::IF_ADDRESS) << '\n'*/;  return t_cycle_by_ins(itype);} // todo: check
         case NOP_0b00000000: {++pc; return t_cycle_by_ins(itype);}
@@ -983,7 +986,10 @@ void CPU::handle_timer(int t_cycles, RAM& ram) {
     static bool tima_overflow = false;
     static int overflow_counter = 0;
 
+
     bool tima_enabled = (ram.read(constants::TAC_REGISTER) >> 2) & 1;
+    std::cout << "TAC_REGISTER:" << (unsigned)ram.read(constants::TAC_REGISTER) << '\n';
+    std::cout << "IF ADDRESS:" << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';
     auto freq = tima_freq(ram);
     while (t_cycles--) {
         if (div_t == 256) {

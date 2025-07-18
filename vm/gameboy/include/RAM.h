@@ -22,8 +22,8 @@ struct RAM {
     } current_mbc = MBC1;
 
     size_t current_rom_bank = 1;
-    std::vector<unsigned char> rom{};
-    std::vector<unsigned char> cart_ram{};
+    std::vector<char> rom{};
+    std::vector<char> cart_ram{};
     size_t current_cart_ram = 0;
     unsigned char dummy_reg = 0xFF;
     enum BankingMode {

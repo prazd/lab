@@ -32,6 +32,7 @@ void RAM::handle_mbc1(unsigned short index, unsigned char value) {
         external_ram_enabled = (value & 0xf) == 0x0A;
     } else if (index >= 0x2000 && index <= constants::ROM_BANK_00_END) {
         auto v = value & 0x1f;
+//        if (v == current_rom_bank) return;
         if (v == 0) v = 1;
         update_rom_bank01(v);
     } else if (index >= constants::ROM_BANK_01_BEGIN && index <= 0x5FFF) {
@@ -75,8 +76,11 @@ void RAM::write(unsigned short index, unsigned char value) {
         handle_mbc(index, value);
         return;
     }
-    if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END)
+    if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END){
+        std::cout << "ECHO RAM WRITE" << '\n';
         index -= 0x2000;
+    }
+
 
     if (is_ram_avaliable(index))
         mem[index] = value;
@@ -90,8 +94,11 @@ unsigned char RAM::read(unsigned short index) const {
 //    if (index == 0x4244) {
 //        std::cout << "READ by 0x4244:" << std::hex << (unsigned)mem[index] << '\n';
 //    }
-    if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END)
+    if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END){
+        std::cout << "ECHO RAM READ!" << '\n';
         index -= 0x2000;
+    }
+
     if (is_ram_avaliable(index))
         return mem[index];
     std::cout << "DUMMY_REG!!!" << '\n';
