@@ -3,6 +3,7 @@
 #include <iostream>
 
 namespace constants {
+    constexpr size_t DMA = 0xFF46;
     constexpr size_t BANK_ROM_SZ = 16384; // 16KiB
     constexpr size_t EXTERNAL_RAM_SZ = 8192; // 8KiB
     constexpr size_t ECHO_RAM_BEGIN = 0xE000;

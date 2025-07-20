@@ -2,6 +2,7 @@
 #define GAMEBOY_CPU_H
 #include "Constants.h"
 #include "RAM.h"
+#include "Timer.h"
 
 struct CPU {
     static constexpr unsigned char HL = 0b110;
@@ -125,20 +126,25 @@ struct CPU {
     };
 
     // Interrupts
+    bool ime_requested = false;
+    unsigned ime_req_count = 0;
     bool vblank_interrupt_enabled = false;
     bool lcd_interrupt_enabled = false;
     bool timer_interrupt_enabled = false;
     bool serial_interrupt_enabled = false;
     bool joypad_interrupt_enabled = false;
-    void handle_timer(int t_cycles, RAM&);
-    void fetch_IE_value(const RAM& ram);
+    void fetch_IE_value(RAM& ram);
 
     bool vblank_interrupt_req = false;
     bool lcd_interrupt_req = false;
     bool timer_interrupt_req = false;
     bool serial_interrupt_req = false;
     bool joypad_interrupt_req = false;
-    void fetch_IF_value(const RAM& ram);
+    void fetch_IF_value(RAM& ram);
+
+    Timer timer;
+    unsigned char tread(RAM& ram, unsigned short);
+    void twrite(RAM& ram, unsigned short index, unsigned char value);
 
     enum InterruptFlag{VBlank_I, LCD_I, Timer_I, Serial_I, Joypad_I};
     void off_IF_value(InterruptFlag, RAM&);
@@ -184,7 +190,7 @@ struct CPU {
 
     bool get_cc_flag(unsigned char val);
 
-    unsigned char fetch(const RAM& ram) const;
+    unsigned char fetch(RAM& ram);
     Instruction decode(unsigned char ins);
     Instruction0xCB decode_0xCB(unsigned char ins);
     int execute(unsigned char i, Instruction itype, RAM& ram);

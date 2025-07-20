@@ -5,9 +5,11 @@
 #include <array>
 #include "RAM.h"
 #include "CPU.h"
+#include "Timer.h"
 #include <filesystem>
 #include <sstream>
 #include <fstream>
+
 
 constexpr size_t WIDTH = 800;
 constexpr size_t HEIGHT = 720;
@@ -212,9 +214,6 @@ struct GameBoyVM{
                 }
 
 
-
-
-
 //                if (cpu.ime) {
 //                        unsigned char pc_l = cpu.pc & 0xff;
 //                        unsigned char pc_h = (cpu.pc >> 8) & 0xff;
@@ -247,18 +246,15 @@ struct GameBoyVM{
                 }
 
                 t_cycles_count+=t_cycle;
-
                 ppu.handle_t_cycle(t_cycle, ram);
-                cpu.handle_timer(t_cycle, ram);
-
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
-
             current_t_cycle = 0;
             std::cout << std::dec;
             // Render
             UpdateTexture(target, ppu.read_buffer());
+
 
             BeginDrawing();
                 ClearBackground(BLACK);
@@ -321,8 +317,13 @@ void draw_tiles(auto& arr) {
     CloseWindow();
 }
 
+
+// Done - /Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb
+// // GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb");
+
+// Failed:
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/hblank_ly_scx_timing-GS.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

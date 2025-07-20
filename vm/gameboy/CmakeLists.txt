@@ -22,6 +22,7 @@ set(SOURCES
     src/CPU.cpp
     src/PPU.cpp
     src/RAM.cpp
+    src/Timer.cpp
     main.cpp
 )
 

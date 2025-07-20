@@ -162,7 +162,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 //    return;
 //#endif
 
-    std::cout << "CurrentLine:" << (unsigned)current_line << '\n';
+//    std::cout << "CurrentLine:" << (unsigned)current_line << '\n';
     while(t_cycle--){
         ++current_t_cycle_count;
         ++last_t_cycles;
@@ -222,6 +222,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
                 current_t_cycle_count = 0;
                 if (current_line == 144){
                     current_mode = VBlank;
+                    ram.write(constants::IF_ADDRESS, ram.read(constants::IF_ADDRESS) | 1);
                     current_v_blank_t_cycle_count = 0;
                 }
                     // request_interrupt(VBLANK_INTERRUPT); // todo:

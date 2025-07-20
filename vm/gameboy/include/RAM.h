@@ -26,6 +26,13 @@ struct RAM {
     std::vector<char> cart_ram{};
     size_t current_cart_ram = 0;
     unsigned char dummy_reg = 0xFF;
+
+    bool tima_written = false;
+    bool div_written = false;
+    bool glitch_overflow = false;
+    bool tima_overflow = false;
+    unsigned short div_internal_sync = 0;
+
     enum BankingMode {
         Simple,
         Advanced,
