@@ -29,13 +29,13 @@ void print_bytes(unsigned short address, auto n, RAM& ram) {
 struct Pixel {
     bool is_sprite;
     Color color{};      // The color number (IGNORING the palette, this value is the color value from the tile data)
-    bool pallete{};     // Palette: OBP0 / OBP1 for DMG, a value between 0 and 7 on CGB
+    unsigned char attrib{};     // Palette: OBP0 / OBP1 for DMG, a value between 0 and 7 on CGB
     // Sprite Priority: Only relevant for Sprites on CGB
     bool bg_priority{}; // Only relevant for Sprites, keeps the value of Bit 7 (OBJ-to-BG Priority) of the Attributes byte of the sprite
 
     static Color get_pixel_color(unsigned char id);
     static int get_color_id(Color c);
-    static std::queue<Pixel> tile_row_to_pixel_arr(unsigned short row);
+    static std::queue<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char);
 };
 
 struct Sprite {
@@ -55,6 +55,9 @@ struct BaseFetcher {
     unsigned char fetcher_current_tile_x{};
     unsigned char low {};
     unsigned char high {};
+
+    bool is_sprite = false;
+    unsigned char pallete = 0;
 
     std::queue<Pixel> pixels{};
     std::queue<Pixel> fifo{};
@@ -85,7 +88,7 @@ struct BaseFetcher {
             case FetcherState::Low:      {low  = ram.read(tile_address + (line_in_tile * 2));      break;}
             case FetcherState::High:     {high = ram.read(tile_address + (line_in_tile * 2) + 1);  break;}
             case FetcherState::ToPixels: {
-                pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low));
+                pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete);
 //                SCX at a Sub-Tile-Layer
                 if (!is_window && fetcher_current_tile_x == 0) {
                     for (int i = 0; i < scx_offset; ++i){
@@ -159,6 +162,8 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
 
 struct SpriteFetcher: BaseFetcher<SpriteFetcher, const Sprite&> {
     unsigned short update_tile_base(auto& ram, const Sprite& sprite) {
+        is_sprite = true;
+        pallete = sprite.attrib;
         return (sprite.index_tile * 16) + constants::VRAM_BEGIN;
     }
 };
@@ -207,6 +212,8 @@ public:
     void update_obj(const RAM& ram);
     void update_bg(const RAM& ram);
     void update_regs(const RAM& ram);
+
+    static Color get_pallete(const RAM& ram, unsigned short index);
 
     unsigned char get_obj_size(const RAM& ram);
 
