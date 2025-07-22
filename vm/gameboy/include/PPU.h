@@ -164,6 +164,7 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, const Sprite&> {
     unsigned short update_tile_base(auto& ram, const Sprite& sprite) {
         is_sprite = true;
         pallete = sprite.attrib;
+        line_in_tile = ram.read(constants::LY_ADDRESS) - (sprite.y_pos - 16);
         return (sprite.index_tile * 16) + constants::VRAM_BEGIN;
     }
 };

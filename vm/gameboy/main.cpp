@@ -90,6 +90,10 @@ struct GameBoyVM{
         std::memcpy(ram.mem + constants::ROM_BANK_01_BEGIN, ram.rom.data() + 16384, 16384);
         cpu.pc = 0x0100;
         cpu.sp = 0xFFFE;
+        ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
+        if (ram.cart_ram.capacity() > 0) {
+
+        }
         switch (get_rom_size(ram.rom)) {
             case 4: {ram.current_mbc = RAM::MBC1; break;}
             default:
@@ -137,7 +141,7 @@ struct GameBoyVM{
 
             std::cout << ppu.pixel_fetcher.tile_address << '\n';
             for (int i = 0; i < 16; ++i){
-                arr[i] = ram.read((0x8000 + 0x63 * 16) + i);
+                arr[i] = ram.read((0x8000 + (counter)) + i);
             }
             std::vector<std::vector<int>> colors;
             for (size_t i = 0; i < 16; i+=2){
@@ -164,7 +168,7 @@ struct GameBoyVM{
                 y += ystep;
                 x = 0.0f;
             }
-//            counter+=16;
+            counter+=16;
         };
 
         int current_t_cycle = 0;
@@ -244,18 +248,35 @@ struct GameBoyVM{
                 } else {
                     t_cycle = cpu.execute(next_ins, decoded_ins, ram);
                 }
-
                 t_cycles_count+=t_cycle;
+                if (ram.dma_active) {
+                    if (ppu.current_mode != PPU::OAM) {
+                        int cp_t_cycle = t_cycle;
+                        while (cp_t_cycle--) {
+                            ++ram.dma_t;
+                            if (ram.dma_t == 4) {
+                                ram.dma_t = 0;
+                                ram.write(constants::OAM_BEGIN + ram.dma_counter, ram.read(ram.dma_address + ram.dma_counter));
+                                ++ram.dma_counter;
+                                if (ram.dma_counter == 160) {
+                                    ram.dma_active = false;
+                                    ram.dma_address = 0;
+                                    ram.dma_counter = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 ppu.handle_t_cycle(t_cycle, ram);
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
+//            print_segment(0xA000, 4);
             current_t_cycle = 0;
             std::cout << std::dec;
             // Render
             UpdateTexture(target, ppu.read_buffer());
-
-//            print_segment(0x8320, 20);
 
             BeginDrawing();
                 ClearBackground(BLACK);
@@ -294,61 +315,16 @@ struct GameBoyVM{
     }
 };
 
-void draw_tiles(auto& arr) {
-    std::vector<std::vector<int>> colors;
-    for (size_t i = 0; i < 16; i+=2){
-            auto l = arr[i];
-            auto h = arr[i+1];
-            std::vector<int> tmp{};
-        for (int j = 0; j < 8; ++j) {
-            auto lc = (l >> (7 - j)) & 1;
-            auto hc = (h >> (7 - j)) & 1;
-            tmp.push_back((hc << 1 | lc));
-        }
-        colors.push_back(tmp);
-    }
-    for (auto&& row: colors){
-        for (auto el: row)
-            std::cout << el;
-        std::cout << '\n';
-    }
-
-    InitWindow(300, 300, "DrawTileTest");
-    SetTargetFPS(60);
-    auto get_color = [](int i){  
-        switch(i){
-            case 0: return WHITE;
-            case 1: return LIGHTGRAY;
-            case 2: return DARKGRAY;
-            default:
-                return BLACK;
-        }
-    };
-    while (!WindowShouldClose()) {
-        BeginDrawing();
-        ClearBackground(WHITE);
-        float xstep = 300.f/8.f;
-        float ystep = 300.f/8.f;
-        float x = 0.0f;
-        float y = 0.0f;
-        for (auto&& row: colors){
-            for (auto el: row) {
-                DrawRectangle(x, y, xstep, ystep, get_color(el));
-                x+=xstep;
-            }
-            y += ystep;
-            x = 0.0f;
-        }
-        EndDrawing();
-    }
-    CloseWindow();
-}
-
-
-// Done - /Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb
-//GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb");
+// Done:
+// /Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb
+// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/basic.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb +-
 
 // Failed:
+// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb
+// /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb
+
 int main() {
         GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';

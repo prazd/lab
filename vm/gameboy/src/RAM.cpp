@@ -7,7 +7,6 @@ void RAM::update_rom_bank01(size_t bank) {
 
 void RAM::update_cart_ram(size_t n) {
     current_cart_ram = n;
-    memcpy(mem + 0xA000, cart_ram.data() + (constants::EXTERNAL_RAM_SZ * current_cart_ram), constants::EXTERNAL_RAM_SZ);
 }
 
 bool RAM::lcd_enabled() const {
@@ -32,7 +31,6 @@ void RAM::handle_mbc1(unsigned short index, unsigned char value) {
         external_ram_enabled = (value & 0xf) == 0x0A;
     } else if (index >= 0x2000 && index <= constants::ROM_BANK_00_END) {
         auto v = value & 0x1f;
-//        if (v == current_rom_bank) return;
         if (v == 0) v = 1;
         update_rom_bank01(v);
     } else if (index >= constants::ROM_BANK_01_BEGIN && index <= 0x5FFF) {
@@ -40,7 +38,7 @@ void RAM::handle_mbc1(unsigned short index, unsigned char value) {
         if (current_banking_mode == Simple) {
             update_rom_bank01(v << 5 | current_rom_bank & 0x1f);
         } else {
-            update_cart_ram(v);
+            update_cart_ram(v); // todo: check
         }
     } else if (index >= 0x6000 && index <= constants::ROM_BANK_01_END) {
         if (value & 1) current_banking_mode = Advanced;
@@ -51,7 +49,7 @@ void RAM::handle_mbc1(unsigned short index, unsigned char value) {
 bool RAM::is_ram_avaliable(unsigned short index) const {
     auto current_ppu_mode = get_ppu_mode();
     if (((index >=  constants::VRAM_BEGIN && index <=  constants::VRAM_END)  && (current_ppu_mode == 3 && lcd_enabled())) ||
-        ((index >=  constants::EXTERNAL_RAM_BEGIN && index <=  constants::EXTERNAL_RAM_END)) && (cart_ram.empty() || !external_ram_enabled) || // todo: check external RAM
+        ((index >=  constants::EXTERNAL_RAM_BEGIN && index <=  constants::EXTERNAL_RAM_END)) && (!external_ram_enabled) || // todo: check external RAM
         ((index >=  constants::OAM_BEGIN && index <=  constants::OAM_END)) && ((current_ppu_mode == 2 || current_ppu_mode == 3) && lcd_enabled()) ||
         ((index >=  constants::NOT_USABLE_BEGIN && index <=  constants::NOT_USABLE_END))
             ) return false;
@@ -63,26 +61,22 @@ unsigned char RAM::get_ppu_mode() const {
 }
 
 void RAM::write(unsigned short index, unsigned char value) {
-//    if (index >= constants::VRAM_BEGIN && index <= constants::VRAM_END) {
-//        std::cout << "Writing to VRAM: Address 0x" << std::hex << index << " Value 0x" << (unsigned)value << std::dec << '\n';
-//    }
-//    std::cout << std::dec;
-
-//    if (index == 0xFF0F) {
-//        std::cout << "WRITE 0xFF0F:" <<(unsigned)value << '\n';
-//    }
-    if (index <=  constants::ROM_BANK_01_END){
+    if (index <= constants::ROM_BANK_01_END){
         handle_mbc(index, value);
         return;
     }
 
-    // todo: 640 T-cycles
     if (index == constants::DMA) {
-        std::memcpy(&mem[constants::OAM_BEGIN], &mem[(value << 8 | 0x00)], 160);
+        dma_active = true;
+        dma_address = (value << 8 | 0x00);
+        dma_counter = 0;
+        dma_t = 0;
     }
+
     if (index == constants::DIV_REGISTER){
         value = 0;
     }
+
     if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END){
         std::cout << "ECHO RAM WRITE" << '\n';
         index -= 0x2000;
@@ -122,20 +116,26 @@ void RAM::write(unsigned short index, unsigned char value) {
             }
         }
         return;
-    }
+   }
 
-    if (is_ram_avaliable(index))
+   if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
+       cart_ram[index + (current_cart_ram * 8192)] = value;
+       return;
+   }
+
+   if (is_ram_avaliable(index))
         mem[index] = value;
 
 }
 
 unsigned char RAM::read(unsigned short index) const {
-//    if (index == 0x4244) {
-//        std::cout << "READ by 0x4244:" << std::hex << (unsigned)mem[index] << '\n';
-//    }
     if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END){
         std::cout << "ECHO RAM READ!" << '\n';
         index -= 0x2000;
+    }
+
+    if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
+        return cart_ram[index + (current_cart_ram * 8192)];
     }
 
     if (is_ram_avaliable(index))

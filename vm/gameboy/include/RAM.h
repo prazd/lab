@@ -21,11 +21,18 @@ struct RAM {
         MBC1
     } current_mbc = MBC1;
 
-    size_t current_rom_bank = 1;
+
     std::vector<char> rom{};
-    std::vector<char> cart_ram{};
+    size_t current_rom_bank = 1;
+    std::vector<unsigned char> cart_ram{};
     size_t current_cart_ram = 0;
+
     unsigned char dummy_reg = 0xFF;
+
+    bool dma_active = 0;
+    unsigned short dma_address = 0;
+    unsigned int dma_counter = 0;
+    unsigned char dma_t = 0;
 
     bool tima_written = false;
     bool div_written = false;
