@@ -2,16 +2,16 @@
 
 Color Pixel::get_pixel_color(unsigned char id)  {
     switch(id){
-        case 0: return BLACK;
+        case 0: return WHITE;
         case 1: return LIGHTGRAY;
         case 2: return DARKGRAY;
         default:
-            return WHITE;
+            return BLACK;
     };
 }
 
 int Pixel::get_color_id(Color c)  {
-    if (c == BLACK)
+    if (c == WHITE)
         return 0;
     if (c == LIGHTGRAY)
         return 1;
@@ -20,7 +20,23 @@ int Pixel::get_color_id(Color c)  {
     return 3;
 }
 
-std::queue<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete)  {
+std::queue<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete, unsigned char pcx, const Sprite& s)  {
+    auto l = row & 0xff;
+    auto h = (row >> 8) & 0xff;
+    std::queue<Pixel> result{};
+    unsigned char lc{};
+    unsigned char hc{};
+    Color color;
+    for (int i = 0; i < 8; ++i) {
+        lc = (l >> (7 - i)) & 1;
+        hc = (h >> (7 - i)) & 1;
+        color = Pixel::get_pixel_color((hc << 1 | lc));
+        result.push(Pixel{.color = color, .is_sprite = is_sprite, .attrib = pallete});
+    }
+    return result;
+}
+
+std::queue<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete, unsigned char)  { // todo: maybe refactoring
     auto l = row & 0xff;
     auto h = (row >> 8) & 0xff;
     std::queue<Pixel> result{};
@@ -118,51 +134,53 @@ void PPU::oam_scan(RAM &ram)  {
     }
 }
 
-Pixel PPU::pixel_mixing(RAM &ram)  {
-    if (pixel_fetcher.fifo.empty()){
-        return Pixel{.color = WHITE};
-    }
+Pixel PPU::pixel_mixing(RAM &ram) {
+    auto bgp = ram.read(constants::BGP);
+    auto bg_pixel = pixel_fetcher.fifo.front(); pixel_fetcher.fifo.pop();
 
-    if (!pixel_fetcher.fifo.empty() && sprite_fetcher.fifo.empty()) {
-        auto bg_pixel = pixel_fetcher.fifo.front(); pixel_fetcher.fifo.pop();
+    switch (Pixel::get_color_id(bg_pixel.color)) {
+        case 1:  {bg_pixel.color = Pixel::get_pixel_color((bgp >> 2) & 3);  break;}
+        case 2:  {bg_pixel.color = Pixel::get_pixel_color((bgp >> 4) & 3);  break;}
+        case 3:  {bg_pixel.color = Pixel::get_pixel_color((bgp >> 6) & 3);  break;}
+        default:
+            {bg_pixel.color = Pixel::get_pixel_color((bgp & 3));  break;}
+    }
+//    if (!(ram.read(constants::LCDC_ADDRESS) & 0x2)) {
+//        return bg_pixel;
+//    }
+    if (sprite_fetcher.fifo.empty()) {
+        return bg_pixel;
+    }
+    auto sprite_pixel = sprite_fetcher.fifo.front();  sprite_fetcher.fifo.pop();
+    //  If the color number of the Sprite Pixel is 0, the Background Pixel is pushed to the buffer.
+    if (Pixel::get_color_id(sprite_pixel.color) == 0){
         return bg_pixel;
     }
 
-    if (!sprite_fetcher.fifo.empty() && !pixel_fetcher.fifo.empty()) {
-        auto bg_pixel = pixel_fetcher.fifo.front(); pixel_fetcher.fifo.pop();
-        auto sprite_pixel = sprite_fetcher.fifo.front();  sprite_fetcher.fifo.pop();
-        //  If the color number of the Sprite Pixel is 0, the Background Pixel is pushed to the buffer.
-        if (Pixel::get_color_id(sprite_pixel.color) == 0){
-            return bg_pixel;
-        }
-//
-        //  If the BG-to-OBJ-Priority bit is 1 and the color number of the Background Pixel is anything other than 0,
-        //  the Background Pixel is pushed to the buffer
-        if ((sprite_pixel.attrib >> 7 & 1) && Pixel::get_color_id(bg_pixel.color) != 0){
-            std::cout << "BG-to-OBJ-Priority" << '\n';
-            return bg_pixel;
-        }
-
-        unsigned char pallete = 0;
-        if ((sprite_pixel.attrib >> 4 & 1))
-            pallete = ram.read(constants::OBP1);
-        else
-            pallete = ram.read(constants::OBP0);
-
-        switch (Pixel::get_color_id(sprite_pixel.color)) {
-            case 1:  {sprite_pixel.color = Pixel::get_pixel_color((pallete >> 2) & 3);  break;}
-            case 2:  {sprite_pixel.color = Pixel::get_pixel_color((pallete >> 4) & 3);  break;}
-            default: {sprite_pixel.color = Pixel::get_pixel_color((pallete >> 6) & 3);  break;}
-        }
-        return sprite_pixel;
+    //  If the BG-to-OBJ-Priority bit is 1 and the color number of the Background Pixel is anything other than 0,
+    //  the Background Pixel is pushed to the buffer
+    if ((sprite_pixel.attrib >> 7 & 1) && Pixel::get_color_id(bg_pixel.color) != 0){
+        std::cout << "BG-to-OBJ-Priority" << '\n';
+        return bg_pixel;
     }
 
-    throw std::exception();
+    unsigned char pallete = 0;
+    if ((sprite_pixel.attrib >> 4 & 1))
+        pallete = ram.read(constants::OBP1);
+    else
+        pallete = ram.read(constants::OBP0);
+
+    switch (Pixel::get_color_id(sprite_pixel.color)) {
+        case 1:  {sprite_pixel.color = Pixel::get_pixel_color((pallete >> 2) & 3);  break;}
+        case 2:  {sprite_pixel.color = Pixel::get_pixel_color((pallete >> 4) & 3);  break;}
+        case 3:  {sprite_pixel.color = Pixel::get_pixel_color((pallete >> 6) & 3);  break;}
+    }
+    return sprite_pixel;
 }
 
 std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
     for (auto& sprite: sprite_buffer) {
-        if (sprite.x_pos - 8  <= current_pixel_x && current_pixel_x < sprite.x_pos) {
+        if (sprite.x_pos - 8 <= current_pixel_x && current_pixel_x < sprite.x_pos) {
             return sprite;
         }
     }
@@ -202,29 +220,24 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
             } else {
                 current_pixel_x = 0;
                 current_mode = Drawing;
-                sprite_fetcher.fifo = {};
-                pixel_fetcher.fifo = {};
-                sprite_fetcher.pixels = {};
-                pixel_fetcher.pixels = {};
                 set_ppu_mode(ram);
             }
         } else if (current_mode == Drawing) {
                 if (current_pixel_x < 160) {
-
                     if (pixel_fetcher.fifo.size() < 8){
-                        pixel_fetcher.fetch(ram, current_pixel_x);
+                        pixel_fetcher.fetch(ram,  current_pixel_x); // todo: check
                     }
-
                     auto sprite = sprite_on_x(ram);
                     if (sprite.has_value()) {
                         if (sprite_fetcher.fifo.size() < 8) {
-                            sprite_fetcher.fetch(ram, sprite.value());
+                            sprite_fetcher.fetch(ram, current_pixel_x, sprite.value());
                         }
                     }
-
                 if (!pixel_fetcher.fifo.empty()) draw(ram);
 
                 } else {
+                    sprite_fetcher.reset();
+                    pixel_fetcher.reset();
                     current_mode = HBlank;
                     set_ppu_mode(ram);
             }

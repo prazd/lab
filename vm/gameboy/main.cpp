@@ -285,7 +285,7 @@ struct GameBoyVM{
                 DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
 
 // PRINT TILES
-#if 0
+#if 1
                 auto tiles_rect = [&](){
                     std::array<Rectangle, 20 * 18> res{};
                     float x_pos = 0.0f;

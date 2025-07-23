@@ -26,6 +26,13 @@ void print_bytes(unsigned short address, auto n, RAM& ram) {
     std::cout << std::dec;
 }
 
+struct Sprite {
+    unsigned char y_pos{};
+    unsigned char x_pos{};
+    unsigned char index_tile{};
+    unsigned char attrib{};
+};
+
 struct Pixel {
     bool is_sprite;
     Color color{};      // The color number (IGNORING the palette, this value is the color value from the tile data)
@@ -35,14 +42,8 @@ struct Pixel {
 
     static Color get_pixel_color(unsigned char id);
     static int get_color_id(Color c);
-    static std::queue<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char);
-};
-
-struct Sprite {
-    unsigned char y_pos{};
-    unsigned char x_pos{};
-    unsigned char index_tile{};
-    unsigned char attrib{};
+    static std::queue<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char, unsigned char);
+    static std::queue<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char, unsigned char current_pixel, const Sprite&);
 };
 
 template <typename Fetcher, typename ... Args>
@@ -56,7 +57,9 @@ struct BaseFetcher {
     unsigned char low {};
     unsigned char high {};
 
+    unsigned char current_pixel_x = 0;
     bool is_sprite = false;
+    int pixel_offset = 0;
     unsigned char pallete = 0;
 
     std::queue<Pixel> pixels{};
@@ -82,15 +85,24 @@ struct BaseFetcher {
         return (((ram.read(constants::LCDC_ADDRESS)) >> 5) & 1);
     }
 
+    void reset() {
+        fifo = {};
+        pixels = {};
+        current_state = FetcherState::GetTile;
+        fetcher_current_tile_x = 0;
+        tile_address = 0;
+//        scx_offset = 0;
+    }
+
     void step(RAM& ram, Args&&... args) {
         switch(current_state) {
             case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(ram, std::forward<Args>(args)...); break;}
             case FetcherState::Low:      {low  = ram.read(tile_address + (line_in_tile * 2));      break;}
             case FetcherState::High:     {high = ram.read(tile_address + (line_in_tile * 2) + 1);  break;}
             case FetcherState::ToPixels: {
-                pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete);
+                pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete, args...);
 //                SCX at a Sub-Tile-Layer
-                if (!is_window && fetcher_current_tile_x == 0) {
+                if ((!is_window && !is_sprite) && fetcher_current_tile_x == 0) {
                     for (int i = 0; i < scx_offset; ++i){
                         pixels.pop();
                     }
@@ -111,7 +123,10 @@ struct BaseFetcher {
             case FetcherState::Low:      {step(ram, std::forward<Args>(args)...); current_state = FetcherState::High;     break;}
             case FetcherState::High:     {step(ram, std::forward<Args>(args)...); current_state = FetcherState::ToPixels; break;}
             case FetcherState::ToPixels: {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Push;     break;}
-            case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); if (pixels.empty()){fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20; current_state = FetcherState::GetTile;} break;}
+            case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); if (pixels.empty()){
+                fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
+                current_state = FetcherState::GetTile;
+            } break;}
         }
     }
 };
@@ -160,8 +175,8 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
     }
 };
 
-struct SpriteFetcher: BaseFetcher<SpriteFetcher, const Sprite&> {
-    unsigned short update_tile_base(auto& ram, const Sprite& sprite) {
+struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
+    unsigned short update_tile_base(auto& ram, unsigned char cpx, const Sprite& sprite) {
         is_sprite = true;
         pallete = sprite.attrib;
         line_in_tile = ram.read(constants::LY_ADDRESS) - (sprite.y_pos - 16);

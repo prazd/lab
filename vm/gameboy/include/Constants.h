@@ -30,18 +30,19 @@ namespace constants {
     constexpr size_t HRAM_END = 0xFFFE;
 
     // Pallete
-
+    constexpr size_t BGP  = 0xFF47;
     constexpr size_t OBP0 = 0xFF48;
     constexpr size_t OBP1 = 0xFF49;
 
+
 // https://gbdev.io/pandocs/Hardware_Reg_List.html?highlight=FF42#hardware-registers
 // Hardware registers
-    constexpr size_t LCDC_ADDRESS = 0xFF40;
-    constexpr size_t STAT_ADDRESS = 0xFF41;
-    constexpr size_t SCY_ADDRESS  =  0xFF42; // bg x
-    constexpr size_t SCX_ADDRESS  =  0xFF43; // bg y
+    constexpr size_t LCDC_ADDRESS =   0xFF40;
+    constexpr size_t STAT_ADDRESS =   0xFF41;
+    constexpr size_t SCY_ADDRESS  =   0xFF42; // bg x
+    constexpr size_t SCX_ADDRESS  =   0xFF43; // bg y
     constexpr size_t LY_ADDRESS   =   0xFF44; // scanline y
-    constexpr size_t LYC_ADDRESS  =  0xFF45;
+    constexpr size_t LYC_ADDRESS  =   0xFF45;
     constexpr size_t WY_ADDRESS   =   0xFF4A; // window x
     constexpr size_t WX_ADDRESS   =   0xFF4B; // window y
 
