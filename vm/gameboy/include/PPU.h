@@ -31,6 +31,7 @@ struct Sprite {
     unsigned char x_pos{};
     unsigned char index_tile{};
     unsigned char attrib{};
+    auto operator<=>(const Sprite&) const = default;
 };
 
 struct Pixel {
@@ -49,7 +50,7 @@ struct Pixel {
 template <typename Fetcher, typename ... Args>
 struct BaseFetcher {
     enum class FetcherState {
-        GetTile, Low, High, ToPixels, Push
+        GetTile, Low, High, Push
     } current_state = FetcherState::GetTile;
 
     unsigned short tile_address{};
@@ -61,12 +62,15 @@ struct BaseFetcher {
     bool is_sprite = false;
     int pixel_offset = 0;
     unsigned char pallete = 0;
+    bool to_pixels_done = false;
+    bool paused = false;
+
+    size_t next_t_cycle = 2; // Start GetTile 2 T-cycle
 
     std::queue<Pixel> pixels{};
     std::queue<Pixel> fifo{};
     unsigned char line_in_tile{};
     bool is_window = false;
-    unsigned char scx_offset{};
 
     // todo: add to static class like ram ranges
     auto get_window_tile_map_area(const RAM& ram) {
@@ -85,47 +89,65 @@ struct BaseFetcher {
         return (((ram.read(constants::LCDC_ADDRESS)) >> 5) & 1);
     }
 
+    void reset_state() {
+        current_state = FetcherState::GetTile;
+    }
+    void reset_pixels() {
+        pixels = {};
+    }
+
     void reset() {
         fifo = {};
         pixels = {};
         current_state = FetcherState::GetTile;
         fetcher_current_tile_x = 0;
         tile_address = 0;
-//        scx_offset = 0;
     }
 
     void step(RAM& ram, Args&&... args) {
         switch(current_state) {
-            case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(ram, std::forward<Args>(args)...); break;}
-            case FetcherState::Low:      {low  = ram.read(tile_address + (line_in_tile * 2));      break;}
-            case FetcherState::High:     {high = ram.read(tile_address + (line_in_tile * 2) + 1);  break;}
-            case FetcherState::ToPixels: {
+            case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(ram, std::forward<Args>(args)...); next_t_cycle = 2; break;} // Low
+            case FetcherState::Low:      {low  = ram.read(tile_address + (line_in_tile * 2)); next_t_cycle = 2; break;}
+            case FetcherState::High:     {
+                high = ram.read(tile_address + (line_in_tile * 2) + 1);
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete, args...);
-//                SCX at a Sub-Tile-Layer
+                next_t_cycle = 1;
                 if ((!is_window && !is_sprite) && fetcher_current_tile_x == 0) {
+                    auto scx_offset =  (ram.read(constants::SCX_ADDRESS) % 8);
                     for (int i = 0; i < scx_offset; ++i){
                         pixels.pop();
                     }
+                    next_t_cycle += scx_offset;
                 }
-                break;}
-            case FetcherState::Push:     {
-                if (fifo.size() < 8 && !pixels.empty()) {
+                while (fifo.size() < 16 && !pixels.empty()) {
                     fifo.push(pixels.front());
                     pixels.pop();
                 }
+            }
+            case FetcherState::Push: {
+                while (fifo.size() < 16 && !pixels.empty()) {
+                    fifo.push(pixels.front());
+                    pixels.pop();
+                }
+                next_t_cycle = 1;
                 break;}
         }
     }
 
     void fetch(RAM& ram, Args&&... args) {
         switch(current_state) {
-            case FetcherState::GetTile:  {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Low;      break;}
-            case FetcherState::Low:      {step(ram, std::forward<Args>(args)...); current_state = FetcherState::High;     break;}
-            case FetcherState::High:     {step(ram, std::forward<Args>(args)...); current_state = FetcherState::ToPixels; break;}
-            case FetcherState::ToPixels: {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Push;     break;}
+            case FetcherState::GetTile:  {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Low;  break;}
+            case FetcherState::Low:      {step(ram, std::forward<Args>(args)...); current_state = FetcherState::High; break;}
+            case FetcherState::High:     {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Push; if (pixels.empty()){
+                    fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
+                    current_state = FetcherState::GetTile;
+                    to_pixels_done = false;
+                } break;}
             case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); if (pixels.empty()){
                 fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
                 current_state = FetcherState::GetTile;
+                next_t_cycle = 2;
+                to_pixels_done = false;
             } break;}
         }
     }
@@ -139,7 +161,7 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
         auto scy = ram.read(constants::SCY_ADDRESS);
         auto ly  = ram.read(constants::LY_ADDRESS);
         auto scx = ram.read(constants::SCX_ADDRESS);
-        scx_offset = ram.read(constants::SCX_ADDRESS) % 8;
+//        scx_offset = ram.read(constants::SCX_ADDRESS) % 8;
         unsigned short tile_base = ((ram.read(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8000 : 0x8800; // TODO: check
 
         bool inside_window_y = (ly >= wy);
@@ -182,6 +204,42 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
         line_in_tile = ram.read(constants::LY_ADDRESS) - (sprite.y_pos - 16);
         return (sprite.index_tile * 16) + constants::VRAM_BEGIN;
     }
+
+    void fetch(RAM& ram, unsigned char cpx, const Sprite& sprite) {
+        switch(current_state) {
+            case FetcherState::GetTile:  {step(ram, cpx, sprite); current_state = FetcherState::High; break;}
+            case FetcherState::High:     {step(ram, cpx, sprite); current_state = FetcherState::Push; break;}
+            case FetcherState::Push:     {step(ram, cpx, sprite); if (pixels.empty()){
+                    fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
+                    current_state = FetcherState::GetTile;
+                    to_pixels_done = false;
+                } break;}
+        }
+    }
+
+    void step(RAM& ram, unsigned char cpx, const Sprite& sprite) {
+        switch(current_state) {
+            case FetcherState::GetTile:  {tile_address = update_tile_base(ram, cpx, sprite); low  = ram.read(tile_address + (line_in_tile * 2)); break;}
+            case FetcherState::Push:     {
+                high = ram.read(tile_address + (line_in_tile * 2) + 1);
+                if (!to_pixels_done) {
+                    pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete, cpx, sprite);
+                    if ((!is_window && !is_sprite) && fetcher_current_tile_x == 0) {
+                        // todo: add t_cycles
+                        auto scx_offset =  (ram.read(constants::SCX_ADDRESS) % 8);
+                        for (int i = 0; i < scx_offset; ++i){
+                            pixels.pop();
+                        }
+                    }
+                    to_pixels_done = true;
+                }
+                while (fifo.size() < 16 && !pixels.empty()) {
+                    fifo.push(pixels.front());
+                    pixels.pop();
+                }
+                break;}
+        }
+    }
 };
 
 class PPU {
@@ -202,6 +260,7 @@ public:
     bool bg_enable = false;
     size_t window_line_counter = 0;
     bool oam_scan_finished = false;
+    bool pixel_fetcher_paused = false;
 
     // todo: optimize
     std::vector<Sprite> sprite_buffer;
