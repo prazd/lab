@@ -196,7 +196,7 @@ struct GameBoyVM{
                     ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
                     return ss;
                 };
-                std::cout  << cpu.instruction_str[decoded_ins] << " ";
+//                std::cout  << cpu.instruction_str[decoded_ins] << " ";
                 if (!cpu.halted) {
                     std::cout <<
 
@@ -285,7 +285,7 @@ struct GameBoyVM{
                 DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
 
 // PRINT TILES
-#if 1
+#if 0
                 auto tiles_rect = [&](){
                     std::array<Rectangle, 20 * 18> res{};
                     float x_pos = 0.0f;
@@ -326,7 +326,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

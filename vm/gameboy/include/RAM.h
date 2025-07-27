@@ -21,7 +21,6 @@ struct RAM {
         MBC1
     } current_mbc = MBC1;
 
-
     std::vector<char> rom{};
     size_t current_rom_bank = 1;
     std::vector<unsigned char> cart_ram{};
@@ -29,7 +28,7 @@ struct RAM {
 
     unsigned char dummy_reg = 0xFF;
 
-    bool dma_active = 0;
+    bool dma_active = false;
     unsigned short dma_address = 0;
     unsigned int dma_counter = 0;
     unsigned char dma_t = 0;

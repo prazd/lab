@@ -924,7 +924,6 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             return t_cycle_by_ins(itype);
         }
         case HALT: {
-            std::cout << "Halt\n";
             if(!halted) {halted = true; ++pc;}
             return t_cycle_by_ins(itype);}
         case STOP: {
@@ -932,8 +931,8 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
                 ++pc;
             return 4;
         }
-        case DI_0b11110011: {std::cout << "DI\n";ime_requested = false; ime_req_count = 0; ime = false; ++pc; return t_cycle_by_ins(itype);}
-        case EI_0b11111011: {std::cout << "EI\n"; ime_requested = true;  ime_req_count = 0; ++pc; /*std::cout << "IF:" << (unsigned)tread(ram,constants::IF_ADDRESS) << '\n'*/;  return t_cycle_by_ins(itype);} // todo: check
+        case DI_0b11110011: {ime_requested = false; ime_req_count = 0; ime = false; ++pc; return t_cycle_by_ins(itype);}
+        case EI_0b11111011: {ime_requested = true;  ime_req_count = 0; ++pc; /*std::cout << "IF:" << (unsigned)tread(ram,constants::IF_ADDRESS) << '\n'*/;  return t_cycle_by_ins(itype);} // todo: check
         case NOP_0b00000000: {++pc; return t_cycle_by_ins(itype);}
     }
     return 0;
