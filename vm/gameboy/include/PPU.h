@@ -6,6 +6,8 @@
 #include "Constants.h"
 #include <queue>
 
+static constexpr size_t NEXT_T_CYCLE_VAL = 2;
+
 bool operator==(Color lhs, Color rhs);
 
 void print_segment(unsigned short address, auto n, RAM& ram) {
@@ -63,7 +65,7 @@ struct BaseFetcher {
     bool paused = false;
     bool finished = false;
 
-    size_t next_t_cycle = 2; // Start GetTile 2 T-cycle
+    size_t next_t_cycle = NEXT_T_CYCLE_VAL; // Start GetTile 2 T-cycle
 
     std::queue<Pixel> pixels{};
     std::queue<Pixel> fifo{};
@@ -102,35 +104,36 @@ struct BaseFetcher {
         paused = false;
         finished = false;
         tile_address = 0;
-        next_t_cycle = 2;
+        next_t_cycle = NEXT_T_CYCLE_VAL;
     }
 
     void step(RAM& ram, Args&&... args) {
         switch(current_state) {
-            case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(ram, std::forward<Args>(args)...); next_t_cycle = 2; break;} // Low
-            case FetcherState::Low:      {low  = ram.read(tile_address + (line_in_tile * 2)); next_t_cycle = 2; break;}
+            case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(ram, std::forward<Args>(args)...); next_t_cycle = NEXT_T_CYCLE_VAL; break;} // Low
+            case FetcherState::Low:      {low = ram.read(tile_address + (line_in_tile * 2)); next_t_cycle = NEXT_T_CYCLE_VAL; break;}
             case FetcherState::High:     {
                 high = ram.read(tile_address + (line_in_tile * 2) + 1);
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete, args...);
-                next_t_cycle = 1;
+                next_t_cycle = NEXT_T_CYCLE_VAL;
                 if ((!is_window && !is_sprite) && fetcher_current_tile_x == 0) {
                     auto scx_offset =  (ram.read(constants::SCX_ADDRESS) % 8);
                     for (int i = 0; i < scx_offset; ++i){
                         pixels.pop();
                     }
-                    next_t_cycle += scx_offset;
+//                    next_t_cycle += scx_offset;
                 }
                 while (fifo.size() < 8 && !pixels.empty()) {
                     fifo.push(pixels.front());
                     pixels.pop();
                 }
+                break;
             }
             case FetcherState::Push: {
                 while (fifo.size() < 8 && !pixels.empty()) {
                     fifo.push(pixels.front());
                     pixels.pop();
                 }
-                next_t_cycle = 1;
+                next_t_cycle = NEXT_T_CYCLE_VAL;
                 break;}
         }
     }
@@ -142,11 +145,12 @@ struct BaseFetcher {
             case FetcherState::High:     {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Push; if (pixels.empty()){
                     fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
                     current_state = FetcherState::GetTile;
+                    next_t_cycle = NEXT_T_CYCLE_VAL;
                 } break;}
             case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); if (pixels.empty()){
                 fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
                 current_state = FetcherState::GetTile;
-                next_t_cycle = 2;
+                next_t_cycle = NEXT_T_CYCLE_VAL;
             } break;}
         }
     }
@@ -205,19 +209,20 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
 
     void fetch(RAM& ram, unsigned char cpx, const Sprite& sprite) {
         switch(current_state) {
-            case FetcherState::GetTile:  {step(ram, cpx, sprite); next_t_cycle = 2; current_state = FetcherState::High; break;}
-            case FetcherState::High:     {step(ram, cpx, sprite); next_t_cycle = 1; current_state = FetcherState::Push;if (pixels.empty()){
+            case FetcherState::GetTile:  {step(ram, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::High; break;}
+            case FetcherState::High:     {step(ram, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::Push;if (pixels.empty()){
                     fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
                     current_state = FetcherState::GetTile;
                     finished = true;
-                    next_t_cycle = 2;
+                    next_t_cycle = NEXT_T_CYCLE_VAL;
                 } break;}
-            case FetcherState::Push:     {step(ram, cpx, sprite); if (pixels.empty()){
+            case FetcherState::Push:     {step(ram, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL; if (pixels.empty()){
                     fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
                     current_state = FetcherState::GetTile;
-                    next_t_cycle = 2;
+                    next_t_cycle = NEXT_T_CYCLE_VAL;
                     finished = true;
-                } break;}
+                }
+                break;}
         }
     }
 
@@ -227,10 +232,6 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
             case FetcherState::High:     {
                 high = ram.read(tile_address + (line_in_tile * 2) + 1);
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete,cpx, sprite);
-//                auto x_offset = sprite.x_pos - (cpx + 8);
-//                if (x_offset > 0) {
-//                    for (int i = 0; i < x_offset && !pixels.empty();++i) pixels.pop();
-//                }
                 while (fifo.size() < 8 && !pixels.empty()) {
                     fifo.push(pixels.front());
                     pixels.pop();
@@ -268,7 +269,7 @@ public:
     bool pixel_fetcher_paused = false;
 
     // todo: optimize
-    std::vector<Sprite> sprite_buffer;
+    std::queue<Sprite> sprite_buffer;
     size_t current_sprite_index = 0;
 
     // coordinates

@@ -487,6 +487,7 @@ void CPU::off_IF_value(CPU::InterruptFlag flag, RAM& ram) {
 }
 
 int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
+    prev_pc = pc;
 #if DEBUG
 //    std::cout << "HL value:" << HL_data() << '\n';
 //    std::cout << "RAM value by HL_address:" << (unsigned)ram.read(HL_data()) << '\n';

@@ -118,7 +118,7 @@ void RAM::write(unsigned short index, unsigned char value) {
         return;
    }
 
-   if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
+   if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END && external_ram_enabled) {
        cart_ram[index + (current_cart_ram * 8192)] = value;
        return;
    }

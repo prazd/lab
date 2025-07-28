@@ -14,9 +14,11 @@ struct CPU {
     unsigned char ir{};
     unsigned char ie{};
     unsigned short pc{};
+    unsigned short prev_pc{};
     unsigned short sp{};
     bool ime = false;
     bool halted = false;
+    bool halt_bug = false;
 
     enum Instruction {
         LD_0b01xxxyyy,

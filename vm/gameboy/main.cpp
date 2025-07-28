@@ -10,7 +10,6 @@
 #include <sstream>
 #include <fstream>
 
-
 constexpr size_t WIDTH = 800;
 constexpr size_t HEIGHT = 720;
 constexpr size_t DISPLAY_HEIGHT = 144;
@@ -240,11 +239,25 @@ struct GameBoyVM{
 //                        decoded_ins = cpu.decode(next_ins);
 //                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
 #endif
-                // todo: check
                 int t_cycle = 0;
-                if (cpu.halted && !cpu.ime) {
-                    if (ram.read(constants::IF_ADDRESS) != 0) {cpu.halted = false;}
-                    t_cycle = 4;
+                if (cpu.halted) {
+                    if (!cpu.ime && ram.read(constants::IF_ADDRESS) != 0){
+                        cpu.halt_bug = true;
+                        cpu.halted = false;
+                        t_cycle = 4;
+                    } else if (cpu.ime) {
+                        // todo: maybe refactoring
+                        // halted = false in execute ime logic
+                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                    } else {
+                        t_cycle = 4;
+                    }
+                } else if (cpu.halt_bug) {
+                    cpu.halt_bug = false;
+                    cpu.pc = cpu.prev_pc;
+                    next_ins = cpu.fetch(ram);
+                    decoded_ins = cpu.decode(next_ins);
+                    t_cycle = cpu.execute(next_ins, decoded_ins, ram);
                 } else {
                     t_cycle = cpu.execute(next_ins, decoded_ins, ram);
                 }
@@ -272,20 +285,21 @@ struct GameBoyVM{
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
-//            print_segment(0xA000, 4);
+
+
             current_t_cycle = 0;
             std::cout << std::dec;
             // Render
             UpdateTexture(target, ppu.read_buffer());
 
             BeginDrawing();
-                ClearBackground(BLACK);
+                ClearBackground(WHITE);
 //                draw_tiles();
                 // todo: check
                 DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
 
 // PRINT TILES
-#if 0
+#if 1
                 auto tiles_rect = [&](){
                     std::array<Rectangle, 20 * 18> res{};
                     float x_pos = 0.0f;
@@ -320,13 +334,14 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/basic.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb +-
+// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug)
 
 // Failed:
-// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb
+//
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
