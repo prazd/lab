@@ -170,6 +170,28 @@ struct GameBoyVM{
             counter+=16;
         };
 
+        auto print_rects = []<size_t height, size_t width>(Color c){
+            std::array<Rectangle, height * width> res{};
+            float x_pos = 0.0f;
+            float y_pos = 0.0f;
+
+            float step_x = WIDTH/width;
+            float step_y = HEIGHT/height;
+            int z = 0;
+            for (int i = 0; i < height; ++i){
+                for (int j = 0; j < width; ++j) {
+                    res[z++] = Rectangle{x_pos, y_pos, step_x, step_y};
+                    x_pos += step_x;
+                }
+                x_pos = 0;
+                y_pos += step_y;
+            }
+            for (const auto& el: res){
+                DrawRectangleLinesEx({el.x, el.y, el.width, el.height}, 1, c);
+            }
+        };
+
+
         int current_t_cycle = 0;
         double cpu_accumulator = 0.0;
 
@@ -293,34 +315,16 @@ struct GameBoyVM{
             UpdateTexture(target, ppu.read_buffer());
 
             BeginDrawing();
-                ClearBackground(WHITE);
+                ClearBackground(BLACK);
 //                draw_tiles();
                 // todo: check
                 DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
 
-// PRINT TILES
-#if 1
-                auto tiles_rect = [&](){
-                    std::array<Rectangle, 20 * 18> res{};
-                    float x_pos = 0.0f;
-                    float y_pos = 0.0f;
 
-                    float step_x = WIDTH/20.f;
-                    float step_y = HEIGHT/18.f;
-                    int z = 0;
-                    for (int i = 0; i < 18; ++i){
-                        for (int j = 0; j < 20; ++j) {
-                            res[z++] = Rectangle{x_pos, y_pos, step_x, step_y};
-                            x_pos += step_x;
-                        }
-                        x_pos = 0;
-                        y_pos += step_y;
-                    }
-                    return res;
-                };
-                for (const auto& el: tiles_rect()){
-                    DrawRectangleLinesEx({el.x, el.y, el.width, el.height}, 1, RED);
-                }
+// PRINT PIXELS
+#if 1
+//              print_rects.template operator()<DISPLAY_HEIGHT, DISPLAY_WIDTH>(GREEN);
+              print_rects.template operator()<18, 20>(RED);
 #endif
 
                 DrawFPS(700, 10);
@@ -341,7 +345,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

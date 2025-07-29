@@ -120,7 +120,7 @@ struct BaseFetcher {
                     for (int i = 0; i < scx_offset; ++i){
                         pixels.pop();
                     }
-//                    next_t_cycle += scx_offset;
+                    next_t_cycle += scx_offset;
                 }
                 while (fifo.size() < 8 && !pixels.empty()) {
                     fifo.push(pixels.front());
@@ -210,19 +210,13 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
     void fetch(RAM& ram, unsigned char cpx, const Sprite& sprite) {
         switch(current_state) {
             case FetcherState::GetTile:  {step(ram, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::High; break;}
-            case FetcherState::High:     {step(ram, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::Push;if (pixels.empty()){
+            case FetcherState::High:     {step(ram, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL;
+                    pixels = {};
                     fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
                     current_state = FetcherState::GetTile;
                     finished = true;
                     next_t_cycle = NEXT_T_CYCLE_VAL;
-                } break;}
-            case FetcherState::Push:     {step(ram, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL; if (pixels.empty()){
-                    fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
-                    current_state = FetcherState::GetTile;
-                    next_t_cycle = NEXT_T_CYCLE_VAL;
-                    finished = true;
-                }
-                break;}
+                 break;}
         }
     }
 
@@ -236,14 +230,8 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
                     fifo.push(pixels.front());
                     pixels.pop();
                 }
-                break;}
-            case FetcherState::Push: {
-                while (fifo.size() < 8 && !pixels.empty()) {
-                    fifo.push(pixels.front());
-                    pixels.pop();
-                }
                 break;
-           }
+            }
         }
     }
 };
@@ -265,11 +253,13 @@ public:
     bool obj_enable = false; // sprites
     bool bg_enable = false;
     size_t window_line_counter = 0;
-    bool oam_scan_finished = false;
     bool pixel_fetcher_paused = false;
+    size_t oam_next_t_cycle = 2;
+    unsigned short current_oam_obj = 0;
 
-    // todo: optimize
-    std::queue<Sprite> sprite_buffer;
+    std::priority_queue<std::pair<Sprite, int>, std::vector<std::pair<Sprite, int>>, decltype([](auto& a, auto& b){
+        return !(a.first.x_pos < b.first.x_pos || (a.first.x_pos == b.first.x_pos && a.second < b.second));
+    })> sprite_buffer;
     size_t current_sprite_index = 0;
 
     // coordinates
@@ -279,6 +269,7 @@ public:
     int current_t_cycle_count = {};
     int current_v_blank_t_cycle_count = {};
     bool longest_line = false;
+    size_t remaining_pixel_count = 0;
 
     PixelFetcher pixel_fetcher;
     SpriteFetcher sprite_fetcher;

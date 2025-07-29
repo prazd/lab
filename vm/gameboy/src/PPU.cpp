@@ -112,31 +112,23 @@ unsigned short PPU::get_tile_data_area(const RAM &ram)  {
 }
 
 void PPU::oam_scan(RAM &ram)  {
-    std::vector<std::pair<Sprite, int>> result{};
-    size_t count{};
-    sprite_buffer = {};
-    auto obj_sz = get_obj_size(ram);
-    for (int i = 0; i < 160; i+=4){
-        auto val= ram.read(constants::OAM_BEGIN + i);
-        int top = val - 16;
-        if (current_line >= top && current_line < top + obj_sz){
-            result.emplace_back(Sprite{
-                    .y_pos = val,
-                    .x_pos = static_cast<unsigned char>(ram.read(constants::OAM_BEGIN + i + 1)),
-                    .index_tile = ram.read(constants::OAM_BEGIN + i + 2),
-                    .attrib = ram.read(constants::OAM_BEGIN + i + 3),
-            }, i/4);
-            ++count;
-        }
-        if (count == 10) break;
+    if (sprite_buffer.size() == 10) {
+        current_oam_obj += 4;
+        return;
     }
-//    sprite_buffer.clear()
-    std::sort(result.begin(), result.end(), [](auto& a, auto& b){
-        return a.first.x_pos < b.first.x_pos || (a.first.x_pos == b.first.x_pos && a.second < b.second);
-    });
-    for (auto& el: result)
-        sprite_buffer.push(el.first);
-    current_sprite_index = 0;
+    auto obj_sz = get_obj_size(ram);
+    auto val= ram.read(constants::OAM_BEGIN + current_oam_obj);
+    int top = val - 16;
+    if (current_line >= top && current_line < top + obj_sz){
+        sprite_buffer.emplace(
+            Sprite{
+                .y_pos = val,
+                .x_pos = static_cast<unsigned char>(ram.read(constants::OAM_BEGIN + current_oam_obj + 1)),
+                .index_tile = ram.read(constants::OAM_BEGIN + current_oam_obj + 2),
+                .attrib = ram.read(constants::OAM_BEGIN + current_oam_obj + 3),
+        }, current_oam_obj);
+    }
+    current_oam_obj += 4;
 }
 
 
@@ -187,10 +179,10 @@ Pixel PPU::pixel_mixing(RAM &ram) {
 
 std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
    if (!sprite_buffer.empty()) {
-       auto current = sprite_buffer.front();
-       if (current.x_pos - 8 <= current_pixel_x && current_pixel_x < current.x_pos) {
+       auto current = sprite_buffer.top();
+       if (current.first.x_pos - 8 <= current_pixel_x && current_pixel_x < current.first.x_pos) {
            sprite_buffer.pop();
-           return current;
+           return current.first;
        }
    }
     return {};
@@ -226,12 +218,15 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 //    std::cout << "\n=========================\n";
 //    std::cout << "BG fifo:" << pixel_fetcher.fifo.size() << " Sprite fifo: " << sprite_fetcher.fifo.size() <<  '\n';
         if (current_mode == OAM){ //
-            if (current_t_cycle_count <= 80) {
-                if (!oam_scan_finished) {
+            if (current_t_cycle_count != 80 && current_oam_obj != 160) {
+                --oam_next_t_cycle;
+                if (oam_next_t_cycle == 0) {
                     oam_scan(ram);
-                    oam_scan_finished = true;
+                    oam_next_t_cycle = 2;
                 }
             } else {
+                oam_next_t_cycle = 2;
+                current_oam_obj = 0;
                 current_pixel_x = 0;
                 internal_t_cycles = 0;
                 current_mode = Drawing;
@@ -239,11 +234,9 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
             }
         } else if (current_mode == Drawing) {
                 if (current_pixel_x < 160) {
-
                     if (!pixel_fetcher.paused) {
                         --pixel_fetcher.next_t_cycle;
                         if (pixel_fetcher.next_t_cycle == 0) {
-//                            std::cout << "NEXT\n";
                             pixel_fetcher.fetch(ram,  current_pixel_x);
                         }
                     }
@@ -266,16 +259,23 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
                             sprite_fetcher.fetch(ram, current_pixel_x, current_sprite);
                             if (sprite_fetcher.finished) {
                                 pixel_fetcher.paused = false;
+                                if (pixel_fetcher.fifo.size() < 6) {
+                                    remaining_pixel_count = 6 - pixel_fetcher.fifo.size();
+                                }
                                 pixel_fetcher.next_t_cycle = 2;
                                 sprite_render = false;
                                 sprite_fetcher.finished = false;
                             }
                         }
                     }
-                    if (!pixel_fetcher.fifo.empty() || !sprite_fetcher.fifo.empty()) {
-//                        std::cout << "DRAW\n";
-                        draw(ram);
+                    if (remaining_pixel_count > 0) {
+                        --remaining_pixel_count;
+                    } else {
+                        if (!pixel_fetcher.fifo.empty() || !sprite_fetcher.fifo.empty()) {
+                            draw(ram);
+                        }
                     }
+
                 } else {
                     std::cout << "Internal T-cycle:" << internal_t_cycles << '\n';
                     sprite_fetcher.reset();
@@ -310,7 +310,9 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
                 }
                 else{
                     current_mode = OAM;
-                    oam_scan_finished = false;
+                    sprite_buffer = {};
+                    oam_next_t_cycle = 2;
+                    current_oam_obj = 0;
                 }
                 window_line_counter = 0;
                 set_ppu_mode(ram);
@@ -321,6 +323,8 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
                 if (current_line == 154) {
                     last_t_cycles = 0;
                     current_mode = OAM;
+                    current_oam_obj = 0;
+                    oam_next_t_cycle = 2;
                     set_ppu_mode(ram);
                     current_line = 0;
                     set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
