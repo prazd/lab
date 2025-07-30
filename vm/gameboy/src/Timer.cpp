@@ -17,7 +17,6 @@ void Timer::handle(int t_cycles, RAM& ram) {
     static int overflow_counter = 0;
 
     auto shift = tima_shift(ram);
-
     while (t_cycles--) {
         if (ram.div_written) {
             ram.div_written = false;
@@ -27,7 +26,6 @@ void Timer::handle(int t_cycles, RAM& ram) {
             prev_bit = 0;
         }
         prev_bit = std::exchange(cur_bit, (div_internal >> shift) & 1);
-        ram.write(constants::DIV_REGISTER, div_internal >> 8);
         ++div_internal;
         ram.div_internal_sync = div_internal;
         if (ram.tima_written) {
@@ -48,7 +46,7 @@ void Timer::handle(int t_cycles, RAM& ram) {
                     ram.write(constants::TIMA_REGISTER, ram.read(constants::TMA_REGISTER));
                 }
             }
-            if (!prev_bit && cur_bit) {
+            if (!prev_bit && cur_bit) { // todo: check
                 unsigned char prev = ram.read(constants::TIMA_REGISTER);
                 ram.write(constants::TIMA_REGISTER, prev + 1);
                 if (prev == 0xff) {

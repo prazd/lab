@@ -90,8 +90,8 @@ struct GameBoyVM{
         cpu.pc = 0x0100;
         cpu.sp = 0xFFFE;
         ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
-        if (ram.cart_ram.capacity() > 0) {
-
+        if (!ram.cart_ram.empty()) {
+            ram.external_ram_enabled = true;
         }
         switch (get_rom_size(ram.rom)) {
             case 4: {ram.current_mbc = RAM::MBC1; break;}
@@ -217,7 +217,7 @@ struct GameBoyVM{
                     ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
                     return ss;
                 };
-//                std::cout  << cpu.instruction_str[decoded_ins] << " ";
+                std::cout  << cpu.instruction_str[decoded_ins] << " ";
                 if (!cpu.halted) {
                     std::cout <<
 
@@ -276,7 +276,7 @@ struct GameBoyVM{
                     }
                 } else if (cpu.halt_bug) {
                     cpu.halt_bug = false;
-                    cpu.pc = cpu.prev_pc;
+                    cpu.pc+=1;
                     next_ins = cpu.fetch(ram);
                     decoded_ins = cpu.decode(next_ins);
                     t_cycle = cpu.execute(next_ins, decoded_ins, ram);
@@ -284,10 +284,12 @@ struct GameBoyVM{
                     t_cycle = cpu.execute(next_ins, decoded_ins, ram);
                 }
                 t_cycles_count+=t_cycle;
+
                 if (ram.dma_active) {
                     if (ppu.current_mode != PPU::OAM) {
                         int cp_t_cycle = t_cycle;
-                        while (cp_t_cycle--) {
+                        while (cp_t_cycle-- && ram.dma_active) {
+                            std::cout << "DMA counter:" << ram.dma_counter << "\n";
                             ++ram.dma_t;
                             if (ram.dma_t == 4) {
                                 ram.dma_t = 0;
@@ -303,15 +305,15 @@ struct GameBoyVM{
                     }
                 }
 
+                cpu.timer.handle(t_cycle, ram);
                 ppu.handle_t_cycle(t_cycle, ram);
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
 
-
             current_t_cycle = 0;
             std::cout << std::dec;
-            // Render
+//            print_segment(constants::VRAM_BEGIN, 30);
             UpdateTexture(target, ppu.read_buffer());
 
             BeginDrawing();
@@ -339,13 +341,15 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb +-
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug)
+// /Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb
 
 // Failed:
 //
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb
+// /Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/add_sp_e_timing.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

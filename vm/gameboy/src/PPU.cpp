@@ -199,6 +199,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
     static unsigned char sprite_x = 0;
     static Sprite current_sprite{};
     static size_t internal_t_cycles = 0;
+//    std::cout << "Current_ppu line:" << (unsigned)current_line << "\n";
 //#if 1
 //    ram.write(constants::LY_ADDRESS, 0x90);
 //    return;
@@ -277,7 +278,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
                     }
 
                 } else {
-                    std::cout << "Internal T-cycle:" << internal_t_cycles << '\n';
+//                    std::cout << "Internal T-cycle:" << internal_t_cycles << '\n';
                     sprite_fetcher.reset();
                     pixel_fetcher.reset();
                     current_sprite_index = 0;

@@ -576,7 +576,11 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         }
         case LDH_0b11100000: { twrite(ram,(0xff00 | tread(ram,pc+1)), regs[A]); pc+=2;  return t_cycle_by_ins(itype);}
         case LD_0b00111010:  { regs[A] = read_regs(HL, ram); decrement_pair(L, H);  ++pc;  return t_cycle_by_ins(itype);}
-        case LD_0b00110010:  { update_regs(HL, ram, regs[A]); decrement_pair(L, H); ++pc; return t_cycle_by_ins(itype);}
+        case LD_0b00110010:  {
+            update_regs(HL, ram, regs[A]);
+            decrement_pair(L, H);
+            ++pc;
+            return t_cycle_by_ins(itype);}
         case LD_0b00101010:  { regs[A] = read_regs(HL, ram); increment_pair(L, H);  ++pc;  return t_cycle_by_ins(itype);}
         case LD_0b00100010:  { update_regs(HL, ram, regs[A]); increment_pair(L, H); ++pc; return t_cycle_by_ins(itype);}
         case LD_0b00xx0001:  { update_pair_ld(tread(ram,pc + 1), tread(ram,pc+2), read45(i)); pc+=3; return t_cycle_by_ins(itype);}
@@ -643,7 +647,10 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             ++pc;
             return t_cycle_by_ins(itype);}
         case INC_0b00110100: { inc_reg(HL, ram); ++pc; return t_cycle_by_ins(itype);}
-        case DEC_0b00xxx101: { dec_reg(read345(i), ram); ++pc; return t_cycle_by_ins(itype);}
+        case DEC_0b00xxx101: {
+            dec_reg(read345(i), ram);
+            ++pc;
+            return t_cycle_by_ins(itype);}
         case DEC_0b00110101: { dec_reg(HL, ram); ++pc; return t_cycle_by_ins(itype);}
         case AND_0b10100xxx: { and_reg_A(read_regs(read012(i), ram)); ++pc; return t_cycle_by_ins(itype);}
         case AND_0b10100110: { and_reg_A(read_regs(HL, ram)); ++pc; return t_cycle_by_ins(itype);}
@@ -932,8 +939,14 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
                 ++pc;
             return 4;
         }
-        case DI_0b11110011: {ime_requested = false; ime_req_count = 0; ime = false; ++pc; return t_cycle_by_ins(itype);}
-        case EI_0b11111011: {ime_requested = true;  ime_req_count = 0; ++pc; /*std::cout << "IF:" << (unsigned)tread(ram,constants::IF_ADDRESS) << '\n'*/;  return t_cycle_by_ins(itype);} // todo: check
+        case DI_0b11110011: {
+            ime_requested = false;
+            ime_req_count = 0; ime = false;
+            ++pc;
+            return t_cycle_by_ins(itype);}
+        case EI_0b11111011: {
+            ime_requested = true;
+            ime_req_count = 0; ++pc; /*std::cout << "IF:" << (unsigned)tread(ram,constants::IF_ADDRESS) << '\n'*/;  return t_cycle_by_ins(itype);} // todo: check
         case NOP_0b00000000: {++pc; return t_cycle_by_ins(itype);}
     }
     return 0;
@@ -980,11 +993,11 @@ void CPU::push_stack(unsigned char l, unsigned char h, RAM& ram) {
 
 unsigned char CPU::tread(RAM &ram, unsigned short index) {
     unsigned char res = ram.read(index);
-    timer.handle(4, ram);
+//    timer.handle(4, ram);
     return res;
 }
 
 void CPU::twrite(RAM &ram, unsigned short index, unsigned char value) {
     ram.write(index, value);
-    timer.handle(4, ram);
+//    timer.handle(4, ram);
 }

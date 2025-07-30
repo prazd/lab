@@ -90,8 +90,9 @@ void RAM::write(unsigned short index, unsigned char value) {
         }
     }
 
-    if (index == constants::DIV_REGISTER)
+    if (index == constants::DIV_REGISTER){
         div_written = true;
+    }
 
    if (index == constants::TAC_REGISTER){
         bool old_enabled = (mem[constants::TAC_REGISTER] >> 2) & 1;
@@ -118,7 +119,7 @@ void RAM::write(unsigned short index, unsigned char value) {
         return;
    }
 
-   if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END && external_ram_enabled) {
+   if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END && external_ram_enabled && !cart_ram.empty()) {
        cart_ram[index + (current_cart_ram * 8192)] = value;
        return;
    }
@@ -129,9 +130,23 @@ void RAM::write(unsigned short index, unsigned char value) {
 }
 
 unsigned char RAM::read(unsigned short index) const {
+    if (index >= constants::OAM_BEGIN && index <= constants::OAM_END && dma_active){
+        std::cout << "DMA active read:" << '\n';
+        return dummy_reg;
+    }
+
+    if (index >= constants::OAM_BEGIN && index <= constants::OAM_END){
+        std::cout << "DMA inactive read:" << '\n';
+    }
+
     if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END){
         std::cout << "ECHO RAM READ!" << '\n';
         index -= 0x2000;
+    }
+
+
+    if (index == constants::DIV_REGISTER){
+        return div_internal_sync >> 8;
     }
 
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
