@@ -45,8 +45,8 @@ struct Pixel {
 
     static Color get_pixel_color(unsigned char id);
     static int get_color_id(Color c);
-    static std::queue<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char, unsigned char);
-    static std::queue<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char, unsigned char current_pixel, const Sprite&);
+    static std::deque<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char, unsigned char);
+    static std::deque<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char, unsigned char current_pixel, const Sprite&);
 };
 
 template <typename Fetcher, typename ... Args>
@@ -67,8 +67,8 @@ struct BaseFetcher {
 
     size_t next_t_cycle = NEXT_T_CYCLE_VAL; // Start GetTile 2 T-cycle
 
-    std::queue<Pixel> pixels{};
-    std::queue<Pixel> fifo{};
+    std::deque<Pixel> pixels{};
+    std::deque<Pixel> fifo{};
     unsigned char line_in_tile{};
     bool is_window = false;
 
@@ -118,20 +118,20 @@ struct BaseFetcher {
                 if ((!is_window && !is_sprite) && fetcher_current_tile_x == 0) {
                     auto scx_offset =  (ram.read(constants::SCX_ADDRESS) % 8);
                     for (int i = 0; i < scx_offset; ++i){
-                        pixels.pop();
+                        pixels.pop_front();
                     }
                     next_t_cycle += scx_offset;
                 }
                 while (fifo.size() < 8 && !pixels.empty()) {
-                    fifo.push(pixels.front());
-                    pixels.pop();
+                    fifo.push_back(pixels.front());
+                    pixels.pop_front();
                 }
                 break;
             }
             case FetcherState::Push: {
                 while (fifo.size() < 8 && !pixels.empty()) {
-                    fifo.push(pixels.front());
-                    pixels.pop();
+                    fifo.push_back(pixels.front());
+                    pixels.pop_front();
                 }
                 next_t_cycle = NEXT_T_CYCLE_VAL;
                 break;}
@@ -226,9 +226,25 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
             case FetcherState::High:     {
                 high = ram.read(tile_address + (line_in_tile * 2) + 1);
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete,cpx, sprite);
-                while (fifo.size() < 8 && !pixels.empty()) {
-                    fifo.push(pixels.front());
-                    pixels.pop();
+                if (fifo.empty()) {
+                    while (fifo.size() < 8 && !pixels.empty()) {
+                        fifo.push_back(pixels.front());
+                        pixels.pop_front();
+                    }
+                } else {
+                    for (int i = 0; i < fifo.size(); ++i) {
+                        if (!pixels.empty()) {
+                            if (Pixel::get_color_id(fifo[i].color) == 0 &&
+                                Pixel::get_color_id(pixels.front().color) != 0) {
+                                fifo[i] = pixels.front();
+                            }
+                            pixels.pop_front();
+                        }
+                    }
+                    while (fifo.size() < 8 && !pixels.empty()) {
+                        fifo.push_back(pixels.front());
+                        pixels.pop_front();
+                    }
                 }
                 break;
             }
@@ -300,7 +316,7 @@ public:
     void draw(RAM& ram);
 public:
     auto  read_buffer() const -> const Color(&)[144][160];
-    void handle_t_cycle(int t_cycle, RAM& ram);
+    void tick(RAM& ram);
     Mode get_current_mode() const;
     void print_buffer() const;
 };

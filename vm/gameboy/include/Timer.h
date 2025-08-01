@@ -3,6 +3,6 @@
 #include "RAM.h"
 struct Timer {
     unsigned short div_internal = 0;
-    void handle(int t_cycles, RAM&);
+    void tick(RAM&);
 };
 #endif

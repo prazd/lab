@@ -135,15 +135,10 @@ unsigned char RAM::read(unsigned short index) const {
         return dummy_reg;
     }
 
-    if (index >= constants::OAM_BEGIN && index <= constants::OAM_END){
-        std::cout << "DMA inactive read:" << '\n';
-    }
-
     if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END){
         std::cout << "ECHO RAM READ!" << '\n';
         index -= 0x2000;
     }
-
 
     if (index == constants::DIV_REGISTER){
         return div_internal_sync >> 8;

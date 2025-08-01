@@ -20,10 +20,10 @@ int Pixel::get_color_id(Color c)  {
     return 3;
 }
 
-std::queue<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete, unsigned char pcx, const Sprite& s)  {
+std::deque<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete, unsigned char pcx, const Sprite& s)  {
     unsigned char l = row & 0xff;
     unsigned char h = (row >> 8) & 0xff;
-    std::queue<Pixel> result{};
+    std::deque<Pixel> result{};
     unsigned char lc{};
     unsigned char hc{};
     Color color;
@@ -33,15 +33,15 @@ std::queue<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprit
         lc = (l >> (7 - i)) & 1;
         hc = (h >> (7 - i)) & 1;
         color = Pixel::get_pixel_color((hc << 1 | lc));
-        result.push(Pixel{.color = color, .is_sprite = is_sprite, .attrib = pallete});
+        result.push_back(Pixel{.color = color, .is_sprite = is_sprite, .attrib = pallete});
     }
     return result;
 }
 
-std::queue<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete, unsigned char)  { // todo: maybe refactoring
+std::deque<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete, unsigned char)  { // todo: maybe refactoring
     unsigned char l = row & 0xff;
     unsigned char h = (row >> 8) & 0xff;
-    std::queue<Pixel> result{};
+    std::deque<Pixel> result{};
     unsigned char lc{};
     unsigned char hc{};
     Color color;
@@ -49,7 +49,7 @@ std::queue<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprit
         lc = (l >> (7 - i)) & 1;
         hc = (h >> (7 - i)) & 1;
         color = Pixel::get_pixel_color((hc << 1 | lc));
-        result.push(Pixel{.color = color, .is_sprite = is_sprite, .attrib = pallete});
+        result.push_back(Pixel{.color = color, .is_sprite = is_sprite, .attrib = pallete});
     }
     return result;
 }
@@ -135,7 +135,7 @@ void PPU::oam_scan(RAM &ram)  {
 Pixel PPU::pixel_mixing(RAM &ram) {
     auto bg_pixel = Pixel{.color = WHITE}; // Default
     if (!pixel_fetcher.fifo.empty()){
-        bg_pixel = pixel_fetcher.fifo.front(); pixel_fetcher.fifo.pop();
+        bg_pixel = pixel_fetcher.fifo.front(); pixel_fetcher.fifo.pop_front();
     }
     auto bgp = ram.read(constants::BGP);
     switch (Pixel::get_color_id(bg_pixel.color)) {
@@ -151,7 +151,7 @@ Pixel PPU::pixel_mixing(RAM &ram) {
     if (sprite_fetcher.fifo.empty()) {
         return bg_pixel;
     }
-    auto sprite_pixel = sprite_fetcher.fifo.front();  sprite_fetcher.fifo.pop();
+    auto sprite_pixel = sprite_fetcher.fifo.front();  sprite_fetcher.fifo.pop_front();
     //  If the color number of the Sprite Pixel is 0, the Background Pixel is pushed to the buffer.
     if (Pixel::get_color_id(sprite_pixel.color) == 0){
         return bg_pixel;
@@ -192,7 +192,7 @@ void PPU::draw(RAM &ram)  {
     buffer[current_line][current_pixel_x++] = pixel_mixing(ram).color;
 }
 
-void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
+void PPU::tick(RAM &ram)  {
     static size_t last_t_cycles = 0;
     static size_t prev_t_cycles = 0;
     static bool sprite_render = false;
@@ -206,7 +206,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
 //#endif
 
 //    std::cout << "CurrentLine:" << (unsigned)current_line << '\n';
-    while(t_cycle--){
+//    while(t_cycle--){
         ++internal_t_cycles;
         ++current_t_cycle_count;
         ++last_t_cycles;
@@ -278,7 +278,6 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
                     }
 
                 } else {
-//                    std::cout << "Internal T-cycle:" << internal_t_cycles << '\n';
                     sprite_fetcher.reset();
                     pixel_fetcher.reset();
                     current_sprite_index = 0;
@@ -340,7 +339,7 @@ void PPU::handle_t_cycle(int t_cycle, RAM &ram)  {
                 }
             }
         }
-    }
+//    }
 }
 
 

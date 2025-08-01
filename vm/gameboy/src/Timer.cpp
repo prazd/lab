@@ -10,14 +10,14 @@ static inline int tima_shift(RAM& ram) {
     }
 }
 
-void Timer::handle(int t_cycles, RAM& ram) {
+void Timer::tick(RAM& ram) {
     static unsigned char prev_bit = 0;
     static unsigned char cur_bit = 0;
     static bool tima_overflow = false;
     static int overflow_counter = 0;
 
     auto shift = tima_shift(ram);
-    while (t_cycles--) {
+//    while (t_cycles--) {
         if (ram.div_written) {
             ram.div_written = false;
             div_internal = 0;
@@ -35,7 +35,7 @@ void Timer::handle(int t_cycles, RAM& ram) {
             if (tima_overflow || ram.glitch_overflow) {
                 if (overflow_counter != 4) {
                     ++overflow_counter;
-                    continue;}
+                    return;}
                 overflow_counter = 0;
                 tima_overflow = false;
                 ram.tima_overflow = false;
@@ -56,5 +56,5 @@ void Timer::handle(int t_cycles, RAM& ram) {
                 }
             }
         }
-    }
+//    }
 }
