@@ -204,7 +204,26 @@ struct GameBoyVM{
             std::cout << "\n==============================\n";
         };
 
+        auto dma_tick = [&]{
+            if (ram.dma_active && ppu.current_mode != PPU::OAM) {
+                std::cout << "DMA counter:" << ram.dma_counter << "\n";
+                ++ram.dma_t;
+                if (ram.dma_t % 4 == 0) {
+                    ram.mem[constants::OAM_BEGIN + ram.dma_counter] =  ram.mem[ram.dma_address + ram.dma_counter];
+                    ++ram.dma_counter;
+                    if (ram.dma_counter == 160) {
+                        std::cout << "Stop DMA\n";
+                        ram.dma_active = false;
+                        ram.dma_address = 0;
+                        ram.dma_counter = 0;
+                    }
+                }
+            }
+        };
+
+
         size_t t_cycles_count = 0;
+
         while(!WindowShouldClose()){
             cpu_accumulator += GetFrameTime();
             while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
@@ -263,7 +282,7 @@ struct GameBoyVM{
 #endif
                 int t_cycle = 0;
                 if (cpu.halted) {
-                    if (!cpu.ime && ram.read(constants::IF_ADDRESS) != 0){
+                    if (!cpu.ime && ram.read(constants::IF_ADDRESS) != 0) {
                         cpu.halt_bug = true;
                         cpu.halted = false;
                         t_cycle = 4;
@@ -276,37 +295,22 @@ struct GameBoyVM{
                     }
                 } else if (cpu.halt_bug) {
                     cpu.halt_bug = false;
-                    cpu.pc+=1;
+                    cpu.pc += 1;
                     next_ins = cpu.fetch(ram);
                     decoded_ins = cpu.decode(next_ins);
                     t_cycle = cpu.execute(next_ins, decoded_ins, ram);
                 } else {
                     t_cycle = cpu.execute(next_ins, decoded_ins, ram);
                 }
-                t_cycles_count+=t_cycle;
+                t_cycles_count += t_cycle;
 
-                if (ram.dma_active) {
-                    if (ppu.current_mode != PPU::OAM) {
-                        int cp_t_cycle = t_cycle;
-                        while (cp_t_cycle-- && ram.dma_active) {
-                            std::cout << "DMA counter:" << ram.dma_counter << "\n";
-                            ++ram.dma_t;
-                            if (ram.dma_t == 4) {
-                                ram.dma_t = 0;
-                                ram.write(constants::OAM_BEGIN + ram.dma_counter, ram.read(ram.dma_address + ram.dma_counter));
-                                ++ram.dma_counter;
-                                if (ram.dma_counter == 160) {
-                                    ram.dma_active = false;
-                                    ram.dma_address = 0;
-                                    ram.dma_counter = 0;
-                                }
-                            }
-                        }
-                    }
+
+                for (int i = 0; i < t_cycle; ++i){
+                    cpu.timer.tick(ram);
+                    ppu.tick(ram);
+                    dma_tick();
                 }
 
-                cpu.timer.handle(t_cycle, ram);
-                ppu.handle_t_cycle(t_cycle, ram);
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
@@ -324,7 +328,7 @@ struct GameBoyVM{
 
 
 // PRINT PIXELS
-#if 1
+#if 0
 //              print_rects.template operator()<DISPLAY_HEIGHT, DISPLAY_WIDTH>(GREEN);
               print_rects.template operator()<18, 20>(RED);
 #endif
@@ -337,19 +341,18 @@ struct GameBoyVM{
 
 // Done:
 // /Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb
-// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/basic.gb
+// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/basic.gb - check
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb +-
-// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug)
+// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug) - check
 // /Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb
 
 // Failed:
-//
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb
 // /Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/add_sp_e_timing.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
