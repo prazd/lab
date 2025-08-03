@@ -1,11 +1,8 @@
 #include <iostream>
-#include <cassert>
-#include <stack>
 
 // NFA (gpt said it's not, but should check again)
 // 162 page
 // alphabet = "(())""
-
 
 //    (         (       (       (
 //   --->      --->    --->    --->      
@@ -17,7 +14,7 @@
 
 template <char begin = '(', char end = ')'>
 struct IsLang {
-    constexpr bool operator()(const std::string& s) const {
+    constexpr bool operator()(const std::string_view& s) const {
         enum class State {
             S,Q1,Q2,Q3,Q4
         } cs = State::S;
@@ -36,13 +33,13 @@ struct IsLang {
                     }
                     break;
                 case State::Q1:
-                    sym == end ? (cs = State::S) : (cs = State::Q2);
+                    cs = sym == end ? State::S : State::Q2;
                     break;
                 case State::Q2:
-                    sym == end ? (cs = State::Q1) : (cs = State::Q3);
+                    cs = sym == end ? State::Q1 : State::Q3;
                     break;
                 case State::Q3:
-                    sym == end ? (cs = State::Q2) : (cs = State::Q4);
+                    cs = sym == end ? State::Q2 : State::Q4;
                     break;
                 case State::Q4:
                     if (sym == end) {
