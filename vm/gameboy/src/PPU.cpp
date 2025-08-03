@@ -185,7 +185,7 @@ std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
            return current.first;
        }
    }
-    return {};
+    return std::nullopt;
 }
 
 void PPU::draw(RAM &ram)  {
@@ -195,29 +195,17 @@ void PPU::draw(RAM &ram)  {
 void PPU::tick(RAM &ram)  {
     static size_t last_t_cycles = 0;
     static size_t prev_t_cycles = 0;
-    static bool sprite_render = false;
     static unsigned char sprite_x = 0;
     static Sprite current_sprite{};
     static size_t internal_t_cycles = 0;
-//    std::cout << "Current_ppu line:" << (unsigned)current_line << "\n";
 //#if 1
 //    ram.write(constants::LY_ADDRESS, 0x90);
 //    return;
 //#endif
-
-//    std::cout << "CurrentLine:" << (unsigned)current_line << '\n';
-//    while(t_cycle--){
         ++internal_t_cycles;
         ++current_t_cycle_count;
         ++last_t_cycles;
         update_regs(ram);
-//    std::cout << "\n=========================\n";
-//    std::cout << "PPU:\n";
-//    std::cout << "T-Cycle: " << current_t_cycle_count << '\n';
-//    std::cout << "CURRENT_LINE:" << current_line << '\n';
-//    std::cout << "CURRENT_MODE:" << current_mode << '\n';
-//    std::cout << "\n=========================\n";
-//    std::cout << "BG fifo:" << pixel_fetcher.fifo.size() << " Sprite fifo: " << sprite_fetcher.fifo.size() <<  '\n';
         if (current_mode == OAM){ //
             if (current_t_cycle_count != 80 && current_oam_obj != 160) {
                 --oam_next_t_cycle;
@@ -269,6 +257,7 @@ void PPU::tick(RAM &ram)  {
                             }
                         }
                     }
+
                     if (remaining_pixel_count > 0) {
                         --remaining_pixel_count;
                     } else {
@@ -339,7 +328,6 @@ void PPU::tick(RAM &ram)  {
                 }
             }
         }
-//    }
 }
 
 

@@ -204,24 +204,6 @@ struct GameBoyVM{
             std::cout << "\n==============================\n";
         };
 
-        auto dma_tick = [&]{
-            if (ram.dma_active && ppu.current_mode != PPU::OAM) {
-                std::cout << "DMA counter:" << ram.dma_counter << "\n";
-                ++ram.dma_t;
-                if (ram.dma_t % 4 == 0) {
-                    ram.mem[constants::OAM_BEGIN + ram.dma_counter] =  ram.mem[ram.dma_address + ram.dma_counter];
-                    ++ram.dma_counter;
-                    if (ram.dma_counter == 160) {
-                        std::cout << "Stop DMA\n";
-                        ram.dma_active = false;
-                        ram.dma_address = 0;
-                        ram.dma_counter = 0;
-                    }
-                }
-            }
-        };
-
-
         size_t t_cycles_count = 0;
 
         while(!WindowShouldClose()){
@@ -304,11 +286,11 @@ struct GameBoyVM{
                 }
                 t_cycles_count += t_cycle;
 
-
-                for (int i = 0; i < t_cycle; ++i){
+                for (int i = 0; i < t_cycle; ++i) {
                     cpu.timer.tick(ram);
                     ppu.tick(ram);
-                    dma_tick();
+                    if (!cpu.halted)
+                        ram.dma_tick();
                 }
 
                 current_t_cycle+=t_cycle;
@@ -317,14 +299,11 @@ struct GameBoyVM{
 
             current_t_cycle = 0;
             std::cout << std::dec;
-//            print_segment(constants::VRAM_BEGIN, 30);
             UpdateTexture(target, ppu.read_buffer());
 
             BeginDrawing();
-                ClearBackground(BLACK);
-//                draw_tiles();
-                // todo: check
-                DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
+               ClearBackground(BLACK);
+               DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
 
 
 // PRINT PIXELS
@@ -343,7 +322,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/basic.gb - check
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb +-
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug) - check
 // /Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb
 
@@ -352,7 +331,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

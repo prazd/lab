@@ -61,6 +61,10 @@ unsigned char RAM::get_ppu_mode() const {
 }
 
 void RAM::write(unsigned short index, unsigned char value) {
+    if (index >= constants::OAM_BEGIN && index <= constants::OAM_END && dma_active){
+        return;
+    }
+
     if (index <= constants::ROM_BANK_01_END){
         handle_mbc(index, value);
         return;
@@ -131,7 +135,6 @@ void RAM::write(unsigned short index, unsigned char value) {
 
 unsigned char RAM::read(unsigned short index) const {
     if (index >= constants::OAM_BEGIN && index <= constants::OAM_END && dma_active){
-        std::cout << "DMA active read:" << '\n';
         return dummy_reg;
     }
 
@@ -153,4 +156,19 @@ unsigned char RAM::read(unsigned short index) const {
 
     std::cout << "DUMMY_REG!!!" << '\n';
     return dummy_reg;
+}
+
+void RAM::dma_tick() {
+    if (dma_active) {
+        ++dma_t;
+        if (dma_t % 4 == 0) {
+            mem[constants::OAM_BEGIN + dma_counter] = mem[dma_address + dma_counter];
+            ++dma_counter;
+            if (dma_counter == 160) {
+                dma_active = false;
+                dma_address = 0;
+                dma_counter = 0;
+            }
+        }
+    }
 }

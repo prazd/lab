@@ -51,6 +51,7 @@ struct RAM {
     void handle_mbc(unsigned short index, unsigned char value);
     void handle_mbc0(unsigned short index, unsigned char value);
     void handle_mbc1(unsigned short index, unsigned char value);
+    void dma_tick();
 
 
     // 0 - HBlank

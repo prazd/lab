@@ -6,7 +6,7 @@
 #include "Constants.h"
 #include <queue>
 
-static constexpr size_t NEXT_T_CYCLE_VAL = 2;
+constexpr size_t NEXT_T_CYCLE_VAL = 2;
 
 bool operator==(Color lhs, Color rhs);
 
@@ -100,9 +100,6 @@ struct BaseFetcher {
         fifo = {};
         pixels = {};
         current_state = FetcherState::GetTile;
-        fetcher_current_tile_x = 0;
-        paused = false;
-        finished = false;
         tile_address = 0;
         next_t_cycle = NEXT_T_CYCLE_VAL;
     }
@@ -116,24 +113,24 @@ struct BaseFetcher {
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete, args...);
                 next_t_cycle = NEXT_T_CYCLE_VAL;
                 if ((!is_window && !is_sprite) && fetcher_current_tile_x == 0) {
-                    auto scx_offset =  (ram.read(constants::SCX_ADDRESS) % 8);
+                    auto scx_offset= (ram.read(constants::SCX_ADDRESS) % 8);
                     for (int i = 0; i < scx_offset; ++i){
                         pixels.pop_front();
                     }
                     next_t_cycle += scx_offset;
                 }
-                while (fifo.size() < 8 && !pixels.empty()) {
+                if (fifo.size() < 8 && !pixels.empty()) {
                     fifo.push_back(pixels.front());
                     pixels.pop_front();
                 }
                 break;
             }
             case FetcherState::Push: {
-                while (fifo.size() < 8 && !pixels.empty()) {
+                if (fifo.size() < 8 && !pixels.empty()) {
                     fifo.push_back(pixels.front());
                     pixels.pop_front();
                 }
-                next_t_cycle = NEXT_T_CYCLE_VAL;
+                next_t_cycle = 1;
                 break;}
         }
     }
@@ -150,8 +147,7 @@ struct BaseFetcher {
             case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); if (pixels.empty()){
                 fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
                 current_state = FetcherState::GetTile;
-                next_t_cycle = NEXT_T_CYCLE_VAL;
-            } break;}
+            } next_t_cycle = NEXT_T_CYCLE_VAL; break;}
         }
     }
 };
@@ -286,6 +282,7 @@ public:
     int current_v_blank_t_cycle_count = {};
     bool longest_line = false;
     size_t remaining_pixel_count = 0;
+    bool sprite_render = false;
 
     PixelFetcher pixel_fetcher;
     SpriteFetcher sprite_fetcher;
