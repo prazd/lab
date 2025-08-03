@@ -1,6 +1,4 @@
 #include <iostream>
-#include <cassert>
-#include <stack>
 
 // DFA
 // 159 page
@@ -8,7 +6,7 @@
 // alphabet = {x, y} 
 template <char begin, char end>
 struct IsLang {
-    constexpr bool operator()(const std::string& s) const {
+    constexpr bool operator()(const std::string_view& s) const {
         enum class State {
             S,
             Q1,
@@ -20,16 +18,9 @@ struct IsLang {
                 return false;
             }
             switch (current_state) {
-                case State::S:
-                    if (sym == end) {
-                        current_state = State::Q1;
-                    }
-                    break;
-                case State::Q1:
-                    current_state = State::Q2;
-                    break;
-                case State::Q2:
-                    break;
+                case State::S: {if (sym == end) current_state = State::Q1;  break;}
+                case State::Q1:{current_state = State::Q2; break;}
+                case State::Q2:{break;}
             }
         }
         return current_state == State::Q1;
