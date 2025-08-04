@@ -90,7 +90,6 @@ struct CPU {
 
         _0xCB,
 
-
         // Control flow
         JP_0b11000011,
         JP_0b11101001,
@@ -123,8 +122,7 @@ struct CPU {
         SRL_0xCB_0b00111xxx,
         BIT_0xCB_0b01xxxxxx,
         RES_0xCB_0b10xxxxxx,
-        SET_0xCB_0b11xxxxxx,
-        NOP_0xCB_0b00000000
+        SET_0xCB_0b11xxxxxx
     };
 
     // Interrupts
@@ -153,6 +151,9 @@ struct CPU {
 
     int t_cycle_by_ins(Instruction ins, unsigned char value = 0);
     int t_cycle_by_ins_0xCB(Instruction0xCB ins, unsigned char value = 0);
+
+    int pc_inc_by_ins(Instruction ins, unsigned char value = 0);
+
     void push_stack(unsigned char l, unsigned char h, RAM& ram);
 
     void set_flag(Flag f, bool val);

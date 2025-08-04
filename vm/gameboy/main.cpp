@@ -82,9 +82,13 @@ struct GameBoyVM{
         std::cout << ram.rom.size();
     }
 
-    GameBoyVM(const std::string_view& path) {
+    explicit GameBoyVM(const std::string_view& path) {
         init_raw_rom(path);
         // init rom
+        if ((unsigned char)ram.rom[0x143] == 0xc0) {
+            std::cout << "\nGameBoyColor unsupported\n";
+            std::abort();
+        }
         std::memcpy(ram.mem + constants::ROM_BANK_00_BEGIN, ram.rom.data(), 16384);
         std::memcpy(ram.mem + constants::ROM_BANK_01_BEGIN, ram.rom.data() + 16384, 16384);
         cpu.pc = 0x0100;
@@ -93,6 +97,7 @@ struct GameBoyVM{
         if (!ram.cart_ram.empty()) {
             ram.external_ram_enabled = true;
         }
+
         switch (get_rom_size(ram.rom)) {
             case 4: {ram.current_mbc = RAM::MBC1; break;}
             default:
@@ -191,7 +196,6 @@ struct GameBoyVM{
             }
         };
 
-
         int current_t_cycle = 0;
         double cpu_accumulator = 0.0;
 
@@ -264,25 +268,25 @@ struct GameBoyVM{
 #endif
                 int t_cycle = 0;
                 if (cpu.halted) {
-                    if (!cpu.ime && ram.read(constants::IF_ADDRESS) != 0) {
+                    auto if_value = ram.read(constants::IF_ADDRESS);
+                    auto ie_value = ram.read(constants::IE_ADDRESS);
+                    if (!cpu.ime && (if_value & ie_value & 0x1f) != 0) {
                         cpu.halt_bug = true;
                         cpu.halted = false;
-                        t_cycle = 4;
-                    } else if (cpu.ime) {
-                        // todo: maybe refactoring
-                        // halted = false in execute ime logic
-                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                        t_cycle = 4; // повторный fetch
+                    } else if (cpu.ime && (if_value & ie_value & 0x1f) != 0) {
+                            // halted = false in execute ime logic
+                            t_cycle = cpu.execute(next_ins, decoded_ins, ram);
                     } else {
+                        // wait
                         t_cycle = 4;
                     }
                 } else if (cpu.halt_bug) {
                     cpu.halt_bug = false;
-                    cpu.pc += 1;
-                    next_ins = cpu.fetch(ram);
-                    decoded_ins = cpu.decode(next_ins);
                     t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                    cpu.pc = cpu.prev_pc;
                 } else {
-                    t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                    t_cycle = cpu.execute(next_ins, decoded_ins, ram); // halt
                 }
                 t_cycles_count += t_cycle;
 
@@ -292,7 +296,6 @@ struct GameBoyVM{
                     if (!cpu.halted)
                         ram.dma_tick();
                 }
-
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
             }
@@ -320,7 +323,8 @@ struct GameBoyVM{
 
 // Done:
 // /Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb
-// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/basic.gb - check
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/halt_ime0_ei.gb
+// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/basic.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug) - check

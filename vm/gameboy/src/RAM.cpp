@@ -82,7 +82,6 @@ void RAM::write(unsigned short index, unsigned char value) {
     }
 
     if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END){
-        std::cout << "ECHO RAM WRITE" << '\n';
         index -= 0x2000;
     }
 
@@ -147,7 +146,7 @@ unsigned char RAM::read(unsigned short index) const {
         return div_internal_sync >> 8;
     }
 
-    if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
+    if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END && external_ram_enabled) {
         return cart_ram[index + (current_cart_ram * 8192)];
     }
 
