@@ -222,26 +222,26 @@ struct GameBoyVM{
                     ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
                     return ss;
                 };
-                std::cout  << cpu.instruction_str[decoded_ins] << " ";
-                if (!cpu.halted) {
-                    std::cout <<
-
-                              "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
-                              "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
-                              "B:" <<  print_hex(cpu.regs[CPU::B]).str() << " " <<
-                              "C:" <<  print_hex(cpu.regs[CPU::C]).str() << " " <<
-                              "D:" <<  print_hex(cpu.regs[CPU::D]).str() << " " <<
-                              "E:" <<  print_hex(cpu.regs[CPU::E]).str() << " " <<
-                              "H:" <<  print_hex(cpu.regs[CPU::H]).str() << " " <<
-                              "L:" <<  print_hex(cpu.regs[CPU::L]).str() << " " <<
-                              "SP:" <<  print_hex(cpu.sp).str() << " " <<
-                              "PC:" <<  print_hex(cpu.pc).str() << " " <<
-                              "PCMEM:" <<  print_hex(ram.read(cpu.pc)).str() << "," <<
-                              print_hex(ram.read(cpu.pc + 1)).str() << "," <<
-                              print_hex(ram.read(cpu.pc + 2)).str() << "," <<
-                              print_hex(ram.read(cpu.pc + 3)).str() << '\n';
-                    std::cout << std::dec;
-                }
+                std::cout  << cpu.instruction_str[decoded_ins] << ":";
+//                if (!cpu.halted) {
+//                    std::cout <<
+//
+//                              "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
+//                              "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
+//                              "B:" <<  print_hex(cpu.regs[CPU::B]).str() << " " <<
+//                              "C:" <<  print_hex(cpu.regs[CPU::C]).str() << " " <<
+//                              "D:" <<  print_hex(cpu.regs[CPU::D]).str() << " " <<
+//                              "E:" <<  print_hex(cpu.regs[CPU::E]).str() << " " <<
+//                              "H:" <<  print_hex(cpu.regs[CPU::H]).str() << " " <<
+//                              "L:" <<  print_hex(cpu.regs[CPU::L]).str() << " " <<
+//                              "SP:" <<  print_hex(cpu.sp).str() << " " <<
+//                              "PC:" <<  print_hex(cpu.pc).str() << " " <<
+//                              "PCMEM:" <<  print_hex(ram.read(cpu.pc)).str() << "," <<
+//                              print_hex(ram.read(cpu.pc + 1)).str() << "," <<
+//                              print_hex(ram.read(cpu.pc + 2)).str() << "," <<
+//                              print_hex(ram.read(cpu.pc + 3)).str() << '\n';
+//                    std::cout << std::dec;
+//                }
 
 
 //                if (cpu.ime) {
@@ -270,23 +270,31 @@ struct GameBoyVM{
                 if (cpu.halted) {
                     auto if_value = ram.read(constants::IF_ADDRESS);
                     auto ie_value = ram.read(constants::IE_ADDRESS);
+
                     if (!cpu.ime && (if_value & ie_value & 0x1f) != 0) {
                         cpu.halt_bug = true;
                         cpu.halted = false;
-                        t_cycle = 4; // повторный fetch
+                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                        cpu.pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
+                        cpu.halt_bug = false;
+                        // todo: finish
+//                    } else if (!cpu.ime && ((if_value & ie_value) & 0x1f) == 0) {
+//                           cpu.halted = false;
+//                           t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+//                           cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
                     } else if (cpu.ime && (if_value & ie_value & 0x1f) != 0) {
                             // halted = false in execute ime logic
+//                            std::cout << "Halted exec\n";
                             t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                            cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
                     } else {
                         // wait
                         t_cycle = 4;
                     }
-                } else if (cpu.halt_bug) {
-                    cpu.halt_bug = false;
-                    t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-                    cpu.pc = cpu.prev_pc;
                 } else {
+//                    std::cout << "Default exec\n";
                     t_cycle = cpu.execute(next_ins, decoded_ins, ram); // halt
+                    cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
                 }
                 t_cycles_count += t_cycle;
 
