@@ -1,7 +1,7 @@
 #ifndef GAMEBOY_RAM_H
 #define GAMEBOY_RAM_H
 #include "Constants.h"
-
+#include <vector>
 struct RAM {
     // 0xE000–0xFDFF: Echo RAM (Mirror of 0xC000–0xDDFF) Nintendo says use of this area is prohibited.
     // 0xFEA0–0xFEFF: Not Usable

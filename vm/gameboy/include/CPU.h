@@ -3,6 +3,7 @@
 #include "Constants.h"
 #include "RAM.h"
 #include "Timer.h"
+#include <unordered_map>
 
 struct CPU {
     static constexpr unsigned char HL = 0b110;
@@ -19,6 +20,7 @@ struct CPU {
     bool ime = false;
     bool halted = false;
     bool halt_bug = false;
+    bool skip_interrupt = false;
 
     enum Instruction {
         LD_0b01xxxyyy,
@@ -185,6 +187,7 @@ struct CPU {
 
     void inc_reg(unsigned char i, RAM& ram);
     void dec_reg(unsigned char i, RAM& ram);
+    void handle_interrupt(RAM& ram, unsigned char& next_ins, Instruction& decoded_ins);
 
     unsigned short HL_data() const;
 

@@ -492,7 +492,9 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
     unsigned char arg1 = tread(ram,pc + 1);
     unsigned char arg2 = tread(ram,pc + 2);
     if (halt_bug) {
+        auto tmp = arg1;
         arg1 = arg0;
+        arg2 = tmp;
     }
 
 #if DEBUG
@@ -522,41 +524,17 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
 //    std::cout << "\n==============================\n";
 
 #endif
-//    std::cout << instruction_str[itype] << " ";
-
-    if (ime_requested && ime_req_count++ == 1) {
-        ime_requested = false;
-        ime_req_count = 0;
-        ime = true;
-    }
-    // interrupts handling
-    if (ime) {
-        unsigned char pc_l = pc & 0xff;
-        unsigned char pc_h = (pc >> 8) & 0xff;
-
-        fetch_IF_value(ram);
-        fetch_IE_value(ram);
-
-        if (vblank_interrupt_req && vblank_interrupt_enabled)
-            { if (halted) halted = false; ime = false; push_stack(pc_l, pc_h, ram); vblank_interrupt_req = false; off_IF_value(VBlank_I, ram); pc = constants::VBLANK_INTERRUPT;}
-        else if (lcd_interrupt_req && lcd_interrupt_enabled)
-            { if (halted) halted = false; ime = false; push_stack(pc_l, pc_h, ram); lcd_interrupt_req    = false; off_IF_value(LCD_I, ram);    pc = constants::STAT_INTERRUPT;}
-        else if (timer_interrupt_req && timer_interrupt_enabled)
-            { if (halted) halted = false; ime = false;
-                push_stack(pc_l, pc_h, ram);
-                timer_interrupt_req  = false;
-                off_IF_value(Timer_I, ram);
-                pc = constants::TIMER_INTERRUPT;
+    // maybe use std::scope (c++23)
+    struct defer {
+        CPU& cpuref;
+        ~defer(){
+            if (cpuref.ime_requested && cpuref.ime_req_count++ == 1) {
+                cpuref.ime_req_count = 0;
+                cpuref.ime_requested = false;
+                cpuref.ime = true;
             }
-        else if (serial_interrupt_req && serial_interrupt_enabled)
-            { if (halted) halted = false; ime = false; push_stack(pc_l, pc_h, ram); serial_interrupt_req = false; off_IF_value(Serial_I, ram); pc = constants::SERIAL_INTERRUPT;}
-        else if (joypad_interrupt_req && joypad_interrupt_enabled)
-            { if (halted) halted = false; ime = false; push_stack(pc_l, pc_h, ram); joypad_interrupt_req = false; off_IF_value(Joypad_I, ram); pc = constants::JOYPAD_INTERRUPT;}
-
-//        timer.handle(8, ram);
-        i = fetch(ram);
-        itype = decode(i);
-    }
+        }
+    } d{.cpuref = *this};
 
     switch(itype) {
         case LD_0b01xxxyyy:  { update_regs(read345(i), ram, read_regs(read012(i), ram)); return t_cycle_by_ins(itype);}
@@ -579,7 +557,10 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             regs[A] = tread(ram,address);
             return t_cycle_by_ins(itype);
         }
-        case LDH_0b11100000: { twrite(ram,(0xff00 | arg1), regs[A]); return t_cycle_by_ins(itype);}
+        case LDH_0b11100000: {
+            twrite(ram,(0xff00 | arg1), regs[A]);
+            return t_cycle_by_ins(itype);
+        }
         case LD_0b00111010:  { regs[A] = read_regs(HL, ram); decrement_pair(L, H); return t_cycle_by_ins(itype);}
         case LD_0b00110010:  {
             update_regs(HL, ram, regs[A]);
@@ -1077,5 +1058,59 @@ int CPU::pc_inc_by_ins(CPU::Instruction ins, unsigned char value) {
         case DI_0b11110011:       {return 1;}
         case EI_0b11111011:       {return 1;}
         case NOP_0b00000000:      {return 1;}
+    }
+}
+
+void CPU::handle_interrupt(RAM& ram, unsigned char& next_ins, Instruction& decoded_ins) {
+    if (ime) { // Interrupt
+        auto if_value = ram.read(constants::IF_ADDRESS);
+        auto ie_value = ram.read(constants::IE_ADDRESS);
+        if ((if_value & ie_value & 0x1f) != 0) {
+            unsigned char pc_l = pc & 0xff;
+            unsigned char pc_h = (pc >> 8) & 0xff;
+
+            fetch_IF_value(ram);
+            fetch_IE_value(ram);
+
+            if (vblank_interrupt_req && vblank_interrupt_enabled) {
+                if (halted) halted = false;
+                ime = false;
+                push_stack(pc_l, pc_h, ram);
+                vblank_interrupt_req = false;
+                off_IF_value(CPU::VBlank_I, ram);
+                pc = constants::VBLANK_INTERRUPT;
+            } else if (lcd_interrupt_req && lcd_interrupt_enabled) {
+                if (halted) halted = false;
+                ime = false;
+                push_stack(pc_l, pc_h, ram);
+                lcd_interrupt_req = false;
+                off_IF_value(CPU::LCD_I, ram);
+                pc = constants::STAT_INTERRUPT;
+            } else if (timer_interrupt_req && timer_interrupt_enabled) {
+                if (halted) halted = false;
+                ime = false;
+                push_stack(pc_l, pc_h, ram);
+                timer_interrupt_req = false;
+                off_IF_value(CPU::Timer_I, ram);
+                pc = constants::TIMER_INTERRUPT;
+            } else if (serial_interrupt_req && serial_interrupt_enabled) {
+                if (halted) halted = false;
+                ime = false;
+                push_stack(pc_l, pc_h, ram);
+                serial_interrupt_req = false;
+                off_IF_value(CPU::Serial_I, ram);
+                pc = constants::SERIAL_INTERRUPT;
+            } else if (joypad_interrupt_req && joypad_interrupt_enabled) {
+                if (halted) halted = false;
+                ime = false;
+                push_stack(pc_l, pc_h, ram);
+                joypad_interrupt_req = false;
+                off_IF_value(CPU::Joypad_I, ram);
+                pc = constants::JOYPAD_INTERRUPT;
+            }
+
+            next_ins = fetch(ram);
+            decoded_ins = decode(next_ins);
+        }
     }
 }

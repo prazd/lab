@@ -209,7 +209,6 @@ struct GameBoyVM{
         };
 
         size_t t_cycles_count = 0;
-
         while(!WindowShouldClose()){
             cpu_accumulator += GetFrameTime();
             while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
@@ -245,59 +244,45 @@ struct GameBoyVM{
 
 
 //                if (cpu.ime) {
-//                        unsigned char pc_l = cpu.pc & 0xff;
-//                        unsigned char pc_h = (cpu.pc >> 8) & 0xff;
-//
-//                        cpu.fetch_IF_value(ram);
-//                        cpu.fetch_IE_value(ram);
-//
-//                        if (cpu.vblank_interrupt_req && cpu.vblank_interrupt_enabled)
-//                        { if (cpu.halted) cpu.halted = false; cpu.ime = false; cpu.push_stack(pc_l, pc_h, ram); cpu.vblank_interrupt_req = false; cpu.off_IF_value(CPU::VBlank_I, ram); cpu.pc = constants::VBLANK_INTERRUPT;}
-//                        else if (cpu.lcd_interrupt_req && cpu.lcd_interrupt_enabled)
-//                        {if (cpu.halted) cpu.halted = false; cpu.ime = false; cpu.push_stack(pc_l, pc_h, ram); cpu.lcd_interrupt_req    = false; cpu.off_IF_value(CPU::LCD_I, ram);  cpu.pc = constants::STAT_INTERRUPT;}
-//                        else if (cpu.timer_interrupt_req && cpu.timer_interrupt_enabled)
-//                        { if (cpu.halted) cpu.halted = false; cpu.ime = false; cpu.push_stack(pc_l, pc_h, ram); cpu.timer_interrupt_req  = false; cpu.off_IF_value(CPU::Timer_I, ram);  cpu.pc = constants::TIMER_INTERRUPT;}
-//                        else if (cpu.serial_interrupt_req && cpu.serial_interrupt_enabled)
-//                        {if (cpu.halted) cpu.halted = false; cpu.ime = false; cpu.push_stack(pc_l, pc_h, ram); cpu.serial_interrupt_req = false; cpu.off_IF_value(CPU::Serial_I, ram); cpu.pc = constants::SERIAL_INTERRUPT;}
-//                        else if (cpu.joypad_interrupt_req && cpu.joypad_interrupt_enabled)
-//                        { if (cpu.halted) cpu.halted = false; cpu.ime = false; cpu.push_stack(pc_l, pc_h, ram); cpu.joypad_interrupt_req = false; cpu.off_IF_value(CPU::Joypad_I, ram); cpu.pc = constants::JOYPAD_INTERRUPT;}
-//
-//                        next_ins = cpu.fetch(ram);
-//                        decoded_ins = cpu.decode(next_ins);
-//                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+
 #endif
                 int t_cycle = 0;
                 if (cpu.halted) {
                     auto if_value = ram.read(constants::IF_ADDRESS);
                     auto ie_value = ram.read(constants::IE_ADDRESS);
-
-                    if (!cpu.ime && (if_value & ie_value & 0x1f) != 0) {
-                        cpu.halt_bug = true;
-                        cpu.halted = false;
-                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-                        cpu.pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
-                        cpu.halt_bug = false;
-                        // todo: finish
-//                    } else if (!cpu.ime && ((if_value & ie_value) & 0x1f) == 0) {
-//                           cpu.halted = false;
-//                           t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-//                           cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
-                    } else if (cpu.ime && (if_value & ie_value & 0x1f) != 0) {
-                            // halted = false in execute ime logic
-//                            std::cout << "Halted exec\n";
+                    if (cpu.ime) {
+                        if ((if_value & ie_value & 0x1f) != 0) {
+                            cpu.handle_interrupt(ram, next_ins, decoded_ins);
                             t_cycle = cpu.execute(next_ins, decoded_ins, ram);
                             cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
-                    } else {
-                        // wait
-                        t_cycle = 4;
+                        } else {
+                            t_cycle = 4; // wait
+                        }
+                    } else if (!cpu.ime) {
+                        if ((if_value & ie_value & 0x1f) != 0) {
+                            if (cpu.skip_interrupt) {
+                                cpu.halted = false;
+                                cpu.skip_interrupt = false;
+                                t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                                cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
+                            } else {
+                                cpu.halt_bug = true;
+                                t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                                cpu.pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
+                                cpu.halt_bug = false;
+                                cpu.halted = false;
+                            }
+                        } else {
+                            cpu.skip_interrupt = true;
+                            t_cycle = 4;
+                        }
                     }
                 } else {
-//                    std::cout << "Default exec\n";
-                    t_cycle = cpu.execute(next_ins, decoded_ins, ram); // halt
+                    cpu.handle_interrupt(ram, next_ins, decoded_ins);
+                    t_cycle = cpu.execute(next_ins, decoded_ins, ram);
                     cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
                 }
                 t_cycles_count += t_cycle;
-
                 for (int i = 0; i < t_cycle; ++i) {
                     cpu.timer.tick(ram);
                     ppu.tick(ram);
@@ -306,6 +291,7 @@ struct GameBoyVM{
                 }
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
+//                std::cout << "IF_VALUE:" << std::hex << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';
             }
 
             current_t_cycle = 0;
@@ -343,7 +329,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/halt_ime0_ei.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

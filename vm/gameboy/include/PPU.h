@@ -5,6 +5,7 @@
 #include <iostream>
 #include "Constants.h"
 #include <queue>
+#include <optional>
 
 constexpr size_t NEXT_T_CYCLE_VAL = 2;
 
