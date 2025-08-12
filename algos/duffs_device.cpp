@@ -2,6 +2,7 @@
 #include <numeric>
 #include <cassert>
 
+// Duff's Device: an optimized loop unrolling technique from the 1980s
 template <typename T>
 void duff_copy(T* to, const T* from, size_t count) {
     size_t n = (count + 7) / 8;
