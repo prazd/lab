@@ -149,7 +149,6 @@ void CPU::update_regs(unsigned char i, RAM &ram, unsigned char value)  {
     throw std::invalid_argument("Unknown register");
 }
 
-
 bool CPU::get_cc_flag(unsigned char val)  {
     return (val == 0b00 && !get_flag(Zf) ||
             val == 0b01 &&  get_flag(Zf) ||
@@ -600,8 +599,6 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
             regs[L] = (result & 0xff);
             return t_cycle_by_ins(itype);
         }
-
-//
         case ADD_0b10000xxx: { add_reg_A(read_regs(read012(i), ram)); return t_cycle_by_ins(itype);}
         case ADD_0b10000110: { add_reg_A(read_regs(HL, ram)); return t_cycle_by_ins(itype);}
         case ADD_0b11000110: { add_reg_A(arg1); return t_cycle_by_ins(itype);}
@@ -913,7 +910,6 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case DI_0b11110011: {
             ime_requested = false;
             ime_req_count = 0; ime = false;
-//            ++pc;
             return t_cycle_by_ins(itype);}
         case EI_0b11111011: {
             ime_requested = true;

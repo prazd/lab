@@ -37,6 +37,19 @@ struct GameBoyVM{
     // Input
     // Sound
 
+    RAM::MBC get_mbc_type(const auto& data) {
+        switch (data[0x0147]) {
+            case 0x01:
+            case 0x02: // MBC1 + RAM
+            case 0x03: // MBC1 + RAM + Battery
+                {return RAM::MBC1;}
+            // todo: finish other mbc types
+            default:{
+                return RAM::MBC0;
+            }
+        }
+    }
+
     int get_rom_size(const auto& data) {
         switch(data[0x0148]) {
             case 0x1: return 4;   // 64KB
@@ -89,25 +102,16 @@ struct GameBoyVM{
             std::cout << "\nGameBoyColor unsupported\n";
             std::abort();
         }
-        std::memcpy(ram.mem + constants::ROM_BANK_00_BEGIN, ram.rom.data(), 16384);
-        std::memcpy(ram.mem + constants::ROM_BANK_01_BEGIN, ram.rom.data() + 16384, 16384);
         cpu.pc = 0x0100;
         cpu.sp = 0xFFFE;
         ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
-        if (!ram.cart_ram.empty()) {
-            ram.external_ram_enabled = true;
-        }
-
-        switch (get_rom_size(ram.rom)) {
-            case 4: {ram.current_mbc = RAM::MBC1; break;}
-            default:
-                {ram.current_mbc = RAM::MBC0; break;}
-        }
+        ram.current_mbc = get_mbc_type(ram.rom);
+        ram.current_rom_bank_max = get_rom_size(ram.rom);
     }
     
     void run() {
         // Gamboy Doctor
-#if 1
+#if 0
         cpu.regs[CPU::A] = 0x01;
         cpu.regs[CPU::F] = 0xB0;
         cpu.regs[CPU::B] = 0x00;
@@ -221,26 +225,26 @@ struct GameBoyVM{
                     ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
                     return ss;
                 };
-                std::cout  << cpu.instruction_str[decoded_ins] << ":";
-//                if (!cpu.halted) {
-//                    std::cout <<
-//
-//                              "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
-//                              "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
-//                              "B:" <<  print_hex(cpu.regs[CPU::B]).str() << " " <<
-//                              "C:" <<  print_hex(cpu.regs[CPU::C]).str() << " " <<
-//                              "D:" <<  print_hex(cpu.regs[CPU::D]).str() << " " <<
-//                              "E:" <<  print_hex(cpu.regs[CPU::E]).str() << " " <<
-//                              "H:" <<  print_hex(cpu.regs[CPU::H]).str() << " " <<
-//                              "L:" <<  print_hex(cpu.regs[CPU::L]).str() << " " <<
-//                              "SP:" <<  print_hex(cpu.sp).str() << " " <<
-//                              "PC:" <<  print_hex(cpu.pc).str() << " " <<
-//                              "PCMEM:" <<  print_hex(ram.read(cpu.pc)).str() << "," <<
-//                              print_hex(ram.read(cpu.pc + 1)).str() << "," <<
-//                              print_hex(ram.read(cpu.pc + 2)).str() << "," <<
-//                              print_hex(ram.read(cpu.pc + 3)).str() << '\n';
-//                    std::cout << std::dec;
-//                }
+                std::cout  << cpu.instruction_str[decoded_ins] << " ";
+                if (!cpu.halted) {
+                    std::cout <<
+
+                              "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
+                              "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
+                              "B:" <<  print_hex(cpu.regs[CPU::B]).str() << " " <<
+                              "C:" <<  print_hex(cpu.regs[CPU::C]).str() << " " <<
+                              "D:" <<  print_hex(cpu.regs[CPU::D]).str() << " " <<
+                              "E:" <<  print_hex(cpu.regs[CPU::E]).str() << " " <<
+                              "H:" <<  print_hex(cpu.regs[CPU::H]).str() << " " <<
+                              "L:" <<  print_hex(cpu.regs[CPU::L]).str() << " " <<
+                              "SP:" <<  print_hex(cpu.sp).str() << " " <<
+                              "PC:" <<  print_hex(cpu.pc).str() << " " <<
+                              "PCMEM:" <<  print_hex(ram.read(cpu.pc)).str() << "," <<
+                              print_hex(ram.read(cpu.pc + 1)).str() << "," <<
+                              print_hex(ram.read(cpu.pc + 2)).str() << "," <<
+                              print_hex(ram.read(cpu.pc + 3)).str() << '\n';
+                    std::cout << std::dec;
+                }
 
 
 //                if (cpu.ime) {
@@ -294,6 +298,7 @@ struct GameBoyVM{
 //                std::cout << "IF_VALUE:" << std::hex << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';
             }
 
+//            print_segment(constants::OAM_BEGIN, 30);
             current_t_cycle = 0;
             std::cout << std::dec;
             UpdateTexture(target, ppu.read_buffer());
@@ -317,19 +322,27 @@ struct GameBoyVM{
 
 // Done:
 // /Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/halt_ime0_ei.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/basic.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/halt_ime0_ei.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug) - check
 // /Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb
 
+
+// MBC-1
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank1.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank2.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_ramg.gb
+
+
 // Failed:
-// /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb
+// /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb ?
 // /Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb
 
+
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/halt_ime0_ei.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

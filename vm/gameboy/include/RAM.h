@@ -25,6 +25,7 @@ struct RAM {
     size_t current_rom_bank = 1;
     std::vector<unsigned char> cart_ram{};
     size_t current_cart_ram = 0;
+    size_t current_rom_bank_max = 0;
 
     unsigned char dummy_reg = 0xFF;
 
@@ -61,8 +62,11 @@ struct RAM {
     unsigned char get_ppu_mode() const;
 
     bool is_ram_avaliable(unsigned short index) const;
+
     void write(unsigned short index, unsigned char value);
     unsigned char read(unsigned short index) const;
+    void write_unchecked(unsigned short index, unsigned char value);
+    unsigned char read_unchecked(unsigned short index) const;
 };
 
 #endif //GAMEBOY_RAM_H

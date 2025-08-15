@@ -275,16 +275,20 @@ void PPU::tick(RAM &ram)  {
             }
         } else if (current_mode == HBlank) {
             if (current_t_cycle_count >= 456){
-                set_ppu_reg(constants::LY_ADDRESS, ++current_line, ram);
+                set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
+
                 // LYC
                 auto lyc = ram.read(constants::LYC_ADDRESS);
                 unsigned char stat = ram.read(constants::STAT_ADDRESS);
                 if(current_line == lyc) {
-                    ram.write(constants::STAT_ADDRESS, (ram.read(constants::STAT_ADDRESS) | (1 << 2)));
-                    if (stat & (1 << 6)) ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | 1 << 1));
+                    ram.write(constants::STAT_ADDRESS, stat | (1 << 2));
+                    if (stat & (1 << 6))
+                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | 1 << 1));
                 } else {
                     ram.write(constants::STAT_ADDRESS, (ram.read(constants::STAT_ADDRESS) & (~(1 << 2))));
                 }
+
+                ++current_line;
 
                 pixel_fetcher.fetcher_current_tile_x = 0; // todo: check
                 sprite_fetcher.fetcher_current_tile_x = 0;
@@ -299,6 +303,9 @@ void PPU::tick(RAM &ram)  {
                 }
                 else{
                     current_mode = OAM;
+                    // LCD Interrupt
+                    if (ram.read(constants::STAT_ADDRESS) & (1 << 5))
+                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | 1 << 1));
                     sprite_buffer = {};
                     oam_next_t_cycle = 2;
                     current_oam_obj = 0;
@@ -311,6 +318,9 @@ void PPU::tick(RAM &ram)  {
                 ++current_line;
                 if (current_line == 154) {
                     last_t_cycles = 0;
+                    // LCD Interrupt
+                    if (ram.read(constants::STAT_ADDRESS) & (1 << 5))
+                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | 1 << 1));
                     current_mode = OAM;
                     current_oam_obj = 0;
                     oam_next_t_cycle = 2;
