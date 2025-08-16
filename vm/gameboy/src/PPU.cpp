@@ -134,7 +134,7 @@ void PPU::oam_scan(RAM &ram)  {
 
 Pixel PPU::pixel_mixing(RAM &ram) {
     auto bg_pixel = Pixel{.color = WHITE}; // Default
-    if (!pixel_fetcher.fifo.empty()){
+    if (!pixel_fetcher.fifo.empty() && ram.read(constants::LCDC_ADDRESS) & 1){
         bg_pixel = pixel_fetcher.fifo.front(); pixel_fetcher.fifo.pop_front();
     }
     auto bgp = ram.read(constants::BGP);
@@ -190,6 +190,7 @@ std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
 
 void PPU::draw(RAM &ram)  {
     buffer[current_line][current_pixel_x++] = pixel_mixing(ram).color;
+    pixel_fetcher.current_x = current_pixel_x;
 }
 
 void PPU::tick(RAM &ram)  {
@@ -223,6 +224,11 @@ void PPU::tick(RAM &ram)  {
             }
         } else if (current_mode == Drawing) {
                 if (current_pixel_x < 160) {
+                    if ((ram.read(constants::WY_ADDRESS) == ram.read(constants::LY_ADDRESS))
+                    && !window_line_is_triggered) {
+                        window_line_is_triggered = true;
+                        pixel_fetcher.window_line_is_triggered = true;
+                    }
                     if (!pixel_fetcher.paused) {
                         --pixel_fetcher.next_t_cycle;
                         if (pixel_fetcher.next_t_cycle == 0) {
@@ -265,7 +271,6 @@ void PPU::tick(RAM &ram)  {
                             draw(ram);
                         }
                     }
-
                 } else {
                     sprite_fetcher.reset();
                     pixel_fetcher.reset();
@@ -289,7 +294,6 @@ void PPU::tick(RAM &ram)  {
                 }
 
                 ++current_line;
-
                 pixel_fetcher.fetcher_current_tile_x = 0; // todo: check
                 sprite_fetcher.fetcher_current_tile_x = 0;
                 current_pixel_x = 0;
@@ -298,11 +302,11 @@ void PPU::tick(RAM &ram)  {
                     current_mode = VBlank;
                     // VBlank Interrupt
                     ram.write(constants::IF_ADDRESS, ram.read(constants::IF_ADDRESS) | 1);
-
                     current_v_blank_t_cycle_count = 0;
                 }
                 else{
                     current_mode = OAM;
+                    pixel_fetcher.is_windows_drawing = false;
                     // LCD Interrupt
                     if (ram.read(constants::STAT_ADDRESS) & (1 << 5))
                         ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | 1 << 1));
@@ -331,6 +335,9 @@ void PPU::tick(RAM &ram)  {
                     current_window_line = 0;
                     current_t_cycle_count = 0;
                     current_v_blank_t_cycle_count = 0;
+                    window_line_is_triggered = false;
+                    pixel_fetcher.is_windows_drawing = false;
+                    is_windows_drawing = false;
                 } else {
                     set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
                     prev_t_cycles = last_t_cycles;

@@ -293,6 +293,7 @@ struct GameBoyVM{
                     if (!cpu.halted)
                         ram.dma_tick();
                 }
+
                 current_t_cycle+=t_cycle;
                 cpu_accumulator-=CPU_CYCLE_TIME;
 //                std::cout << "IF_VALUE:" << std::hex << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';
@@ -339,10 +340,11 @@ struct GameBoyVM{
 // Failed:
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb ?
 // /Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb
+// /Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb
 
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
