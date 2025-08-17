@@ -190,7 +190,12 @@ std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
 
 void PPU::draw(RAM &ram)  {
     buffer[current_line][current_pixel_x++] = pixel_mixing(ram).color;
-    pixel_fetcher.current_x = current_pixel_x;
+    if (!is_windows_drawing && is_windows_fetching_ready(ram)) {
+        pixel_fetcher.reset();
+        is_windows_drawing = true;
+        pixel_fetcher.windows_current_tile_x = 0;
+        pixel_fetcher.is_windows_drawing = true;
+    }
 }
 
 void PPU::tick(RAM &ram)  {
@@ -227,7 +232,6 @@ void PPU::tick(RAM &ram)  {
                     if ((ram.read(constants::WY_ADDRESS) == ram.read(constants::LY_ADDRESS))
                     && !window_line_is_triggered) {
                         window_line_is_triggered = true;
-                        pixel_fetcher.window_line_is_triggered = true;
                     }
                     if (!pixel_fetcher.paused) {
                         --pixel_fetcher.next_t_cycle;
@@ -272,6 +276,7 @@ void PPU::tick(RAM &ram)  {
                         }
                     }
                 } else {
+                    std::cout << "internal_t_cycles:" << internal_t_cycles << '\n';
                     sprite_fetcher.reset();
                     pixel_fetcher.reset();
                     current_sprite_index = 0;
@@ -361,4 +366,9 @@ void PPU::print_buffer() const {
         std::cout << '\n';
     }
     std::cout << "\n=======================================\n";
+}
+
+bool PPU::is_windows_fetching_ready(RAM &ram) {
+    return window_line_is_triggered && ((ram.read(constants::LCDC_ADDRESS) >> 5) & 1) && (ram.read(constants::LCDC_ADDRESS) & 1)
+           && current_pixel_x >= (ram.read(constants::WX_ADDRESS) - 7);
 }

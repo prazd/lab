@@ -53,7 +53,7 @@ struct Pixel {
 template <typename Fetcher, typename ... Args>
 struct BaseFetcher {
     enum class FetcherState {
-        GetTile, Low, High, Push
+        GetTile, Low, High, Sleep, Push
     } current_state = FetcherState::GetTile;
 
     unsigned short tile_address{};
@@ -93,13 +93,21 @@ struct BaseFetcher {
 
     bool is_windows_drawing = false;
     bool window_line_is_triggered = false;
-    unsigned char current_x = 0;
 
     void reset_state() {
         current_state = FetcherState::GetTile;
     }
     void reset_pixels() {
         pixels = {};
+    }
+
+    void try_to_fill_fifo() {
+        if (fifo.empty()) {
+          while (!pixels.empty()) {
+            fifo.push_back(pixels.front());
+            pixels.pop_front();
+          }
+        }
     }
 
     void reset() {
@@ -110,19 +118,13 @@ struct BaseFetcher {
         next_t_cycle = NEXT_T_CYCLE_VAL;
     }
 
-    bool is_windows_fetching_ready(RAM &ram) {
-        return window_line_is_triggered && ((ram.read(constants::LCDC_ADDRESS) >> 5) & 1) && (ram.read(constants::LCDC_ADDRESS) & 1)
-                && current_x >= (ram.read(constants::WX_ADDRESS) - 7);
-    }
-
     void step(RAM& ram, Args&&... args) {
         switch(current_state) {
-            case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(ram, std::forward<Args>(args)...); next_t_cycle = NEXT_T_CYCLE_VAL; break;} // Low
-            case FetcherState::Low:      {low = ram.read(tile_address + (line_in_tile * 2)); next_t_cycle = NEXT_T_CYCLE_VAL; break;}
+            case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(ram, std::forward<Args>(args)...); break;} // Low
+            case FetcherState::Low:      {low = ram.read(tile_address + (line_in_tile * 2)); break;}
             case FetcherState::High:     {
                 high = ram.read(tile_address + (line_in_tile * 2) + 1);
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete, args...);
-                next_t_cycle = NEXT_T_CYCLE_VAL;
                 if ((!is_window && !is_sprite) && fetcher_current_tile_x == 0) {
                     auto scx_offset= (ram.read(constants::SCX_ADDRESS) % 8);
                     for (int i = 0; i < scx_offset; ++i){
@@ -130,53 +132,54 @@ struct BaseFetcher {
                     }
                     next_t_cycle += scx_offset;
                 }
-
-                if (is_window && !is_windows_drawing) {
-                    if (is_windows_fetching_ready(ram)) {
-                        reset();
-                        is_windows_drawing = true;
-                        windows_current_tile_x = 0;
-                        break;
-                    }
-                }
-                while (fifo.size() < 8 && !pixels.empty()) {
-                    fifo.push_back(pixels.front());
-                    pixels.pop_front();
-                }
-                break;
-            }
-            case FetcherState::Push: {
-                if (!is_windows_drawing) {
-                    if (is_windows_fetching_ready(ram)) {
-                        reset();
-                        is_windows_drawing = true;
-                        windows_current_tile_x = 0;
-                        break;
-                    }
-                }
-                if (fifo.size() < 8 && !pixels.empty()) {
-                    fifo.push_back(pixels.front());
-                    pixels.pop_front();
-                }
+                try_to_fill_fifo();
+                break;}
+            case FetcherState::Sleep:    {
+                try_to_fill_fifo();
                 next_t_cycle = 1;
                 break;}
+            case FetcherState::Push: {
+                next_t_cycle = 1;
+                try_to_fill_fifo();
+                break;
+            }
         }
     }
 
     void fetch(RAM& ram, Args&&... args) {
         switch(current_state) {
-            case FetcherState::GetTile:  {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Low;  break;}
-            case FetcherState::Low:      {step(ram, std::forward<Args>(args)...); current_state = FetcherState::High; break;}
-            case FetcherState::High:     {step(ram, std::forward<Args>(args)...); current_state = FetcherState::Push; if (pixels.empty()){
+            case FetcherState::GetTile:  {step(ram, std::forward<Args>(args)...); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::Low;  break;}
+            case FetcherState::Low:      {step(ram, std::forward<Args>(args)...); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::High; break;}
+            case FetcherState::High:     {step(ram, std::forward<Args>(args)...);
+                if (fifo.size() == 8 && pixels.empty()) {
                     if (is_window) {
                         windows_current_tile_x = (windows_current_tile_x + 1) % 20;
                     } else {
                         fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
                     }
-                    current_state = FetcherState::GetTile;
                     next_t_cycle = NEXT_T_CYCLE_VAL;
-                } break;}
-            case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); if (pixels.empty()){
+                    current_state = FetcherState::GetTile;
+                } else {
+                    next_t_cycle = NEXT_T_CYCLE_VAL;
+                    current_state = FetcherState::Sleep;
+                }
+                break;}
+            case FetcherState::Sleep:    {
+                step(ram, std::forward<Args>(args)...);
+                if (fifo.size() == 8 && pixels.empty()) {
+                    if (is_window) {
+                        windows_current_tile_x = (windows_current_tile_x + 1) % 20;
+                    } else {
+                        fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
+                    }
+                    next_t_cycle = NEXT_T_CYCLE_VAL;
+                    current_state = FetcherState::GetTile;
+                } else {
+                    current_state = FetcherState::Push;
+                    next_t_cycle = 1;
+                }
+                break;}
+            case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); next_t_cycle = 1; if (pixels.empty()){
                 if (is_window) {
                     windows_current_tile_x = (windows_current_tile_x + 1) % 20;
                 } else {
@@ -212,7 +215,7 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
         } else {
             tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
             tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
-            tilemap_y = ((ly + scy) & 0xff) / 8;                       // Because of this formula, fetcherY can be between 0 and 255
+            tilemap_y = ((ly + scy) & 0xff) / 8;                      // Because of this formula, fetcherY can be between 0 and 255
             line_in_tile = (ly + scy) % 8;
             is_window = false;
         }
@@ -261,11 +264,13 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
                         pixels.pop_front();
                     }
                 } else {
-                    for (int i = 0; i < fifo.size(); ++i) {
+
+                    for (auto &el: fifo) {
                         if (!pixels.empty()) {
-                            if (Pixel::get_color_id(fifo[i].color) == 0 &&
+                            // todo: maybe index check
+                            if (Pixel::get_color_id(el.color) == 0 &&
                                 Pixel::get_color_id(pixels.front().color) != 0) {
-                                fifo[i] = pixels.front();
+                                el = pixels.front();
                             }
                             pixels.pop_front();
                         }
