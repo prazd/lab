@@ -95,7 +95,7 @@ void CPU::xor_reg_A(unsigned char val)  {
 void CPU::sub_reg_A_flags_only(unsigned char val)  {
     auto res = (int)regs[A] - (int)val;
     auto res8 = (unsigned char)(res & 0xff);
-    set_flag(Nf, 1);
+    set_flag(Nf, true);
     set_flag(Zf, (res8 == 0));
     set_flag(Cf, (val > regs[A]));
     set_flag(Hf, ((regs[A] & 0xf) - (val & 0xf) < 0)); // todo: check((val & 0xf) > (regs[A] & 0xf)));
@@ -615,9 +615,6 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case CP_0b10111110:  { sub_reg_A_flags_only(read_regs(HL, ram)); return t_cycle_by_ins(itype);}
         case CP_0b11111110:  {
             sub_reg_A_flags_only(arg1);
-#if DEBUG
-            std::cout << "CP 0x90, A: " << (unsigned)regs[A] << " Zf: " << (unsigned)get_flag(Zf) << '\n';
-#endif
             return t_cycle_by_ins(itype);}
         case INC_0b00xxx100: {
             inc_reg(read345(i), ram);
@@ -936,20 +933,20 @@ void CPU::print_regs() const {
 
 void CPU::fetch_IF_value(RAM& ram) {
     auto if_value = ram.read(constants::IF_ADDRESS);
-    if (if_value & 1) vblank_interrupt_req = true;
-    if ((if_value >> 1) & 1) lcd_interrupt_req = true;
-    if ((if_value >> 2) & 1) timer_interrupt_req = true;
-    if ((if_value >> 3) & 1) serial_interrupt_req = true;
-    if ((if_value >> 4) & 1) joypad_interrupt_req = true;
+    vblank_interrupt_req = (if_value & 1);
+    lcd_interrupt_req =    ((if_value >> 1) & 1);
+    timer_interrupt_req =  ((if_value >> 2) & 1);
+    serial_interrupt_req = ((if_value >> 3) & 1);
+    joypad_interrupt_req = ((if_value >> 4) & 1);
 }
 
 void CPU::fetch_IE_value(RAM& ram) {
-    auto if_value = ram.read(constants::IE_ADDRESS);
-    if (if_value & 1) vblank_interrupt_enabled = true;
-    if ((if_value >> 1) & 1) lcd_interrupt_enabled = true;
-    if ((if_value >> 2) & 1) timer_interrupt_enabled = true;
-    if ((if_value >> 3) & 1) serial_interrupt_enabled = true;
-    if ((if_value >> 4) & 1) joypad_interrupt_enabled = true;
+    auto if_value =    ram.read(constants::IE_ADDRESS);
+    vblank_interrupt_enabled    =    (if_value & 1);
+    lcd_interrupt_enabled       =    ((if_value >> 1) & 1);
+    timer_interrupt_enabled     =    ((if_value >> 2) & 1);
+    serial_interrupt_enabled    =    ((if_value >> 3) & 1);
+    joypad_interrupt_enabled    =    ((if_value >> 4) & 1);
 }
 
 void CPU::push_stack(unsigned char l, unsigned char h, RAM& ram) {
@@ -959,8 +956,7 @@ void CPU::push_stack(unsigned char l, unsigned char h, RAM& ram) {
 }
 
 unsigned char CPU::tread(RAM &ram, unsigned short index) {
-    unsigned char res = ram.read(index);
-    return res;
+    return ram.read(index);
 }
 
 void CPU::twrite(RAM &ram, unsigned short index, unsigned char value) {
@@ -1082,7 +1078,8 @@ void CPU::handle_interrupt(RAM& ram, unsigned char& next_ins, Instruction& decod
                 lcd_interrupt_req = false;
                 off_IF_value(CPU::LCD_I, ram);
                 pc = constants::STAT_INTERRUPT;
-            } else if (timer_interrupt_req && timer_interrupt_enabled) {
+            }
+            else if (timer_interrupt_req && timer_interrupt_enabled) {
                 if (halted) halted = false;
                 ime = false;
                 push_stack(pc_l, pc_h, ram);
@@ -1104,7 +1101,6 @@ void CPU::handle_interrupt(RAM& ram, unsigned char& next_ins, Instruction& decod
                 off_IF_value(CPU::Joypad_I, ram);
                 pc = constants::JOYPAD_INTERRUPT;
             }
-
             next_ins = fetch(ram);
             decoded_ins = decode(next_ins);
         }

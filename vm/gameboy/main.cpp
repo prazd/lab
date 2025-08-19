@@ -344,7 +344,7 @@ struct GameBoyVM{
 
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_lcdc_bg_en_change.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
