@@ -33,36 +33,15 @@ private:
     coro_handle handle_;    
 };
 
-#define WAIT(N) while(N--){std::cout << "Tick\n"; co_await std::suspend_always();}
-
-resumable add() {
-    std::cout << "Add\n";
-    int z = 3;
-    WAIT(z);
-    std::cout << "Step\n";
-    z = 3;
-    WAIT(z);
-    std::cout << "Step\n\n";
-}
-
-resumable load() {
-    std::cout << "Load\n";
-    int z = 3;
-    WAIT(z);
-    std::cout << "Step\n";
-    z = 3;
-    WAIT(z);
-    std::cout << "Step\n";
-    z = 3;
-    WAIT(z);
-    std::cout << "Step\n\n";
+resumable foo() {
+    std::cout << "Begin\n";
+    co_await std::suspend_always();
+    std::cout << "End\n";
 }
 
 int main() {
-    int t_cycles = 8;
-    auto c_add = add();
-    while(t_cycles--) c_add.resume();
-    t_cycles = 12;
-    auto c_load = load();
-    while(t_cycles--) c_load.resume();
+    auto r = foo();
+    r.resume();
+    std::cout << "Mid\n";
+    r.resume();
 }
