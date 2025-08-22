@@ -19,6 +19,7 @@ find_package(raylib REQUIRED HINTS ${RAYLIB_DIR})
 include_directories(include)
 
 set(SOURCES
+    src/Resumable.cpp
     src/CPU.cpp
     src/PPU.cpp
     src/RAM.cpp

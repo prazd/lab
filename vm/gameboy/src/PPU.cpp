@@ -312,6 +312,7 @@ void PPU::tick(RAM &ram)  {
                 } else {
                     current_mode = OAM;
                     pixel_fetcher.is_windows_drawing = false;
+                    pixel_fetcher.windows_current_tile_x = 0;
 
                     // LCD Interrupt
                     if (ram.read(constants::STAT_ADDRESS) & (1 << 5))

@@ -143,7 +143,9 @@ void CPU::update_regs(unsigned char i, RAM &ram, unsigned char value)  {
         case 0b011: {regs[E] = value; return;}
         case 0b100: {regs[H] = value; return;}
         case 0b101: {regs[L] = value; return;}
-        case 0b110: {twrite(ram, HL_data(), value); return;}
+        case 0b110: {
+            twrite(ram, HL_data(), value); return;
+        }
         case 0b111: {regs[A] = value; return;}
     }
     throw std::invalid_argument("Unknown register");
@@ -1078,8 +1080,7 @@ void CPU::handle_interrupt(RAM& ram, unsigned char& next_ins, Instruction& decod
                 lcd_interrupt_req = false;
                 off_IF_value(CPU::LCD_I, ram);
                 pc = constants::STAT_INTERRUPT;
-            }
-            else if (timer_interrupt_req && timer_interrupt_enabled) {
+            } else if (timer_interrupt_req && timer_interrupt_enabled) {
                 if (halted) halted = false;
                 ime = false;
                 push_stack(pc_l, pc_h, ram);
@@ -1103,6 +1104,730 @@ void CPU::handle_interrupt(RAM& ram, unsigned char& next_ins, Instruction& decod
             }
             next_ins = fetch(ram);
             decoded_ins = decode(next_ins);
+        }
+    }
+}
+
+Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruction &itype, RAM &ram) {
+    int wait = 0;
+    while (true) {
+
+        prev_pc = pc;
+
+        unsigned char arg0 = tread(ram, pc);
+        unsigned char arg1 = tread(ram, pc + 1);
+        unsigned char arg2 = tread(ram, pc + 2);
+        if (halt_bug) {
+            auto tmp = arg1;
+            arg1 = arg0;
+            arg2 = tmp;
+        }
+
+#if DEBUG
+    //    std::cout << "HL value:" << HL_data() << '\n';
+    //    std::cout << "RAM value by HL_address:" << (unsigned)ram.read(HL_data()) << '\n';
+    //    auto print_range = [&](int n){
+    //        while(n--) std::cout << "mem[" << pc + n << "] :" << (unsigned)ram.read(pc + n) << '\n';
+    //    };
+
+    //    std::cout << "\n==============================\n";
+
+    //    std::cout << std::hex << "REG[A]" << (unsigned)regs[A] << '\n';
+    //    std::cout <<"REG[B]: " << (unsigned)regs[B] << '\n';
+    //    std::cout <<"REG[C]: " << (unsigned)regs[C] << '\n';
+    //    std::cout <<"REG[D]: " << (unsigned)regs[D] << '\n';
+    //    std::cout <<"REG[E]: " << (unsigned)regs[E] << '\n';
+    //    std::cout <<"REG[F]: " << (unsigned)regs[F] << '\n';
+    //    std::cout << "Zero:" << (unsigned)get_flag(Zf) << '\n';
+    //    std::cout << "Negative: " << (unsigned)get_flag(Nf) << '\n';
+    //    std::cout << "HalfCarry: " << (unsigned)get_flag(Hf) << '\n';
+    //    std::cout << "Carry: " << (unsigned)get_flag(Cf) << '\n';
+    //    std::cout << "PC: " << pc << '\n';
+    //    std::cout << "SP: " << sp << '\n';
+    //    std::cout << "MEM:\n";
+    //    print_range(3);
+    //    std::cout << std::dec;
+    //    std::cout << "\n==============================\n";
+
+#endif
+
+        // maybe use std::scope (c++23)
+        struct defer {
+            CPU &cpuref;
+            ~defer() {
+                if (cpuref.ime_requested && cpuref.ime_req_count++ == 1) {
+                    cpuref.ime_req_count = 0;
+                    cpuref.ime_requested = false;
+                    cpuref.ime = true;
+                }
+            }
+        } d{.cpuref = *this};
+
+        switch (itype) {
+            case LD_0b01xxxyyy: {
+                wait = 3;
+                while(wait--) co_await std::suspend_always();
+                update_regs(read345(i), ram, read_regs(read012(i), ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b01xxx110: {
+                wait = 7;
+                while(wait--) co_await std::suspend_always();
+                update_regs(read345(i), ram, read_regs(HL, ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b00xxx110: {
+                update_regs(read345(i), ram, arg1);
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b01110xxx: {
+                update_regs(HL, ram, read_regs(read012(i), ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b00110110: {
+                update_regs(HL, ram, arg1);
+                co_await std::suspend_always();
+                break;
+            };
+            case LD_0b00001010: {
+                regs[A] = tread(ram, ((regs[B] << 8) | regs[C]));
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b00011010: {
+                regs[A] = tread(ram, ((regs[D] << 8) | regs[E]));
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b00000010: {
+                twrite(ram, ((regs[B] << 8) | regs[C]), regs[A]);
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b00010010: {
+                twrite(ram, ((regs[D] << 8) | regs[E]), regs[A]);
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b11111010: {
+                regs[A] = tread(ram, arg1 | (arg2 << 8));
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b11101010: {
+                twrite(ram, (arg1 | (arg2 << 8)), regs[A]);
+                co_await std::suspend_always();
+                break;
+            }
+            case LDH_0b11110010: {
+                regs[A] = tread(ram, 0xff00 | regs[C]);
+                co_await std::suspend_always();
+                break;
+            }
+            case LDH_0b11100010: {
+                twrite(ram, (0xff00 | regs[C]), regs[A]);
+                co_await std::suspend_always();
+                break;
+            }
+            case LDH_0b11110000: {
+                unsigned short address = (0xff00 | arg1);
+                regs[A] = tread(ram, address);
+                co_await std::suspend_always();
+                break;
+            }
+            case LDH_0b11100000: {
+                twrite(ram, (0xff00 | arg1), regs[A]);
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b00111010: {
+                regs[A] = read_regs(HL, ram);
+                decrement_pair(L, H);
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b00110010: {
+                update_regs(HL, ram, regs[A]);
+                decrement_pair(L, H);
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b00101010: {
+                regs[A] = read_regs(HL, ram);
+                increment_pair(L, H);
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b00100010: {
+                update_regs(HL, ram, regs[A]);
+                increment_pair(L, H);
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b00xx0001: {
+                update_pair_ld(arg1, arg2, read45(i));
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b00001000: {
+                unsigned short address = (arg1 | (arg2 << 8));
+                twrite(ram, address, sp & 0xff);
+                twrite(ram, address + 1, ((sp >> 8) & 0xff));
+                co_await std::suspend_always();
+                break;
+            }
+            case LD_0b11111001: {
+                sp = (regs[L] | (regs[H] << 8));
+
+                co_await std::suspend_always();
+                break;
+            } // SP = HL
+            case PUSH_0b11xx0101: {
+                auto val = stack_getpair(read45(i));
+                sp -= 2;
+                twrite(ram, sp, (val & 0xff));
+                twrite(ram, sp + 1, ((val >> 8) & 0xff));
+
+                co_await std::suspend_always();
+                break;
+            } // stack push xx
+            case POP_0b11xx0001: {
+                update_pair_pop(tread(ram, sp), tread(ram, sp + 1), read45(i));
+                sp += 2;
+                co_await std::suspend_always();
+                break;
+            };
+            case LD_0b11111000: {
+                set_flag(Zf, 0);
+                set_flag(Nf, 0);
+                auto e = static_cast<char>(arg1);
+                unsigned int result = e + sp;
+                set_flag(Cf, ((sp & 0xff) + (unsigned char) (e) > 0xff));
+                set_flag(Hf, ((sp & 0xf) + ((unsigned char) (e) & 0xf) > 0xf));
+                regs[H] = ((result >> 8) & 0xff);
+                regs[L] = (result & 0xff);
+                co_await std::suspend_always(); break;
+            }
+            case ADD_0b10000xxx: {
+                add_reg_A(read_regs(read012(i), ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case ADD_0b10000110: {
+                add_reg_A(read_regs(HL, ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case ADD_0b11000110: {
+                add_reg_A(arg1);
+                co_await std::suspend_always();
+                break;
+            }
+            case ADC_0b10001xxx: {
+                add_reg_A_plus(read_regs(read012(i), ram), get_flag(Cf));
+                co_await std::suspend_always();
+                break;
+            }
+            case ADC_0b10001110: {
+                add_reg_A_plus(read_regs(HL, ram), get_flag(Cf));
+                co_await std::suspend_always();
+                break;
+            }
+            case ADC_0b11001110: {
+                add_reg_A_plus(arg1, get_flag(Cf));
+                co_await std::suspend_always();
+                break;
+            }
+            case SUB_0b10010xxx: {
+                sub_reg_A(read_regs(read012(i), ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case SUB_0b10010110: {
+                sub_reg_A(read_regs(HL, ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case SUB_0b11010110: {
+                sub_reg_A(arg1);
+                co_await std::suspend_always();
+                break;
+            }
+            case SBC_0b10011xxx: {
+                sub_reg_A_plus(read_regs(read012(i), ram), get_flag(Cf));
+                co_await std::suspend_always();
+                break;
+            } // (reg[A] - r - reg[C]) == reg[A] - (r + reg[C])
+            case SBC_0b10011110: {
+                sub_reg_A_plus(read_regs(HL, ram), get_flag(Cf));
+                co_await std::suspend_always();
+                break;
+            }
+            case SBC_0b11011110: {
+                sub_reg_A_plus(arg1, get_flag(Cf));
+                co_await std::suspend_always();
+                break;
+            }
+            case CP_0b10111xxx: {
+                sub_reg_A_flags_only(read_regs(read012(i), ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case CP_0b10111110: {
+                sub_reg_A_flags_only(read_regs(HL, ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case CP_0b11111110: {
+                sub_reg_A_flags_only(arg1);
+                co_await std::suspend_always();
+                break;
+            }
+            case INC_0b00xxx100: {
+                inc_reg(read345(i), ram);
+                co_await std::suspend_always();
+                break;
+            }
+            case INC_0b00110100: {
+                inc_reg(HL, ram);
+                co_await std::suspend_always();
+                break;
+            }
+            case DEC_0b00xxx101: {
+                dec_reg(read345(i), ram);
+                co_await std::suspend_always();
+                break;
+            }
+            case DEC_0b00110101: {
+                dec_reg(HL, ram);
+                co_await std::suspend_always();
+                break;
+            }
+            case AND_0b10100xxx: {
+                and_reg_A(read_regs(read012(i), ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case AND_0b10100110: {
+                and_reg_A(read_regs(HL, ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case AND_0b11100110: {
+                and_reg_A(arg1);
+                co_await std::suspend_always();
+                break;
+            }
+            case OR_0b10110xxx: {
+                or_reg_A(read_regs(read012(i), ram));
+#if DEBUG
+                std::cout << "OR C, Zf: " << (unsigned)get_flag(Zf) << " BC: " << (short)getpair(0) << '\n';
+#endif
+                co_await std::suspend_always();
+                break;
+            }
+            case OR_0b10110110: {
+                or_reg_A(read_regs(HL, ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case OR_0b11110110: {
+                or_reg_A(arg1);
+                co_await std::suspend_always();
+                break;
+            }
+            case XOR_0b10101xxx: {
+                xor_reg_A(read_regs(read012(i), ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case XOR_0b10101110: {
+                xor_reg_A(read_regs(HL, ram));
+                co_await std::suspend_always();
+                break;
+            }
+            case XOR_0b11101110: {
+                xor_reg_A(arg1);
+                co_await std::suspend_always();
+                break;
+            }
+            case CCF_0b00111111: {
+                set_flag(Cf, !get_flag(Cf));
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                co_await std::suspend_always();
+                break;
+            }
+            case SCF_0b00110111: {
+                set_flag(Cf, 1);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                co_await std::suspend_always();
+                break;
+            }
+            case DAA_0b00100111: {
+                if (!get_flag(Nf)) {
+                    if (get_flag(Cf) || regs[A] > 0x99) {
+                        regs[A] += 0x60;
+                        set_flag(Cf, 1);
+                    }
+                    if (get_flag(Hf) || (regs[A] & 0x0F) > 0x09) {
+                        regs[A] += 0x06;
+                    }
+                } else {
+                    if (get_flag(Cf)) regs[A] -= 0x60;
+                    if (get_flag(Hf)) regs[A] -= 0x06;
+                }
+                set_flag(Zf, regs[A] == 0);
+                set_flag(Hf, 0);
+                co_await std::suspend_always();
+                break;
+            }
+            case CPL_0b00101111: {
+                regs[A] = ~regs[A];
+                set_flag(Nf, 1);
+                set_flag(Hf, 1);
+                co_await std::suspend_always();
+                break;
+            }
+            case INC_0b00xx0011: {
+                auto rr = read45(i);
+                unsigned short pair = inc_getpair(rr);
+                ++pair;
+                update_pair_ld((pair & 0xff), ((pair >> 8) & 0xff), rr);
+                co_await std::suspend_always();
+                break;
+            }
+            case DEC_0b00xx1011: {
+                auto rr = read45(i);
+                unsigned short pair = inc_getpair(rr);
+                --pair;
+                update_pair_ld((pair & 0xff), ((pair >> 8) & 0xff), rr);
+                co_await std::suspend_always();
+                break;
+            }
+            case ADD_0b00xx1001: {
+                add_reg_HL(inc_getpair(read45(i)));
+                co_await std::suspend_always();
+                break;
+            }
+            case ADD_0b11101000: {
+                set_flag(Zf, 0);
+                set_flag(Nf, 0);
+                auto e = static_cast<char>(arg1);
+                int result = e + sp;
+                set_flag(Cf, ((sp & 0xff) + (unsigned char) (e) > 0xff));
+                set_flag(Hf, ((sp & 0xf) + ((unsigned char) (e) & 0xf) > 0xf));
+                sp = (unsigned short) (result);
+                co_await std::suspend_always();
+                break;
+            }
+            case RLCA_0b00000111: {
+                auto res = std::rotl(regs[A], 1);
+                set_flag(Zf, 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                set_flag(Cf, regs[A] & 0x80);
+                regs[A] = res;
+                co_await std::suspend_always();
+                break;
+            }
+            case RRCA_0b00001111: {
+                auto res = std::rotr(regs[A], 1);
+                set_flag(Zf, 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                set_flag(Cf, regs[A] & 1);
+                regs[A] = res;
+                co_await std::suspend_always();
+                break;
+            }
+            case RLA_0b00010111: {
+                auto carry = get_flag(Cf);
+                auto res = ((regs[A] << 1) | carry);
+                set_flag(Cf, regs[A] & 0x80);
+                set_flag(Zf, 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                regs[A] = res;
+                co_await std::suspend_always();
+                break;
+            }
+            case RRA_0b00011111: {
+                auto carry = get_flag(Cf);
+                auto res = ((regs[A] >> 1) | carry << 7);
+                set_flag(Cf, regs[A] & 1);
+                set_flag(Zf, 0);
+                set_flag(Nf, 0);
+                set_flag(Hf, 0);
+                regs[A] = res;
+                co_await std::suspend_always();
+                break;
+            }
+            case _0xCB: {
+                auto pc_next = arg1;
+                auto ins = decode_0xCB(pc_next);
+                switch (ins) {
+                    case RLC_0xCB_0b00000xxx: {
+                        auto rid = read012(pc_next);
+                        auto reg = read_regs(rid, ram);
+                        auto res = std::rotl(reg, 1);
+                        set_flag(Zf, res == 0);
+                        set_flag(Nf, 0);
+                        set_flag(Hf, 0);
+                        set_flag(Cf, reg & 0x80);
+                        update_regs(rid, ram, res);
+                        co_await std::suspend_always();
+                        break;
+                    }
+                    case RRC_0xCB_0b00001xxx: {
+                        auto rid = read012(pc_next);
+                        auto reg = read_regs(rid, ram);
+                        auto res = std::rotr(reg, 1);
+                        set_flag(Zf, res == 0);
+                        set_flag(Nf, 0);
+                        set_flag(Hf, 0);
+                        set_flag(Cf, reg & 1);
+                        update_regs(rid, ram, res);
+                        co_await std::suspend_always();
+                        break;
+                    }
+                    case RL_0xCB_0b00010xxx: {
+                        auto rid = read012(pc_next);
+                        auto reg = read_regs(rid, ram);
+                        auto carry = get_flag(Cf);
+                        unsigned char res = ((reg << 1) | carry);
+                        set_flag(Cf, reg & 0x80);
+                        set_flag(Zf, res == 0);
+                        set_flag(Nf, 0);
+                        set_flag(Hf, 0);
+                        update_regs(rid, ram, res);
+                        co_await std::suspend_always();
+                        break;
+                    }
+                    case RR_0xCB_0b00011xxx: {
+                        auto rid = read012(pc_next);
+                        auto reg = read_regs(rid, ram);
+                        auto carry = get_flag(Cf);
+                        unsigned char res = ((reg >> 1) | carry << 7);
+                        set_flag(Cf, reg & 1);
+                        set_flag(Zf, res == 0);
+                        set_flag(Nf, 0);
+                        set_flag(Hf, 0);
+                        update_regs(rid, ram, res);
+                        co_await std::suspend_always();
+                        break;
+                    }
+                    case SLA_0xCB_0b00100xxx: {
+                        auto rid = read012(pc_next);
+                        auto reg = read_regs(rid, ram);
+                        unsigned char res = reg << 1;
+                        set_flag(Cf, reg & 0x80);
+                        set_flag(Zf, res == 0);
+                        set_flag(Nf, 0);
+                        set_flag(Hf, 0);
+                        update_regs(rid, ram, res);
+                        co_await std::suspend_always();
+                        break;
+                    }
+                    case SRA_0xCB_0b00101xxx: {
+                        auto rid = read012(pc_next);
+                        auto reg = read_regs(rid, ram);
+                        auto sign_bit = reg & 0x80;
+                        unsigned char res = ((reg >> 1) | sign_bit);
+                        set_flag(Cf, reg & 1);
+                        set_flag(Zf, res == 0);
+                        set_flag(Nf, 0);
+                        set_flag(Hf, 0);
+                        update_regs(rid, ram, res);
+                        co_await std::suspend_always();
+                        break;
+                    }
+                    case SWAP_0xCB_0b00110xxx: {
+                        auto rid = read012(pc_next);
+                        auto reg = read_regs(rid, ram);
+                        auto l = reg & 0x0f;
+                        auto h = reg & 0xf0;
+                        unsigned char res = (l << 4 | h >> 4);
+                        set_flag(Zf, res == 0);
+                        set_flag(Nf, 0);
+                        set_flag(Hf, 0);
+                        set_flag(Cf, 0);
+                        update_regs(rid, ram, res);
+                        co_await std::suspend_always();
+                        break;
+                    }
+                    case SRL_0xCB_0b00111xxx: {
+                        auto rid = read012(pc_next);
+                        auto reg = read_regs(rid, ram);
+                        unsigned char res = reg >> 1;
+                        set_flag(Cf, reg & 1);
+                        set_flag(Zf, res == 0);
+                        set_flag(Nf, 0);
+                        set_flag(Hf, 0);
+                        update_regs(rid, ram, res);
+                        co_await std::suspend_always();
+                        break;
+                    }
+                    case BIT_0xCB_0b01xxxxxx: {
+                        auto bit_n = read345(pc_next);
+                        auto reg = read_regs(read012(pc_next), ram);
+                        set_flag(Zf, !((reg >> bit_n) & 1));
+                        set_flag(Nf, 0);
+                        set_flag(Hf, 1);
+                        co_await std::suspend_always();
+                        break;
+                    }
+                    case RES_0xCB_0b10xxxxxx: {
+                        auto bit_n = read345(pc_next);
+                        auto rid = read012(pc_next);
+                        auto reg = read_regs(rid, ram);
+                        update_regs(rid, ram, reg & ~(1 << bit_n));
+                        co_await std::suspend_always();
+                        break;
+                    }
+                    case SET_0xCB_0b11xxxxxx: {
+                        auto bit_n = read345(pc_next);
+                        auto rid = read012(pc_next);
+                        auto reg = read_regs(rid, ram);
+                        update_regs(rid, ram, reg | (1 << bit_n));
+                        co_await std::suspend_always();
+                        break;
+                    }
+                }
+            };
+                // Control flow
+            case JP_0b11000011: {
+                pc = ((arg2 << 8) | arg1);
+                co_await std::suspend_always();
+                break;
+            }
+            case JP_0b11101001: {
+                pc = ((regs[H] << 8) | regs[L]);
+                co_await std::suspend_always();
+                break;
+            }
+            case JP_0b110xx010: {
+                auto val = read34(i);
+                auto jmp = [&] { pc = ((arg2 << 8) | arg1); };
+                bool cc_flag = get_cc_flag(val);
+                if (cc_flag)
+                    jmp();
+                else
+                    pc += 3;
+                co_await std::suspend_always();
+                break;
+            }
+            case JR_0b00011000: {
+                pc += 2 + (char) (arg1);
+                co_await std::suspend_always();
+                break;
+            }
+            case JR_0b001xx000: {
+                unsigned char val = read34(i);
+                auto jmp = [&] { pc += 2 + (char) (arg1); };
+                bool cc_flag = get_cc_flag(val);
+                if (cc_flag)
+                    jmp();
+                else
+                    pc += 2;
+                co_await std::suspend_always();
+                break;
+            }
+            case CALL_0b11001101: {
+                unsigned short nn = ((arg2 << 8) | arg1);
+                sp -= 2;
+                twrite(ram, sp, (pc + 3) & 0xff);
+                twrite(ram, sp + 1, ((pc + 3) >> 8));
+                pc = nn;
+                co_await std::suspend_always();
+                break;
+            }
+            case CALL_0b110xx100: {
+                auto val = read34(i);
+                unsigned short nn = ((arg2 << 8) | arg1);
+                auto call = [&] {
+                    sp -= 2;
+                    twrite(ram, sp, (pc + 3) & 0xff);
+                    twrite(ram, sp + 1, ((pc + 3) >> 8) & 0xff);
+                    pc = nn;
+                };
+                bool cc_flag = get_cc_flag(val);
+                if (cc_flag)
+                    call();
+                else
+                    pc += 3;
+                co_await std::suspend_always();
+            }
+            case RET_0b11001001: {
+                pc = ((tread(ram, sp + 1) << 8) | tread(ram, sp));
+                sp += 2;
+                co_await std::suspend_always(); break;
+            }
+            case RET_0b110xx000: {
+                auto val = read34(i);
+                auto ret = [&] {
+                    pc = ((tread(ram, sp + 1) << 8) | tread(ram, sp));
+                    sp += 2;
+                };
+                auto cc_flag = get_cc_flag(val);
+                if (cc_flag)
+                    ret();
+                else
+                    ++pc;
+                co_await std::suspend_always();
+            }
+            case RETI_0b11011001: {
+                pc = ((tread(ram, sp + 1) << 8) | tread(ram, sp));
+                sp += 2;
+                ime = true;
+                co_await std::suspend_always();
+                break;
+            }
+            case RST_0b11xxx111: {
+                unsigned short nn = ((0x0 << 8) | rst_vec[read345(i)]);
+                sp -= 2;
+                twrite(ram, sp, (pc + 1) & 0xff);
+                twrite(ram, sp + 1, ((pc + 1) >> 8));
+                pc = nn;
+                co_await std::suspend_always();
+                break;
+            }
+            case HALT: {
+                if (!halted) {
+                    halted = true;
+                    ++pc;
+                }
+                co_await std::suspend_always();
+                break;
+            }
+            case STOP: {
+//            if (tread(ram, constants::LY_ADDRESS) == 144)
+//                ++pc;
+                co_await std::suspend_always();
+                break;
+            }
+            case DI_0b11110011: {
+                ime_requested = false;
+                ime_req_count = 0;
+                ime = false;
+                co_await std::suspend_always();
+                break;
+            }
+            case EI_0b11111011: {
+                ime_requested = true;
+                ime_req_count = 0;  /*std::cout << "IF:" << (unsigned)tread(ram,constants::IF_ADDRESS) << '\n'*/;
+                co_await std::suspend_always();
+                break;
+            } // todo: check
+            case NOP_0b00000000: {
+                co_await std::suspend_always();
+                break;
+            }
         }
     }
 }

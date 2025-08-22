@@ -4,6 +4,7 @@
 #include "RAM.h"
 #include "Timer.h"
 #include <unordered_map>
+#include "Resumable.h"
 
 struct CPU {
     static constexpr unsigned char HL = 0b110;
@@ -200,6 +201,7 @@ struct CPU {
     Instruction decode(unsigned char ins);
     Instruction0xCB decode_0xCB(unsigned char ins);
     int execute(unsigned char i, Instruction itype, RAM& ram);
+    Resumable instruction_async_loop(const unsigned char& i, const Instruction& itype, RAM& ram);
     void print_regs() const;
 
     std::unordered_map<Instruction, std::string_view> instruction_str = {
