@@ -50,6 +50,105 @@ struct GameBoyVM{
         }
     }
 
+
+    void main_loop(){
+        int current_t_cycle = 0;
+        while(current_t_cycle < 70'224) {
+            auto next_ins = cpu.fetch(ram);
+            auto decoded_ins = cpu.decode(next_ins);
+#if 0
+            auto print_hex = [&](auto val){
+                    auto num_bytes = sizeof(val);
+                    std::stringstream ss("");
+                    ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
+                    return ss;
+                };
+                std::cout  << cpu.instruction_str[decoded_ins] << " ";
+                if (!cpu.halted) {
+                    std::cout <<
+
+                              "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
+                              "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
+                              "B:" <<  print_hex(cpu.regs[CPU::B]).str() << " " <<
+                              "C:" <<  print_hex(cpu.regs[CPU::C]).str() << " " <<
+                              "D:" <<  print_hex(cpu.regs[CPU::D]).str() << " " <<
+                              "E:" <<  print_hex(cpu.regs[CPU::E]).str() << " " <<
+                              "H:" <<  print_hex(cpu.regs[CPU::H]).str() << " " <<
+                              "L:" <<  print_hex(cpu.regs[CPU::L]).str() << " " <<
+                              "SP:" <<  print_hex(cpu.sp).str() << " " <<
+                              "PC:" <<  print_hex(cpu.pc).str() << " " <<
+                              "PCMEM:" <<  print_hex(ram.read(cpu.pc)).str() << "," <<
+                              print_hex(ram.read(cpu.pc + 1)).str() << "," <<
+                              print_hex(ram.read(cpu.pc + 2)).str() << "," <<
+                              print_hex(ram.read(cpu.pc + 3)).str() << '\n';
+                    std::cout << std::dec;
+                }
+
+
+//                if (cpu.ime) {
+
+#endif
+            int t_cycle = 0;
+            if (cpu.halted) {
+                auto if_value = ram.read(constants::IF_ADDRESS);
+                auto ie_value = ram.read(constants::IE_ADDRESS);
+                if (cpu.ime) {
+                    if ((if_value & ie_value & 0x1f) != 0) {
+                        cpu.handle_interrupt(ram, next_ins, decoded_ins);
+                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                        cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
+                    } else {
+                        t_cycle = 4; // wait
+                    }
+                } else if (!cpu.ime) {
+                    if ((if_value & ie_value & 0x1f) != 0) {
+                        if (cpu.skip_interrupt) {
+                            cpu.halted = false;
+                            cpu.skip_interrupt = false;
+                            t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                            cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
+                        } else {
+                            cpu.halt_bug = true;
+                            t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                            cpu.pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
+                            cpu.halt_bug = false;
+                            cpu.halted = false;
+                        }
+                    } else {
+                        cpu.skip_interrupt = true;
+                        t_cycle = 4;
+                    }
+                }
+            } else {
+                cpu.handle_interrupt(ram, next_ins, decoded_ins);
+                t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+                cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
+            }
+//            t_cycles_count += t_cycle;
+            for (int i = 0; i < t_cycle; ++i) {
+                cpu.timer.tick(ram);
+                ppu.tick(ram);
+                if (!cpu.halted)
+                    ram.dma_tick();
+            }
+
+            current_t_cycle+=t_cycle;
+//            cpu_accumulator-=CPU_CYCLE_TIME;
+//                std::cout << "IF_VALUE:" << std::hex << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';
+        }
+    }
+
+    void main_loop_async(auto& ic) {
+        int current_t_cycle = 0;
+        while(current_t_cycle++ < 70'224) {
+                ic.resume();
+                ppu.tick(ram);
+                cpu.timer.tick(ram);
+                if (!cpu.halted)
+                    ram.dma_tick();
+        }
+    }
+
     int get_rom_size(const auto& data) {
         switch(data[0x0148]) {
             case 0x1: return 4;   // 64KB
@@ -111,7 +210,7 @@ struct GameBoyVM{
     
     void run() {
         // Gamboy Doctor
-#if 0
+#if 1
         cpu.regs[CPU::A] = 0x01;
         cpu.regs[CPU::F] = 0xB0;
         cpu.regs[CPU::B] = 0x00;
@@ -123,7 +222,6 @@ struct GameBoyVM{
         cpu.sp = 0xfffe;
         cpu.pc = 0x0100;
 #endif
-
 
         InitWindow(WIDTH, HEIGHT, "GameBoy");
         SetTargetFPS(60); // 59.7275 FPS
@@ -213,93 +311,10 @@ struct GameBoyVM{
         };
 
         size_t t_cycles_count = 0;
+        auto ic = cpu.instruction_async_loop(ram);
         while(!WindowShouldClose()){
-            cpu_accumulator += GetFrameTime();
-            while(current_t_cycle < 70'224 && cpu_accumulator >= CPU_CYCLE_TIME) {
-                auto next_ins = cpu.fetch(ram);
-                auto decoded_ins = cpu.decode(next_ins);
-#if 0
-                auto print_hex = [&](auto val){
-                    auto num_bytes = sizeof(val);
-                    std::stringstream ss("");
-                    ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
-                    return ss;
-                };
-                std::cout  << cpu.instruction_str[decoded_ins] << " ";
-                if (!cpu.halted) {
-                    std::cout <<
-
-                              "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
-                              "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
-                              "B:" <<  print_hex(cpu.regs[CPU::B]).str() << " " <<
-                              "C:" <<  print_hex(cpu.regs[CPU::C]).str() << " " <<
-                              "D:" <<  print_hex(cpu.regs[CPU::D]).str() << " " <<
-                              "E:" <<  print_hex(cpu.regs[CPU::E]).str() << " " <<
-                              "H:" <<  print_hex(cpu.regs[CPU::H]).str() << " " <<
-                              "L:" <<  print_hex(cpu.regs[CPU::L]).str() << " " <<
-                              "SP:" <<  print_hex(cpu.sp).str() << " " <<
-                              "PC:" <<  print_hex(cpu.pc).str() << " " <<
-                              "PCMEM:" <<  print_hex(ram.read(cpu.pc)).str() << "," <<
-                              print_hex(ram.read(cpu.pc + 1)).str() << "," <<
-                              print_hex(ram.read(cpu.pc + 2)).str() << "," <<
-                              print_hex(ram.read(cpu.pc + 3)).str() << '\n';
-                    std::cout << std::dec;
-                }
-
-
-//                if (cpu.ime) {
-
-#endif
-                int t_cycle = 0;
-                if (cpu.halted) {
-                    auto if_value = ram.read(constants::IF_ADDRESS);
-                    auto ie_value = ram.read(constants::IE_ADDRESS);
-                    if (cpu.ime) {
-                        if ((if_value & ie_value & 0x1f) != 0) {
-                            cpu.handle_interrupt(ram, next_ins, decoded_ins);
-                            t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-                            cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
-                        } else {
-                            t_cycle = 4; // wait
-                        }
-                    } else if (!cpu.ime) {
-                        if ((if_value & ie_value & 0x1f) != 0) {
-                            if (cpu.skip_interrupt) {
-                                cpu.halted = false;
-                                cpu.skip_interrupt = false;
-                                t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-                                cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
-                            } else {
-                                cpu.halt_bug = true;
-                                t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-                                cpu.pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
-                                cpu.halt_bug = false;
-                                cpu.halted = false;
-                            }
-                        } else {
-                            cpu.skip_interrupt = true;
-                            t_cycle = 4;
-                        }
-                    }
-                } else {
-                    cpu.handle_interrupt(ram, next_ins, decoded_ins);
-                    t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-                    cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
-                }
-                t_cycles_count += t_cycle;
-                for (int i = 0; i < t_cycle; ++i) {
-                    cpu.timer.tick(ram);
-                    ppu.tick(ram);
-                    if (!cpu.halted)
-                        ram.dma_tick();
-                }
-
-                current_t_cycle+=t_cycle;
-                cpu_accumulator-=CPU_CYCLE_TIME;
-//                std::cout << "IF_VALUE:" << std::hex << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';
-            }
-
-//            print_segment(constants::OAM_BEGIN, 30);
+            main_loop_async(ic);
+            print_segment(constants::VRAM_BEGIN, 30);
             current_t_cycle = 0;
             std::cout << std::dec;
             UpdateTexture(target, ppu.read_buffer());
@@ -307,7 +322,6 @@ struct GameBoyVM{
             BeginDrawing();
                ClearBackground(BLACK);
                DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
-
 
 // PRINT PIXELS
 #if 0
@@ -343,7 +357,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

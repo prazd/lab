@@ -201,7 +201,7 @@ struct CPU {
     Instruction decode(unsigned char ins);
     Instruction0xCB decode_0xCB(unsigned char ins);
     int execute(unsigned char i, Instruction itype, RAM& ram);
-    Resumable instruction_async_loop(const unsigned char& i, const Instruction& itype, RAM& ram);
+    Resumable instruction_async_loop(RAM& ram);
     void print_regs() const;
 
     std::unordered_map<Instruction, std::string_view> instruction_str = {

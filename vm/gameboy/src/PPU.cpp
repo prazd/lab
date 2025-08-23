@@ -204,14 +204,18 @@ void PPU::tick(RAM &ram)  {
     static unsigned char sprite_x = 0;
     static Sprite current_sprite{};
     static size_t internal_t_cycles = 0;
-//#if 1
-//    ram.write(constants::LY_ADDRESS, 0x90);
-//    return;
-//#endif
+#if 0
+    ram.write(constants::LY_ADDRESS, 0x90);
+    return;
+#endif
+        if (ram.read(constants::LY_ADDRESS) == 0x90) {
+            std::cout << "LY address: 90!!!!!\n";
+        }
         ++internal_t_cycles;
         ++current_t_cycle_count;
         ++last_t_cycles;
         update_regs(ram);
+
         if (current_mode == OAM){ //
             if (current_t_cycle_count != 80 && current_oam_obj != 160) {
                 --oam_next_t_cycle;
@@ -276,7 +280,7 @@ void PPU::tick(RAM &ram)  {
                         }
                     }
                 } else {
-                    std::cout << "internal_t_cycles:" << internal_t_cycles << '\n';
+//                    std::cout << "internal_t_cycles:" << internal_t_cycles << '\n';
                     sprite_fetcher.reset();
                     pixel_fetcher.reset();
                     current_sprite_index = 0;

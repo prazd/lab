@@ -1,6 +1,7 @@
 #include "CPU.h"
 #include <chrono>
-
+#include <iomanip>
+#include <sstream>
 #define DEBUG 0
 
 unsigned char CPU::read345(unsigned char i)  {
@@ -387,7 +388,7 @@ int CPU::t_cycle_by_ins_0xCB(CPU::Instruction0xCB ins, unsigned char value) {
 
 int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value - 0xCB pc + 1 / cc_flag
     switch(ins) {
-        case LD_0b01xxxyyy:       {return 4;}
+        case LD_0b01xxxyyy:       {return read345(value) == HL ? 8 : 4;}
         case LD_0b00xxx110:       {return 8;}
         case LD_0b01xxx110:       {return 8;}
         case LD_0b01110xxx:       {return 8;}
@@ -411,7 +412,7 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
         case LD_0b11111001:       {return 8;}
         case PUSH_0b11xx0101:     {return 16;}
         case POP_0b11xx0001:      {return 12;}
-        case LD_0b11111000:       {return 12;}
+        case LD_0b11111000:       {return 8;} // todo: check 12 ??
         case ADD_0b10000xxx:      {return 4;}
         case ADD_0b10000110:      {return 8;}
         case ADD_0b11000110:      {return 8;}
@@ -1108,12 +1109,77 @@ void CPU::handle_interrupt(RAM& ram, unsigned char& next_ins, Instruction& decod
     }
 }
 
-Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruction &itype, RAM &ram) {
-    int wait = 0;
+Resumable CPU::instruction_async_loop(RAM &ram) {
+#if 1
+    auto print_hex = [&](auto val){
+        auto num_bytes = sizeof(val);
+        std::stringstream ss("");
+        ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
+        return ss;
+    };
+//                std::cout  << instruction_str[itype] << " ";
+    if (!halted) {
+        std::cout <<
+
+                  "A:" << print_hex(regs[CPU::A]).str() << " " <<
+                  "F:" <<  print_hex(regs[CPU::F]).str() << " " <<
+                  "B:" <<  print_hex(regs[CPU::B]).str() << " " <<
+                  "C:" <<  print_hex(regs[CPU::C]).str() << " " <<
+                  "D:" <<  print_hex(regs[CPU::D]).str() << " " <<
+                  "E:" <<  print_hex(regs[CPU::E]).str() << " " <<
+                  "H:" <<  print_hex(regs[CPU::H]).str() << " " <<
+                  "L:" <<  print_hex(regs[CPU::L]).str() << " " <<
+                  "SP:" <<  print_hex(sp).str() << " " <<
+                  "PC:" <<  print_hex(pc).str() << " " <<
+                  "PCMEM:" <<  print_hex(ram.read(pc)).str() << "," <<
+                  print_hex(ram.read(pc + 1)).str() << "," <<
+                  print_hex(ram.read(pc + 2)).str() << "," <<
+                  print_hex(ram.read(pc + 3)).str() << '\n';
+        std::cout << std::dec;
+    }
+#endif
+
+    #define WAIT(n) for (int i = 0; i < n; ++i) co_await std::suspend_always();
     while (true) {
+        WAIT(3) // fetch/decode
+        auto i = fetch(ram);
+        auto itype = decode(i);
+
+//        if (halted) {
+//            auto if_value = ram.read(constants::IF_ADDRESS);
+//            auto ie_value = ram.read(constants::IE_ADDRESS);
+//            if (ime) {
+//                if ((if_value & ie_value & 0x1f) != 0) {
+//                    // todo: check
+////                    handle_interrupt(ram, i, itype);
+////                    t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+////                    cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
+//                } else {
+//                    WAIT(4)
+//                    continue;
+//                }
+//            } else if (!ime) {
+//                if ((if_value & ie_value & 0x1f) != 0) {
+//                    if (skip_interrupt) {
+//                        halted = false;
+//                        skip_interrupt = false;
+//                    } else {
+//                        // todo: check halt bug
+//                        halt_bug = true;
+////                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+////                        pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
+//                        halt_bug = false;
+//                        halted = false;
+//                    }
+//                } else {
+//                    skip_interrupt = true;
+//                    WAIT(4)
+//                    continue;
+//                }
+//            }
+//        }
 
         prev_pc = pc;
-
         unsigned char arg0 = tread(ram, pc);
         unsigned char arg1 = tread(ram, pc + 1);
         unsigned char arg2 = tread(ram, pc + 2);
@@ -1122,6 +1188,7 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
             arg1 = arg0;
             arg2 = tmp;
         }
+        handle_interrupt(ram, i, itype); // todo: check
 
 #if DEBUG
     //    std::cout << "HL value:" << HL_data() << '\n';
@@ -1150,7 +1217,6 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
     //    std::cout << "\n==============================\n";
 
 #endif
-
         // maybe use std::scope (c++23)
         struct defer {
             CPU &cpuref;
@@ -1164,262 +1230,282 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
         } d{.cpuref = *this};
 
         switch (itype) {
-            case LD_0b01xxxyyy: {
-                wait = 3;
-                while(wait--) co_await std::suspend_always();
+            case LD_0b01xxxyyy: { // 4/8 t-cycle
+                // todo: check
+                WAIT(4)
                 update_regs(read345(i), ram, read_regs(read012(i), ram));
-                co_await std::suspend_always();
+//                unsigned char value {};
+//                if (read345(i) != HL)
+//                    value = read_regs(read345(i), ram);
+//                else {
+//                    WAIT(4)
+//                    value = tread(ram, HL_data());
+//                }
+//                update_regs(read345(i), ram, value);
                 break;
             }
-            case LD_0b01xxx110: {
-                wait = 7;
-                while(wait--) co_await std::suspend_always();
-                update_regs(read345(i), ram, read_regs(HL, ram));
-                co_await std::suspend_always();
+            case LD_0b01xxx110: { // 8 t-cycles
+                WAIT(4)
+                auto regs_val = read_regs(HL, ram);
+                update_regs(read345(i), ram, regs_val);
                 break;
             }
             case LD_0b00xxx110: {
+                WAIT(4)
                 update_regs(read345(i), ram, arg1);
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b01110xxx: {
+                WAIT(4)
                 update_regs(HL, ram, read_regs(read012(i), ram));
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b00110110: {
+                WAIT(8)
                 update_regs(HL, ram, arg1);
-                co_await std::suspend_always();
                 break;
             };
             case LD_0b00001010: {
+                WAIT(4)
                 regs[A] = tread(ram, ((regs[B] << 8) | regs[C]));
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b00011010: {
+                WAIT(4)
                 regs[A] = tread(ram, ((regs[D] << 8) | regs[E]));
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b00000010: {
+                WAIT(4)
                 twrite(ram, ((regs[B] << 8) | regs[C]), regs[A]);
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b00010010: {
+                WAIT(4)
                 twrite(ram, ((regs[D] << 8) | regs[E]), regs[A]);
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b11111010: {
+                WAIT(12)
                 regs[A] = tread(ram, arg1 | (arg2 << 8));
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b11101010: {
+                WAIT(12)
                 twrite(ram, (arg1 | (arg2 << 8)), regs[A]);
-                co_await std::suspend_always();
                 break;
             }
             case LDH_0b11110010: {
+                WAIT(4)
                 regs[A] = tread(ram, 0xff00 | regs[C]);
-                co_await std::suspend_always();
                 break;
             }
             case LDH_0b11100010: {
+                WAIT(4)
                 twrite(ram, (0xff00 | regs[C]), regs[A]);
-                co_await std::suspend_always();
                 break;
             }
             case LDH_0b11110000: {
+                WAIT(4)
                 unsigned short address = (0xff00 | arg1);
+                WAIT(4)
                 regs[A] = tread(ram, address);
-                co_await std::suspend_always();
                 break;
             }
             case LDH_0b11100000: {
+                WAIT(8)
                 twrite(ram, (0xff00 | arg1), regs[A]);
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b00111010: {
+                WAIT(4)
                 regs[A] = read_regs(HL, ram);
                 decrement_pair(L, H);
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b00110010: {
+                WAIT(4)
                 update_regs(HL, ram, regs[A]);
                 decrement_pair(L, H);
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b00101010: {
+                WAIT(4)
                 regs[A] = read_regs(HL, ram);
                 increment_pair(L, H);
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b00100010: {
+                WAIT(4)
                 update_regs(HL, ram, regs[A]);
                 increment_pair(L, H);
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b00xx0001: {
+                WAIT(8)
                 update_pair_ld(arg1, arg2, read45(i));
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b00001000: {
+                WAIT(8)
                 unsigned short address = (arg1 | (arg2 << 8));
+                WAIT(4)
                 twrite(ram, address, sp & 0xff);
+                WAIT(4)
                 twrite(ram, address + 1, ((sp >> 8) & 0xff));
-                co_await std::suspend_always();
                 break;
             }
             case LD_0b11111001: {
+                WAIT(4)
                 sp = (regs[L] | (regs[H] << 8));
-
-                co_await std::suspend_always();
                 break;
             } // SP = HL
             case PUSH_0b11xx0101: {
+                WAIT(4)
                 auto val = stack_getpair(read45(i));
                 sp -= 2;
+                WAIT(4)
                 twrite(ram, sp, (val & 0xff));
+                WAIT(4)
                 twrite(ram, sp + 1, ((val >> 8) & 0xff));
-
-                co_await std::suspend_always();
                 break;
             } // stack push xx
             case POP_0b11xx0001: {
-                update_pair_pop(tread(ram, sp), tread(ram, sp + 1), read45(i));
+                WAIT(4)
+                auto a1 = tread(ram, sp);
+                WAIT(4)
+                auto a2 = tread(ram, sp + 1);
+                update_pair_pop(a1, a2, read45(i));
                 sp += 2;
-                co_await std::suspend_always();
                 break;
             };
             case LD_0b11111000: {
+                WAIT(4);
+                auto e = static_cast<char>(arg1);
                 set_flag(Zf, 0);
                 set_flag(Nf, 0);
-                auto e = static_cast<char>(arg1);
                 unsigned int result = e + sp;
                 set_flag(Cf, ((sp & 0xff) + (unsigned char) (e) > 0xff));
                 set_flag(Hf, ((sp & 0xf) + ((unsigned char) (e) & 0xf) > 0xf));
                 regs[H] = ((result >> 8) & 0xff);
                 regs[L] = (result & 0xff);
-                co_await std::suspend_always(); break;
+                break;
             }
             case ADD_0b10000xxx: {
                 add_reg_A(read_regs(read012(i), ram));
-                co_await std::suspend_always();
                 break;
             }
             case ADD_0b10000110: {
+                WAIT(4)
                 add_reg_A(read_regs(HL, ram));
-                co_await std::suspend_always();
                 break;
             }
             case ADD_0b11000110: {
+                WAIT(4)
                 add_reg_A(arg1);
-                co_await std::suspend_always();
                 break;
             }
             case ADC_0b10001xxx: {
                 add_reg_A_plus(read_regs(read012(i), ram), get_flag(Cf));
-                co_await std::suspend_always();
                 break;
             }
             case ADC_0b10001110: {
+                WAIT(4)
                 add_reg_A_plus(read_regs(HL, ram), get_flag(Cf));
-                co_await std::suspend_always();
                 break;
             }
             case ADC_0b11001110: {
+                WAIT(4)
                 add_reg_A_plus(arg1, get_flag(Cf));
-                co_await std::suspend_always();
                 break;
             }
             case SUB_0b10010xxx: {
                 sub_reg_A(read_regs(read012(i), ram));
-                co_await std::suspend_always();
                 break;
             }
             case SUB_0b10010110: {
+                WAIT(4)
                 sub_reg_A(read_regs(HL, ram));
-                co_await std::suspend_always();
                 break;
             }
             case SUB_0b11010110: {
+                WAIT(4)
                 sub_reg_A(arg1);
-                co_await std::suspend_always();
                 break;
             }
             case SBC_0b10011xxx: {
                 sub_reg_A_plus(read_regs(read012(i), ram), get_flag(Cf));
-                co_await std::suspend_always();
                 break;
             } // (reg[A] - r - reg[C]) == reg[A] - (r + reg[C])
             case SBC_0b10011110: {
+                WAIT(4)
                 sub_reg_A_plus(read_regs(HL, ram), get_flag(Cf));
-                co_await std::suspend_always();
                 break;
             }
             case SBC_0b11011110: {
+                WAIT(4)
                 sub_reg_A_plus(arg1, get_flag(Cf));
-                co_await std::suspend_always();
                 break;
             }
             case CP_0b10111xxx: {
                 sub_reg_A_flags_only(read_regs(read012(i), ram));
-                co_await std::suspend_always();
+                WAIT(1)
                 break;
             }
             case CP_0b10111110: {
+                WAIT(4)
                 sub_reg_A_flags_only(read_regs(HL, ram));
-                co_await std::suspend_always();
                 break;
             }
             case CP_0b11111110: {
+                WAIT(4)
                 sub_reg_A_flags_only(arg1);
-                co_await std::suspend_always();
                 break;
             }
             case INC_0b00xxx100: {
                 inc_reg(read345(i), ram);
-                co_await std::suspend_always();
                 break;
             }
             case INC_0b00110100: {
-                inc_reg(HL, ram);
-                co_await std::suspend_always();
+                WAIT(4) // todo: check
+                auto reg = read_regs(HL, ram);
+                auto cp = reg;
+                unsigned char result = reg + 1;
+                set_flag(Nf, 0);
+                set_flag(Zf, result == 0);
+                set_flag(Hf, (cp & 0xf) == 0xf);
+                WAIT(4)
+                update_regs(HL, ram, result);
                 break;
             }
             case DEC_0b00xxx101: {
                 dec_reg(read345(i), ram);
-                co_await std::suspend_always();
                 break;
             }
             case DEC_0b00110101: {
-                dec_reg(HL, ram);
-                co_await std::suspend_always();
+                WAIT(4)
+                auto reg = read_regs(HL, ram);
+                auto cp = reg;
+                unsigned char result = reg - 1;
+                set_flag(Nf, 1);
+                set_flag(Zf, result == 0);
+                set_flag(Hf, (cp & 0xf) == 0);
+                WAIT(4)
+                update_regs(HL, ram, result);
                 break;
             }
             case AND_0b10100xxx: {
                 and_reg_A(read_regs(read012(i), ram));
-                co_await std::suspend_always();
                 break;
             }
             case AND_0b10100110: {
+                WAIT(4)
                 and_reg_A(read_regs(HL, ram));
-                co_await std::suspend_always();
                 break;
             }
             case AND_0b11100110: {
+                WAIT(4)
                 and_reg_A(arg1);
-                co_await std::suspend_always();
                 break;
             }
             case OR_0b10110xxx: {
@@ -1427,46 +1513,42 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
 #if DEBUG
                 std::cout << "OR C, Zf: " << (unsigned)get_flag(Zf) << " BC: " << (short)getpair(0) << '\n';
 #endif
-                co_await std::suspend_always();
                 break;
             }
             case OR_0b10110110: {
+                WAIT(4)
                 or_reg_A(read_regs(HL, ram));
-                co_await std::suspend_always();
                 break;
             }
             case OR_0b11110110: {
+                WAIT(4)
                 or_reg_A(arg1);
-                co_await std::suspend_always();
                 break;
             }
             case XOR_0b10101xxx: {
                 xor_reg_A(read_regs(read012(i), ram));
-                co_await std::suspend_always();
                 break;
             }
             case XOR_0b10101110: {
+                WAIT(4)
                 xor_reg_A(read_regs(HL, ram));
-                co_await std::suspend_always();
                 break;
             }
             case XOR_0b11101110: {
+                WAIT(4)
                 xor_reg_A(arg1);
-                co_await std::suspend_always();
                 break;
             }
             case CCF_0b00111111: {
                 set_flag(Cf, !get_flag(Cf));
                 set_flag(Nf, 0);
                 set_flag(Hf, 0);
-                co_await std::suspend_always();
                 break;
             }
             case SCF_0b00110111: {
                 set_flag(Cf, 1);
                 set_flag(Nf, 0);
                 set_flag(Hf, 0);
-                co_await std::suspend_always();
                 break;
             }
             case DAA_0b00100111: {
@@ -1484,46 +1566,46 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
                 }
                 set_flag(Zf, regs[A] == 0);
                 set_flag(Hf, 0);
-                co_await std::suspend_always();
                 break;
             }
             case CPL_0b00101111: {
                 regs[A] = ~regs[A];
                 set_flag(Nf, 1);
                 set_flag(Hf, 1);
-                co_await std::suspend_always();
                 break;
             }
             case INC_0b00xx0011: {
+                WAIT(4)
                 auto rr = read45(i);
                 unsigned short pair = inc_getpair(rr);
                 ++pair;
                 update_pair_ld((pair & 0xff), ((pair >> 8) & 0xff), rr);
-                co_await std::suspend_always();
                 break;
             }
             case DEC_0b00xx1011: {
+                WAIT(4)
                 auto rr = read45(i);
                 unsigned short pair = inc_getpair(rr);
                 --pair;
                 update_pair_ld((pair & 0xff), ((pair >> 8) & 0xff), rr);
-                co_await std::suspend_always();
                 break;
             }
             case ADD_0b00xx1001: {
+                WAIT(4)
                 add_reg_HL(inc_getpair(read45(i)));
-                co_await std::suspend_always();
                 break;
             }
             case ADD_0b11101000: {
                 set_flag(Zf, 0);
                 set_flag(Nf, 0);
+                WAIT(4)
                 auto e = static_cast<char>(arg1);
+                WAIT(4)
                 int result = e + sp;
                 set_flag(Cf, ((sp & 0xff) + (unsigned char) (e) > 0xff));
                 set_flag(Hf, ((sp & 0xf) + ((unsigned char) (e) & 0xf) > 0xf));
                 sp = (unsigned short) (result);
-                co_await std::suspend_always();
+                WAIT(5)
                 break;
             }
             case RLCA_0b00000111: {
@@ -1533,7 +1615,6 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
                 set_flag(Hf, 0);
                 set_flag(Cf, regs[A] & 0x80);
                 regs[A] = res;
-                co_await std::suspend_always();
                 break;
             }
             case RRCA_0b00001111: {
@@ -1543,7 +1624,6 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
                 set_flag(Hf, 0);
                 set_flag(Cf, regs[A] & 1);
                 regs[A] = res;
-                co_await std::suspend_always();
                 break;
             }
             case RLA_0b00010111: {
@@ -1554,7 +1634,6 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
                 set_flag(Nf, 0);
                 set_flag(Hf, 0);
                 regs[A] = res;
-                co_await std::suspend_always();
                 break;
             }
             case RRA_0b00011111: {
@@ -1565,7 +1644,6 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
                 set_flag(Nf, 0);
                 set_flag(Hf, 0);
                 regs[A] = res;
-                co_await std::suspend_always();
                 break;
             }
             case _0xCB: {
@@ -1573,31 +1651,47 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
                 auto ins = decode_0xCB(pc_next);
                 switch (ins) {
                     case RLC_0xCB_0b00000xxx: {
+                        WAIT(4)
                         auto rid = read012(pc_next);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         auto reg = read_regs(rid, ram);
                         auto res = std::rotl(reg, 1);
                         set_flag(Zf, res == 0);
                         set_flag(Nf, 0);
                         set_flag(Hf, 0);
                         set_flag(Cf, reg & 0x80);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         update_regs(rid, ram, res);
-                        co_await std::suspend_always();
                         break;
                     }
                     case RRC_0xCB_0b00001xxx: {
+                        WAIT(4)
                         auto rid = read012(pc_next);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         auto reg = read_regs(rid, ram);
                         auto res = std::rotr(reg, 1);
                         set_flag(Zf, res == 0);
                         set_flag(Nf, 0);
                         set_flag(Hf, 0);
                         set_flag(Cf, reg & 1);
+                        if (rid == HL){
+                            WAIT(4)
+                        }
                         update_regs(rid, ram, res);
-                        co_await std::suspend_always();
                         break;
                     }
                     case RL_0xCB_0b00010xxx: {
+                        WAIT(4)
                         auto rid = read012(pc_next);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         auto reg = read_regs(rid, ram);
                         auto carry = get_flag(Cf);
                         unsigned char res = ((reg << 1) | carry);
@@ -1605,12 +1699,18 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
                         set_flag(Zf, res == 0);
                         set_flag(Nf, 0);
                         set_flag(Hf, 0);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         update_regs(rid, ram, res);
-                        co_await std::suspend_always();
                         break;
                     }
                     case RR_0xCB_0b00011xxx: {
+                        WAIT(4)
                         auto rid = read012(pc_next);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         auto reg = read_regs(rid, ram);
                         auto carry = get_flag(Cf);
                         unsigned char res = ((reg >> 1) | carry << 7);
@@ -1618,24 +1718,36 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
                         set_flag(Zf, res == 0);
                         set_flag(Nf, 0);
                         set_flag(Hf, 0);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         update_regs(rid, ram, res);
-                        co_await std::suspend_always();
                         break;
                     }
                     case SLA_0xCB_0b00100xxx: {
+                        WAIT(4)
                         auto rid = read012(pc_next);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         auto reg = read_regs(rid, ram);
                         unsigned char res = reg << 1;
                         set_flag(Cf, reg & 0x80);
                         set_flag(Zf, res == 0);
                         set_flag(Nf, 0);
                         set_flag(Hf, 0);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         update_regs(rid, ram, res);
-                        co_await std::suspend_always();
                         break;
                     }
                     case SRA_0xCB_0b00101xxx: {
+                        WAIT(4)
                         auto rid = read012(pc_next);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         auto reg = read_regs(rid, ram);
                         auto sign_bit = reg & 0x80;
                         unsigned char res = ((reg >> 1) | sign_bit);
@@ -1643,12 +1755,18 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
                         set_flag(Zf, res == 0);
                         set_flag(Nf, 0);
                         set_flag(Hf, 0);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         update_regs(rid, ram, res);
-                        co_await std::suspend_always();
                         break;
                     }
                     case SWAP_0xCB_0b00110xxx: {
+                        WAIT(4)
                         auto rid = read012(pc_next);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         auto reg = read_regs(rid, ram);
                         auto l = reg & 0x0f;
                         auto h = reg & 0xf0;
@@ -1657,144 +1775,191 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
                         set_flag(Nf, 0);
                         set_flag(Hf, 0);
                         set_flag(Cf, 0);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         update_regs(rid, ram, res);
-                        co_await std::suspend_always();
                         break;
                     }
                     case SRL_0xCB_0b00111xxx: {
+                        WAIT(4)
                         auto rid = read012(pc_next);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         auto reg = read_regs(rid, ram);
                         unsigned char res = reg >> 1;
                         set_flag(Cf, reg & 1);
                         set_flag(Zf, res == 0);
                         set_flag(Nf, 0);
                         set_flag(Hf, 0);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         update_regs(rid, ram, res);
-                        co_await std::suspend_always();
                         break;
                     }
                     case BIT_0xCB_0b01xxxxxx: {
+                        WAIT(4)
                         auto bit_n = read345(pc_next);
+                        if (read012(pc_next) == HL) {
+                            WAIT(4)
+                        }
                         auto reg = read_regs(read012(pc_next), ram);
                         set_flag(Zf, !((reg >> bit_n) & 1));
                         set_flag(Nf, 0);
                         set_flag(Hf, 1);
-                        co_await std::suspend_always();
                         break;
                     }
                     case RES_0xCB_0b10xxxxxx: {
+                        WAIT(4)
                         auto bit_n = read345(pc_next);
                         auto rid = read012(pc_next);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         auto reg = read_regs(rid, ram);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         update_regs(rid, ram, reg & ~(1 << bit_n));
-                        co_await std::suspend_always();
                         break;
                     }
                     case SET_0xCB_0b11xxxxxx: {
+                        WAIT(4)
                         auto bit_n = read345(pc_next);
                         auto rid = read012(pc_next);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         auto reg = read_regs(rid, ram);
+                        if (rid == HL) {
+                            WAIT(4)
+                        }
                         update_regs(rid, ram, reg | (1 << bit_n));
-                        co_await std::suspend_always();
                         break;
                     }
                 }
-            };
+                break;
+            }
                 // Control flow
             case JP_0b11000011: {
+                WAIT(12)
                 pc = ((arg2 << 8) | arg1);
-                co_await std::suspend_always();
                 break;
             }
             case JP_0b11101001: {
                 pc = ((regs[H] << 8) | regs[L]);
-                co_await std::suspend_always();
                 break;
             }
             case JP_0b110xx010: {
                 auto val = read34(i);
                 auto jmp = [&] { pc = ((arg2 << 8) | arg1); };
                 bool cc_flag = get_cc_flag(val);
-                if (cc_flag)
+                if (cc_flag){
+                    WAIT(12)
                     jmp();
-                else
+                } else {
+                    WAIT(8)
                     pc += 3;
-                co_await std::suspend_always();
+                }
                 break;
             }
             case JR_0b00011000: {
+                WAIT(8)
                 pc += 2 + (char) (arg1);
-                co_await std::suspend_always();
                 break;
             }
             case JR_0b001xx000: {
                 unsigned char val = read34(i);
                 auto jmp = [&] { pc += 2 + (char) (arg1); };
                 bool cc_flag = get_cc_flag(val);
-                if (cc_flag)
+                if (cc_flag) {
+                    WAIT(8)
                     jmp();
-                else
+                }else {
+                    WAIT(4)
                     pc += 2;
-                co_await std::suspend_always();
+                }
                 break;
             }
             case CALL_0b11001101: {
+                WAIT(8)
                 unsigned short nn = ((arg2 << 8) | arg1);
                 sp -= 2;
+                WAIT(4)
                 twrite(ram, sp, (pc + 3) & 0xff);
+                WAIT(4)
                 twrite(ram, sp + 1, ((pc + 3) >> 8));
+                WAIT(4)
                 pc = nn;
-                co_await std::suspend_always();
                 break;
             }
             case CALL_0b110xx100: {
+                WAIT(8)
                 auto val = read34(i);
                 unsigned short nn = ((arg2 << 8) | arg1);
-                auto call = [&] {
-                    sp -= 2;
-                    twrite(ram, sp, (pc + 3) & 0xff);
-                    twrite(ram, sp + 1, ((pc + 3) >> 8) & 0xff);
-                    pc = nn;
-                };
                 bool cc_flag = get_cc_flag(val);
-                if (cc_flag)
-                    call();
-                else
+                if (cc_flag) {
+                    sp -= 2;
+                    WAIT(4)
+                    twrite(ram, sp, (pc + 3) & 0xff);
+                    WAIT(4)
+                    twrite(ram, sp + 1, ((pc + 3) >> 8) & 0xff);
+                    WAIT(4)
+                    pc = nn;
+                } else {
                     pc += 3;
-                co_await std::suspend_always();
+                }
+                break;
             }
             case RET_0b11001001: {
-                pc = ((tread(ram, sp + 1) << 8) | tread(ram, sp));
+                WAIT(4)
+                unsigned short a1 = (tread(ram, sp + 1) << 8);
+                WAIT(4)
+                unsigned short a2 = tread(ram, sp);
+                pc = (a1 | a2);
+                WAIT(4)
                 sp += 2;
-                co_await std::suspend_always(); break;
+                break;
             }
             case RET_0b110xx000: {
+                WAIT(4)
                 auto val = read34(i);
-                auto ret = [&] {
-                    pc = ((tread(ram, sp + 1) << 8) | tread(ram, sp));
-                    sp += 2;
-                };
                 auto cc_flag = get_cc_flag(val);
-                if (cc_flag)
-                    ret();
-                else
+                if (cc_flag) {
+                    WAIT(4)
+                    unsigned short a1 = (tread(ram, sp + 1) << 8);
+                    WAIT(4)
+                    unsigned short a2 = tread(ram, sp);
+                    WAIT(4)
+                    pc = (a1 | a2);
+                    sp += 2;
+                } else {
                     ++pc;
-                co_await std::suspend_always();
+                }
+                break;
             }
             case RETI_0b11011001: {
-                pc = ((tread(ram, sp + 1) << 8) | tread(ram, sp));
+                WAIT(4)
+                unsigned short a1 = (tread(ram, sp + 1) << 8);
+                WAIT(4)
+                unsigned short a2 = tread(ram, sp);
+                WAIT(4)
+                pc = (a1 | a2);
                 sp += 2;
                 ime = true;
-                co_await std::suspend_always();
                 break;
             }
             case RST_0b11xxx111: {
+                WAIT(4)
                 unsigned short nn = ((0x0 << 8) | rst_vec[read345(i)]);
                 sp -= 2;
+                WAIT(4)
                 twrite(ram, sp, (pc + 1) & 0xff);
+                WAIT(4)
                 twrite(ram, sp + 1, ((pc + 1) >> 8));
                 pc = nn;
-                co_await std::suspend_always();
                 break;
             }
             case HALT: {
@@ -1802,32 +1967,56 @@ Resumable CPU::instruction_async_loop(const unsigned char &i, const CPU::Instruc
                     halted = true;
                     ++pc;
                 }
-                co_await std::suspend_always();
                 break;
             }
             case STOP: {
 //            if (tread(ram, constants::LY_ADDRESS) == 144)
 //                ++pc;
-                co_await std::suspend_always();
+
                 break;
             }
             case DI_0b11110011: {
                 ime_requested = false;
                 ime_req_count = 0;
                 ime = false;
-                co_await std::suspend_always();
                 break;
             }
             case EI_0b11111011: {
                 ime_requested = true;
                 ime_req_count = 0;  /*std::cout << "IF:" << (unsigned)tread(ram,constants::IF_ADDRESS) << '\n'*/;
-                co_await std::suspend_always();
                 break;
             } // todo: check
             case NOP_0b00000000: {
-                co_await std::suspend_always();
                 break;
             }
         }
+        pc += pc_inc_by_ins(itype);
+#if 0
+
+                std::cout  << instruction_str[itype] << " ";
+                if (!halted) {
+                    std::cout <<
+
+                              "A:" << print_hex(regs[CPU::A]).str() << " " <<
+                              "F:" <<  print_hex(regs[CPU::F]).str() << " " <<
+                              "B:" <<  print_hex(regs[CPU::B]).str() << " " <<
+                              "C:" <<  print_hex(regs[CPU::C]).str() << " " <<
+                              "D:" <<  print_hex(regs[CPU::D]).str() << " " <<
+                              "E:" <<  print_hex(regs[CPU::E]).str() << " " <<
+                              "H:" <<  print_hex(regs[CPU::H]).str() << " " <<
+                              "L:" <<  print_hex(regs[CPU::L]).str() << " " <<
+                              "SP:" <<  print_hex(sp).str() << " " <<
+                              "PC:" <<  print_hex(pc).str() << " " <<
+                              "PCMEM:" <<  print_hex(ram.read(pc)).str() << "," <<
+                              print_hex(ram.read(pc + 1)).str() << "," <<
+                              print_hex(ram.read(pc + 2)).str() << "," <<
+                              print_hex(ram.read(pc + 3)).str() << '\n';
+                    std::cout << std::dec;
+                }
+
+//                if (cpu.ime) {
+#endif
+
+        WAIT(1)
     }
 }

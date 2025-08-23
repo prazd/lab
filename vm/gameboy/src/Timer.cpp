@@ -15,7 +15,6 @@ void Timer::tick(RAM& ram) {
     static unsigned char cur_bit = 0;
     static bool tima_overflow = false;
     static int overflow_counter = 0;
-
         auto shift = tima_shift(ram);
         if (ram.div_written) {
             ram.div_written = false;
