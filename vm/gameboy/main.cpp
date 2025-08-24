@@ -314,7 +314,6 @@ struct GameBoyVM{
         auto ic = cpu.instruction_async_loop(ram);
         while(!WindowShouldClose()){
             main_loop_async(ic);
-            print_segment(constants::VRAM_BEGIN, 30);
             current_t_cycle = 0;
             std::cout << std::dec;
             UpdateTexture(target, ppu.read_buffer());
@@ -338,12 +337,13 @@ struct GameBoyVM{
 // Done:
 // /Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/basic.gb
+// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/reg_read.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/halt_ime0_ei.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug) - check
-// /Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb
-
+// /Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb // todo: fix
+// /Users/prazd/Desktop/dev/gb-test-roms/mem_timing/mem_timing.gb
 
 // MBC-1
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank1.gb
@@ -355,9 +355,14 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb ?
 // /Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb
 // /Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb
+// /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_lcdc_bg_en_change.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/misc/ppu/vblank_stat_intr-C.gb
+// /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/sources-GS.gb
+
+// /Users/prazd/Desktop/dev/gb-test-roms/interrupt_time/interrupt_time.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/cpu_instrs.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/interrupt_time/interrupt_time.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

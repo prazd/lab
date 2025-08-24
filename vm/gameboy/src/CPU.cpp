@@ -1145,39 +1145,39 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
         auto i = fetch(ram);
         auto itype = decode(i);
 
-//        if (halted) {
-//            auto if_value = ram.read(constants::IF_ADDRESS);
-//            auto ie_value = ram.read(constants::IE_ADDRESS);
-//            if (ime) {
-//                if ((if_value & ie_value & 0x1f) != 0) {
-//                    // todo: check
-////                    handle_interrupt(ram, i, itype);
-////                    t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-////                    cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
-//                } else {
-//                    WAIT(4)
-//                    continue;
-//                }
-//            } else if (!ime) {
-//                if ((if_value & ie_value & 0x1f) != 0) {
-//                    if (skip_interrupt) {
-//                        halted = false;
-//                        skip_interrupt = false;
-//                    } else {
-//                        // todo: check halt bug
-//                        halt_bug = true;
-////                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-////                        pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
-//                        halt_bug = false;
-//                        halted = false;
-//                    }
-//                } else {
-//                    skip_interrupt = true;
-//                    WAIT(4)
-//                    continue;
-//                }
-//            }
-//        }
+        if (halted) {
+            auto if_value = ram.read(constants::IF_ADDRESS);
+            auto ie_value = ram.read(constants::IE_ADDRESS);
+            if (ime) {
+                if ((if_value & ie_value & 0x1f) != 0) {
+                    // todo: check
+//                    handle_interrupt(ram, i, itype);
+//                    t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+//                    cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
+                } else {
+                    WAIT(4)
+                    continue;
+                }
+            } else if (!ime) {
+                if ((if_value & ie_value & 0x1f) != 0) {
+                    if (skip_interrupt) {
+                        halted = false;
+                        skip_interrupt = false;
+                    } else {
+                        // todo: check halt bug
+                        halt_bug = true;
+//                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+//                        pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
+                        halt_bug = false;
+                        halted = false;
+                    }
+                } else {
+                    skip_interrupt = true;
+                    WAIT(4)
+                    continue;
+                }
+            }
+        }
 
         prev_pc = pc;
         unsigned char arg0 = tread(ram, pc);
@@ -1188,7 +1188,56 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             arg1 = arg0;
             arg2 = tmp;
         }
-        handle_interrupt(ram, i, itype); // todo: check
+
+        if (ime) { // Interrupt
+            auto if_value = ram.read(constants::IF_ADDRESS);
+            auto ie_value = ram.read(constants::IE_ADDRESS);
+            if ((if_value & ie_value & 0x1f) != 0) {
+                unsigned char pc_l = pc & 0xff;
+                unsigned char pc_h = (pc >> 8) & 0xff;
+
+                fetch_IF_value(ram);
+                fetch_IE_value(ram);
+
+                if (vblank_interrupt_req && vblank_interrupt_enabled) {
+                    if (halted) halted = false;
+                    ime = false;
+                    push_stack(pc_l, pc_h, ram);
+                    vblank_interrupt_req = false;
+                    off_IF_value(CPU::VBlank_I, ram);
+                    pc = constants::VBLANK_INTERRUPT;
+                } else if (lcd_interrupt_req && lcd_interrupt_enabled) {
+                    if (halted) halted = false;
+                    ime = false;
+                    push_stack(pc_l, pc_h, ram);
+                    lcd_interrupt_req = false;
+                    off_IF_value(CPU::LCD_I, ram);
+                    pc = constants::STAT_INTERRUPT;
+                } else if (timer_interrupt_req && timer_interrupt_enabled) {
+                    if (halted) halted = false;
+                    ime = false;
+                    push_stack(pc_l, pc_h, ram);
+                    timer_interrupt_req = false;
+                    off_IF_value(CPU::Timer_I, ram);
+                    pc = constants::TIMER_INTERRUPT;
+                } else if (serial_interrupt_req && serial_interrupt_enabled) {
+                    if (halted) halted = false;
+                    ime = false;
+                    push_stack(pc_l, pc_h, ram);
+                    serial_interrupt_req = false;
+                    off_IF_value(CPU::Serial_I, ram);
+                    pc = constants::SERIAL_INTERRUPT;
+                } else if (joypad_interrupt_req && joypad_interrupt_enabled) {
+                    if (halted) halted = false;
+                    ime = false;
+                    push_stack(pc_l, pc_h, ram);
+                    joypad_interrupt_req = false;
+                    off_IF_value(CPU::Joypad_I, ram);
+                    pc = constants::JOYPAD_INTERRUPT;
+                }
+                continue;
+            }
+        }
 
 #if DEBUG
     //    std::cout << "HL value:" << HL_data() << '\n';
