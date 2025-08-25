@@ -125,12 +125,17 @@ struct BaseFetcher {
             case FetcherState::High:     {
                 high = ram.read(tile_address + (line_in_tile * 2) + 1);
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete, args...);
-                if ((!is_window && !is_sprite) && fetcher_current_tile_x == 0) {
-                    auto scx_offset= (ram.read(constants::SCX_ADDRESS) % 8);
+                next_t_cycle = 1;
+                auto scx_offset= (ram.read(constants::SCX_ADDRESS) % 8);
+                if (fetcher_current_tile_x == 0 || fetcher_current_tile_x == 1) {
+                    next_t_cycle += 6;
+                }
+                if ((!is_window && !is_sprite) && fetcher_current_tile_x == 0 && scx_offset > 0) {
                     for (int i = 0; i < scx_offset; ++i){
                         pixels.pop_front();
                     }
-                    next_t_cycle += scx_offset;
+                    next_t_cycle += scx_offset; // todo: check
+                    break;
                 }
                 try_to_fill_fifo();
                 break;}
@@ -157,7 +162,6 @@ struct BaseFetcher {
                     } else {
                         fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
                     }
-                    next_t_cycle = NEXT_T_CYCLE_VAL;
                     current_state = FetcherState::GetTile;
                 } else {
                     next_t_cycle = NEXT_T_CYCLE_VAL;
@@ -179,14 +183,18 @@ struct BaseFetcher {
                     next_t_cycle = 1;
                 }
                 break;}
-            case FetcherState::Push:     {step(ram, std::forward<Args>(args)...); next_t_cycle = 1; if (pixels.empty()){
-                if (is_window) {
-                    windows_current_tile_x = (windows_current_tile_x + 1) % 20;
-                } else {
-                    fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
-                }
-                current_state = FetcherState::GetTile;
-            } next_t_cycle = NEXT_T_CYCLE_VAL; break;}
+            case FetcherState::Push:     {
+                step(ram, std::forward<Args>(args)...);
+                next_t_cycle = 1;
+                if (pixels.empty()){
+                    if (is_window) {
+                        windows_current_tile_x = (windows_current_tile_x + 1) % 20;
+                    } else {
+                        fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
+                    }
+                    current_state = FetcherState::GetTile;
+                    next_t_cycle = NEXT_T_CYCLE_VAL;
+                } break;}
         }
     }
 };
@@ -199,7 +207,7 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
         auto scy = ram.read(constants::SCY_ADDRESS);
         auto ly  = ram.read(constants::LY_ADDRESS);
         auto scx = ram.read(constants::SCX_ADDRESS);
-        unsigned short tile_base = ((ram.read(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8000 : 0x8800; // TODO: check
+        unsigned short tile_base = ((ram.read(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8000 : 0x8800;
 
         unsigned short tilemap_base{};
         unsigned char  tilemap_x{};
@@ -235,7 +243,10 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
     unsigned short update_tile_base(auto& ram, unsigned char cpx, const Sprite& sprite) {
         is_sprite = true;
         pallete = sprite.attrib;
+        auto lcdc_mode = (ram.read(constants::LCDC_ADDRESS) >> 2) & 1;
         line_in_tile = ram.read(constants::LY_ADDRESS) - (sprite.y_pos - 16);
+        if ((sprite.attrib >> 6) & 1)
+            line_in_tile = ((lcdc_mode ? 16 : 8)) - line_in_tile - 1;
         return (sprite.index_tile * 16) + constants::VRAM_BEGIN;
     }
 
@@ -258,16 +269,18 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
             case FetcherState::High:     {
                 high = ram.read(tile_address + (line_in_tile * 2) + 1);
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete,cpx, sprite);
+
+                // X-flip
+                if (sprite.attrib >> 5 & 1) std::reverse(pixels.begin(), pixels.end());
+
                 if (fifo.empty()) {
                     while (fifo.size() < 8 && !pixels.empty()) {
                         fifo.push_back(pixels.front());
                         pixels.pop_front();
                     }
                 } else {
-
                     for (auto &el: fifo) {
                         if (!pixels.empty()) {
-                            // todo: maybe index check
                             if (Pixel::get_color_id(el.color) == 0 &&
                                 Pixel::get_color_id(pixels.front().color) != 0) {
                                 el = pixels.front();

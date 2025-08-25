@@ -324,8 +324,8 @@ struct GameBoyVM{
 
 // PRINT PIXELS
 #if 0
-//              print_rects.template operator()<DISPLAY_HEIGHT, DISPLAY_WIDTH>(GREEN);
-              print_rects.template operator()<18, 20>(RED);
+              print_rects.template operator()<DISPLAY_HEIGHT, DISPLAY_WIDTH>(GREEN);
+//              print_rects.template operator()<18, 20>(RED);
 #endif
 
                 DrawFPS(700, 10);
@@ -350,7 +350,6 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank2.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_ramg.gb
 
-
 // Failed:
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb ?
 // /Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb
@@ -360,9 +359,12 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/sources-GS.gb
 
 // /Users/prazd/Desktop/dev/gb-test-roms/interrupt_time/interrupt_time.gb
+// /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
+// /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb
+// /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/interrupt_time/interrupt_time.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
