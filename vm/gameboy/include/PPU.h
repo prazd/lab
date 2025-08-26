@@ -164,7 +164,8 @@ struct BaseFetcher {
                     }
                     current_state = FetcherState::GetTile;
                 } else {
-                    next_t_cycle = NEXT_T_CYCLE_VAL;
+                    // todo: check
+                    next_t_cycle = 1;
                     current_state = FetcherState::Sleep;
                 }
                 break;}
@@ -253,9 +254,9 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
     void fetch(RAM& ram, unsigned char cpx, const Sprite& sprite) {
         switch(current_state) {
             case FetcherState::GetTile:  {step(ram, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::High; break;}
-            case FetcherState::High:     {step(ram, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL;
+            case FetcherState::High:     {step(ram, cpx, sprite);
                     pixels = {};
-                fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
+                    fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
                     current_state = FetcherState::GetTile;
                     finished = true;
                     next_t_cycle = NEXT_T_CYCLE_VAL;
@@ -291,6 +292,15 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
                     while (fifo.size() < 8 && !pixels.empty()) {
                         fifo.push_back(pixels.front());
                         pixels.pop_front();
+                    }
+                }
+                if (fifo.size() < 8) {
+                    while (fifo.size() < 8) {
+                        if (sprite.attrib >> 5 & 1) {
+                            fifo.push_front(Pixel{.color = WHITE});
+                        } else {
+                            fifo.push_back(Pixel{.color = WHITE});
+                        }
                     }
                 }
                 break;

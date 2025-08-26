@@ -18,10 +18,18 @@ void Timer::tick(RAM& ram) {
     auto shift = tima_shift(ram);
     if (ram.div_written) {
         ram.div_written = false;
+        prev_bit = std::exchange(cur_bit, 0);
         div_internal = 0;
         ram.div_internal_sync = 0;
-        cur_bit = 0;
-        prev_bit = 0;
+        if (prev_bit && !cur_bit && (ram.read(constants::TAC_REGISTER) >> 2) & 1) {
+            unsigned char prev = ram.read(constants::TIMA_REGISTER);
+            ram.write(constants::TIMA_REGISTER, prev + 1);
+            if (prev == 0xff) {
+                tima_overflow = true;
+                ram.tima_overflow = true;
+            }
+        }
+        return;
     }
     prev_bit = std::exchange(cur_bit, (div_internal >> shift) & 1);
     ++div_internal;
@@ -41,14 +49,14 @@ void Timer::tick(RAM& ram) {
             if (ram.tima_written){
                 ram.tima_written = false;
             } else {
+                ram.write(constants::IF_ADDRESS, ram.read(constants::IF_ADDRESS) | (1 << 2));
                 ram.write(constants::TIMA_REGISTER, ram.read(constants::TMA_REGISTER));
             }
         }
-        if (!prev_bit && cur_bit) { // todo: check
+        if (prev_bit && !cur_bit) {
             unsigned char prev = ram.read(constants::TIMA_REGISTER);
             ram.write(constants::TIMA_REGISTER, prev + 1);
             if (prev == 0xff) {
-                ram.write(constants::IF_ADDRESS, ram.read(constants::IF_ADDRESS) | (1 << 2));
                 tima_overflow = true;
                 ram.tima_overflow = true;
             }

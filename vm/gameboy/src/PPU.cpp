@@ -163,16 +163,16 @@ Pixel PPU::pixel_mixing(RAM &ram) {
         return bg_pixel;
     }
 
-    unsigned char pallete = 0;
+    unsigned char obp{};
     if ((sprite_pixel.attrib >> 4 & 1))
-        pallete = ram.read(constants::OBP1);
+        obp = ram.read(constants::OBP1);
     else
-        pallete = ram.read(constants::OBP0);
+        obp = ram.read(constants::OBP0);
 
     switch (Pixel::get_color_id(sprite_pixel.color)) {
-        case 1:  {sprite_pixel.color = Pixel::get_pixel_color((pallete >> 2) & 3);  break;}
-        case 2:  {sprite_pixel.color = Pixel::get_pixel_color((pallete >> 4) & 3);  break;}
-        case 3:  {sprite_pixel.color = Pixel::get_pixel_color((pallete >> 6) & 3);  break;}
+        case 1:  {sprite_pixel.color = Pixel::get_pixel_color((obp >> 2) & 3);  break;}
+        case 2:  {sprite_pixel.color = Pixel::get_pixel_color((obp >> 4) & 3);  break;}
+        case 3:  {sprite_pixel.color = Pixel::get_pixel_color((obp >> 6) & 3);  break;}
     }
     return sprite_pixel;
 }
@@ -235,25 +235,18 @@ void PPU::tick(RAM &ram)  {
                         window_line_is_triggered = true;
                     }
                     if (!pixel_fetcher.paused) {
-                        // todo: check
-//                        if (remaining_pixel_count > 0) {
-//                            --remaining_pixel_count;
-//                        } else {
                             --pixel_fetcher.next_t_cycle;
                             if (pixel_fetcher.next_t_cycle == 0) {
                                 pixel_fetcher.fetch(ram,  current_pixel_x);
                             }
-//                        }
                     }
-//
+
                     if (!sprite_render) {
                         auto sprite = sprite_on_x(ram);
                         if (sprite.has_value()) {
                             current_sprite = sprite.value();
                             sprite_render = true;
                             pixel_fetcher.paused = true;
-                            pixel_fetcher.current_state = decltype(pixel_fetcher)::FetcherState::GetTile;
-                            pixel_fetcher.reset();
                             sprite_fetcher.finished = false;
                         }
                     }
@@ -264,9 +257,6 @@ void PPU::tick(RAM &ram)  {
                             sprite_fetcher.fetch(ram, current_pixel_x, current_sprite);
                             if (sprite_fetcher.finished) {
                                 pixel_fetcher.paused = false;
-                                if (pixel_fetcher.fifo.size() < 6) {
-                                    remaining_pixel_count = 6 - pixel_fetcher.fifo.size();
-                                }
                                 pixel_fetcher.next_t_cycle = 2;
                                 sprite_render = false;
                                 sprite_fetcher.finished = false;
@@ -277,16 +267,18 @@ void PPU::tick(RAM &ram)  {
                     if (remaining_pixel_count > 0) {
                         --remaining_pixel_count;
                     } else {
-                    if (!pixel_fetcher.fifo.empty() || !sprite_fetcher.fifo.empty()) {
+                    if ((!pixel_fetcher.fifo.empty() || !sprite_fetcher.fifo.empty()) &&
+                            !pixel_fetcher.paused) {
                         draw(ram);
-                    }
+                       }
                     }
                 } else {
                     sprite_fetcher.reset();
                     pixel_fetcher.reset();
                     current_sprite_index = 0;
-                    std::cout << "internal_t_cycles:" << internal_t_cycles << '\n';
                     internal_t_cycles = 0;
+                    if (ram.read(constants::STAT_ADDRESS) & (1 << 3))
+                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
                     current_mode = HBlank;
                     set_ppu_mode(ram);
             }
@@ -297,19 +289,17 @@ void PPU::tick(RAM &ram)  {
                 current_pixel_x = 0;
                 current_t_cycle_count = 0;
 
-
                 // todo: fix
                 // LYC
-//                auto lyc = ram.read(constants::LYC_ADDRESS);
-//                unsigned char stat = ram.read(constants::STAT_ADDRESS);
-//                if(current_line == lyc) {
-//                    ram.write(constants::STAT_ADDRESS, stat | (1 << 2));
-//                    if (stat & (1 << 6))
-//                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
-//                } else {
-//                    ram.write(constants::STAT_ADDRESS, (ram.read(constants::STAT_ADDRESS) & (~(1 << 2))));
-//                }
-
+                auto lyc = ram.read(constants::LYC_ADDRESS);
+                unsigned char stat = ram.read(constants::STAT_ADDRESS);
+                if(current_line == lyc) {
+                    ram.write(constants::STAT_ADDRESS, stat | (1 << 2));
+                    if (stat & (1 << 6))
+                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
+                } else {
+                    ram.write(constants::STAT_ADDRESS, (ram.read(constants::STAT_ADDRESS) & (~(1 << 2))));
+                }
                 if (current_line == 143){
                     current_mode = VBlank;
                     // VBlank Interrupt

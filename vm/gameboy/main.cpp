@@ -25,7 +25,7 @@ struct GameBoyVM{
     void print_segment(unsigned short address, int n) {
         std::cout << "\n=============================\n";
         for (int i = 0; i < n; ++i){
-            std::cout << std::hex << address + i <<  ":" << (unsigned)ram.mem[address + i] << '\n';
+            std::cout << std::hex << address + i <<  ":" << (unsigned)ram.read(address + i) << '\n';
         }
         std::cout << "\n=============================\n";
         std::cout << std::dec;
@@ -344,6 +344,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug) - check
 // /Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb // todo: fix
 // /Users/prazd/Desktop/dev/gb-test-roms/mem_timing/mem_timing.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/div_timing.gb
 
 // MBC-1
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank1.gb
@@ -358,7 +359,6 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/misc/ppu/vblank_stat_intr-C.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/sources-GS.gb
 
-// /Users/prazd/Desktop/dev/gb-test-roms/interrupt_time/interrupt_time.gb
 // /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
