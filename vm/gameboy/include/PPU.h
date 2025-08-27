@@ -41,9 +41,6 @@ struct Pixel {
     bool is_sprite;
     Color color{};      // The color number (IGNORING the palette, this value is the color value from the tile data)
     unsigned char attrib{};     // Palette: OBP0 / OBP1 for DMG, a value between 0 and 7 on CGB
-    // Sprite Priority: Only relevant for Sprites on CGB
-    bool bg_priority{}; // Only relevant for Sprites, keeps the value of Bit 7 (OBJ-to-BG Priority) of the Attributes byte of the sprite
-
     static Color get_pixel_color(unsigned char id);
     static int get_color_id(Color c);
     static std::deque<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char, unsigned char);
@@ -66,15 +63,13 @@ struct BaseFetcher {
     unsigned char pallete = 0;
     bool paused = false;
     bool finished = false;
-
+    bool is_windows_drawing = false;
     size_t next_t_cycle = NEXT_T_CYCLE_VAL; // Start GetTile 2 T-cycle
-
     std::deque<Pixel> pixels{};
     std::deque<Pixel> fifo{};
     unsigned char line_in_tile{};
     bool is_window = false;
 
-    // todo: add to static class like ram ranges
     auto get_window_tile_map_area(const RAM& ram) {
         if (((ram.read(constants::LCDC_ADDRESS) >> 6) & 1))
             return 0x9C00;
@@ -85,20 +80,6 @@ struct BaseFetcher {
         if (((ram.read(constants::LCDC_ADDRESS) >> 3) & 1))
             return 0x9C00;
         return 0x9800;
-    }
-
-    bool window_visible(const RAM& ram) {
-        return (((ram.read(constants::LCDC_ADDRESS)) >> 5) & 1);
-    }
-
-    bool is_windows_drawing = false;
-    bool window_line_is_triggered = false;
-
-    void reset_state() {
-        current_state = FetcherState::GetTile;
-    }
-    void reset_pixels() {
-        pixels = {};
     }
 
     void try_to_fill_fifo() {
@@ -224,7 +205,7 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
         } else {
             tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
             tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
-            tilemap_y = ((ly + scy) & 0xff) / 8;                      // Because of this formula, fetcherY can be between 0 and 255
+            tilemap_y = ((ly + scy) & 0xff) / 8;                       // Because of this formula, fetcherY can be between 0 and 255
             line_in_tile = (ly + scy) % 8;
             is_window = false;
         }
@@ -310,14 +291,12 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
 };
 
 class PPU {
-public:
     enum Mode {
         HBlank =  0b00,    // H-Blank
         VBlank =  0b01,    // V-Blank
         OAM =     0b10,    // OAM Search
         Drawing = 0b11     // Pixel Transfer
     };
-//public:
     Mode current_mode = OAM;
     Color buffer[144][160]{};
 
@@ -333,16 +312,12 @@ public:
     std::priority_queue<std::pair<Sprite, int>, std::vector<std::pair<Sprite, int>>, decltype([](auto& a, auto& b){
         return !(a.first.x_pos < b.first.x_pos || (a.first.x_pos == b.first.x_pos && a.second < b.second));
     })> sprite_buffer;
-    size_t current_sprite_index = 0;
 
     // coordinates
     size_t current_pixel_x = 0;
-    size_t current_window_line = 0;
     unsigned char current_line = {};
     int current_t_cycle_count = {};
     int current_v_blank_t_cycle_count = {};
-    bool longest_line = false;
-    size_t remaining_pixel_count = 0;
     bool sprite_render = false;
 
     PixelFetcher pixel_fetcher;
@@ -350,10 +325,6 @@ public:
 
     void set_ppu_reg(unsigned short address, unsigned char value, RAM& ram);
     void set_ppu_mode(RAM& ram);
-
-    /* TODO: set 2 bit of STAT_ADDRESS to LY == LYC */
-    void update_ly_lyc_compare_flag(RAM& ram);
-
     void update_lcd(const RAM& ram);
     void update_window(const RAM& ram);
     void update_obj(const RAM& ram);
@@ -364,19 +335,14 @@ public:
     bool is_windows_drawing = false;
     bool is_windows_fetching_ready(RAM& ram);
 
-    static Color get_pallete(const RAM& ram, unsigned short index);
-
     unsigned char get_obj_size(const RAM& ram);
-
-    unsigned short get_window_tile_map_area(const RAM& ram);
-    unsigned short get_bg_tile_map_area(const RAM& ram);
-    unsigned short get_tile_data_area(const RAM& ram);
-
     void oam_scan(RAM& ram);
     Pixel pixel_mixing(RAM& ram);
     std::optional<Sprite> sprite_on_x(RAM& ram);
     void draw(RAM& ram);
 public:
+    unsigned short get_bg_fetcher_tile_address() const;
+    unsigned short get_sprite_fetcher_tile_address() const;
     auto  read_buffer() const -> const Color(&)[144][160];
     void tick(RAM& ram);
     Mode get_current_mode() const;

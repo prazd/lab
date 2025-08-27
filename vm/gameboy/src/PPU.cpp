@@ -95,22 +95,6 @@ unsigned char PPU::get_obj_size(const RAM &ram)  {
     return (((ram.read(constants::LCDC_ADDRESS)) >> 2) & 1) ? 16 : 8;
 }
 
-unsigned short PPU::get_window_tile_map_area(const RAM &ram) {
-    if (((ram.read(constants::LCDC_ADDRESS) >> 6) & 1))
-        return 0x9C00;
-    return 0x9800;
-}
-unsigned short PPU::get_bg_tile_map_area(const RAM &ram)  {
-    if (((ram.read(constants::LCDC_ADDRESS) >> 3) & 1))
-        return 0x9C00;
-    return 0x9800;
-}
-unsigned short PPU::get_tile_data_area(const RAM &ram)  {
-    if (((ram.read(constants::LCDC_ADDRESS) >> 4) & 1))
-        return 0x8800;
-    return 0x8000;
-}
-
 void PPU::oam_scan(RAM &ram)  {
     if (sprite_buffer.size() == 10) {
         current_oam_obj += 4;
@@ -212,8 +196,8 @@ void PPU::tick(RAM &ram)  {
         ++current_t_cycle_count;
         ++last_t_cycles;
         update_regs(ram);
-
-        if (current_mode == OAM){ //
+//    std::cout <<  "Stat:" << std::bitset<8>(ram.read(constants::STAT_ADDRESS)).to_string() << '\n';
+        if (current_mode == OAM){
             if (current_t_cycle_count != 80 && current_oam_obj != 160) {
                 --oam_next_t_cycle;
                 if (oam_next_t_cycle == 0) {
@@ -264,21 +248,16 @@ void PPU::tick(RAM &ram)  {
                         }
                     }
 
-                    if (remaining_pixel_count > 0) {
-                        --remaining_pixel_count;
-                    } else {
                     if ((!pixel_fetcher.fifo.empty() || !sprite_fetcher.fifo.empty()) &&
                             !pixel_fetcher.paused) {
                         draw(ram);
                        }
-                    }
                 } else {
                     sprite_fetcher.reset();
                     pixel_fetcher.reset();
-                    current_sprite_index = 0;
                     internal_t_cycles = 0;
-                    if (ram.read(constants::STAT_ADDRESS) & (1 << 3))
-                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
+                   if (ram.read(constants::STAT_ADDRESS) & (1 << 3))
+                       ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
                     current_mode = HBlank;
                     set_ppu_mode(ram);
             }
@@ -296,7 +275,7 @@ void PPU::tick(RAM &ram)  {
                 if(current_line == lyc) {
                     ram.write(constants::STAT_ADDRESS, stat | (1 << 2));
                     if (stat & (1 << 6))
-                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
+                         ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
                 } else {
                     ram.write(constants::STAT_ADDRESS, (ram.read(constants::STAT_ADDRESS) & (~(1 << 2))));
                 }
@@ -328,7 +307,6 @@ void PPU::tick(RAM &ram)  {
             if (current_v_blank_t_cycle_count++ == 456){
                 ++current_line;
                 if (current_line == 154) {
-//                    std::cout << "Internal t-cycles:" << internal_t_cycles << '\n';
                     last_t_cycles = 0;
                     // LCD Interrupt
                     if (ram.read(constants::STAT_ADDRESS) & (1 << 5))
@@ -340,7 +318,6 @@ void PPU::tick(RAM &ram)  {
                     current_line = 0;
                     set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
                     current_pixel_x = 0;
-                    current_window_line = 0;
                     current_t_cycle_count = 0;
                     current_v_blank_t_cycle_count = 0;
                     window_line_is_triggered = false;
@@ -374,4 +351,12 @@ void PPU::print_buffer() const {
 bool PPU::is_windows_fetching_ready(RAM &ram) {
     return window_line_is_triggered && ((ram.read(constants::LCDC_ADDRESS) >> 5) & 1) && (ram.read(constants::LCDC_ADDRESS) & 1)
            && current_pixel_x >= (ram.read(constants::WX_ADDRESS) - 7);
+}
+
+unsigned short PPU::get_sprite_fetcher_tile_address() const {
+    return sprite_fetcher.tile_address;
+}
+
+unsigned short PPU::get_bg_fetcher_tile_address() const {
+    return pixel_fetcher.tile_address;
 }

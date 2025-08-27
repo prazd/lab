@@ -245,7 +245,7 @@ struct GameBoyVM{
             static std::array<unsigned char, 16> arr{};
             std::cout << "Counter:" << counter << '\n';
 
-            std::cout << ppu.pixel_fetcher.tile_address << '\n';
+            std::cout << ppu.get_bg_fetcher_tile_address() << '\n';
             for (int i = 0; i < 16; ++i){
                 arr[i] = ram.read((0x8000 + (counter)) + i);
             }
@@ -364,7 +364,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/02-interrupts.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

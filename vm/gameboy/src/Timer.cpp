@@ -33,6 +33,7 @@ void Timer::tick(RAM& ram) {
     }
     prev_bit = std::exchange(cur_bit, (div_internal >> shift) & 1);
     ++div_internal;
+    ram.mem[constants::DIV_REGISTER] = (div_internal >> 8) & 0xff;
     ram.div_internal_sync = div_internal;
     if (ram.tima_written) {
         tima_overflow = ram.tima_overflow;
@@ -49,13 +50,15 @@ void Timer::tick(RAM& ram) {
             if (ram.tima_written){
                 ram.tima_written = false;
             } else {
-                ram.write(constants::IF_ADDRESS, ram.read(constants::IF_ADDRESS) | (1 << 2));
+                // todo: check
+                // 02-interrupts test failed
                 ram.write(constants::TIMA_REGISTER, ram.read(constants::TMA_REGISTER));
+                ram.write(constants::IF_ADDRESS, ram.read(constants::IF_ADDRESS) | (1 << 2));
             }
         }
         if (prev_bit && !cur_bit) {
             unsigned char prev = ram.read(constants::TIMA_REGISTER);
-            ram.write(constants::TIMA_REGISTER, prev + 1);
+//            ram.write(constants::TIMA_REGISTER, prev + 1);
             if (prev == 0xff) {
                 tima_overflow = true;
                 ram.tima_overflow = true;
