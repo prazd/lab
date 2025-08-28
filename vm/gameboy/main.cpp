@@ -141,9 +141,13 @@ struct GameBoyVM{
     void main_loop_async(auto& ic) {
         int current_t_cycle = 0;
         while(current_t_cycle++ < 70'224) {
+                cpu.timer.tick(ram);
+#if 1
+                std::cout << cpu.instruction_str[cpu.decode(ram.read(cpu.pc))] << " REG[A]:" << (int)(cpu.regs[CPU::A]) << '\n';
+                std::cout << "TIMA:" << (int)ram.read(constants::TIMA_REGISTER) << '\n';
+#endif
                 ic.resume();
                 ppu.tick(ram);
-                cpu.timer.tick(ram);
                 if (!cpu.halted)
                     ram.dma_tick();
         }
@@ -327,7 +331,6 @@ struct GameBoyVM{
               print_rects.template operator()<DISPLAY_HEIGHT, DISPLAY_WIDTH>(GREEN);
 //              print_rects.template operator()<18, 20>(RED);
 #endif
-
                 DrawFPS(700, 10);
             EndDrawing();
         }
@@ -364,7 +367,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/books/cpp/cpp/vm/gameboy/roms/02-interrupts.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb"); // todo
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

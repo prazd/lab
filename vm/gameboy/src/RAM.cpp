@@ -76,50 +76,9 @@ void RAM::write(unsigned short index, unsigned char value) {
         dma_t = 0;
     }
 
-    if (index == constants::DIV_REGISTER){
-        value = 0;
-    }
-
     if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END){
         index -= 0x2000;
     }
-
-    if (index == constants::TIMA_REGISTER) {
-        tima_written = true;
-        if (tima_overflow || glitch_overflow) {
-            tima_overflow = false;
-            glitch_overflow = false;
-        }
-    }
-
-    if (index == constants::DIV_REGISTER){
-        div_written = true;
-    }
-
-   if (index == constants::TAC_REGISTER){
-        bool old_enabled = (mem[constants::TAC_REGISTER] >> 2) & 1;
-        auto old_value = mem[constants::TAC_REGISTER];
-        mem[constants::TAC_REGISTER] = value;
-
-        unsigned char shift = 0;
-        switch (old_value & 3) {
-            case 0b00: {shift = 9; break;}
-            case 0b01: {shift = 3; break;}
-            case 0b10: {shift = 5; break;}
-            default:
-                shift = 7;
-                break;
-        }
-        if (old_enabled && (div_internal_sync >> shift) & 1){
-            unsigned char prev = read(constants::TIMA_REGISTER);
-            mem[constants::TIMA_REGISTER] =  prev + 1;
-            if (prev == 0xff) {
-                mem[constants::IF_ADDRESS] =  read(constants::IF_ADDRESS) | (1 << 2);
-                glitch_overflow = true;
-            }
-        }
-        return;
-   }
 
    if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END && external_ram_enabled && !cart_ram.empty()) {
         auto current_address = index - constants::EXTERNAL_RAM_BEGIN;
@@ -128,7 +87,19 @@ void RAM::write(unsigned short index, unsigned char value) {
        return;
    }
 
-   if (is_ram_avaliable(index))
+    if (index == constants::DIV_REGISTER){
+        value = 0;
+    }
+
+    if (index == constants::TIMA_REGISTER) {
+        tima_written = true;
+    }
+
+    if (index == constants::DIV_REGISTER){
+        div_written = true;
+    }
+
+    if (is_ram_avaliable(index))
         mem[index] = value;
 }
 

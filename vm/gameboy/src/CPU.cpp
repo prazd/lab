@@ -343,7 +343,11 @@ void CPU::update_pair_ld(unsigned char l, unsigned char h, unsigned char pair)  
 void CPU::update_pair_pop(unsigned char l, unsigned char h, unsigned char pair)  {
     switch(pair) {
         case 0b00: {regs[C] = l; regs[B] = h; break;}
-        case 0b01: {regs[E] = l; regs[D] = h; break;}
+        case 0b01: {
+            regs[E] = l;
+            regs[D] = h;
+            break;
+        }
         case 0b10: {regs[L] = l; regs[H] = h; break;}
         case 0b11: {regs[F] = (l & 0xf0); regs[A] = h; break;} // todo: check
     }
@@ -1292,7 +1296,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
         switch (itype) {
             case LD_0b01xxxyyy: { // 4/8 t-cycle
                 // todo: check
-                WAIT(4)
+//                WAIT(4)
                 update_regs(read345(i), ram, read_regs(read012(i), ram));
 //                unsigned char value {};
 //                if (read345(i) != HL)
