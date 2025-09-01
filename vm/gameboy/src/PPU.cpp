@@ -188,6 +188,8 @@ void PPU::tick(RAM &ram)  {
     static unsigned char sprite_x = 0;
     static Sprite current_sprite{};
     static size_t internal_t_cycles = 0;
+    static size_t ly_increment_delay = 0;
+    static bool ly_increment_done = false;
 #if 0
     ram.write(constants::LY_ADDRESS, 0x90);
     return;
@@ -258,12 +260,31 @@ void PPU::tick(RAM &ram)  {
                     internal_t_cycles = 0;
                    if (ram.read(constants::STAT_ADDRESS) & (1 << 3))
                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
-                    current_mode = HBlank;
-                    set_ppu_mode(ram);
+
+                   switch(ram.read(constants::SCX_ADDRESS) % 8){
+                       case 0: {ly_increment_delay = 51; break;}
+                       case 1:
+                       case 2:
+                       case 3:
+                       case 4:
+                               {ly_increment_delay = 50; break;}
+                       case 5:
+                       case 6:
+                       case 7:
+                               {ly_increment_delay = 49; break;}
+                   }
+                    ly_increment_done = false;
+                   current_mode = HBlank;
+                   set_ppu_mode(ram);
             }
         } else if (current_mode == HBlank) {
+            if (!ly_increment_done && --ly_increment_delay == 0) {
+                ly_increment_done = true;
+                ++current_line;
+                set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
+            }
             if (current_t_cycle_count >= 456){
-                pixel_fetcher.fetcher_current_tile_x = 0; // todo: check
+                pixel_fetcher.fetcher_current_tile_x = 0;
                 sprite_fetcher.fetcher_current_tile_x = 0;
                 current_pixel_x = 0;
                 current_t_cycle_count = 0;
@@ -298,8 +319,6 @@ void PPU::tick(RAM &ram)  {
                     oam_next_t_cycle = 2;
                     current_oam_obj = 0;
                 }
-                ++current_line;
-                set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
                 window_line_counter = 0;
                 set_ppu_mode(ram);
             }

@@ -145,11 +145,24 @@ struct CPU {
     bool joypad_interrupt_req = false;
     void fetch_IF_value(RAM& ram);
 
+    void update_interrupts_status(RAM& ram);
+
     Timer timer;
     unsigned char tread(RAM& ram, unsigned short);
     void twrite(RAM& ram, unsigned short index, unsigned char value);
-
     enum InterruptFlag{VBlank_I, LCD_I, Timer_I, Serial_I, Joypad_I};
+
+    static constexpr unsigned short InterruptJumpAddress[] = {
+        constants::VBLANK_INTERRUPT,
+        constants::STAT_INTERRUPT,
+        constants::TIMER_INTERRUPT,
+        constants::SERIAL_INTERRUPT,
+        constants::JOYPAD_INTERRUPT
+    };
+
+    bool ie_status[5]{};
+    bool if_status[5]{};
+
     void off_IF_value(InterruptFlag, RAM&);
 
     int t_cycle_by_ins(Instruction ins, unsigned char value = 0);

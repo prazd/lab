@@ -142,7 +142,7 @@ struct GameBoyVM{
         int current_t_cycle = 0;
         while(current_t_cycle++ < 70'224) {
                 cpu.timer.tick(ram);
-#if 1
+#if 0
                 std::cout << cpu.instruction_str[cpu.decode(ram.read(cpu.pc))] << " REG[A]:" << (int)(cpu.regs[CPU::A]) << '\n';
                 std::cout << "TIMA:" << (int)ram.read(constants::TIMA_REGISTER) << '\n';
 #endif
@@ -345,14 +345,22 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug) - check
-// /Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb // todo: fix
+// /Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb
 // /Users/prazd/Desktop/dev/gb-test-roms/mem_timing/mem_timing.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/div_timing.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/interrupts/ie_push.gb
 
 // MBC-1
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank1.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank2.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_ramg.gb
+
+
+
+// PPU
+
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/hblank_ly_scx_timing-GS.gb - failed
+
 
 // Failed:
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb ?
@@ -367,7 +375,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb"); // todo
+        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

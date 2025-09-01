@@ -940,20 +940,20 @@ void CPU::print_regs() const {
 
 void CPU::fetch_IF_value(RAM& ram) {
     auto if_value = ram.read(constants::IF_ADDRESS);
-    vblank_interrupt_req = (if_value & 1);
-    lcd_interrupt_req =    ((if_value >> 1) & 1);
-    timer_interrupt_req =  ((if_value >> 2) & 1);
-    serial_interrupt_req = ((if_value >> 3) & 1);
-    joypad_interrupt_req = ((if_value >> 4) & 1);
+    if_status[0] = vblank_interrupt_req = (if_value & 1);
+    if_status[1] = lcd_interrupt_req =    ((if_value >> 1) & 1);
+    if_status[2] = timer_interrupt_req =  ((if_value >> 2) & 1);
+    if_status[3] = serial_interrupt_req = ((if_value >> 3) & 1);
+    if_status[4] = joypad_interrupt_req = ((if_value >> 4) & 1);
 }
 
 void CPU::fetch_IE_value(RAM& ram) {
     auto if_value =    ram.read(constants::IE_ADDRESS);
-    vblank_interrupt_enabled    =    (if_value & 1);
-    lcd_interrupt_enabled       =    ((if_value >> 1) & 1);
-    timer_interrupt_enabled     =    ((if_value >> 2) & 1);
-    serial_interrupt_enabled    =    ((if_value >> 3) & 1);
-    joypad_interrupt_enabled    =    ((if_value >> 4) & 1);
+    ie_status[0] = vblank_interrupt_enabled =  (if_value & 1);
+    ie_status[1] = lcd_interrupt_enabled    =  ((if_value >> 1) & 1);
+    ie_status[2] = timer_interrupt_enabled  =  ((if_value >> 2) & 1);
+    ie_status[3] = serial_interrupt_enabled =  ((if_value >> 3) & 1);
+    ie_status[4] = joypad_interrupt_enabled =  ((if_value >> 4) & 1);
 }
 
 void CPU::push_stack(unsigned char l, unsigned char h, RAM& ram) {
@@ -1168,7 +1168,6 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         halt_bug = true;
 //                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
 //                        pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
-                        halt_bug = false;
                         halted = false;
                     }
                 } else {
@@ -1178,7 +1177,6 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 }
             }
         }
-
         prev_pc = pc;
         unsigned char arg0 = tread(ram, pc);
         unsigned char arg1 = tread(ram, pc + 1);
@@ -1188,63 +1186,45 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             arg1 = arg0;
             arg2 = tmp;
         }
-
         if (ime) { // Interrupt
             auto if_value = ram.read(constants::IF_ADDRESS);
             auto ie_value = ram.read(constants::IE_ADDRESS);
             if ((if_value & ie_value & 0x1f) != 0) {
                 unsigned char pc_l = pc & 0xff;
                 unsigned char pc_h = (pc >> 8) & 0xff;
-
                 WAIT(4)
-                fetch_IF_value(ram);
-                fetch_IE_value(ram);
-
-                if (vblank_interrupt_req && vblank_interrupt_enabled) {
-                    if (halted) halted = false;
-                    ime = false;
-                    WAIT(8)
-                    push_stack(pc_l, pc_h, ram);
-                    vblank_interrupt_req = false;
-                    WAIT(4)
-                    off_IF_value(CPU::VBlank_I, ram);
-                    pc = constants::VBLANK_INTERRUPT;
-                } else if (lcd_interrupt_req && lcd_interrupt_enabled) {
-                    if (halted) halted = false;
-                    ime = false;
-                    WAIT(8)
-                    push_stack(pc_l, pc_h, ram);
-                    lcd_interrupt_req = false;
-                    WAIT(4)
-                    off_IF_value(CPU::LCD_I, ram);
-                    pc = constants::STAT_INTERRUPT;
-                } else if (timer_interrupt_req && timer_interrupt_enabled) {
-                    if (halted) halted = false;
-                    ime = false;
-                    WAIT(8)
-                    push_stack(pc_l, pc_h, ram);
-                    timer_interrupt_req = false;
-                    WAIT(4)
-                    off_IF_value(CPU::Timer_I, ram);
-                    pc = constants::TIMER_INTERRUPT;
-                } else if (serial_interrupt_req && serial_interrupt_enabled) {
-                    if (halted) halted = false;
-                    ime = false;
-                    WAIT(8)
-                    push_stack(pc_l, pc_h, ram);
-                    serial_interrupt_req = false;
-                    WAIT(4)
-                    off_IF_value(CPU::Serial_I, ram);
-                    pc = constants::SERIAL_INTERRUPT;
-                } else if (joypad_interrupt_req && joypad_interrupt_enabled) {
-                    if (halted) halted = false;
-                    ime = false;
-                    WAIT(8)
-                    push_stack(pc_l, pc_h, ram);
-                    joypad_interrupt_req = false;
-                    WAIT(4)
-                    off_IF_value(CPU::Joypad_I, ram);
-                    pc = constants::JOYPAD_INTERRUPT;
+                update_interrupts_status(ram);
+                for (int i = 0; i < 5; ++i) {
+                    if (ie_status[i] && if_status[i]) {
+                        if (halted) halted = false;
+                        ime = false;
+                        sp-=1;
+                        WAIT(4)
+                        twrite(ram, sp, pc_h);
+                        update_interrupts_status(ram);
+                        if (!ie_status[i] || !if_status[i]) {
+                            bool updated = false;
+                            for(int j = i; j < 5; ++j){
+                                if (ie_status[j] && if_status[j]) {
+                                    i = j;
+                                    updated = true;
+                                    break;
+                                }
+                            }
+                            if (!updated){
+                                pc = 0x0000;
+                                break;
+                            }
+                        }
+                        sp-=1;
+                        WAIT(4)
+                        twrite(ram, sp, pc_l);
+                        if_status[i] = false;
+                        WAIT(4)
+                        off_IF_value( static_cast<InterruptFlag>(i), ram);
+                        pc = InterruptJumpAddress[i];
+                        break;
+                    }
                 }
                 WAIT(4)
                 continue;
@@ -1444,7 +1424,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 break;
             };
             case LD_0b11111000: {
-                WAIT(4);
+                WAIT(4)
                 auto e = static_cast<char>(arg1);
                 set_flag(Zf, 0);
                 set_flag(Nf, 0);
@@ -1453,6 +1433,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 set_flag(Hf, ((sp & 0xf) + ((unsigned char) (e) & 0xf) > 0xf));
                 regs[H] = ((result >> 8) & 0xff);
                 regs[L] = (result & 0xff);
+                WAIT(4)
                 break;
             }
             case ADD_0b10000xxx: {
@@ -1513,7 +1494,6 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
             case CP_0b10111xxx: {
                 sub_reg_A_flags_only(read_regs(read012(i), ram));
-                WAIT(1)
                 break;
             }
             case CP_0b10111110: {
@@ -1669,7 +1649,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 set_flag(Cf, ((sp & 0xff) + (unsigned char) (e) > 0xff));
                 set_flag(Hf, ((sp & 0xf) + ((unsigned char) (e) & 0xf) > 0xf));
                 sp = (unsigned short) (result);
-                WAIT(5)
+                WAIT(4)
                 break;
             }
             case RLCA_0b00000111: {
@@ -2036,7 +2016,6 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             case STOP: {
 //            if (tread(ram, constants::LY_ADDRESS) == 144)
 //                ++pc;
-
                 break;
             }
             case DI_0b11110011: {
@@ -2055,6 +2034,10 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
         }
         pc += pc_inc_by_ins(itype);
+        if (halt_bug) {
+            --pc;
+            halt_bug = false;
+        }
 #if 0
 
                 std::cout  << instruction_str[itype] << " ";
@@ -2083,4 +2066,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
 
         WAIT(1)
     }
+}
+
+void CPU::update_interrupts_status(RAM& ram) {
+    fetch_IE_value(ram);
+    fetch_IF_value(ram);
 }
