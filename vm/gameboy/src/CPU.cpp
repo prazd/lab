@@ -918,7 +918,9 @@ int CPU::execute(unsigned char i, CPU::Instruction itype, RAM &ram)  {
         case EI_0b11111011: {
             ime_requested = true;
             ime_req_count = 0;  /*std::cout << "IF:" << (unsigned)tread(ram,constants::IF_ADDRESS) << '\n'*/;  return t_cycle_by_ins(itype);} // todo: check
-        case NOP_0b00000000: {return t_cycle_by_ins(itype);}
+        case NOP_0b00000000: {
+            return t_cycle_by_ins(itype);
+        }
     }
     return 0;
 }
