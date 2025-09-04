@@ -65,8 +65,8 @@ struct RAM {
 
     void write(unsigned short index, unsigned char value);
     unsigned char read(unsigned short index) const;
-    void write_unchecked(unsigned short index, unsigned char value);
-    unsigned char read_unchecked(unsigned short index) const;
+    void write_unsafe(unsigned short index, unsigned char value);
+    unsigned char read_unsafe(unsigned short index) const;
 };
 
 #endif //GAMEBOY_RAM_H

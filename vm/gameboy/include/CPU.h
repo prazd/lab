@@ -152,7 +152,7 @@ struct CPU {
     void twrite(RAM& ram, unsigned short index, unsigned char value);
     enum InterruptFlag{VBlank_I, LCD_I, Timer_I, Serial_I, Joypad_I};
 
-    static constexpr unsigned short InterruptJumpAddress[] = {
+    static constexpr unsigned short interrupt_jump_addresses[] = {
         constants::VBLANK_INTERRUPT,
         constants::STAT_INTERRUPT,
         constants::TIMER_INTERRUPT,

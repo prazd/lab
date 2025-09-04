@@ -148,8 +148,7 @@ struct GameBoyVM{
 #endif
                 ic.resume();
                 ppu.tick(ram);
-                if (!cpu.halted)
-                    ram.dma_tick();
+                if (!cpu.halted) ram.dma_tick();
         }
     }
 
@@ -318,6 +317,7 @@ struct GameBoyVM{
         auto ic = cpu.instruction_async_loop(ram);
         while(!WindowShouldClose()){
             main_loop_async(ic);
+//            std::cout << "STAT VALUE:" << std::bitset<8>(ram.read(constants::STAT_ADDRESS)).to_string() << '\n';
             current_t_cycle = 0;
             std::cout << std::dec;
             UpdateTexture(target, ppu.read_buffer());
@@ -356,10 +356,8 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_ramg.gb
 
 
-
 // PPU
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_1_2_timing-GS.gb
-
 
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/hblank_ly_scx_timing-GS.gb - failed
 
@@ -374,9 +372,8 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
-
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/hblank_ly_scx_timing-GS.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_0_timing.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

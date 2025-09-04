@@ -136,7 +136,7 @@ unsigned char RAM::read(unsigned short index) const {
     return dummy_reg;
 }
 
-void RAM::write_unchecked(unsigned short index, unsigned char value) {
+void RAM::write_unsafe(unsigned short index, unsigned char value) {
     if (index <= constants::ROM_BANK_01_END){
         handle_mbc(index, value);
         return;
@@ -203,7 +203,7 @@ void RAM::write_unchecked(unsigned short index, unsigned char value) {
     mem[index] = value;
 }
 
-unsigned char RAM::read_unchecked(unsigned short index) const {
+unsigned char RAM::read_unsafe(unsigned short index) const {
     if (index >= constants::ROM_BANK_00_BEGIN && index <= constants::ROM_BANK_00_END){
         return rom[index];
     }
@@ -231,7 +231,7 @@ void RAM::dma_tick() {
         ++dma_t;
         if (dma_t % 4 == 0) {
             // mem[constants::OAM_BEGIN + dma_counter] = mem[dma_address + dma_counter];
-            write_unchecked( constants::OAM_BEGIN + dma_counter, read_unchecked(dma_address + dma_counter));
+            write_unsafe(constants::OAM_BEGIN + dma_counter, read_unsafe(dma_address + dma_counter));
             ++dma_counter;
             if (dma_counter == 160) {
                 dma_active = false;

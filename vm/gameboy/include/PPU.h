@@ -71,13 +71,13 @@ struct BaseFetcher {
     bool is_window = false;
 
     auto get_window_tile_map_area(const RAM& ram) {
-        if (((ram.read(constants::LCDC_ADDRESS) >> 6) & 1))
+        if (((ram.read_unsafe(constants::LCDC_ADDRESS) >> 6) & 1))
             return 0x9C00;
         return 0x9800;
     }
 
     auto get_bg_tile_map_area(const RAM& ram) {
-        if (((ram.read(constants::LCDC_ADDRESS) >> 3) & 1))
+        if (((ram.read_unsafe(constants::LCDC_ADDRESS) >> 3) & 1))
             return 0x9C00;
         return 0x9800;
     }
@@ -102,14 +102,14 @@ struct BaseFetcher {
     void step(RAM& ram, Args&&... args) {
         switch(current_state) {
             case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(ram, std::forward<Args>(args)...); break;} // Low
-            case FetcherState::Low:      {low = ram.read(tile_address + (line_in_tile * 2)); break;}
+            case FetcherState::Low:      {low = ram.read_unsafe(tile_address + (line_in_tile * 2)); break;}
             case FetcherState::High:     {
-                high = ram.read(tile_address + (line_in_tile * 2) + 1);
+                high = ram.read_unsafe(tile_address + (line_in_tile * 2) + 1);
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete, args...);
                 next_t_cycle = 1;
-                auto scx_offset= (ram.read(constants::SCX_ADDRESS) % 8);
+                auto scx_offset= (ram.read_unsafe(constants::SCX_ADDRESS) % 8);
                 if (fetcher_current_tile_x == 0 || fetcher_current_tile_x == 1) {
-                    next_t_cycle += 6;
+                   next_t_cycle += 6;
                 }
                 if ((!is_window && !is_sprite) && fetcher_current_tile_x == 0 && scx_offset > 0) {
                     for (int i = 0; i < scx_offset; ++i){
@@ -125,8 +125,8 @@ struct BaseFetcher {
                 next_t_cycle = 1;
                 break;}
             case FetcherState::Push: {
-                next_t_cycle = 1;
                 try_to_fill_fifo();
+                next_t_cycle = 1;
                 break;
             }
         }
@@ -146,7 +146,7 @@ struct BaseFetcher {
                     current_state = FetcherState::GetTile;
                 } else {
                     // todo: check
-                    next_t_cycle = 1;
+//                    next_t_cycle = 1;
                     current_state = FetcherState::Sleep;
                 }
                 break;}
@@ -184,12 +184,12 @@ struct BaseFetcher {
 struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
     unsigned char current_window_line{};
     unsigned short update_tile_base(auto& ram, unsigned char current_pixel_x) {
-        auto wy = ram.read(constants::WY_ADDRESS);
-        auto wx = ram.read(constants::WX_ADDRESS);
-        auto scy = ram.read(constants::SCY_ADDRESS);
-        auto ly  = ram.read(constants::LY_ADDRESS);
-        auto scx = ram.read(constants::SCX_ADDRESS);
-        unsigned short tile_base = ((ram.read(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8000 : 0x8800;
+        auto wy = ram.read_unsafe(constants::WY_ADDRESS);
+        auto wx = ram.read_unsafe(constants::WX_ADDRESS);
+        auto scy = ram.read_unsafe(constants::SCY_ADDRESS);
+        auto ly  = ram.read_unsafe(constants::LY_ADDRESS);
+        auto scx = ram.read_unsafe(constants::SCX_ADDRESS);
+        unsigned short tile_base = ((ram.read_unsafe(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8000 : 0x8800;
 
         unsigned short tilemap_base{};
         unsigned char  tilemap_x{};
@@ -210,7 +210,7 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
             is_window = false;
         }
         unsigned short tilemap_address = (tilemap_x + tilemap_y * 32) + tilemap_base;
-        unsigned char tile_index = ram.read(tilemap_address);
+        unsigned char tile_index = ram.read_unsafe(tilemap_address);
 
         unsigned short res{};
         if (tile_base == 0x8000)
@@ -225,8 +225,8 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
     unsigned short update_tile_base(auto& ram, unsigned char cpx, const Sprite& sprite) {
         is_sprite = true;
         pallete = sprite.attrib;
-        auto lcdc_mode = (ram.read(constants::LCDC_ADDRESS) >> 2) & 1;
-        line_in_tile = ram.read(constants::LY_ADDRESS) - (sprite.y_pos - 16);
+        auto lcdc_mode = (ram.read_unsafe(constants::LCDC_ADDRESS) >> 2) & 1;
+        line_in_tile = ram.read_unsafe(constants::LY_ADDRESS) - (sprite.y_pos - 16);
         if ((sprite.attrib >> 6) & 1)
             line_in_tile = ((lcdc_mode ? 16 : 8)) - line_in_tile - 1;
         return (sprite.index_tile * 16) + constants::VRAM_BEGIN;
@@ -247,9 +247,10 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
 
     void step(RAM& ram, unsigned char cpx, const Sprite& sprite) {
         switch(current_state) {
-            case FetcherState::GetTile:  {tile_address = update_tile_base(ram, cpx, sprite); low  = ram.read(tile_address + (line_in_tile * 2)); break;}
+            case FetcherState::GetTile:  {tile_address = update_tile_base(ram, cpx, sprite); low  = ram.read_unsafe(
+                        tile_address + (line_in_tile * 2)); break;}
             case FetcherState::High:     {
-                high = ram.read(tile_address + (line_in_tile * 2) + 1);
+                high = ram.read_unsafe(tile_address + (line_in_tile * 2) + 1);
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete,cpx, sprite);
 
                 // X-flip

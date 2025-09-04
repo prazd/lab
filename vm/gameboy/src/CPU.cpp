@@ -96,6 +96,9 @@ void CPU::xor_reg_A(unsigned char val)  {
 void CPU::sub_reg_A_flags_only(unsigned char val)  {
     auto res = (int)regs[A] - (int)val;
     auto res8 = (unsigned char)(res & 0xff);
+//    if (res8 == 0) {
+//        res8+=0;
+//    }
     set_flag(Nf, true);
     set_flag(Zf, (res8 == 0));
     set_flag(Cf, (val > regs[A]));
@@ -1148,16 +1151,11 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
     #define WAIT(n) for (int i = 0; i < n; ++i) co_await std::suspend_always();
     while (true) {
         if (halted) {
-            auto if_value = ram.read(constants::IF_ADDRESS);
             auto ie_value = ram.read(constants::IE_ADDRESS);
+            auto if_value = ram.read(constants::IF_ADDRESS);
             if (ime) {
-                if ((if_value & ie_value & 0x1f) != 0) {
-                    // todo: check
-//                    handle_interrupt(ram, i, itype);
-//                    t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-//                    cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
-                } else {
-                    WAIT(4)
+                if ((if_value & ie_value & 0x1f) == 0) {
+                    WAIT(1)
                     continue;
                 }
             } else if (!ime) {
@@ -1166,7 +1164,6 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         halted = false;
                         skip_interrupt = false;
                     } else {
-                        // todo: check halt bug
                         halt_bug = true;
 //                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
 //                        pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
@@ -1224,7 +1221,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if_status[i] = false;
                         WAIT(4)
                         off_IF_value( static_cast<InterruptFlag>(i), ram);
-                        pc = InterruptJumpAddress[i];
+                        pc = interrupt_jump_addresses[i];
                         break;
                     }
                 }
@@ -1274,7 +1271,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
         WAIT(3) // fetch/decode
         auto i = fetch(ram);
         auto itype = decode(i);
-
+//        if (ram.read(constants::LY_ADDRESS) == 144) {
+//            i+=0;
+//        }
         switch (itype) {
             case LD_0b01xxxyyy: { // 4/8 t-cycle
                 // todo: check
@@ -2013,6 +2012,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                     halted = true;
                     ++pc;
                 }
+                WAIT(4)
                 break;
             }
             case STOP: {

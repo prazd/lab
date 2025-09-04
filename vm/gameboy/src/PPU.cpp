@@ -67,23 +67,25 @@ PPU::Mode PPU::get_current_mode() const {
 }
 
 void PPU::set_ppu_reg(unsigned short address, unsigned char value, RAM& ram) {
-    ram.write(address, value);
+    ram.write_unsafe(address, value);
 }
 
 void PPU::set_ppu_mode(RAM &ram) {
-    ram.write(constants::STAT_ADDRESS, (current_mode | ram.read(constants::STAT_ADDRESS)) & 0xFC);
+    ram.write_unsafe(constants::STAT_ADDRESS, (ram.read_unsafe(constants::STAT_ADDRESS) & 0xFC) | current_mode);
+//    std::cout << "CurrentMode:" << (unsigned)current_mode << '\n';
+//    std::cout << "CurrentStat:" << std::bitset<8>(ram.read_unsafe(constants::STAT_ADDRESS)).to_string() << '\n';
 }
 void PPU::update_lcd(const RAM &ram) {
-    lcd_enable = (((ram.read(constants::LCDC_ADDRESS)) >> 7) & 1);
+    lcd_enable = (((ram.read_unsafe(constants::LCDC_ADDRESS)) >> 7) & 1);
 }
 void PPU::update_window(const RAM &ram) {
-    window_visible = (((ram.read(constants::LCDC_ADDRESS)) >> 5) & 1);
+    window_visible = (((ram.read_unsafe(constants::LCDC_ADDRESS)) >> 5) & 1);
 }
 void PPU::update_obj(const RAM &ram) {
-    obj_enable = (((ram.read(constants::LCDC_ADDRESS)) >> 1) & 1);
+    obj_enable = (((ram.read_unsafe(constants::LCDC_ADDRESS)) >> 1) & 1);
 }
 void PPU::update_bg(const RAM &ram)  {
-    bg_enable = ((ram.read(constants::LCDC_ADDRESS)) & 1);
+    bg_enable = ((ram.read_unsafe(constants::LCDC_ADDRESS)) & 1);
 }
 void PPU::update_regs(const RAM &ram) {
 //    update_lcd(ram);
@@ -93,7 +95,7 @@ void PPU::update_regs(const RAM &ram) {
 }
 
 unsigned char PPU::get_obj_size(const RAM &ram)  {
-    return (((ram.read(constants::LCDC_ADDRESS)) >> 2) & 1) ? 16 : 8;
+    return (((ram.read_unsafe(constants::LCDC_ADDRESS)) >> 2) & 1) ? 16 : 8;
 }
 
 void PPU::oam_scan(RAM &ram)  {
@@ -102,15 +104,15 @@ void PPU::oam_scan(RAM &ram)  {
         return;
     }
     auto obj_sz = get_obj_size(ram);
-    auto val= ram.read(constants::OAM_BEGIN + current_oam_obj);
+    auto val= ram.read_unsafe(constants::OAM_BEGIN + current_oam_obj);
     int top = val - 16;
     if (current_line >= top && current_line < top + obj_sz){
         sprite_buffer.emplace(
             Sprite{
                 .y_pos = val,
-                .x_pos = static_cast<unsigned char>(ram.read(constants::OAM_BEGIN + current_oam_obj + 1)),
-                .index_tile = ram.read(constants::OAM_BEGIN + current_oam_obj + 2),
-                .attrib = ram.read(constants::OAM_BEGIN + current_oam_obj + 3),
+                .x_pos = static_cast<unsigned char>(ram.read_unsafe(constants::OAM_BEGIN + current_oam_obj + 1)),
+                .index_tile = ram.read_unsafe(constants::OAM_BEGIN + current_oam_obj + 2),
+                .attrib = ram.read_unsafe(constants::OAM_BEGIN + current_oam_obj + 3),
         }, current_oam_obj);
     }
     current_oam_obj += 4;
@@ -119,10 +121,10 @@ void PPU::oam_scan(RAM &ram)  {
 
 Pixel PPU::pixel_mixing(RAM &ram) {
     auto bg_pixel = Pixel{.color = WHITE}; // Default
-    if (!pixel_fetcher.fifo.empty() && ram.read(constants::LCDC_ADDRESS) & 1){
+    if (!pixel_fetcher.fifo.empty() && ram.read_unsafe(constants::LCDC_ADDRESS) & 1){
         bg_pixel = pixel_fetcher.fifo.front(); pixel_fetcher.fifo.pop_front();
     }
-    auto bgp = ram.read(constants::BGP);
+    auto bgp = ram.read_unsafe(constants::BGP);
     switch (Pixel::get_color_id(bg_pixel.color)) {
         case 1:  {bg_pixel.color = Pixel::get_pixel_color((bgp >> 2) & 3);  break;}
         case 2:  {bg_pixel.color = Pixel::get_pixel_color((bgp >> 4) & 3);  break;}
@@ -130,7 +132,7 @@ Pixel PPU::pixel_mixing(RAM &ram) {
         default:
             {bg_pixel.color = Pixel::get_pixel_color((bgp & 3));  break;}
     }
-    if (!(ram.read(constants::LCDC_ADDRESS) & 0x2)) {
+    if (!(ram.read_unsafe(constants::LCDC_ADDRESS) & 0x2)) {
         return bg_pixel;
     }
     if (sprite_fetcher.fifo.empty()) {
@@ -150,9 +152,9 @@ Pixel PPU::pixel_mixing(RAM &ram) {
 
     unsigned char obp{};
     if ((sprite_pixel.attrib >> 4 & 1))
-        obp = ram.read(constants::OBP1);
+        obp = ram.read_unsafe(constants::OBP1);
     else
-        obp = ram.read(constants::OBP0);
+        obp = ram.read_unsafe(constants::OBP0);
 
     switch (Pixel::get_color_id(sprite_pixel.color)) {
         case 1:  {sprite_pixel.color = Pixel::get_pixel_color((obp >> 2) & 3);  break;}
@@ -183,8 +185,6 @@ void PPU::draw(RAM &ram)  {
     }
 }
 
-
-
 void PPU::tick(RAM &ram)  {
     static size_t last_t_cycles = 0;
     static size_t prev_t_cycles = 0;
@@ -195,15 +195,14 @@ void PPU::tick(RAM &ram)  {
     static bool ly_increment_done = false;
     static bool start_oam = false;
 
-
-#define DEBUG_T_CYCLE 0
+#define DEBUG_T_CYCLE 1
 #define PRINT_T_CYCLE(x, t_cycles) std::cout << x << ": " << t_cycles << '\n'; t_cycles = 0;
 #define PRINT_DOTS(n) for (int i = 0; i < n; ++i) std::cout << '-'; std::cout << '\n';
 #define PRINT_LINE(line) std::cout << "Line: " << (unsigned)line << '\n';
 
     static size_t debug_t_cycles = 0;
 #if 0
-    ram.write(constants::LY_ADDRESS, 0x90);
+    ram.write_unchecked(constants::LY_ADDRESS, 0x90);
     return;
 #endif
         ++internal_t_cycles;
@@ -211,8 +210,7 @@ void PPU::tick(RAM &ram)  {
         ++last_t_cycles;
         update_regs(ram);
 
-
-//    std::cout <<  "Stat:" << std::bitset<8>(ram.read(constants::STAT_ADDRESS)).to_string() << '\n';
+//    std::cout <<  "Stat:" << std::bitset<8>(ram.read_unsafe(constants::STAT_ADDRESS)).to_string() << '\n';
         if (current_mode == OAM){
 #if DEBUG_T_CYCLE
             ++debug_t_cycles;
@@ -228,17 +226,19 @@ void PPU::tick(RAM &ram)  {
                 current_oam_obj = 0;
                 current_pixel_x = 0;
                 current_mode = Drawing;
+                set_ppu_mode(ram);
 #if DEBUG_T_CYCLE
                 PRINT_T_CYCLE("OAM", debug_t_cycles);
 #endif
-                set_ppu_mode(ram);
+//                set_ppu_mode(ram);
             }
         } else if (current_mode == Drawing) {
 #if DEBUG_T_CYCLE
             ++debug_t_cycles;
 #endif
                 if (current_pixel_x < 160) {
-                    if ((ram.read(constants::WY_ADDRESS) == ram.read(constants::LY_ADDRESS))
+                    if (((ram.read_unsafe(constants::LCDC_ADDRESS) >> 5) & 1)
+                    && (ram.read_unsafe(constants::WY_ADDRESS) == ram.read_unsafe(constants::LY_ADDRESS))
                     && !window_line_is_triggered) {
                         window_line_is_triggered = true;
                     }
@@ -275,15 +275,15 @@ void PPU::tick(RAM &ram)  {
                     if ((!pixel_fetcher.fifo.empty() || !sprite_fetcher.fifo.empty()) &&
                             !pixel_fetcher.paused) {
                         draw(ram);
-                       }
+                    }
                 } else {
                     sprite_fetcher.reset();
                     pixel_fetcher.reset();
 //                    internal_t_cycles = 0;
-                if (ram.read(constants::STAT_ADDRESS) & (1 << 3))
-                       ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
+                if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 3))
+                    ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
 
-                   switch(ram.read(constants::SCX_ADDRESS) % 8){
+                   switch(ram.read_unsafe(constants::SCX_ADDRESS) % 8){
                        case 0: {ly_increment_delay = 51; break;}
                        case 1:
                        case 2:
@@ -300,7 +300,7 @@ void PPU::tick(RAM &ram)  {
                     PRINT_T_CYCLE("Drawing", debug_t_cycles)
 #endif
                     current_mode = HBlank;
-                   set_ppu_mode(ram);
+                    set_ppu_mode(ram);
             }
         } else if (current_mode == HBlank) {
 #if DEBUG_T_CYCLE
@@ -309,7 +309,11 @@ void PPU::tick(RAM &ram)  {
             if (!ly_increment_done && --ly_increment_delay == 0) {
                 ly_increment_done = true;
                 set_ppu_reg(constants::LY_ADDRESS, ++current_line, ram);
+                if (current_line == 70) {
+                    current_line+=0;
+                }
             }
+//            std::cout << "ly_increment_delay:" << ly_increment_delay << '\n';
             if (current_t_cycle_count >= 456){
 #if DEBUG_T_CYCLE
                 assert(current_t_cycle_count == 456);
@@ -321,25 +325,27 @@ void PPU::tick(RAM &ram)  {
 
                 // todo: fix
                 // LYC
-                auto lyc = ram.read(constants::LYC_ADDRESS);
-                unsigned char stat = ram.read(constants::STAT_ADDRESS);
+                auto lyc = ram.read_unsafe(constants::LYC_ADDRESS);
+                unsigned char stat = ram.read_unsafe(constants::STAT_ADDRESS);
                 if(current_line == lyc) {
-                    ram.write(constants::STAT_ADDRESS, stat | (1 << 2));
+                    ram.write_unsafe(constants::STAT_ADDRESS, stat | (1 << 2));
                     if (stat & (1 << 6))
-                         ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
+                        ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                 } else {
-                    ram.write(constants::STAT_ADDRESS, (ram.read(constants::STAT_ADDRESS) & (~(1 << 2))));
+                    ram.write_unsafe(constants::STAT_ADDRESS,
+                                     (ram.read_unsafe(constants::STAT_ADDRESS) & (~(1 << 2))));
                 }
                 if (current_line == 144){
 #if DEBUG_T_CYCLE
                     PRINT_T_CYCLE("HBlank", debug_t_cycles)
 #endif
                     current_mode = VBlank;
+                    set_ppu_mode(ram);
                     // VBlank Interrupt
-                    ram.write(constants::IF_ADDRESS, ram.read(constants::IF_ADDRESS) | 1);
+                    ram.write_unsafe(constants::IF_ADDRESS, ram.read_unsafe(constants::IF_ADDRESS) | 1);
                     // LCDC
-                    if (ram.read(constants::STAT_ADDRESS) & (1 << 4))
-                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
+                    if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 4))
+                        ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                     current_v_blank_t_cycle_count = 0;
                 } else {
 #if DEBUG_T_CYCLE
@@ -348,17 +354,17 @@ void PPU::tick(RAM &ram)  {
                     PRINT_DOTS(20)
 #endif
                     current_mode = OAM;
+                    set_ppu_mode(ram);
                     pixel_fetcher.is_windows_drawing = false;
                     pixel_fetcher.windows_current_tile_x = 0;
                     // LCD Interrupt
-                    if (ram.read(constants::STAT_ADDRESS) & (1 << 5))
-                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
+                    if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
+                        ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                     sprite_buffer = {};
                     oam_next_t_cycle = 2;
                     current_oam_obj = 0;
                 }
                 window_line_counter = 0;
-                set_ppu_mode(ram);
             }
         } else if (current_mode == VBlank) {
 #if DEBUG_T_CYCLE
@@ -374,14 +380,17 @@ void PPU::tick(RAM &ram)  {
 #endif
                     last_t_cycles = 0;
                     current_mode = OAM;
+                    set_ppu_mode(ram);
                     // LCD Interrupt
-                    if (ram.read(constants::STAT_ADDRESS) & (1 << 5))
-                        ram.write(constants::IF_ADDRESS, (ram.read(constants::IF_ADDRESS) | (1 << 1)));
+                    if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
+                        ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                     current_oam_obj = 0;
                     oam_next_t_cycle = 2;
-                    set_ppu_mode(ram);
+//                    set_ppu_mode(ram);
                     current_line = 0;
+#if DEBUG_T_CYCLE
                     std::cout << "internal_t_cycles:" << internal_t_cycles << '\n';
+#endif
                     internal_t_cycles = 0;
                     set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
                     current_pixel_x = 0;
@@ -414,8 +423,9 @@ void PPU::print_buffer() const {
 }
 
 bool PPU::is_windows_fetching_ready(RAM &ram) {
-    return window_line_is_triggered && ((ram.read(constants::LCDC_ADDRESS) >> 5) & 1) && (ram.read(constants::LCDC_ADDRESS) & 1)
-           && current_pixel_x >= (ram.read(constants::WX_ADDRESS) - 7);
+    return window_line_is_triggered && ((ram.read_unsafe(constants::LCDC_ADDRESS) >> 5) & 1) && (ram.read_unsafe(
+            constants::LCDC_ADDRESS) & 1)
+           && current_pixel_x >= (ram.read_unsafe(constants::WX_ADDRESS) - 7);
 }
 
 unsigned short PPU::get_sprite_fetcher_tile_address() const {
