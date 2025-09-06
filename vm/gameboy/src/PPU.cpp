@@ -121,7 +121,7 @@ void PPU::oam_scan(RAM &ram)  {
 
 Pixel PPU::pixel_mixing(RAM &ram) {
     auto bg_pixel = Pixel{.color = WHITE}; // Default
-    if (!pixel_fetcher.fifo.empty() && ram.read_unsafe(constants::LCDC_ADDRESS) & 1){
+    if (!pixel_fetcher.fifo.empty()){
         bg_pixel = pixel_fetcher.fifo.front(); pixel_fetcher.fifo.pop_front();
     }
     auto bgp = ram.read_unsafe(constants::BGP);
@@ -195,7 +195,7 @@ void PPU::tick(RAM &ram)  {
     static bool ly_increment_done = false;
     static bool start_oam = false;
 
-#define DEBUG_T_CYCLE 1
+#define DEBUG_T_CYCLE 0
 #define PRINT_T_CYCLE(x, t_cycles) std::cout << x << ": " << t_cycles << '\n'; t_cycles = 0;
 #define PRINT_DOTS(n) for (int i = 0; i < n; ++i) std::cout << '-'; std::cout << '\n';
 #define PRINT_LINE(line) std::cout << "Line: " << (unsigned)line << '\n';
@@ -209,6 +209,7 @@ void PPU::tick(RAM &ram)  {
         ++current_t_cycle_count;
         ++last_t_cycles;
         update_regs(ram);
+        set_ppu_mode(ram);
 
 //    std::cout <<  "Stat:" << std::bitset<8>(ram.read_unsafe(constants::STAT_ADDRESS)).to_string() << '\n';
         if (current_mode == OAM){
@@ -226,7 +227,7 @@ void PPU::tick(RAM &ram)  {
                 current_oam_obj = 0;
                 current_pixel_x = 0;
                 current_mode = Drawing;
-                set_ppu_mode(ram);
+
 #if DEBUG_T_CYCLE
                 PRINT_T_CYCLE("OAM", debug_t_cycles);
 #endif
@@ -235,6 +236,7 @@ void PPU::tick(RAM &ram)  {
         } else if (current_mode == Drawing) {
 #if DEBUG_T_CYCLE
             ++debug_t_cycles;
+//            std::cout << "debug_t_cycles:" << debug_t_cycles << '\n';
 #endif
                 if (current_pixel_x < 160) {
                     if (((ram.read_unsafe(constants::LCDC_ADDRESS) >> 5) & 1)
@@ -243,10 +245,10 @@ void PPU::tick(RAM &ram)  {
                         window_line_is_triggered = true;
                     }
                     if (!pixel_fetcher.paused) {
-                            --pixel_fetcher.next_t_cycle;
-                            if (pixel_fetcher.next_t_cycle == 0) {
-                                pixel_fetcher.fetch(ram,  current_pixel_x);
-                            }
+                        --pixel_fetcher.next_t_cycle;
+                        if (pixel_fetcher.next_t_cycle == 0) {
+                            pixel_fetcher.fetch(ram,  current_pixel_x);
+                        }
                     }
 
                     if (!sprite_render) {
@@ -300,7 +302,7 @@ void PPU::tick(RAM &ram)  {
                     PRINT_T_CYCLE("Drawing", debug_t_cycles)
 #endif
                     current_mode = HBlank;
-                    set_ppu_mode(ram);
+//                    set_ppu_mode(ram);
             }
         } else if (current_mode == HBlank) {
 #if DEBUG_T_CYCLE
@@ -316,7 +318,7 @@ void PPU::tick(RAM &ram)  {
 //            std::cout << "ly_increment_delay:" << ly_increment_delay << '\n';
             if (current_t_cycle_count >= 456){
 #if DEBUG_T_CYCLE
-                assert(current_t_cycle_count == 456);
+//                assert(current_t_cycle_count == 456);
 #endif
                 pixel_fetcher.fetcher_current_tile_x = 0;
                 sprite_fetcher.fetcher_current_tile_x = 0;
@@ -340,7 +342,7 @@ void PPU::tick(RAM &ram)  {
                     PRINT_T_CYCLE("HBlank", debug_t_cycles)
 #endif
                     current_mode = VBlank;
-                    set_ppu_mode(ram);
+//                    set_ppu_mode(ram);
                     // VBlank Interrupt
                     ram.write_unsafe(constants::IF_ADDRESS, ram.read_unsafe(constants::IF_ADDRESS) | 1);
                     // LCDC
@@ -354,7 +356,7 @@ void PPU::tick(RAM &ram)  {
                     PRINT_DOTS(20)
 #endif
                     current_mode = OAM;
-                    set_ppu_mode(ram);
+//                    set_ppu_mode(ram);
                     pixel_fetcher.is_windows_drawing = false;
                     pixel_fetcher.windows_current_tile_x = 0;
                     // LCD Interrupt
@@ -380,7 +382,7 @@ void PPU::tick(RAM &ram)  {
 #endif
                     last_t_cycles = 0;
                     current_mode = OAM;
-                    set_ppu_mode(ram);
+//                    set_ppu_mode(ram);
                     // LCD Interrupt
                     if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
                         ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));

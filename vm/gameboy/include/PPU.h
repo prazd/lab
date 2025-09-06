@@ -145,8 +145,7 @@ struct BaseFetcher {
                     }
                     current_state = FetcherState::GetTile;
                 } else {
-                    // todo: check
-//                    next_t_cycle = 1;
+                    next_t_cycle = 1;
                     current_state = FetcherState::Sleep;
                 }
                 break;}
@@ -161,8 +160,8 @@ struct BaseFetcher {
                     next_t_cycle = NEXT_T_CYCLE_VAL;
                     current_state = FetcherState::GetTile;
                 } else {
-                    current_state = FetcherState::Push;
                     next_t_cycle = 1;
+                    current_state = FetcherState::Push;
                 }
                 break;}
             case FetcherState::Push:     {

@@ -47,12 +47,10 @@ void RAM::handle_mbc1(unsigned short index, unsigned char value) {
 
 bool RAM::is_ram_avaliable(unsigned short index) const {
     auto current_ppu_mode = get_ppu_mode();
-    if (((index >=  constants::VRAM_BEGIN && index <=  constants::VRAM_END)  && (current_ppu_mode == 3 && lcd_enabled())) ||
+    return !(((index >=  constants::VRAM_BEGIN && index <=  constants::VRAM_END)  && (current_ppu_mode == 3 && lcd_enabled())) ||
         ((index >=  constants::EXTERNAL_RAM_BEGIN && index <=  constants::EXTERNAL_RAM_END)) && (!external_ram_enabled) || // todo: check external RAM
-        ((index >=  constants::OAM_BEGIN && index <=  constants::OAM_END)) && ((current_ppu_mode == 2 || current_ppu_mode == 3) && lcd_enabled()) ||
-        ((index >=  constants::NOT_USABLE_BEGIN && index <=  constants::NOT_USABLE_END))
-            ) return false;
-    return true;
+        ((index >=  constants::OAM_BEGIN && index <= constants::OAM_END)) && ((current_ppu_mode == 2 || current_ppu_mode == 3) && lcd_enabled()) ||
+        ((index >=  constants::NOT_USABLE_BEGIN && index <=  constants::NOT_USABLE_END)));
 }
 
 unsigned char RAM::get_ppu_mode() const {
@@ -227,17 +225,15 @@ unsigned char RAM::read_unsafe(unsigned short index) const {
 }
 
 void RAM::dma_tick() {
-    if (dma_active) {
-        ++dma_t;
-        if (dma_t % 4 == 0) {
-            // mem[constants::OAM_BEGIN + dma_counter] = mem[dma_address + dma_counter];
-            write_unsafe(constants::OAM_BEGIN + dma_counter, read_unsafe(dma_address + dma_counter));
-            ++dma_counter;
-            if (dma_counter == 160) {
-                dma_active = false;
-                dma_address = 0;
-                dma_counter = 0;
-            }
+    ++dma_t;
+    if (dma_t % 4 == 0) {
+        // mem[constants::OAM_BEGIN + dma_counter] = mem[dma_address + dma_counter];
+        write_unsafe(constants::OAM_BEGIN + dma_counter, read_unsafe(dma_address + dma_counter));
+        ++dma_counter;
+        if (dma_counter == 160) {
+            dma_active = false;
+            dma_address = 0;
+            dma_counter = 0;
         }
     }
 }

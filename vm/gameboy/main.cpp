@@ -50,94 +50,6 @@ struct GameBoyVM{
         }
     }
 
-
-    void main_loop(){
-        int current_t_cycle = 0;
-        while(current_t_cycle < 70'224) {
-            auto next_ins = cpu.fetch(ram);
-            auto decoded_ins = cpu.decode(next_ins);
-#if 0
-            auto print_hex = [&](auto val){
-                    auto num_bytes = sizeof(val);
-                    std::stringstream ss("");
-                    ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
-                    return ss;
-                };
-                std::cout  << cpu.instruction_str[decoded_ins] << " ";
-                if (!cpu.halted) {
-                    std::cout <<
-
-                              "A:" << print_hex(cpu.regs[CPU::A]).str() << " " <<
-                              "F:" <<  print_hex(cpu.regs[CPU::F]).str() << " " <<
-                              "B:" <<  print_hex(cpu.regs[CPU::B]).str() << " " <<
-                              "C:" <<  print_hex(cpu.regs[CPU::C]).str() << " " <<
-                              "D:" <<  print_hex(cpu.regs[CPU::D]).str() << " " <<
-                              "E:" <<  print_hex(cpu.regs[CPU::E]).str() << " " <<
-                              "H:" <<  print_hex(cpu.regs[CPU::H]).str() << " " <<
-                              "L:" <<  print_hex(cpu.regs[CPU::L]).str() << " " <<
-                              "SP:" <<  print_hex(cpu.sp).str() << " " <<
-                              "PC:" <<  print_hex(cpu.pc).str() << " " <<
-                              "PCMEM:" <<  print_hex(ram.read(cpu.pc)).str() << "," <<
-                              print_hex(ram.read(cpu.pc + 1)).str() << "," <<
-                              print_hex(ram.read(cpu.pc + 2)).str() << "," <<
-                              print_hex(ram.read(cpu.pc + 3)).str() << '\n';
-                    std::cout << std::dec;
-                }
-
-
-//                if (cpu.ime) {
-
-#endif
-            int t_cycle = 0;
-            if (cpu.halted) {
-                auto if_value = ram.read(constants::IF_ADDRESS);
-                auto ie_value = ram.read(constants::IE_ADDRESS);
-                if (cpu.ime) {
-                    if ((if_value & ie_value & 0x1f) != 0) {
-                        cpu.handle_interrupt(ram, next_ins, decoded_ins);
-                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-                        cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
-                    } else {
-                        t_cycle = 4; // wait
-                    }
-                } else if (!cpu.ime) {
-                    if ((if_value & ie_value & 0x1f) != 0) {
-                        if (cpu.skip_interrupt) {
-                            cpu.halted = false;
-                            cpu.skip_interrupt = false;
-                            t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-                            cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
-                        } else {
-                            cpu.halt_bug = true;
-                            t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-                            cpu.pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
-                            cpu.halt_bug = false;
-                            cpu.halted = false;
-                        }
-                    } else {
-                        cpu.skip_interrupt = true;
-                        t_cycle = 4;
-                    }
-                }
-            } else {
-                cpu.handle_interrupt(ram, next_ins, decoded_ins);
-                t_cycle = cpu.execute(next_ins, decoded_ins, ram);
-                cpu.pc += cpu.pc_inc_by_ins(decoded_ins);
-            }
-//            t_cycles_count += t_cycle;
-            for (int i = 0; i < t_cycle; ++i) {
-                cpu.timer.tick(ram);
-                ppu.tick(ram);
-                if (!cpu.halted)
-                    ram.dma_tick();
-            }
-
-            current_t_cycle+=t_cycle;
-//            cpu_accumulator-=CPU_CYCLE_TIME;
-//                std::cout << "IF_VALUE:" << std::hex << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';
-        }
-    }
-
     void main_loop_async(auto& ic) {
         int current_t_cycle = 0;
         while(current_t_cycle++ < 70'224) {
@@ -147,8 +59,9 @@ struct GameBoyVM{
                 std::cout << "TIMA:" << (int)ram.read(constants::TIMA_REGISTER) << '\n';
 #endif
                 ic.resume();
-                ppu.tick(ram);
-                if (!cpu.halted) ram.dma_tick();
+                // todo: reset to 0 line when off
+                if (ram.mem[constants::LCDC_ADDRESS] & 0x80) ppu.tick(ram);
+                if (!cpu.halted && ram.dma_active) ram.dma_tick();
         }
     }
 
@@ -206,6 +119,7 @@ struct GameBoyVM{
         }
         cpu.pc = 0x0100;
         cpu.sp = 0xFFFE;
+        ram.mem[constants::LCDC_ADDRESS] = 0x91;
         ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
         ram.current_mbc = get_mbc_type(ram.rom);
         ram.current_rom_bank_max = get_rom_size(ram.rom);
@@ -323,7 +237,7 @@ struct GameBoyVM{
             UpdateTexture(target, ppu.read_buffer());
 
             BeginDrawing();
-               ClearBackground(BLACK);
+               ClearBackground(WHITE);
                DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
 
 // PRINT PIXELS
@@ -347,21 +261,29 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug) - check
 // /Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb
 // /Users/prazd/Desktop/dev/gb-test-roms/mem_timing/mem_timing.gb
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/div_timing.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/interrupts/ie_push.gb
 
 // MBC-1
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank1.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank2.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_ramg.gb
-
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_oam_ok_timing.gb
 
 // PPU
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_1_2_timing-GS.gb
-
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/hblank_ly_scx_timing-GS.gb - failed
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_0_timing.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode3_timing.gb
 
 // Failed:
+
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb - failed
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb - failed
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_irq_blocking.gb - failed
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/lcdon_write_timing-GS.gb - failed
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/hblank_ly_scx_timing-GS.gb - failed
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing_sprites.gb - failed
+
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb ?
 // /Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb
 // /Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb
@@ -369,11 +291,13 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/misc/ppu/vblank_stat_intr-C.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/sources-GS.gb
 
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/div_timing.gb - failed
+
 // /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_0_timing.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing_sprites.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
