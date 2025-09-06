@@ -52,6 +52,7 @@ struct GameBoyVM{
 
     void main_loop_async(auto& ic) {
         int current_t_cycle = 0;
+        bool prev_lcdc_on = ram.mem[constants::LCDC_ADDRESS] & 0x80;
         while(current_t_cycle++ < 70'224) {
                 cpu.timer.tick(ram);
 #if 0
@@ -59,8 +60,20 @@ struct GameBoyVM{
                 std::cout << "TIMA:" << (int)ram.read(constants::TIMA_REGISTER) << '\n';
 #endif
                 ic.resume();
-                // todo: reset to 0 line when off
-                if (ram.mem[constants::LCDC_ADDRESS] & 0x80) ppu.tick(ram);
+                if (ram.mem[constants::LCDC_ADDRESS] & 0x80) {
+                    ram.mem[constants::STAT_ADDRESS] |= 0x80; // todo: check
+                    if (!prev_lcdc_on) {
+                        prev_lcdc_on = true;
+                        ppu.lyc_ly_compare(ram);
+                        // todo: check - start with HBlank
+                    } else {
+                        ppu.tick(ram);
+                    }
+                }
+                if (!(ram.mem[constants::LCDC_ADDRESS] & 0x80) && prev_lcdc_on) {
+                    prev_lcdc_on = false;
+                    ppu.reset(ram);
+                }
                 if (!cpu.halted && ram.dma_active) ram.dma_tick();
         }
     }
@@ -120,6 +133,7 @@ struct GameBoyVM{
         cpu.pc = 0x0100;
         cpu.sp = 0xFFFE;
         ram.mem[constants::LCDC_ADDRESS] = 0x91;
+        ram.mem[constants::STAT_ADDRESS] = 0x80;
         ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
         ram.current_mbc = get_mbc_type(ram.rom);
         ram.current_rom_bank_max = get_rom_size(ram.rom);
@@ -274,11 +288,12 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_0_timing.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode3_timing.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb
+
 
 // Failed:
 
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb - failed
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_irq_blocking.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/lcdon_write_timing-GS.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/hblank_ly_scx_timing-GS.gb - failed
@@ -297,7 +312,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing_sprites.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

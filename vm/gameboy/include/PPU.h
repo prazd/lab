@@ -300,6 +300,8 @@ class PPU {
     Mode current_mode = OAM;
     Color buffer[144][160]{};
 
+
+
     bool lcd_enable = true;
     bool window_visible = false;
     bool obj_enable = false; // sprites
@@ -341,6 +343,9 @@ class PPU {
     std::optional<Sprite> sprite_on_x(RAM& ram);
     void draw(RAM& ram);
 public:
+    void set_start_mode();
+    void lyc_ly_compare(RAM& ram);
+    void reset(RAM&);
     unsigned short get_bg_fetcher_tile_address() const;
     unsigned short get_sprite_fetcher_tile_address() const;
     auto  read_buffer() const -> const Color(&)[144][160];

@@ -210,6 +210,7 @@ void PPU::tick(RAM &ram)  {
         ++last_t_cycles;
         update_regs(ram);
         set_ppu_mode(ram);
+        lyc_ly_compare(ram);
 
 //    std::cout <<  "Stat:" << std::bitset<8>(ram.read_unsafe(constants::STAT_ADDRESS)).to_string() << '\n';
         if (current_mode == OAM){
@@ -299,7 +300,10 @@ void PPU::tick(RAM &ram)  {
                    }
                     ly_increment_done = false;
 #if DEBUG_T_CYCLE
-                    PRINT_T_CYCLE("Drawing", debug_t_cycles)
+                   if (debug_t_cycles != 172){
+                       debug_t_cycles += 0;
+                   }
+                   PRINT_T_CYCLE("Drawing", debug_t_cycles)
 #endif
                     current_mode = HBlank;
 //                    set_ppu_mode(ram);
@@ -308,13 +312,13 @@ void PPU::tick(RAM &ram)  {
 #if DEBUG_T_CYCLE
             ++debug_t_cycles;
 #endif
-            if (!ly_increment_done && --ly_increment_delay == 0) {
-                ly_increment_done = true;
-                set_ppu_reg(constants::LY_ADDRESS, ++current_line, ram);
-                if (current_line == 70) {
-                    current_line+=0;
-                }
-            }
+//            if (!ly_increment_done && --ly_increment_delay == 0) {
+//                ly_increment_done = true;
+//
+//                if (current_line == 70) {
+//                    current_line+=0;
+//                }
+//            }
 //            std::cout << "ly_increment_delay:" << ly_increment_delay << '\n';
             if (current_t_cycle_count >= 456){
 #if DEBUG_T_CYCLE
@@ -325,19 +329,9 @@ void PPU::tick(RAM &ram)  {
                 current_pixel_x = 0;
                 current_t_cycle_count = 0;
 
-                // todo: fix
-                // LYC
-                auto lyc = ram.read_unsafe(constants::LYC_ADDRESS);
-                unsigned char stat = ram.read_unsafe(constants::STAT_ADDRESS);
-                if(current_line == lyc) {
-                    ram.write_unsafe(constants::STAT_ADDRESS, stat | (1 << 2));
-                    if (stat & (1 << 6))
-                        ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
-                } else {
-                    ram.write_unsafe(constants::STAT_ADDRESS,
-                                     (ram.read_unsafe(constants::STAT_ADDRESS) & (~(1 << 2))));
-                }
-                if (current_line == 144){
+                // LYC == LY
+
+                if (current_line == 143){
 #if DEBUG_T_CYCLE
                     PRINT_T_CYCLE("HBlank", debug_t_cycles)
 #endif
@@ -366,6 +360,7 @@ void PPU::tick(RAM &ram)  {
                     oam_next_t_cycle = 2;
                     current_oam_obj = 0;
                 }
+                set_ppu_reg(constants::LY_ADDRESS, ++current_line, ram);
                 window_line_counter = 0;
             }
         } else if (current_mode == VBlank) {
@@ -436,4 +431,34 @@ unsigned short PPU::get_sprite_fetcher_tile_address() const {
 
 unsigned short PPU::get_bg_fetcher_tile_address() const {
     return pixel_fetcher.tile_address;
+}
+
+void PPU::reset(RAM& ram) {
+    lyc_ly_compare(ram);
+    *this = PPU{};
+    current_mode = HBlank;
+    set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
+    set_ppu_mode(ram);
+}
+
+void PPU::set_start_mode() {
+    current_mode = OAM;
+}
+
+void PPU::lyc_ly_compare(RAM& ram) {
+    auto lyc = ram.read_unsafe(constants::LYC_ADDRESS);
+    unsigned char stat = ram.read_unsafe(constants::STAT_ADDRESS);
+    if(current_line == lyc) {
+        if (!((stat >> 2) & 1)) {
+            ram.write_unsafe(constants::STAT_ADDRESS, stat | (1 << 2));
+            if (stat & (1 << 6)){
+                ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
+            }
+        }
+    } else {
+        if ((stat >> 2) & 1) {
+            ram.write_unsafe(constants::STAT_ADDRESS,
+                             (ram.read_unsafe(constants::STAT_ADDRESS) & (~(1 << 2))));
+        }
+    }
 }
