@@ -47,10 +47,10 @@ void RAM::handle_mbc1(unsigned short index, unsigned char value) {
 
 bool RAM::is_ram_avaliable(unsigned short index) const {
     auto current_ppu_mode = get_ppu_mode();
-    return !(((index >=  constants::VRAM_BEGIN && index <=  constants::VRAM_END)  && (current_ppu_mode == 3 && lcd_enabled())) ||
-        ((index >=  constants::EXTERNAL_RAM_BEGIN && index <=  constants::EXTERNAL_RAM_END)) && (!external_ram_enabled) || // todo: check external RAM
-        ((index >=  constants::OAM_BEGIN && index <= constants::OAM_END)) && ((current_ppu_mode == 2 || current_ppu_mode == 3) && lcd_enabled()) ||
-        ((index >=  constants::NOT_USABLE_BEGIN && index <=  constants::NOT_USABLE_END)));
+    return !(((index >=  constants::VRAM_BEGIN && index <=  constants::VRAM_END) && ((current_ppu_mode == 3 && lcd_enabled()))) ||
+             ((index >=  constants::EXTERNAL_RAM_BEGIN && index <=  constants::EXTERNAL_RAM_END) && (!external_ram_enabled)) || // todo: check external RAM
+             ((index >=  constants::OAM_BEGIN && index <= constants::OAM_END) && (((current_ppu_mode == 2 || current_ppu_mode == 3) && lcd_enabled()))) ||
+             ((index >=  constants::NOT_USABLE_BEGIN && index <=  constants::NOT_USABLE_END)));
 }
 
 unsigned char RAM::get_ppu_mode() const {
@@ -97,8 +97,14 @@ void RAM::write(unsigned short index, unsigned char value) {
         div_written = true;
     }
 
-    if (is_ram_avaliable(index))
+    if (is_ram_avaliable(index)){
+        if (index == constants::OAM_BEGIN){
+//            value = 0;
+            std::cout << "WRITE :" << (unsigned)value << '\n';
+        }
         mem[index] = value;
+    }
+
 }
 
 unsigned char RAM::read(unsigned short index) const {

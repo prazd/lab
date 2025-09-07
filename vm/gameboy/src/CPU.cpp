@@ -840,6 +840,14 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
 //        if (ram.read(constants::LY_ADDRESS) == 144) {
 //            i+=0;
 //        }
+        if (itype != NOP_0b00000000) {
+            i += 0;
+        }
+
+        if (itype == NOP_0b00000000) {
+            i += 0;
+        }
+
         switch (itype) {
             case LD_0b01xxxyyy: { // 4/8 t-cycle
                 // todo: check
@@ -893,6 +901,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
             case LD_0b00010010: {
                 WAIT(4)
+                std::cout << "DE addr:" << (unsigned)((regs[D] << 8) | regs[E]) << '\n';
                 twrite(ram, ((regs[D] << 8) | regs[E]), regs[A]);
                 break;
             }
@@ -924,7 +933,17 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 break;
             }
             case LDH_0b11100000: {
+                static int count = 0;
                 WAIT(8)
+                if ((0xff00 | arg1) == constants::LCDC_ADDRESS && regs[A] == 0x81) {
+                    regs[C] += 0;
+                    std::cout << "-------------------------------\n";
+                    std::cout << "Count:" << std::hex << count << '\n';
+                    if (count++ == 0x11) {
+                        count+=0;
+                    }
+                }
+
                 twrite(ram, (0xff00 | arg1), regs[A]);
                 break;
             }

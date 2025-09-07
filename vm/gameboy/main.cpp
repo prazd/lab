@@ -53,6 +53,8 @@ struct GameBoyVM{
     void main_loop_async(auto& ic) {
         int current_t_cycle = 0;
         bool prev_lcdc_on = ram.mem[constants::LCDC_ADDRESS] & 0x80;
+        int lcdc_on_count = 0;
+        bool lcdc_init_finished = true;
         while(current_t_cycle++ < 70'224) {
                 cpu.timer.tick(ram);
 #if 0
@@ -61,13 +63,21 @@ struct GameBoyVM{
 #endif
                 ic.resume();
                 if (ram.mem[constants::LCDC_ADDRESS] & 0x80) {
-                    ram.mem[constants::STAT_ADDRESS] |= 0x80; // todo: check
+                    ram.mem[constants::STAT_ADDRESS] |= 0x80;
                     if (!prev_lcdc_on) {
+                        lcdc_init_finished = false;
+                        lcdc_on_count = 16;
                         prev_lcdc_on = true;
                         ppu.lyc_ly_compare(ram);
-                        // todo: check - start with HBlank
                     } else {
-                        ppu.tick(ram);
+                       if (!lcdc_init_finished && lcdc_on_count-- == 0) {
+                           lcdc_init_finished = true;
+                           ppu.reset(ram);
+                           ppu.set_start_mode();
+                       }
+                       if (lcdc_init_finished){
+                           ppu.tick(ram);
+                       }
                     }
                 }
                 if (!(ram.mem[constants::LCDC_ADDRESS] & 0x80) && prev_lcdc_on) {
@@ -290,7 +300,6 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode3_timing.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb
 
-
 // Failed:
 
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb - failed
@@ -312,7 +321,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/lcdon_write_timing-GS.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
