@@ -1,24 +1,42 @@
-#include <iostream>
-
-struct F {
+struct A {
     int x;
     long y;
 };
 
 #pragma pack(push, 1)
-struct S {
+struct B {
     int x;
     long y;
 };
 #pragma pack(pop)
 
- struct T {
-    int x;
+// Or several
+#pragma pack(push, 1)
+struct C1 {
+    char x;
+    short y;
+};
+struct C2 {
+    char x;
+    short y;
+};
+#pragma pack(pop)
+
+struct __attribute__((packed)) D {
+    char x;
     long y;
-} __attribute__((aligned(32)));
+};
+
+struct __attribute__((aligned(32))) E {
+    long x;
+    long y;
+};
 
 int main() {
-    std::cout << sizeof(F) << std::endl;
-    std::cout << sizeof(S) << std::endl;
-    std::cout << sizeof(T) << std::endl;
+    static_assert(sizeof(A)   == 16);
+    static_assert(sizeof(B)   == 12);
+    static_assert(sizeof(C1)  == 3);
+    static_assert(sizeof(C2)  == 3);
+    static_assert(sizeof(D)   == 9);
+    static_assert(sizeof(E)   == 32);
 }
