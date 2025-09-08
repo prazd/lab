@@ -49,7 +49,7 @@ bool RAM::is_ram_avaliable(unsigned short index) const {
     auto current_ppu_mode = get_ppu_mode();
     return !(((index >=  constants::VRAM_BEGIN && index <=  constants::VRAM_END) && ((current_ppu_mode == 3 && lcd_enabled()))) ||
              ((index >=  constants::EXTERNAL_RAM_BEGIN && index <=  constants::EXTERNAL_RAM_END) && (!external_ram_enabled)) || // todo: check external RAM
-             ((index >=  constants::OAM_BEGIN && index <= constants::OAM_END) && (((current_ppu_mode == 2 || current_ppu_mode == 3) && lcd_enabled()))) ||
+             ((index >=  constants::OAM_BEGIN && index <= constants::OAM_END) && ppu_oam_usage) || // (((current_ppu_mode == 2 || current_ppu_mode == 3) && lcd_enabled())))
              ((index >=  constants::NOT_USABLE_BEGIN && index <=  constants::NOT_USABLE_END)));
 }
 

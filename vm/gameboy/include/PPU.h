@@ -6,6 +6,7 @@
 #include "Constants.h"
 #include <queue>
 #include <optional>
+#include "Resumable.h"
 
 constexpr size_t NEXT_T_CYCLE_VAL = 2;
 
@@ -349,9 +350,9 @@ public:
     unsigned short get_bg_fetcher_tile_address() const;
     unsigned short get_sprite_fetcher_tile_address() const;
     auto  read_buffer() const -> const Color(&)[144][160];
-    void tick(RAM& ram);
     Mode get_current_mode() const;
     void print_buffer() const;
+    Resumable tick_async(RAM& ram);
 };
 
 #endif //GAMEBOY_PPU_H

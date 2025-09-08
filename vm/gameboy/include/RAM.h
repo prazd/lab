@@ -38,6 +38,7 @@ struct RAM {
     bool div_written = false;
     bool glitch_overflow = false;
     bool tima_overflow = false;
+    bool ppu_oam_usage = false;
     unsigned short div_internal_sync = 0;
 
     enum BankingMode {

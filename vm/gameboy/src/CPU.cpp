@@ -713,8 +713,6 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
         std::cout << std::dec;
     }
 #endif
-
-    #define WAIT(n) for (int i = 0; i < n; ++i) co_await std::suspend_always();
     while (true) {
         if (halted) {
             auto ie_value = ram.read(constants::IE_ADDRESS);
@@ -901,7 +899,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
             case LD_0b00010010: {
                 WAIT(4)
-                std::cout << "DE addr:" << (unsigned)((regs[D] << 8) | regs[E]) << '\n';
+//                std::cout << "DE addr:" << (unsigned)((regs[D] << 8) | regs[E]) << '\n';
                 twrite(ram, ((regs[D] << 8) | regs[E]), regs[A]);
                 break;
             }
@@ -939,7 +937,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                     regs[C] += 0;
                     std::cout << "-------------------------------\n";
                     std::cout << "Count:" << std::hex << count << '\n';
-                    if (count++ == 0x11) {
+                    if (count++ == 0) {
                         count+=0;
                     }
                 }

@@ -50,7 +50,7 @@ struct GameBoyVM{
         }
     }
 
-    void main_loop_async(auto& ic) {
+    void main_loop_async(auto& cpu_r, auto& ppu_r) {
         int current_t_cycle = 0;
         bool prev_lcdc_on = ram.mem[constants::LCDC_ADDRESS] & 0x80;
         int lcdc_on_count = 0;
@@ -61,7 +61,7 @@ struct GameBoyVM{
                 std::cout << cpu.instruction_str[cpu.decode(ram.read(cpu.pc))] << " REG[A]:" << (int)(cpu.regs[CPU::A]) << '\n';
                 std::cout << "TIMA:" << (int)ram.read(constants::TIMA_REGISTER) << '\n';
 #endif
-                ic.resume();
+                cpu_r.resume();
                 if (ram.mem[constants::LCDC_ADDRESS] & 0x80) {
                     ram.mem[constants::STAT_ADDRESS] |= 0x80;
                     if (!prev_lcdc_on) {
@@ -76,7 +76,9 @@ struct GameBoyVM{
                            ppu.set_start_mode();
                        }
                        if (lcdc_init_finished){
-                           ppu.tick(ram);
+                             ppu_r.resume();
+//                             std::cout << "Mode:" << ppu.get_current_mode() << '\n';
+//                             std::cout << "RamAccess:" << ram.ppu_oam_usage << '\n';
                        }
                     }
                 }
@@ -252,9 +254,10 @@ struct GameBoyVM{
         };
 
         size_t t_cycles_count = 0;
-        auto ic = cpu.instruction_async_loop(ram);
+        auto cpu_r = cpu.instruction_async_loop(ram);
+        auto ppu_r = ppu.tick_async(ram);
         while(!WindowShouldClose()){
-            main_loop_async(ic);
+            main_loop_async(cpu_r, ppu_r);
 //            std::cout << "STAT VALUE:" << std::bitset<8>(ram.read(constants::STAT_ADDRESS)).to_string() << '\n';
             current_t_cycle = 0;
             std::cout << std::dec;
@@ -301,7 +304,6 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb
 
 // Failed:
-
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_irq_blocking.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/lcdon_write_timing-GS.gb - failed

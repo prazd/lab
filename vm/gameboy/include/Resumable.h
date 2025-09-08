@@ -2,6 +2,7 @@
 #define RAM_H_RESUMABLE_H
 #include <coroutine>
 #include <iostream>
+#define WAIT(n) for (int i = 0; i < n; ++i) co_await std::suspend_always();
 struct Resumable {
     struct promise_type{
         using coro_handle = std::coroutine_handle<promise_type>;
