@@ -302,6 +302,22 @@ class PPU {
     Color buffer[144][160]{};
 
 
+    size_t last_t_cycles = 0;
+    size_t prev_t_cycles = 0;
+    unsigned char sprite_x = 0;
+    Sprite current_sprite{};
+    size_t internal_t_cycles = 0;
+    size_t ly_increment_delay = 0;
+    bool ly_increment_done = false;
+    bool start_oam = false;
+    bool oam_start = true;
+
+    enum OamMode {
+        ReadSprite,
+        Gap
+    } current_oam_mode = ReadSprite;
+    int read_sprite_count = 2;
+    int oam_gap_count = 1;
 
     bool lcd_enable = true;
     bool window_visible = false;
@@ -309,7 +325,9 @@ class PPU {
     bool bg_enable = false;
     size_t window_line_counter = 0;
     bool pixel_fetcher_paused = false;
-    size_t oam_next_t_cycle = 2;
+    int oam_next_t_cycle = 2;
+    int oam_sprite_get = 2;
+    size_t oam_next_t_sprite_t_cycle = 2;
     unsigned short current_oam_obj = 0;
 
     std::priority_queue<std::pair<Sprite, int>, std::vector<std::pair<Sprite, int>>, decltype([](auto& a, auto& b){
@@ -343,7 +361,11 @@ class PPU {
     Pixel pixel_mixing(RAM& ram);
     std::optional<Sprite> sprite_on_x(RAM& ram);
     void draw(RAM& ram);
+
+
+
 public:
+    void tick(RAM& ram);
     void set_start_mode();
     void lyc_ly_compare(RAM& ram);
     void reset(RAM&);
@@ -352,7 +374,6 @@ public:
     auto  read_buffer() const -> const Color(&)[144][160];
     Mode get_current_mode() const;
     void print_buffer() const;
-    Resumable tick_async(RAM& ram);
 };
 
 #endif //GAMEBOY_PPU_H

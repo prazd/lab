@@ -50,7 +50,7 @@ struct GameBoyVM{
         }
     }
 
-    void main_loop_async(auto& cpu_r, auto& ppu_r) {
+    void main_loop_async(auto& cpu_r) {
         int current_t_cycle = 0;
         bool prev_lcdc_on = ram.mem[constants::LCDC_ADDRESS] & 0x80;
         int lcdc_on_count = 0;
@@ -61,12 +61,12 @@ struct GameBoyVM{
                 std::cout << cpu.instruction_str[cpu.decode(ram.read(cpu.pc))] << " REG[A]:" << (int)(cpu.regs[CPU::A]) << '\n';
                 std::cout << "TIMA:" << (int)ram.read(constants::TIMA_REGISTER) << '\n';
 #endif
-                cpu_r.resume();
+
                 if (ram.mem[constants::LCDC_ADDRESS] & 0x80) {
                     ram.mem[constants::STAT_ADDRESS] |= 0x80;
                     if (!prev_lcdc_on) {
                         lcdc_init_finished = false;
-                        lcdc_on_count = 16;
+                        lcdc_on_count = 12; // todo: check
                         prev_lcdc_on = true;
                         ppu.lyc_ly_compare(ram);
                     } else {
@@ -74,9 +74,10 @@ struct GameBoyVM{
                            lcdc_init_finished = true;
                            ppu.reset(ram);
                            ppu.set_start_mode();
+                           ram.ppu_oam_usage = true;
                        }
                        if (lcdc_init_finished){
-                             ppu_r.resume();
+                             ppu.tick(ram);
 //                             std::cout << "Mode:" << ppu.get_current_mode() << '\n';
 //                             std::cout << "RamAccess:" << ram.ppu_oam_usage << '\n';
                        }
@@ -86,6 +87,7 @@ struct GameBoyVM{
                     prev_lcdc_on = false;
                     ppu.reset(ram);
                 }
+                cpu_r.resume();
                 if (!cpu.halted && ram.dma_active) ram.dma_tick();
         }
     }
@@ -255,9 +257,9 @@ struct GameBoyVM{
 
         size_t t_cycles_count = 0;
         auto cpu_r = cpu.instruction_async_loop(ram);
-        auto ppu_r = ppu.tick_async(ram);
         while(!WindowShouldClose()){
-            main_loop_async(cpu_r, ppu_r);
+            main_loop_async(cpu_r);
+
 //            std::cout << "STAT VALUE:" << std::bitset<8>(ram.read(constants::STAT_ADDRESS)).to_string() << '\n';
             current_t_cycle = 0;
             std::cout << std::dec;
@@ -323,7 +325,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/lcdon_write_timing-GS.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
