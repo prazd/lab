@@ -19,7 +19,7 @@ struct RAM {
     enum MBC {
         MBC0,
         MBC1
-    } current_mbc = MBC1;
+    } current_mbc = MBC0;
 
     std::vector<char> rom{};
     size_t current_rom_bank = 1;

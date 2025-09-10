@@ -899,8 +899,8 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
             case LD_0b00010010: {
                 WAIT(4)
-                std::cout << "DE addr:" << (unsigned)((regs[D] << 8) | regs[E]) << '\n';
-                std::cout << "PPU internal t_cycle:" << std::dec << ram.ppu_internal_t_cycle << '\n';
+//                std::cout << "DE addr:" << (unsigned)((regs[D] << 8) | regs[E]) << '\n';
+//                std::cout << "PPU internal t_cycle:" << std::dec << ram.ppu_internal_t_cycle << '\n';
                 static int count = 0;
                 if (((regs[D] << 8) | regs[E]) == constants::OAM_BEGIN && regs[A] == 0x81){
                     if (count == 0) {

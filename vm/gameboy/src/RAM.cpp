@@ -98,12 +98,18 @@ void RAM::write(unsigned short index, unsigned char value) {
     }
 
     if (is_ram_avaliable(index)){
+        if (index == constants::LCDC_ADDRESS) {
+            std::cout << "LCDC write:" << (unsigned)value << '\n';
+        }
+        if (index == constants::LCDC_ADDRESS && value == 0x80){
+            value += 0;
+        }
         if (index == constants::OAM_BEGIN && value == 0x81){
-            std::cout << "CurrentAccess:" << ppu_oam_usage << '\n';
-            std::cout << "CurrentMode:" << (mem[constants::STAT_ADDRESS] & 0x3) << "\n";
-            std::cout << "WRITE :" << (unsigned)value << '\n';
-            std::cout << "PPU internal t_cycle:" << std::dec << ppu_internal_t_cycle << '\n';
-            std::cout << "\n===============================\n";
+//            std::cout << "CurrentAccess:" << ppu_oam_usage << '\n';
+//            std::cout << "CurrentMode:" << (mem[constants::STAT_ADDRESS] & 0x3) << "\n";
+//            std::cout << "WRITE :" << (unsigned)value << '\n';
+//            std::cout << "PPU internal t_cycle:" << std::dec << ppu_internal_t_cycle << '\n';
+//            std::cout << "\n===============================\n";
         }
         mem[index] = value;
     }

@@ -212,9 +212,13 @@ void PPU::tick(RAM &ram)  {
         if (current_t_cycle_count != 80) {
             // 1Mcycle (4t-cycle) -> read 1 row (8byte ==> 2 sprite)
             // 2t-cycle read row + 2t-cycle gap
-            if (oam_start) {ram.ppu_oam_usage = true; oam_start = false;}
+            if (oam_start) {
+                ram.ppu_oam_usage = true;
+                oam_start = false;
+            }
+//            std::cout << current_t_cycle_count << " CurrentMode:" << ram.ppu_oam_usage << '\n';
             switch (current_oam_mode) {
-                case ReadSprite: { //
+                case ReadSprite: {
                         --read_sprite_count;
                         if (sprite_buffer.size() != 10) {
                             auto obj_sz = get_obj_size(ram);
@@ -239,7 +243,7 @@ void PPU::tick(RAM &ram)  {
                         break;
                 }
                 case Gap: {
-                    oam_gap_count--;
+                    --oam_gap_count;
                     if (oam_gap_count == 0) {
                         current_oam_mode = ReadSprite;
                         oam_gap_count = 2;
@@ -250,7 +254,11 @@ void PPU::tick(RAM &ram)  {
             }
         } else {
             oam_start = true;
+            current_oam_mode = ReadSprite;
             ram.ppu_oam_usage = false;
+            read_sprite_count = 2;
+            oam_gap_count = 2;
+
             oam_next_t_cycle = 2;
             current_oam_obj = 0;
             current_pixel_x = 0;
@@ -267,6 +275,10 @@ void PPU::tick(RAM &ram)  {
 //            std::cout << "debug_t_cycles:" << debug_t_cycles << '\n';
 #endif
         if (current_pixel_x < 160) {
+
+
+
+
             if (((ram.read_unsafe(constants::LCDC_ADDRESS) >> 5) & 1)
                 && (ram.read_unsafe(constants::WY_ADDRESS) == ram.read_unsafe(constants::LY_ADDRESS))
                 && !window_line_is_triggered) {

@@ -317,7 +317,7 @@ class PPU {
         Gap
     } current_oam_mode = ReadSprite;
     int read_sprite_count = 2;
-    int oam_gap_count = 1;
+    int oam_gap_count = 2;
 
     bool lcd_enable = true;
     bool window_visible = false;

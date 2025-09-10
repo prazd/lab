@@ -57,6 +57,7 @@ struct GameBoyVM{
         bool lcdc_init_finished = true;
         while(current_t_cycle++ < 70'224) {
                 cpu.timer.tick(ram);
+
 #if 0
                 std::cout << cpu.instruction_str[cpu.decode(ram.read(cpu.pc))] << " REG[A]:" << (int)(cpu.regs[CPU::A]) << '\n';
                 std::cout << "TIMA:" << (int)ram.read(constants::TIMA_REGISTER) << '\n';
@@ -66,7 +67,7 @@ struct GameBoyVM{
                     ram.mem[constants::STAT_ADDRESS] |= 0x80;
                     if (!prev_lcdc_on) {
                         lcdc_init_finished = false;
-                        lcdc_on_count = 12; // todo: check
+                        lcdc_on_count = 12;
                         prev_lcdc_on = true;
                         ppu.lyc_ly_compare(ram);
                     } else {
@@ -83,11 +84,12 @@ struct GameBoyVM{
                        }
                     }
                 }
+                cpu_r.resume();
                 if (!(ram.mem[constants::LCDC_ADDRESS] & 0x80) && prev_lcdc_on) {
                     prev_lcdc_on = false;
                     ppu.reset(ram);
                 }
-                cpu_r.resume();
+
                 if (!cpu.halted && ram.dma_active) ram.dma_tick();
         }
     }
@@ -324,8 +326,13 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
+
+// Games:
+// Tetris:
+//     Source - https://github.com/alexsteb/tetris_disassembly/blob/master/main.asm
+//     ROM -    /Users/prazd/Desktop/dev/tetris.gb
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
