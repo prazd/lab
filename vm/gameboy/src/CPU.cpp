@@ -846,6 +846,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             i += 0;
         }
 
+        // lbl_MENU_COPYRIGHT_INIT::
+        // -- WAIT_FOR_VBLANK
+        //
         switch (itype) {
             case LD_0b01xxxyyy: { // 4/8 t-cycle
                 // todo: check
@@ -914,6 +917,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             case LD_0b11111010: {
                 WAIT(12)
                 regs[A] = tread(ram, arg1 | (arg2 << 8));
+                if ((arg1 | (arg2 << 8)) == 0xc0ce){
+                    arg1 += 0;
+                }
                 break;
             }
             case LD_0b11101010: {
@@ -934,6 +940,16 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             case LDH_0b11110000: {
                 WAIT(4)
                 unsigned short address = (0xff00 | arg1);
+                if (address == 0xffe1) {
+                    address+=0;
+                    std::cout << (unsigned)tread(ram, address) << '\n';
+                }
+                if (address == 0xffc7) {
+                    address+=0;
+                }
+                if (address == 0xffe8) {
+                    address+=0;
+                }
                 WAIT(4)
                 regs[A] = tread(ram, address);
                 break;
@@ -956,6 +972,13 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                     }
                     ++count;
                 }
+                if ((0xff00 | arg1) == constants::IF_ADDRESS) {
+                    arg1 += 0;
+                }
+                if ((0xff00 | arg1) == 0xffe1) {
+                    arg1 += 0;
+                }
+
                 twrite(ram, (0xff00 | arg1), regs[A]);
                 break;
             }
@@ -1488,10 +1511,12 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             case JP_0b11000011: {
                 WAIT(12)
                 pc = ((arg2 << 8) | arg1);
+                std::cout << "PC:" << pc << '\n';
                 break;
             }
             case JP_0b11101001: {
                 pc = ((regs[H] << 8) | regs[L]);
+                std::cout << "JP_0b11101001 PC:" << pc << '\n';
                 break;
             }
             case JP_0b110xx010: {
@@ -1528,6 +1553,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             case CALL_0b11001101: {
                 WAIT(8)
                 unsigned short nn = ((arg2 << 8) | arg1);
+                if (nn == 0xFFB6) {
+                    arg1 += 0;
+                }
                 sp -= 2;
                 WAIT(4)
                 twrite(ram, sp, (pc + 3) & 0xff);
@@ -1596,11 +1624,13 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             case RST_0b11xxx111: {
                 WAIT(4)
                 unsigned short nn = ((0x0 << 8) | rst_vec[read345(i)]);
-                sp -= 2;
+                std::cout << (unsigned)read345(i) << '\n';
+                --sp;
+                WAIT(4)
+                twrite(ram, sp, ((pc + 1) >> 8));
+                --sp;
                 WAIT(4)
                 twrite(ram, sp, (pc + 1) & 0xff);
-                WAIT(4)
-                twrite(ram, sp + 1, ((pc + 1) >> 8));
                 pc = nn;
                 break;
             }
