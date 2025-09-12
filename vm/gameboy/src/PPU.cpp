@@ -377,7 +377,7 @@ void PPU::tick(RAM &ram)  {
                 current_mode = VBlank;
 //                    set_ppu_mode(ram);
                 // VBlank Interrupt
-                ram.write_unsafe(constants::IF_ADDRESS, ram.read_unsafe(constants::IF_ADDRESS) | 1);
+//                ram.write_unsafe(constants::IF_ADDRESS, ram.read_unsafe(constants::IF_ADDRESS) | 1);
                 // LCDC
                 if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 4))
                     ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));

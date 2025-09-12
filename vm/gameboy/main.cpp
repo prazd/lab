@@ -330,6 +330,7 @@ struct GameBoyVM{
 // Games:
 // Tetris:
 //     Source - https://github.com/alexsteb/tetris_disassembly/blob/master/main.asm
+//              https://github.com/vinheim3/tetris-gb-disasm
 //     ROM -    /Users/prazd/Desktop/dev/tetris.gb
 int main() {
         GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");

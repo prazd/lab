@@ -846,9 +846,18 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             i += 0;
         }
 
-        // lbl_MENU_COPYRIGHT_INIT::
-        // -- WAIT_FOR_VBLANK
-        //
+//        lbl_MENU_COPYRIGHT_INIT::
+//        call WAIT_FOR_VBLANK
+//        call COPY_TITLE_TILES
+//        ld de, $4a07		; Starting address of copyright screen tile map in ROM
+//        call COPY_TILEMAP
+//        call CLEAR_OAM_DATA
+
+
+
+
+// !!!! Last:
+// call func_7ff0
         switch (itype) {
             case LD_0b01xxxyyy: { // 4/8 t-cycle
                 // todo: check
@@ -950,6 +959,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 if (address == 0xffe8) {
                     address+=0;
                 }
+                if (address == 0xff80) {
+                    address+=0; // ldh a, [rBUTTON_DOWN] in MainLoop
+                }
                 WAIT(4)
                 regs[A] = tread(ram, address);
                 break;
@@ -957,6 +969,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             case LDH_0b11100000: {
                 static int count = 0;
                 WAIT(8)
+                if ((0xff00 | arg1) == 0xff80) {
+                    arg1+=0;
+                }
                 if ((0xff00 | arg1) == constants::LCDC_ADDRESS && regs[A] == 0x81) {
                     regs[C] += 0;
                     std::cout << "-------------------------------\n";
@@ -1008,6 +1023,22 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
             case LD_0b00xx0001: {
                 WAIT(8)
+                // COPY_CHARACTERS
+                // ld bc, $0138
+                if (read45(i) == 0b00 && (arg1 | (arg2 << 8)) == 0x138) {
+                    arg1 += 0;
+                }
+                // ld bc, $0da0		; length of symbol data set (starting right after characters)
+                if (read45(i) == 0b00 && (arg1 | (arg2 << 8)) == 0xda0) {
+                    arg1 += 0;
+                }
+                if (read45(i) == 0b01 && (arg1 | (arg2 << 8)) == 0x4a07) {
+                    arg1 += 0;
+                }
+//                ld hl, $c300		; Copy some values into $c300+. Seems to be serial related
+                if (read45(i) == 0b10 && (arg1 | (arg2 << 8)) == 0xc300) {
+                    arg1 += 0;
+                }
                 update_pair_ld(arg1, arg2, read45(i));
                 break;
             }
@@ -1544,7 +1575,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 if (cc_flag) {
                     WAIT(8)
                     jmp();
-                }else {
+                } else {
                     WAIT(4)
                     pc += 2;
                 }
@@ -1554,6 +1585,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 WAIT(8)
                 unsigned short nn = ((arg2 << 8) | arg1);
                 if (nn == 0xFFB6) {
+                    arg1 += 0;
+                }
+                if (nn == 0x7ff0) {
                     arg1 += 0;
                 }
                 sp -= 2;
