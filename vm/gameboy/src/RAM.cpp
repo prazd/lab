@@ -142,8 +142,11 @@ unsigned char RAM::read(unsigned short index) const {
         return external_ram_enabled ? cart_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_cart_ram * 8192)] : dummy_reg;
     }
 
-    if (is_ram_avaliable(index))
+    if (is_ram_avaliable(index)){
+        auto val = mem[index];
         return mem[index];
+    }
+
 
 //    std::cout << "DUMMY_REG!!!" << '\n';
     return dummy_reg;

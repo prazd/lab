@@ -275,10 +275,6 @@ void PPU::tick(RAM &ram)  {
 //            std::cout << "debug_t_cycles:" << debug_t_cycles << '\n';
 #endif
         if (current_pixel_x < 160) {
-
-
-
-
             if (((ram.read_unsafe(constants::LCDC_ADDRESS) >> 5) & 1)
                 && (ram.read_unsafe(constants::WY_ADDRESS) == ram.read_unsafe(constants::LY_ADDRESS))
                 && !window_line_is_triggered) {
@@ -377,7 +373,7 @@ void PPU::tick(RAM &ram)  {
                 current_mode = VBlank;
 //                    set_ppu_mode(ram);
                 // VBlank Interrupt
-//                ram.write_unsafe(constants::IF_ADDRESS, ram.read_unsafe(constants::IF_ADDRESS) | 1);
+                ram.write_unsafe(constants::IF_ADDRESS, ram.read_unsafe(constants::IF_ADDRESS) | 1);
                 // LCDC
                 if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 4))
                     ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));

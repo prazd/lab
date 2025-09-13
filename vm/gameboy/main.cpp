@@ -6,6 +6,7 @@
 #include "RAM.h"
 #include "CPU.h"
 #include "Timer.h"
+#include "Joypad.h"
 #include <filesystem>
 #include <sstream>
 #include <fstream>
@@ -21,6 +22,7 @@ struct GameBoyVM{
     CPU cpu;
     RAM ram;
     PPU ppu;
+    Joypad joypad;
 
     void print_segment(unsigned short address, int n) {
         std::cout << "\n=============================\n";
@@ -56,6 +58,7 @@ struct GameBoyVM{
         int lcdc_on_count = 0;
         bool lcdc_init_finished = true;
         while(current_t_cycle++ < 70'224) {
+                joypad.update_state(ram);
                 cpu.timer.tick(ram);
 
 #if 0
@@ -148,6 +151,7 @@ struct GameBoyVM{
         }
         cpu.pc = 0x0100;
         cpu.sp = 0xFFFE;
+        ram.mem[constants::JOYPAD] = 0xff;
         ram.mem[constants::LCDC_ADDRESS] = 0x91;
         ram.mem[constants::STAT_ADDRESS] = 0x80;
         ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
@@ -257,12 +261,11 @@ struct GameBoyVM{
             std::cout << "\n==============================\n";
         };
 
-        size_t t_cycles_count = 0;
+
         auto cpu_r = cpu.instruction_async_loop(ram);
         while(!WindowShouldClose()){
             main_loop_async(cpu_r);
-
-//            std::cout << "STAT VALUE:" << std::bitset<8>(ram.read(constants::STAT_ADDRESS)).to_string() << '\n';
+//            print_segment(0xff80, 20);
             current_t_cycle = 0;
             std::cout << std::dec;
             UpdateTexture(target, ppu.read_buffer());

@@ -24,10 +24,10 @@ namespace constants {
     constexpr size_t WRAM2_END = 0xDFFF;
     constexpr size_t OAM_BEGIN = 0xFE00;
     constexpr size_t OAM_END = 0xFE9F;
-    constexpr size_t IO_REGISTERS_BEGIN = 0xFF00;
     constexpr size_t IO_REGISTERS_END = 0xFF7F;
     constexpr size_t HRAM_BEGIN = 0xFF80;
     constexpr size_t HRAM_END = 0xFFFE;
+    constexpr size_t JOYPAD = 0xFF00;
 
     // Pallete
     constexpr size_t BGP  = 0xFF47;
