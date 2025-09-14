@@ -317,7 +317,6 @@ void PPU::tick(RAM &ram)  {
         } else {
             sprite_fetcher.reset();
             pixel_fetcher.reset();
-//                    internal_t_cycles = 0;
             if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 3))
                 ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
 

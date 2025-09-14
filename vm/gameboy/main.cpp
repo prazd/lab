@@ -151,6 +151,7 @@ struct GameBoyVM{
         }
         cpu.pc = 0x0100;
         cpu.sp = 0xFFFE;
+        ram.rom_sz = get_rom_size(ram.rom);
         ram.mem[constants::JOYPAD] = 0xff;
         ram.mem[constants::LCDC_ADDRESS] = 0x91;
         ram.mem[constants::STAT_ADDRESS] = 0x80;
@@ -301,6 +302,17 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank1.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank2.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_ramg.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_mode.gb
+
+// Failed:
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/ram_256kb.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/ram_64kb.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_16Mb.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_1Mb.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_2Mb.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_4Mb.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_512kb.gb
+
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_oam_ok_timing.gb
 
 // PPU
@@ -330,13 +342,16 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
 
+
 // Games:
 // Tetris:
 //     Source - https://github.com/alexsteb/tetris_disassembly/blob/master/main.asm
 //              https://github.com/vinheim3/tetris-gb-disasm
 //     ROM -    /Users/prazd/Desktop/dev/tetris.gb
+
+
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

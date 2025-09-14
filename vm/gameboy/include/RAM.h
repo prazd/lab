@@ -22,7 +22,13 @@ struct RAM {
     } current_mbc = MBC0;
 
     std::vector<char> rom{};
-    size_t current_rom_bank = 1;
+    size_t rom_sz = 0;
+    size_t current_rom_bank0 = 0;
+    size_t current_rom_bank1 = 1;
+
+    size_t mbc_high_bits = 0;
+    size_t mbc_low_bits = 1;
+
     std::vector<unsigned char> cart_ram{};
     size_t current_cart_ram = 0;
     size_t current_rom_bank_max = 0;
@@ -47,9 +53,6 @@ struct RAM {
         Advanced,
     } current_banking_mode = Simple;
     bool external_ram_enabled = false;
-
-    void update_rom_bank01(size_t bank);
-    void update_cart_ram(size_t n);
     bool lcd_enabled() const;
     void handle_mbc(unsigned short index, unsigned char value);
     void handle_mbc0(unsigned short index, unsigned char value);
