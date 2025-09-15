@@ -11,33 +11,118 @@
 #include <sstream>
 #include <fstream>
 
-constexpr size_t WIDTH = 800;
-constexpr size_t HEIGHT = 720;
+#define DEBUG_MODE 1
+constexpr size_t DEBUG_WIDTH = 1500;
+constexpr size_t DEBUG_HEIGHT = 1500;
+
+constexpr size_t LCD_WIDTH = 800;
+constexpr size_t LCD_HEIGHT = 720;
+
+constexpr size_t WIDTH = DEBUG_MODE ? DEBUG_WIDTH : LCD_WIDTH;
+constexpr size_t HEIGHT = DEBUG_MODE ? DEBUG_HEIGHT: LCD_HEIGHT;
+
 constexpr size_t DISPLAY_HEIGHT = 144;
 constexpr size_t DISPLAY_WIDTH = 160;
 constexpr double CPU_FREQUENCY = 4194304.0;
 constexpr double CPU_CYCLE_TIME = 1/CPU_FREQUENCY;
+
+struct DebugTools {
+    using Tile = std::array<std::array<int, 8>, 8>;
+    static Tile get_tile_by_address(const RAM& ram, unsigned short address){
+        std::array<unsigned char, 16> arr{};
+        for (int i = 0; i < 16; ++i){
+            arr[i] = ram.read_unsafe(address + i);
+        }
+        std::array<std::array<int, 8>, 8> colors{};
+        std::array<int, 8> tmp{};
+        size_t current{};
+        for (size_t i = 0; i < 16; i+=2){
+            auto l = arr[i];
+            auto h = arr[i+1];
+            for (int j = 0; j < 8; ++j) {
+                auto lc = (l >> (7 - j)) & 1;
+                auto hc = (h >> (7 - j)) & 1;
+                tmp[j] = (hc << 1 | lc);
+            }
+            colors[current++] = tmp;
+        }
+        return colors;
+    };
+
+    template<size_t height, size_t width>
+    static auto print_rects(Color c){
+        std::array<Rectangle, height * width> res{};
+        float x_pos = 0.0f;
+        float y_pos = 0.0f;
+
+        float step_x = LCD_WIDTH/width;
+        float step_y = LCD_HEIGHT/height;
+        int z = 0;
+        for (int i = 0; i < height; ++i){
+            for (int j = 0; j < width; ++j) {
+                res[z++] = Rectangle{x_pos, y_pos, step_x, step_y};
+                x_pos += step_x;
+            }
+            x_pos = 0;
+            y_pos += step_y;
+        }
+        for (const auto& el: res){
+            DrawRectangleLinesEx({el.x, el.y, el.width, el.height}, 1, c);
+        }
+    };
+
+    static void print_segment(const RAM& ram, unsigned short address, int n) {
+        std::cout << "\n=============================\n";
+        for (int i = 0; i < n; ++i){
+            std::cout << std::hex << address + i <<  ":" << (unsigned)ram.read_unsafe(address + i) << '\n';
+        }
+        std::cout << "\n=============================\n";
+        std::cout << std::dec;
+    }
+
+    static void draw_n_tiles(const RAM& ram, unsigned short begin_address, float x_begin, float y_begin, int n_tiles) {
+        std::stringstream ss;
+        ss << "Address:" << std::hex << begin_address;
+        auto str = ss.str();
+        DrawText(str.c_str(), x_begin, y_begin, 30.f, BLACK);
+        y_begin += 30.f;
+        std::vector<Tile> vec{};
+        for (int i = 0; i < n_tiles; ++i)
+            vec.push_back(get_tile_by_address(ram, begin_address + (16 * i)));
+
+        float xstep = 40.f/8;
+        float ystep = 40.f/8;
+        float x = x_begin;
+        float y = y_begin;
+        size_t count = 0;
+        float current_x = x;
+        float current_y = y;
+        auto prev_x = x;
+        for (auto& colors: vec) {
+            for (auto&& row: colors){
+                for (auto el: row) {
+                    DrawRectangle(x, y, xstep, ystep, Pixel::get_pixel_color(el));
+                    x+=xstep;
+                }
+                y += ystep;
+                prev_x = std::exchange(x, current_x);
+            }
+            if (++count % 8 == 0){
+                y = current_y = y + 1;
+                x = current_x = x_begin;
+            } else {
+                y = current_y;
+                x = current_x = prev_x + (xstep * 2);
+            }
+        }
+    }
+};
 
 struct GameBoyVM{
     CPU cpu;
     RAM ram;
     PPU ppu;
     Joypad joypad;
-
-    void print_segment(unsigned short address, int n) {
-        std::cout << "\n=============================\n";
-        for (int i = 0; i < n; ++i){
-            std::cout << std::hex << address + i <<  ":" << (unsigned)ram.read(address + i) << '\n';
-        }
-        std::cout << "\n=============================\n";
-        std::cout << std::dec;
-    }
-
-    /*todo finish other components*/
-    // Timer
-    // Interrupts
-    // Input
-    // Sound
 
     RAM::MBC get_mbc_type(const auto& data) {
         switch (data[0x0147]) {
@@ -82,8 +167,6 @@ struct GameBoyVM{
                        }
                        if (lcdc_init_finished){
                              ppu.tick(ram);
-//                             std::cout << "Mode:" << ppu.get_current_mode() << '\n';
-//                             std::cout << "RamAccess:" << ram.ppu_oam_usage << '\n';
                        }
                     }
                 }
@@ -192,93 +275,23 @@ struct GameBoyVM{
         }
         UpdateTexture(target, display_buffer.data());
 
-        auto draw_tiles = [&] {
-            static int counter = 0;
-            static std::array<unsigned char, 16> arr{};
-            std::cout << "Counter:" << counter << '\n';
-
-            std::cout << ppu.get_bg_fetcher_tile_address() << '\n';
-            for (int i = 0; i < 16; ++i){
-                arr[i] = ram.read((0x8000 + (counter)) + i);
-            }
-            std::vector<std::vector<int>> colors;
-            for (size_t i = 0; i < 16; i+=2){
-                auto l = arr[i];
-                auto h = arr[i+1];
-                std::vector<int> tmp{};
-                for (int j = 0; j < 8; ++j) {
-                    auto lc = (l >> (7 - j)) & 1;
-                    auto hc = (h >> (7 - j)) & 1;
-                    tmp.push_back((hc << 1 | lc));
-                }
-                colors.push_back(tmp);
-            }
-
-            float xstep = 300.f/8.f;
-            float ystep = 300.f/8.f;
-            float x = 0.0f;
-            float y = 0.0f;
-            for (auto&& row: colors){
-                for (auto el: row) {
-                    DrawRectangle(x, y, xstep, ystep, Pixel::get_pixel_color(el));
-                    x+=xstep;
-                }
-                y += ystep;
-                x = 0.0f;
-            }
-            counter+=16;
-        };
-
-        auto print_rects = []<size_t height, size_t width>(Color c){
-            std::array<Rectangle, height * width> res{};
-            float x_pos = 0.0f;
-            float y_pos = 0.0f;
-
-            float step_x = WIDTH/width;
-            float step_y = HEIGHT/height;
-            int z = 0;
-            for (int i = 0; i < height; ++i){
-                for (int j = 0; j < width; ++j) {
-                    res[z++] = Rectangle{x_pos, y_pos, step_x, step_y};
-                    x_pos += step_x;
-                }
-                x_pos = 0;
-                y_pos += step_y;
-            }
-            for (const auto& el: res){
-                DrawRectangleLinesEx({el.x, el.y, el.width, el.height}, 1, c);
-            }
-        };
-
-        int current_t_cycle = 0;
-        double cpu_accumulator = 0.0;
-
-        auto print_sp = [&](size_t n) {
-            if (cpu.sp == 0xfffe) return;
-            std::cout << "\n==============================\n";
-            for (int i = 0; i < n; ++i){
-                std::cout << "SP[" << i << "]" << std::hex << (unsigned)ram.read(cpu.sp + i) << '\n';
-            }
-            std::cout << "\n==============================\n";
-        };
-
-
         auto cpu_r = cpu.instruction_async_loop(ram);
+
         while(!WindowShouldClose()){
             main_loop_async(cpu_r);
-//            print_segment(0xff80, 20);
-            current_t_cycle = 0;
             std::cout << std::dec;
             UpdateTexture(target, ppu.read_buffer());
-
             BeginDrawing();
                ClearBackground(WHITE);
-               DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, WIDTH, HEIGHT}, {0, 0}, 0.0f, WHITE);
+               DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, LCD_WIDTH, LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
+
+               DebugTools::draw_n_tiles(ram, 0x8800, 810, 0, 30);
+               DebugTools::draw_n_tiles(ram, 0x8000, 810, 600, 30);
 
 // PRINT PIXELS
-#if 0
-              print_rects.template operator()<DISPLAY_HEIGHT, DISPLAY_WIDTH>(GREEN);
-//              print_rects.template operator()<18, 20>(RED);
+#if 1
+//              print_rects.template operator()<DISPLAY_HEIGHT, DISPLAY_WIDTH>(GREEN);
+              DebugTools::print_rects<18, 20>(RED);
 #endif
                 DrawFPS(700, 10);
             EndDrawing();

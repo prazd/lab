@@ -216,7 +216,7 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
         if (tile_base == 0x8000)
             res = (tile_base + (tile_index * 16));
         else
-            res = (tile_base + ((char)tile_index * 16));
+            res = (tile_base + (((char)tile_index) * 16));
         return res;
     }
 };
