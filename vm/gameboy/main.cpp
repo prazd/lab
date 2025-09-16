@@ -80,18 +80,22 @@ struct DebugTools {
         std::cout << std::dec;
     }
 
-    static void draw_n_tiles(const RAM& ram, unsigned short begin_address, float x_begin, float y_begin, int n_tiles) {
+    static void draw_n_tiles(const RAM& ram, unsigned short begin_address, Rectangle rec, int n_tiles) {
         std::stringstream ss;
         ss << "Address:" << std::hex << begin_address;
         auto str = ss.str();
+        float x_begin = rec.x;
+        float y_begin = rec.y;
+        DrawRectangleLinesEx(rec, 1, BLACK);
+        y_begin+=10.f;
         DrawText(str.c_str(), x_begin, y_begin, 30.f, BLACK);
         y_begin += 30.f;
         std::vector<Tile> vec{};
         for (int i = 0; i < n_tiles; ++i)
             vec.push_back(get_tile_by_address(ram, begin_address + (16 * i)));
 
-        float xstep = 40.f/8;
-        float ystep = 40.f/8;
+        float xstep = (rec.width/20)/8;
+        float ystep = (rec.height/20)/8;
         float x = x_begin;
         float y = y_begin;
         size_t count = 0;
@@ -107,12 +111,12 @@ struct DebugTools {
                 y += ystep;
                 prev_x = std::exchange(x, current_x);
             }
-            if (++count % 8 == 0){
-                y = current_y = y + 1;
+            if ((prev_x + (xstep) >= rec.x + rec.width)){
+                y = current_y = y + ystep;
                 x = current_x = x_begin;
             } else {
                 y = current_y;
-                x = current_x = prev_x + (xstep * 2);
+                x = current_x = prev_x;
             }
         }
     }
@@ -277,6 +281,7 @@ struct GameBoyVM{
 
         auto cpu_r = cpu.instruction_async_loop(ram);
 
+        unsigned short debug_base = 0x8000;
         while(!WindowShouldClose()){
             main_loop_async(cpu_r);
             std::cout << std::dec;
@@ -285,8 +290,12 @@ struct GameBoyVM{
                ClearBackground(WHITE);
                DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, LCD_WIDTH, LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
 
-               DebugTools::draw_n_tiles(ram, 0x8800, 810, 0, 30);
-               DebugTools::draw_n_tiles(ram, 0x8000, 810, 600, 30);
+               if (IsKeyDown(KEY_DOWN))
+                   debug_base+= (20 * 16);
+               else if (IsKeyDown(KEY_UP))
+                   debug_base-= (20 * 16);
+               DebugTools::draw_n_tiles(ram, debug_base, Rectangle{810,0,500,500}, 250);
+//               DebugTools::draw_n_tiles(ram, 0x8000, 810, 600, 100);
 
 // PRINT PIXELS
 #if 1
@@ -325,7 +334,6 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_2Mb.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_4Mb.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_512kb.gb
-
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_oam_ok_timing.gb
 
 // PPU

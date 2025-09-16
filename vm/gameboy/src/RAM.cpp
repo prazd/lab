@@ -235,7 +235,9 @@ unsigned char RAM::read_unsafe(unsigned short index) const {
     }
 
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
-        return cart_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_cart_ram * 8192)];
+        if (external_ram_enabled)
+            return cart_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_cart_ram * 8192)];
+        return dummy_reg;
     }
     return mem[index];
 }
