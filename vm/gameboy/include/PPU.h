@@ -189,7 +189,7 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
         auto scy = ram.read_unsafe(constants::SCY_ADDRESS);
         auto ly  = ram.read_unsafe(constants::LY_ADDRESS);
         auto scx = ram.read_unsafe(constants::SCX_ADDRESS);
-        unsigned short tile_base = ((ram.read_unsafe(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8000 : 0x8800;
+        unsigned short tile_base = ((ram.read_unsafe(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8000 : 0x9000;
 
         unsigned short tilemap_base{};
         unsigned char  tilemap_x{};

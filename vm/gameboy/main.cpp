@@ -5,7 +5,6 @@
 #include <array>
 #include "RAM.h"
 #include "CPU.h"
-#include "Timer.h"
 #include "Joypad.h"
 #include <filesystem>
 #include <sstream>
@@ -26,8 +25,9 @@ constexpr size_t DISPLAY_WIDTH = 160;
 constexpr double CPU_FREQUENCY = 4194304.0;
 constexpr double CPU_CYCLE_TIME = 1/CPU_FREQUENCY;
 
+using Tile = std::array<std::array<int, 8>, 8>;
+
 struct DebugTools {
-    using Tile = std::array<std::array<int, 8>, 8>;
     static Tile get_tile_by_address(const RAM& ram, unsigned short address){
         std::array<unsigned char, 16> arr{};
         for (int i = 0; i < 16; ++i){
@@ -119,6 +119,131 @@ struct DebugTools {
                 x = current_x = prev_x;
             }
         }
+    }
+};
+
+template <size_t pwidth, size_t pheight, size_t width, size_t height>
+struct DebugWindow {
+    using Buffer = std::array<std::array<Color, pwidth>, pheight>;
+    bool active = false;
+    Rectangle rec;
+    Texture2D target;
+    Buffer buffer{};
+    std::string header;
+    DebugWindow(float x, float y):
+        rec({x, y, width, height}){
+
+        Image img(GenImageColor(pwidth, pheight, WHITE));
+        target = LoadTextureFromImage(img);
+        UnloadImage(img);
+
+        for (size_t i = 0; i < pheight; ++i) {
+            for (size_t j = 0 ; j < pwidth; ++j) {
+                buffer[i][j] = WHITE;
+            }
+        }
+        UpdateTexture(target, buffer.data());
+    }
+    void update() {
+        UpdateTexture(target, buffer.data());
+    }
+    void move_check() {
+        if (CheckCollisionPointRec(GetMousePosition(), rec)){
+            if (IsMouseButtonDown(0)) {
+                rec.x = GetMousePosition().x - (width/2);
+                rec.y = GetMousePosition().y - (height/2);
+            }
+        }
+    }
+    void draw(){
+        move_check();
+        DrawRectangleLinesEx(rec, 1, BLACK);
+        DrawText(header.c_str(), rec.x, rec.y, 30.f, BLACK);
+        DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{rec.x+1, rec.y+30, width-20, height-50}, {0, 0}, 0.0f, WHITE);
+    }
+    void draw_text() {
+        move_check();
+        DrawRectangleLinesEx(rec, 1, BLACK);
+        DrawText(header.c_str(), rec.x, rec.y, 30.f, BLACK);
+    }
+};
+
+template <size_t pwidth, size_t pheight, size_t width, size_t height, size_t n_tiles>
+struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
+    using DW = DebugWindow<pwidth, pheight,width,height>;
+    unsigned short base_address{};
+    std::array<Tile, n_tiles> tiles;
+    TileWindow(float x, float y, unsigned short base_address):
+        DebugWindow<pwidth, pheight,width,height>(x, y),
+        base_address(base_address){
+    }
+    void update_tiles(RAM& ram){
+        std::stringstream ss;
+        ss << "Tiles address:" << std::hex << base_address;
+        auto str = ss.str();
+        int x_begin = 0;
+        int y_begin = 0;
+        DW::header = ss.str();
+
+        for (int i = 0; i < n_tiles; ++i)
+            tiles[i] = DebugTools::get_tile_by_address(ram, base_address + (16 * i));
+
+        int x = x_begin;
+        int y = y_begin;
+        size_t count = 0;
+        int current_x = x;
+        int current_y = y;
+        auto prev_x = x;
+        for (auto& colors: tiles) {
+            for (auto&& row: colors){
+                for (auto el: row) {
+                    DW::buffer[y][x++] = Pixel::get_pixel_color(el);
+                }
+                ++y;
+                prev_x = std::exchange(x, current_x);
+            }
+            if ((prev_x + 1 >= pwidth)){
+                y = current_y = y;
+                x = current_x = x_begin;
+            } else {
+                y = current_y;
+                x = current_x = prev_x;
+            }
+        }
+        DW::update();
+    }
+    void handle(RAM& ram){
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec)){
+            if (IsKeyDown(KEY_DOWN)){
+                base_address += (20 * 16);
+            } else if (IsKeyDown(KEY_UP)) {
+                base_address -= (20 * 16);
+            }
+        }
+        update_tiles(ram);
+        DW::draw();
+    }
+};
+
+template <size_t pwidth, size_t pheight, size_t width, size_t height>
+struct RegWindows: public DebugWindow<pwidth, pheight, width, height> {
+    using DW = DebugWindow<pwidth, pheight,width,height>;
+    RegWindows(float x, float y): DW(x, y){}
+    void handle(CPU& cpu){
+        std::stringstream ss;
+        ss << std::hex << " Registers:\n" <<
+           " A:" << (unsigned)cpu.regs[CPU::A] << "\n" <<
+           " F:" <<  (unsigned)cpu.regs[CPU::F] << "\n" <<
+           " B:" <<  (unsigned)cpu.regs[CPU::B] << "\n" <<
+           " C:" <<  (unsigned)cpu.regs[CPU::C] << "\n" <<
+           " D:" <<  (unsigned)cpu.regs[CPU::D] << "\n" <<
+           " E:" <<  (unsigned)cpu.regs[CPU::E] << "\n" <<
+           " H:" <<  (unsigned)cpu.regs[CPU::H] << "\n" <<
+           " L:" <<  (unsigned)cpu.regs[CPU::L] << "\n" <<
+           " SP:" <<  cpu.sp << "\n" <<
+           " PC:" <<  cpu.pc << "\n";
+            DW::header = ss.str();
+            DW::draw_text();
     }
 };
 
@@ -279,9 +404,12 @@ struct GameBoyVM{
         }
         UpdateTexture(target, display_buffer.data());
 
-        auto cpu_r = cpu.instruction_async_loop(ram);
+#if DEBUG_MODE
+        TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
+        RegWindows<160,144,300,400> rw(810,500);
+#endif
 
-        unsigned short debug_base = 0x8000;
+        auto cpu_r = cpu.instruction_async_loop(ram);
         while(!WindowShouldClose()){
             main_loop_async(cpu_r);
             std::cout << std::dec;
@@ -289,16 +417,12 @@ struct GameBoyVM{
             BeginDrawing();
                ClearBackground(WHITE);
                DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, LCD_WIDTH, LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
-
-               if (IsKeyDown(KEY_DOWN))
-                   debug_base+= (20 * 16);
-               else if (IsKeyDown(KEY_UP))
-                   debug_base-= (20 * 16);
-               DebugTools::draw_n_tiles(ram, debug_base, Rectangle{810,0,500,500}, 250);
-//               DebugTools::draw_n_tiles(ram, 0x8000, 810, 600, 100);
-
+#if DEBUG_MODE
+                tw.handle(ram);
+                rw.handle(cpu);
+#endif
 // PRINT PIXELS
-#if 1
+#if 0
 //              print_rects.template operator()<DISPLAY_HEIGHT, DISPLAY_WIDTH>(GREEN);
               DebugTools::print_rects<18, 20>(RED);
 #endif
@@ -372,7 +496,7 @@ struct GameBoyVM{
 
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/Zelda.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
