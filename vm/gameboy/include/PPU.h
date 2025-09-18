@@ -357,7 +357,6 @@ class PPU {
     bool is_windows_fetching_ready(RAM& ram);
 
     unsigned char get_obj_size(const RAM& ram);
-    void oam_scan(RAM& ram);
     Pixel pixel_mixing(RAM& ram);
     std::optional<Sprite> sprite_on_x(RAM& ram);
     void draw(RAM& ram);

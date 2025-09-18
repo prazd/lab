@@ -201,7 +201,6 @@ struct CPU {
 
     void inc_reg(unsigned char i, RAM& ram);
     void dec_reg(unsigned char i, RAM& ram);
-    void handle_interrupt(RAM& ram, unsigned char& next_ins, Instruction& decoded_ins);
 
     unsigned short HL_data() const;
 

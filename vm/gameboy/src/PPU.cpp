@@ -96,26 +96,6 @@ unsigned char PPU::get_obj_size(const RAM &ram)  {
     return (((ram.read_unsafe(constants::LCDC_ADDRESS)) >> 2) & 1) ? 16 : 8;
 }
 
-void PPU::oam_scan(RAM &ram)  {
-    if (sprite_buffer.size() == 10) {
-        current_oam_obj += 4;
-        return;
-    }
-    auto obj_sz = get_obj_size(ram);
-    auto val= ram.read_unsafe(constants::OAM_BEGIN + current_oam_obj);
-    int top = val - 16;
-    if (current_line >= top && current_line < top + obj_sz){
-        sprite_buffer.emplace(
-            Sprite{
-                .y_pos = val,
-                .x_pos = static_cast<unsigned char>(ram.read_unsafe(constants::OAM_BEGIN + current_oam_obj + 1)),
-                .index_tile = ram.read_unsafe(constants::OAM_BEGIN + current_oam_obj + 2),
-                .attrib = ram.read_unsafe(constants::OAM_BEGIN + current_oam_obj + 3),
-        }, current_oam_obj);
-    }
-    current_oam_obj += 4;
-}
-
 
 Pixel PPU::pixel_mixing(RAM &ram) {
     auto bg_pixel = Pixel{.color = WHITE}; // Default
@@ -204,7 +184,6 @@ void PPU::tick(RAM &ram)  {
     set_ppu_mode(ram);
     lyc_ly_compare(ram);
 
-//    std::cout <<  "Stat:" << std::bitset<8>(ram.read_unsafe(constants::STAT_ADDRESS)).to_string() << '\n';
     if (current_mode == OAM){
 #if DEBUG_T_CYCLE
         ++debug_t_cycles;
@@ -216,7 +195,6 @@ void PPU::tick(RAM &ram)  {
                 ram.ppu_oam_usage = true;
                 oam_start = false;
             }
-//            std::cout << current_t_cycle_count << " CurrentMode:" << ram.ppu_oam_usage << '\n';
             switch (current_oam_mode) {
                 case ReadSprite: {
                         --read_sprite_count;
@@ -287,7 +265,7 @@ void PPU::tick(RAM &ram)  {
                 }
             }
 
-            if (!sprite_render) {
+            if (!sprite_render && ram.read_unsafe(constants::LCDC_ADDRESS) & (1 << 1)) {
                 auto sprite = sprite_on_x(ram);
                 if (sprite.has_value()) {
                     current_sprite = sprite.value();
@@ -411,13 +389,12 @@ void PPU::tick(RAM &ram)  {
 #endif
                 last_t_cycles = 0;
                 current_mode = OAM;
-//                    set_ppu_mode(ram);
+
                 // LCD Interrupt
                 if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
                     ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                 current_oam_obj = 0;
                 oam_next_t_cycle = 2;
-//                    set_ppu_mode(ram);
                 current_line = 0;
 #if DEBUG_T_CYCLE
                 std::cout << "internal_t_cycles:" << internal_t_cycles << '\n';

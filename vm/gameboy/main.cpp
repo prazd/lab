@@ -161,10 +161,10 @@ struct DebugWindow {
         DrawText(header.c_str(), rec.x, rec.y, 30.f, BLACK);
         DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{rec.x+1, rec.y+30, width-20, height-50}, {0, 0}, 0.0f, WHITE);
     }
-    void draw_text() {
+    void draw_text(float font_sz) {
         move_check();
         DrawRectangleLinesEx(rec, 1, BLACK);
-        DrawText(header.c_str(), rec.x, rec.y, 30.f, BLACK);
+        DrawText(header.c_str(), rec.x, rec.y, font_sz, BLACK);
     }
 };
 
@@ -241,9 +241,13 @@ struct RegWindows: public DebugWindow<pwidth, pheight, width, height> {
            " H:" <<  (unsigned)cpu.regs[CPU::H] << "\n" <<
            " L:" <<  (unsigned)cpu.regs[CPU::L] << "\n" <<
            " SP:" <<  cpu.sp << "\n" <<
-           " PC:" <<  cpu.pc << "\n";
+           " PC:" <<  cpu.pc << "\n" <<
+           " ZeroFlag:" << (unsigned)cpu.get_flag(CPU::Zf) << '\n' <<
+           " NegFlag:" << (unsigned)cpu.get_flag(CPU::Nf) << '\n' <<
+           " HalfFlag:" << (unsigned)cpu.get_flag(CPU::Hf) << '\n' <<
+           " CarryFlag:" << (unsigned)cpu.get_flag(CPU::Cf) << '\n';
             DW::header = ss.str();
-            DW::draw_text();
+            DW::draw_text(24.f);
     }
 };
 
@@ -412,7 +416,6 @@ struct GameBoyVM{
         auto cpu_r = cpu.instruction_async_loop(ram);
         while(!WindowShouldClose()){
             main_loop_async(cpu_r);
-            std::cout << std::dec;
             UpdateTexture(target, ppu.read_buffer());
             BeginDrawing();
                ClearBackground(WHITE);
@@ -487,16 +490,15 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
 
-
 // Games:
 // Tetris:
 //     Source - https://github.com/alexsteb/tetris_disassembly/blob/master/main.asm
 //              https://github.com/vinheim3/tetris-gb-disasm
 //     ROM -    /Users/prazd/Desktop/dev/tetris.gb
-
+// /Users/prazd/Desktop/dev/PokemonBlueVersion.gb - MBC3
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/Zelda.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

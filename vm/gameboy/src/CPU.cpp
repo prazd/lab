@@ -631,59 +631,6 @@ int CPU::pc_inc_by_ins(CPU::Instruction ins, unsigned char value) {
     }
 }
 
-void CPU::handle_interrupt(RAM& ram, unsigned char& next_ins, Instruction& decoded_ins) {
-    if (ime) { // Interrupt
-        auto if_value = ram.read(constants::IF_ADDRESS);
-        auto ie_value = ram.read(constants::IE_ADDRESS);
-        if ((if_value & ie_value & 0x1f) != 0) {
-            unsigned char pc_l = pc & 0xff;
-            unsigned char pc_h = (pc >> 8) & 0xff;
-
-            fetch_IF_value(ram);
-            fetch_IE_value(ram);
-
-            if (vblank_interrupt_req && vblank_interrupt_enabled) {
-                if (halted) halted = false;
-                ime = false;
-                push_stack(pc_l, pc_h, ram);
-                vblank_interrupt_req = false;
-                off_IF_value(CPU::VBlank_I, ram);
-                pc = constants::VBLANK_INTERRUPT;
-            } else if (lcd_interrupt_req && lcd_interrupt_enabled) {
-                if (halted) halted = false;
-                ime = false;
-                push_stack(pc_l, pc_h, ram);
-                lcd_interrupt_req = false;
-                off_IF_value(CPU::LCD_I, ram);
-                pc = constants::STAT_INTERRUPT;
-            } else if (timer_interrupt_req && timer_interrupt_enabled) {
-                if (halted) halted = false;
-                ime = false;
-                push_stack(pc_l, pc_h, ram);
-                timer_interrupt_req = false;
-                off_IF_value(CPU::Timer_I, ram);
-                pc = constants::TIMER_INTERRUPT;
-            } else if (serial_interrupt_req && serial_interrupt_enabled) {
-                if (halted) halted = false;
-                ime = false;
-                push_stack(pc_l, pc_h, ram);
-                serial_interrupt_req = false;
-                off_IF_value(CPU::Serial_I, ram);
-                pc = constants::SERIAL_INTERRUPT;
-            } else if (joypad_interrupt_req && joypad_interrupt_enabled) {
-                if (halted) halted = false;
-                ime = false;
-                push_stack(pc_l, pc_h, ram);
-                joypad_interrupt_req = false;
-                off_IF_value(CPU::Joypad_I, ram);
-                pc = constants::JOYPAD_INTERRUPT;
-            }
-            next_ins = fetch(ram);
-            decoded_ins = decode(next_ins);
-        }
-    }
-}
-
 Resumable CPU::instruction_async_loop(RAM &ram) {
 #if 1
     auto print_hex = [&](auto val){
