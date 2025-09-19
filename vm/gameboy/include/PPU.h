@@ -140,9 +140,9 @@ struct BaseFetcher {
             case FetcherState::High:     {step(ram, std::forward<Args>(args)...);
                 if (fifo.size() == 8 && pixels.empty()) {
                     if (is_window) {
-                        windows_current_tile_x = (windows_current_tile_x + 1) % 20;
+                        windows_current_tile_x = (windows_current_tile_x + 1) % 21;
                     } else {
-                        fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
+                        fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 21;
                     }
                     current_state = FetcherState::GetTile;
                 } else {
@@ -154,9 +154,9 @@ struct BaseFetcher {
                 step(ram, std::forward<Args>(args)...);
                 if (fifo.size() == 8 && pixels.empty()) {
                     if (is_window) {
-                        windows_current_tile_x = (windows_current_tile_x + 1) % 20;
+                        windows_current_tile_x = (windows_current_tile_x + 1) % 21;
                     } else {
-                        fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
+                        fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 21;
                     }
                     next_t_cycle = NEXT_T_CYCLE_VAL;
                     current_state = FetcherState::GetTile;
@@ -170,9 +170,9 @@ struct BaseFetcher {
                 next_t_cycle = 1;
                 if (pixels.empty()){
                     if (is_window) {
-                        windows_current_tile_x = (windows_current_tile_x + 1) % 20;
+                        windows_current_tile_x = (windows_current_tile_x + 1) % 21;
                     } else {
-                        fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
+                        fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 21;
                     }
                     current_state = FetcherState::GetTile;
                     next_t_cycle = NEXT_T_CYCLE_VAL;
@@ -237,7 +237,7 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
             case FetcherState::GetTile:  {step(ram, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::High; break;}
             case FetcherState::High:     {step(ram, cpx, sprite);
                     pixels = {};
-                    fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 20;
+                    fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 21;
                     current_state = FetcherState::GetTile;
                     finished = true;
                     next_t_cycle = NEXT_T_CYCLE_VAL;
@@ -335,7 +335,7 @@ class PPU {
     })> sprite_buffer;
 
     // coordinates
-    size_t current_pixel_x = 0;
+    int current_pixel_x = 0;
     unsigned char current_line = {};
     int current_t_cycle_count = {};
     int current_v_blank_t_cycle_count = {};

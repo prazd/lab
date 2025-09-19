@@ -145,7 +145,7 @@ Pixel PPU::pixel_mixing(RAM &ram) {
 std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
    if (!sprite_buffer.empty()) {
        auto current = sprite_buffer.top();
-       if (current.first.x_pos - 8 <= current_pixel_x && current_pixel_x < current.first.x_pos) {
+       if ((int)(current.first.x_pos - 8) <= current_pixel_x && current_pixel_x < current.first.x_pos) {
            sprite_buffer.pop();
            return current.first;
        }
@@ -265,11 +265,13 @@ void PPU::tick(RAM &ram)  {
                 }
             }
 
-            if (!sprite_render && ram.read_unsafe(constants::LCDC_ADDRESS) & (1 << 1)) {
+            if (!sprite_render && ram.read_unsafe(constants::LCDC_ADDRESS) & (1 << 1)){
                 auto sprite = sprite_on_x(ram);
                 if (sprite.has_value()) {
                     current_sprite = sprite.value();
                     sprite_render = true;
+                    // todo: check
+//                    pixel_fetcher.current_state = decltype(pixel_fetcher)::FetcherState::GetTile;
                     pixel_fetcher.paused = true;
                     sprite_fetcher.finished = false;
                 }
@@ -281,14 +283,13 @@ void PPU::tick(RAM &ram)  {
                     sprite_fetcher.fetch(ram, current_pixel_x, current_sprite);
                     if (sprite_fetcher.finished) {
                         pixel_fetcher.paused = false;
-                        pixel_fetcher.next_t_cycle = 2;
                         sprite_render = false;
                         sprite_fetcher.finished = false;
                     }
                 }
             }
 
-            if ((!pixel_fetcher.fifo.empty() || !sprite_fetcher.fifo.empty()) &&
+            if ((!pixel_fetcher.fifo.empty()) &&
                 !pixel_fetcher.paused) {
                 draw(ram);
             }

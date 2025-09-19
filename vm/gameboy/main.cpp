@@ -426,7 +426,7 @@ struct GameBoyVM{
 #endif
 // PRINT PIXELS
 #if 0
-//              print_rects.template operator()<DISPLAY_HEIGHT, DISPLAY_WIDTH>(GREEN);
+//             DebugTools::print_rects<DISPLAY_HEIGHT, DISPLAY_WIDTH>(GREEN);
               DebugTools::print_rects<18, 20>(RED);
 #endif
                 DrawFPS(700, 10);
@@ -498,7 +498,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/PokemonBlueVersion.gb - MBC3
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
