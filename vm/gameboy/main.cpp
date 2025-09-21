@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <sstream>
 #include <fstream>
+#include <span>
 
 #define DEBUG_MODE 1
 constexpr size_t DEBUG_WIDTH = 1500;
@@ -125,7 +126,6 @@ struct DebugTools {
 template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct DebugWindow {
     using Buffer = std::array<std::array<Color, pwidth>, pheight>;
-    bool active = false;
     Rectangle rec;
     Texture2D target;
     Buffer buffer{};
@@ -256,6 +256,7 @@ struct GameBoyVM{
     RAM ram;
     PPU ppu;
     Joypad joypad;
+    std::string_view ram_path;
 
     RAM::MBC get_mbc_type(const auto& data) {
         switch (data[0x0147]) {
@@ -268,6 +269,17 @@ struct GameBoyVM{
                 return RAM::MBC0;
             }
         }
+    }
+
+    void try_to_use_save() {
+        if (ram.rom[0x147] != 0x03) return;
+        std::cout << "\nMBC1 with battery save\n";
+        std::string spath(ram_path.substr(0, ram_path.size()-3));
+        spath += ".sav";
+        std::ifstream ifile(spath, std::ios::binary | std::ios::in);
+        if (!ifile.is_open()){ std::cout << "Can't open save file:" << spath << '\n'; return;}
+        ifile.read((char*)ram.cart_ram.data(), ram.cart_ram.size()); // todo: check
+        ifile.close();
     }
 
     void main_loop_async(auto& cpu_r) {
@@ -358,7 +370,7 @@ struct GameBoyVM{
         std::cout << ram.rom.size();
     }
 
-    explicit GameBoyVM(const std::string_view& path) {
+    explicit GameBoyVM(const std::string_view& path): ram_path(path) {
         init_raw_rom(path);
         // init rom
         if ((unsigned char)ram.rom[0x143] == 0xc0) {
@@ -374,6 +386,23 @@ struct GameBoyVM{
         ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
         ram.current_mbc = get_mbc_type(ram.rom);
         ram.current_rom_bank_max = get_rom_size(ram.rom);
+        try_to_use_save();
+    }
+
+    ~GameBoyVM(){
+        if (ram.rom[0x147] == 0x03){
+            std::string save_path(ram_path.substr(0, ram_path.size()-3));
+            save_path += ".sav";
+            std::ofstream save_file(save_path, std::ios::binary | std::ios::out);
+            if (save_file.is_open()) {
+
+                save_file.write((char*)ram.cart_ram.data(), ram.cart_ram.size());
+                std::cout << "\nSaved succesfully\n";
+            } else {
+                std::cout << "!!!!!!!!!!! Save error !!!!!!!!!!!" << '\n';
+            }
+            save_file.close();
+        } // MBC1 + RAM + Battery
     }
     
     void run() {
@@ -498,7 +527,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/PokemonBlueVersion.gb - MBC3
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/Zelda.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
