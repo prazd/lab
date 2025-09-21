@@ -93,6 +93,7 @@ struct BaseFetcher {
     }
 
     void reset() {
+        is_window = false;
         fifo = {};
         pixels = {};
         current_state = FetcherState::GetTile;
@@ -202,6 +203,7 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
             tilemap_y = current_window_line/8;
             line_in_tile = current_window_line % 8;
             is_window = true;
+//            ++current_window_line;
         } else {
             tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
             tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
@@ -323,7 +325,6 @@ class PPU {
     bool window_visible = false;
     bool obj_enable = false; // sprites
     bool bg_enable = false;
-    size_t window_line_counter = 0;
     bool pixel_fetcher_paused = false;
     int oam_next_t_cycle = 2;
     int oam_sprite_get = 2;

@@ -254,7 +254,7 @@ void PPU::tick(RAM &ram)  {
 #endif
         if (current_pixel_x < 160) {
             if (((ram.read_unsafe(constants::LCDC_ADDRESS) >> 5) & 1)
-                && (ram.read_unsafe(constants::WY_ADDRESS) == ram.read_unsafe(constants::LY_ADDRESS))
+                && ram.read_unsafe(constants::LY_ADDRESS) >= (ram.read_unsafe(constants::WY_ADDRESS))
                 && !window_line_is_triggered) {
                 window_line_is_triggered = true;
             }
@@ -296,6 +296,12 @@ void PPU::tick(RAM &ram)  {
         } else {
             sprite_fetcher.reset();
             pixel_fetcher.reset();
+
+            window_line_is_triggered = false;
+            is_windows_drawing = false;
+            pixel_fetcher.is_windows_drawing = false;
+            pixel_fetcher.windows_current_tile_x = 0;
+
             if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 3))
                 ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
 
@@ -312,6 +318,8 @@ void PPU::tick(RAM &ram)  {
                 {ly_increment_delay = 49; break;}
             }
             ly_increment_done = false;
+
+
 #if DEBUG_T_CYCLE
             if (debug_t_cycles != 172){
                        debug_t_cycles += 0;
@@ -337,6 +345,8 @@ void PPU::tick(RAM &ram)  {
 #if DEBUG_T_CYCLE
             //                assert(current_t_cycle_count == 456);
 #endif
+//            pixel_fetcher.current_window_line = 0;
+            pixel_fetcher.windows_current_tile_x = 0;
             pixel_fetcher.fetcher_current_tile_x = 0;
             sprite_fetcher.fetcher_current_tile_x = 0;
             current_pixel_x = 0;
@@ -363,7 +373,7 @@ void PPU::tick(RAM &ram)  {
                     PRINT_DOTS(20)
 #endif
                 current_mode = OAM;
-//                    set_ppu_mode(ram);
+                window_line_is_triggered = false;
                 pixel_fetcher.is_windows_drawing = false;
                 pixel_fetcher.windows_current_tile_x = 0;
                 // LCD Interrupt
@@ -374,7 +384,6 @@ void PPU::tick(RAM &ram)  {
                 current_oam_obj = 0;
             }
             set_ppu_reg(constants::LY_ADDRESS, ++current_line, ram);
-            window_line_counter = 0;
         }
     } else if (current_mode == VBlank) {
 #if DEBUG_T_CYCLE
@@ -405,6 +414,7 @@ void PPU::tick(RAM &ram)  {
                 current_pixel_x = 0;
                 current_t_cycle_count = 0;
                 window_line_is_triggered = false;
+                pixel_fetcher.current_window_line = 0;
                 pixel_fetcher.is_windows_drawing = false;
                 is_windows_drawing = false;
             } else {
@@ -432,9 +442,11 @@ void PPU::print_buffer() const {
 }
 
 bool PPU::is_windows_fetching_ready(RAM &ram) {
-    return window_line_is_triggered && ((ram.read_unsafe(constants::LCDC_ADDRESS) >> 5) & 1) && (ram.read_unsafe(
-            constants::LCDC_ADDRESS) & 1)
-           && current_pixel_x >= (ram.read_unsafe(constants::WX_ADDRESS) - 7);
+    return
+            ((ram.read_unsafe(constants::LCDC_ADDRESS) >> 5) & 1) &&
+            (ram.read_unsafe(constants::LCDC_ADDRESS) & 1) &&
+           current_line >= ram.read_unsafe(constants::WY_ADDRESS) &&
+           current_pixel_x >= ((int)(ram.read_unsafe(constants::WX_ADDRESS) - 7));
 }
 
 unsigned short PPU::get_sprite_fetcher_tile_address() const {

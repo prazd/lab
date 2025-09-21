@@ -498,7 +498,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/PokemonBlueVersion.gb - MBC3
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/Zelda.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
