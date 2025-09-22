@@ -836,13 +836,6 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
             case LD_0b00010010: {
                 WAIT(4)
-                static int count = 0;
-                if (((regs[D] << 8) | regs[E]) == constants::OAM_BEGIN && regs[A] == 0x81){
-                    if (count == 0) {
-                        count+=0;
-                    }
-                    ++count;
-                }
                 twrite(ram, ((regs[D] << 8) | regs[E]), regs[A]);
                 break;
             }

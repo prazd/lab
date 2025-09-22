@@ -183,7 +183,6 @@ void PPU::tick(RAM &ram)  {
     update_regs(ram);
     set_ppu_mode(ram);
     lyc_ly_compare(ram);
-
     if (current_mode == OAM){
 #if DEBUG_T_CYCLE
         ++debug_t_cycles;
@@ -359,7 +358,6 @@ void PPU::tick(RAM &ram)  {
                 PRINT_T_CYCLE("HBlank", debug_t_cycles)
 #endif
                 current_mode = VBlank;
-//                    set_ppu_mode(ram);
                 // VBlank Interrupt
                 ram.write_unsafe(constants::IF_ADDRESS, ram.read_unsafe(constants::IF_ADDRESS) | 1);
                 // LCDC

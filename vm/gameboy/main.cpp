@@ -379,10 +379,12 @@ struct GameBoyVM{
         }
         cpu.pc = 0x0100;
         cpu.sp = 0xFFFE;
+
         ram.rom_sz = get_rom_size(ram.rom);
         ram.mem[constants::JOYPAD] = 0xff;
         ram.mem[constants::LCDC_ADDRESS] = 0x91;
         ram.mem[constants::STAT_ADDRESS] = 0x80;
+        ram.mem[constants::BGP] = 0xFC;
         ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
         ram.current_mbc = get_mbc_type(ram.rom);
         ram.current_rom_bank_max = get_rom_size(ram.rom);
@@ -527,7 +529,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/PokemonBlueVersion.gb - MBC3
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
