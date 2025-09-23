@@ -252,11 +252,6 @@ void PPU::tick(RAM &ram)  {
 //            std::cout << "debug_t_cycles:" << debug_t_cycles << '\n';
 #endif
         if (current_pixel_x < 160) {
-            if (((ram.read_unsafe(constants::LCDC_ADDRESS) >> 5) & 1)
-                && ram.read_unsafe(constants::LY_ADDRESS) >= (ram.read_unsafe(constants::WY_ADDRESS))
-                && !window_line_is_triggered) {
-                window_line_is_triggered = true;
-            }
             if (!pixel_fetcher.paused) {
                 --pixel_fetcher.next_t_cycle;
                 if (pixel_fetcher.next_t_cycle == 0) {
@@ -296,7 +291,6 @@ void PPU::tick(RAM &ram)  {
             sprite_fetcher.reset();
             pixel_fetcher.reset();
 
-            window_line_is_triggered = false;
             is_windows_drawing = false;
             pixel_fetcher.is_windows_drawing = false;
             pixel_fetcher.windows_current_tile_x = 0;
@@ -371,7 +365,6 @@ void PPU::tick(RAM &ram)  {
                     PRINT_DOTS(20)
 #endif
                 current_mode = OAM;
-                window_line_is_triggered = false;
                 pixel_fetcher.is_windows_drawing = false;
                 pixel_fetcher.windows_current_tile_x = 0;
                 // LCD Interrupt
@@ -411,7 +404,6 @@ void PPU::tick(RAM &ram)  {
                 set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
                 current_pixel_x = 0;
                 current_t_cycle_count = 0;
-                window_line_is_triggered = false;
                 pixel_fetcher.current_window_line = 0;
                 pixel_fetcher.is_windows_drawing = false;
                 is_windows_drawing = false;

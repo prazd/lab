@@ -64,6 +64,41 @@ namespace constants {
     constexpr size_t TIMA_REGISTER =   0xFF05;
     constexpr size_t TMA_REGISTER  =   0xFF06;
     constexpr size_t TAC_REGISTER  =   0xFF07;
+
+// Serial
+    constexpr size_t SB_ADDRESS = 0xFF01;
+    constexpr size_t SC_ADDRESS = 0xFF02;
+
+// Channels
+    constexpr size_t NR10_ADDRESS = 0xFF10;
+    constexpr size_t NR11_ADDRESS = 0xFF11;
+    constexpr size_t NR12_ADDRESS = 0xFF12;
+    constexpr size_t NR13_ADDRESS = 0xFF13;
+    constexpr size_t NR14_ADDRESS = 0xFF14;
+
+    constexpr size_t NR21_ADDRESS = 0xFF16;
+    constexpr size_t NR22_ADDRESS = 0xFF17;
+    constexpr size_t NR23_ADDRESS = 0xFF18;
+    constexpr size_t NR24_ADDRESS = 0xFF19;
+
+    constexpr size_t NR30_ADDRESS = 0xFF1A;
+    constexpr size_t NR31_ADDRESS = 0xFF1B;
+    constexpr size_t NR32_ADDRESS = 0xFF1C;
+    constexpr size_t NR33_ADDRESS = 0xFF1D;
+    constexpr size_t NR34_ADDRESS = 0xFF1E;
+
+    constexpr size_t NR41_ADDRESS = 0xFF20;
+    constexpr size_t NR42_ADDRESS = 0xFF21;
+    constexpr size_t NR43_ADDRESS = 0xFF22;
+    constexpr size_t NR44_ADDRESS = 0xFF23;
+
+    constexpr size_t NR50_ADDRESS = 0xFF24;
+    constexpr size_t NR51_ADDRESS = 0xFF25;
+    constexpr size_t NR52_ADDRESS = 0xFF26;
+
+
+
+
 }
 
 #endif //GAMEBOY_CONSTANTS_H

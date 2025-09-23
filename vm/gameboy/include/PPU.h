@@ -353,7 +353,6 @@ class PPU {
     void update_bg(const RAM& ram);
     void update_regs(const RAM& ram);
 
-    bool window_line_is_triggered = false;
     bool is_windows_drawing = false;
     bool is_windows_fetching_ready(RAM& ram);
 

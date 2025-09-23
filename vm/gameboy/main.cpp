@@ -370,6 +370,58 @@ struct GameBoyVM{
         std::cout << ram.rom.size();
     }
 
+    // https://gbdev.io/pandocs/Power_Up_Sequence.html#register-initialization
+    void boot() {
+        cpu.regs[CPU::A] = 0x01;
+        cpu.regs[CPU::F] = 0xB0;
+        cpu.regs[CPU::B] = 0x00;
+        cpu.regs[CPU::C] = 0x13;
+        cpu.regs[CPU::D] = 0x00;
+        cpu.regs[CPU::E] = 0xD8;
+        cpu.regs[CPU::H] = 0x01;
+        cpu.regs[CPU::L] = 0x4D;
+        cpu.pc = 0x0100;
+        cpu.sp = 0xFFFE;
+
+        ram.mem[constants::JOYPAD] = 0xcf;
+        ram.mem[constants::SC_ADDRESS] = 0x7e;
+        ram.mem[constants::DIV_REGISTER] = 0xAB; // --
+        ram.mem[constants::TAC_REGISTER] = 0xF8;
+        ram.mem[constants::IF_ADDRESS] = 0xE1;
+
+        ram.mem[constants::NR10_ADDRESS] = 0x80;
+        ram.mem[constants::NR11_ADDRESS] = 0xBF;
+        ram.mem[constants::NR12_ADDRESS] = 0xF3;
+        ram.mem[constants::NR13_ADDRESS] = 0xFF;
+        ram.mem[constants::NR14_ADDRESS] = 0xBF;
+
+        ram.mem[constants::NR21_ADDRESS] = 0x3F;
+        ram.mem[constants::NR22_ADDRESS] = 0x00;
+        ram.mem[constants::NR23_ADDRESS] = 0xFF;
+        ram.mem[constants::NR24_ADDRESS] = 0xBF;
+
+        ram.mem[constants::NR30_ADDRESS] = 0x7F;
+        ram.mem[constants::NR31_ADDRESS] = 0xFF;
+        ram.mem[constants::NR32_ADDRESS] = 0x9F;
+        ram.mem[constants::NR33_ADDRESS] = 0xFF;
+        ram.mem[constants::NR34_ADDRESS] = 0xBF;
+
+        ram.mem[constants::NR41_ADDRESS] = 0xFF;
+        ram.mem[constants::NR42_ADDRESS] = 0x00;
+        ram.mem[constants::NR43_ADDRESS] = 0x00;
+        ram.mem[constants::NR44_ADDRESS] = 0xBF;
+
+        ram.mem[constants::NR50_ADDRESS] = 0x77;
+        ram.mem[constants::NR51_ADDRESS] = 0xF3;
+        ram.mem[constants::NR52_ADDRESS] = 0xF1;
+
+
+        ram.mem[constants::LCDC_ADDRESS] = 0x91;
+        ram.mem[constants::STAT_ADDRESS] = 0x85; // --
+        ram.mem[constants::DMA] = 0xFF;
+        ram.mem[constants::BGP] = 0xFC;
+    }
+
     explicit GameBoyVM(const std::string_view& path): ram_path(path) {
         init_raw_rom(path);
         // init rom
@@ -377,14 +429,9 @@ struct GameBoyVM{
             std::cout << "\nGameBoyColor unsupported\n";
             std::abort();
         }
-        cpu.pc = 0x0100;
-        cpu.sp = 0xFFFE;
 
         ram.rom_sz = get_rom_size(ram.rom);
-        ram.mem[constants::JOYPAD] = 0xff;
-        ram.mem[constants::LCDC_ADDRESS] = 0x91;
-        ram.mem[constants::STAT_ADDRESS] = 0x80;
-        ram.mem[constants::BGP] = 0xFC;
+        boot();
         ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
         ram.current_mbc = get_mbc_type(ram.rom);
         ram.current_rom_bank_max = get_rom_size(ram.rom);
@@ -408,20 +455,6 @@ struct GameBoyVM{
     }
     
     void run() {
-        // Gamboy Doctor
-#if 1
-        cpu.regs[CPU::A] = 0x01;
-        cpu.regs[CPU::F] = 0xB0;
-        cpu.regs[CPU::B] = 0x00;
-        cpu.regs[CPU::C] = 0x13;
-        cpu.regs[CPU::D] = 0x00;
-        cpu.regs[CPU::E] = 0xD8;
-        cpu.regs[CPU::H] = 0x01;
-        cpu.regs[CPU::L] = 0x4D;
-        cpu.sp = 0xfffe;
-        cpu.pc = 0x0100;
-#endif
-
         InitWindow(WIDTH, HEIGHT, "GameBoy");
         SetTargetFPS(60); // 59.7275 FPS
 
@@ -529,7 +562,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/PokemonBlueVersion.gb - MBC3
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
