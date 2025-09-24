@@ -96,11 +96,13 @@ unsigned char PPU::get_obj_size(const RAM &ram)  {
     return (((ram.read_unsafe(constants::LCDC_ADDRESS)) >> 2) & 1) ? 16 : 8;
 }
 
-
-Pixel PPU::pixel_mixing(RAM &ram) {
-    auto bg_pixel = Pixel{.color = WHITE}; // Default
-    if (!pixel_fetcher.fifo.empty()){
-        bg_pixel = pixel_fetcher.fifo.front(); pixel_fetcher.fifo.pop_front();
+void PPU::set_bg_palette(RAM& ram, Pixel& bg_pixel) {
+//    LCDC.0 has different meanings depending on Game Boy type and Mode:
+//    Non-CGB Mode (DMG, SGB and CGB in compatibility mode): BG and Window display
+//    When Bit 0 is cleared, both background and window become blank (white), and the Window Display Bit is ignored in that case. Only objects may still be displayed (if enabled in Bit 1).
+    if (!(ram.read_unsafe(constants::LCDC_ADDRESS) & 0x1)){
+        bg_pixel.color = Pixel::get_pixel_color(0);
+        return;
     }
     auto bgp = ram.read_unsafe(constants::BGP);
     switch (Pixel::get_color_id(bg_pixel.color)) {
@@ -108,26 +110,11 @@ Pixel PPU::pixel_mixing(RAM &ram) {
         case 2:  {bg_pixel.color = Pixel::get_pixel_color((bgp >> 4) & 3);  break;}
         case 3:  {bg_pixel.color = Pixel::get_pixel_color((bgp >> 6) & 3);  break;}
         default:
-            {bg_pixel.color = Pixel::get_pixel_color((bgp & 3));  break;}
+        {bg_pixel.color = Pixel::get_pixel_color((bgp & 3));  break;}
     }
-    if (!(ram.read_unsafe(constants::LCDC_ADDRESS) & 0x2)) {
-        return bg_pixel;
-    }
-    if (sprite_fetcher.fifo.empty()) {
-        return bg_pixel;
-    }
-    auto sprite_pixel = sprite_fetcher.fifo.front();  sprite_fetcher.fifo.pop_front();
-    //  If the color number of the Sprite Pixel is 0, the Background Pixel is pushed to the buffer.
-    if (Pixel::get_color_id(sprite_pixel.color) == 0){
-        return bg_pixel;
-    }
+}
 
-    //  If the BG-to-OBJ-Priority bit is 1 and the color number of the Background Pixel is anything other than 0,
-    //  the Background Pixel is pushed to the buffer
-    if ((sprite_pixel.attrib >> 7 & 1) && Pixel::get_color_id(bg_pixel.color) != 0){
-        return bg_pixel;
-    }
-
+void PPU::set_sprite_palette(RAM &ram, Pixel& sprite_pixel) {
     unsigned char obp{};
     if ((sprite_pixel.attrib >> 4 & 1))
         obp = ram.read_unsafe(constants::OBP1);
@@ -139,6 +126,40 @@ Pixel PPU::pixel_mixing(RAM &ram) {
         case 2:  {sprite_pixel.color = Pixel::get_pixel_color((obp >> 4) & 3);  break;}
         case 3:  {sprite_pixel.color = Pixel::get_pixel_color((obp >> 6) & 3);  break;}
     }
+}
+
+
+Pixel PPU::pixel_mixing(RAM &ram) {
+    auto bg_pixel = Pixel{.color = WHITE}; // Default
+    if (!pixel_fetcher.fifo.empty()){
+        bg_pixel = pixel_fetcher.fifo.front(); pixel_fetcher.fifo.pop_front();
+    }
+
+    if (!(ram.read_unsafe(constants::LCDC_ADDRESS) & 0x2)) {
+        set_bg_palette(ram, bg_pixel);
+        return bg_pixel;
+    }
+
+    if (sprite_fetcher.fifo.empty()) {
+        set_bg_palette(ram, bg_pixel);
+        return bg_pixel;
+    }
+
+    auto sprite_pixel = sprite_fetcher.fifo.front();  sprite_fetcher.fifo.pop_front();
+    //  If the color number of the Sprite Pixel is 0, the Background Pixel is pushed to the buffer.
+    if (Pixel::get_color_id(sprite_pixel.color) == 0){
+        set_bg_palette(ram, bg_pixel);
+        return bg_pixel;
+    }
+
+    //  If the BG-to-OBJ-Priority bit is 1 and the color number of the Background Pixel is anything other than 0,
+    //  the Background Pixel is pushed to the buffer
+    if ((sprite_pixel.attrib >> 7 & 1) && Pixel::get_color_id(bg_pixel.color) != 0){
+        set_bg_palette(ram, bg_pixel);
+        return bg_pixel;
+    }
+
+    set_sprite_palette(ram, sprite_pixel);
     return sprite_pixel;
 }
 

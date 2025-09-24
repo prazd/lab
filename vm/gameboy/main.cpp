@@ -457,6 +457,7 @@ struct GameBoyVM{
     void run() {
         InitWindow(WIDTH, HEIGHT, "GameBoy");
         SetTargetFPS(60); // 59.7275 FPS
+        SetExitKey(0);
 
         // texture init
         Image img = GenImageColor(DISPLAY_WIDTH, DISPLAY_HEIGHT, WHITE);
@@ -534,6 +535,10 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode3_timing.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb
 
+// /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
+// /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb +-
+// /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
+
 // Failed:
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_irq_blocking.gb - failed
@@ -550,10 +555,6 @@ struct GameBoyVM{
 
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/div_timing.gb - failed
 
-// /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
-// /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb
-// /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
-
 // Games:
 // Tetris:
 //     Source - https://github.com/alexsteb/tetris_disassembly/blob/master/main.asm
@@ -562,7 +563,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/PokemonBlueVersion.gb - MBC3
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

@@ -203,7 +203,6 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
             tilemap_y = current_window_line/8;
             line_in_tile = current_window_line % 8;
             is_window = true;
-//            ++current_window_line;
         } else {
             tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
             tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
@@ -360,9 +359,8 @@ class PPU {
     Pixel pixel_mixing(RAM& ram);
     std::optional<Sprite> sprite_on_x(RAM& ram);
     void draw(RAM& ram);
-
-
-
+    void set_bg_palette(RAM& ram, Pixel&);
+    void set_sprite_palette(RAM& ram, Pixel&);
 public:
     void tick(RAM& ram);
     void set_start_mode();
