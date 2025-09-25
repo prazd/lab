@@ -230,7 +230,11 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
         line_in_tile = ram.read_unsafe(constants::LY_ADDRESS) - (sprite.y_pos - 16);
         if ((sprite.attrib >> 6) & 1)
             line_in_tile = ((lcdc_mode ? 16 : 8)) - line_in_tile - 1;
-        return (sprite.index_tile * 16) + constants::VRAM_BEGIN;
+//        In this mode, this byte specifies the index of the first (top) tile of the object.
+//        This is enforced by the hardware: the least significant bit of the tile index is ignored; that is, the top 8×8 tile is “NN & $FE”,
+//        and the bottom 8×8 tile is “NN | $01”.
+// todo: check
+        return ((lcdc_mode ? sprite.index_tile & 0xfe : sprite.index_tile) * 16) + constants::VRAM_BEGIN;
     }
 
     void fetch(RAM& ram, unsigned char cpx, const Sprite& sprite) {
@@ -329,6 +333,7 @@ class PPU {
     int oam_sprite_get = 2;
     size_t oam_next_t_sprite_t_cycle = 2;
     unsigned short current_oam_obj = 0;
+    bool win_disabled = false;
 
     std::priority_queue<std::pair<Sprite, int>, std::vector<std::pair<Sprite, int>>, decltype([](auto& a, auto& b){
         return !(a.first.x_pos < b.first.x_pos || (a.first.x_pos == b.first.x_pos && a.second < b.second));
