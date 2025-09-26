@@ -176,11 +176,19 @@ std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
 
 void PPU::draw(RAM &ram)  {
     buffer[current_line][current_pixel_x++] = pixel_mixing(ram).color;
-    if (!is_windows_drawing && is_windows_fetching_ready(ram)) {
+    if (!pixel_fetcher.is_windows_drawing && is_windows_fetching_ready(ram)) {
+        std::cout << "CurrentWindowLine:" << (unsigned)pixel_fetcher.current_window_line << '\n';
         pixel_fetcher.reset();
-        is_windows_drawing = true;
-        pixel_fetcher.windows_current_tile_x = 0;
+        if (!is_win_init){
+//            pixel_fetcher.current_window_line = ram.read_unsafe(constants::LY_ADDRESS) - ram.read_unsafe(constants::WY_ADDRESS);
+            pixel_fetcher.current_window_line = 0;
+            is_win_init = true;
+        }
+
+//                use_saved_window_ly ? (use_saved_window_ly = false, save_window_ly) :
+//                ram.read_unsafe(constants::LY_ADDRESS) - ram.read_unsafe(constants::WY_ADDRESS);
         pixel_fetcher.is_windows_drawing = true;
+        pixel_fetcher.windows_current_tile_x = 0;
     }
 }
 
@@ -311,9 +319,6 @@ void PPU::tick(RAM &ram)  {
         } else {
             sprite_fetcher.reset();
             pixel_fetcher.reset();
-
-            is_windows_drawing = false;
-            pixel_fetcher.is_windows_drawing = false;
             pixel_fetcher.windows_current_tile_x = 0;
 
             if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 3))
@@ -386,7 +391,6 @@ void PPU::tick(RAM &ram)  {
                     PRINT_DOTS(20)
 #endif
                 current_mode = OAM;
-                pixel_fetcher.is_windows_drawing = false;
                 pixel_fetcher.windows_current_tile_x = 0;
                 // LCD Interrupt
                 if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
@@ -394,6 +398,10 @@ void PPU::tick(RAM &ram)  {
                 sprite_buffer = {};
                 oam_next_t_cycle = 2;
                 current_oam_obj = 0;
+            }
+            if (pixel_fetcher.is_windows_drawing) {
+                ++pixel_fetcher.current_window_line;
+                pixel_fetcher.is_windows_drawing = false;
             }
             set_ppu_reg(constants::LY_ADDRESS, ++current_line, ram);
         }
@@ -424,10 +432,11 @@ void PPU::tick(RAM &ram)  {
                 internal_t_cycles = 0;
                 set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
                 current_pixel_x = 0;
+                use_saved_window_ly = false;
+                is_win_init = false;
+                save_window_ly = 0;
                 current_t_cycle_count = 0;
-                pixel_fetcher.current_window_line = 0;
                 pixel_fetcher.is_windows_drawing = false;
-                is_windows_drawing = false;
             } else {
                 set_ppu_reg(constants::LY_ADDRESS, current_line, ram);
                 prev_t_cycles = last_t_cycles;

@@ -198,7 +198,6 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
 
         if (is_windows_drawing) {
             tilemap_base = get_window_tile_map_area(ram);
-            current_window_line = ly - wy; // local window line
             tilemap_x = windows_current_tile_x;
             tilemap_y = current_window_line/8;
             line_in_tile = current_window_line % 8;
@@ -357,7 +356,9 @@ class PPU {
     void update_bg(const RAM& ram);
     void update_regs(const RAM& ram);
 
-    bool is_windows_drawing = false;
+    bool is_win_init = false;
+    bool use_saved_window_ly = false;
+    unsigned char save_window_ly{};
     bool is_windows_fetching_ready(RAM& ram);
 
     unsigned char get_obj_size(const RAM& ram);
