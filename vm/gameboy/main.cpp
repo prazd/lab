@@ -29,6 +29,10 @@ constexpr double CPU_CYCLE_TIME = 1/CPU_FREQUENCY;
 using Tile = std::array<std::array<int, 8>, 8>;
 
 struct DebugTools {
+    static Tile get_sprite_tile(const RAM& ram, const Sprite& sprite) {
+        auto lcdc_mode = (ram.read_unsafe(constants::LCDC_ADDRESS) >> 2) & 1;
+        return get_tile_by_address(ram, ((lcdc_mode ? sprite.index_tile & 0xfe : sprite.index_tile) * 16) + constants::VRAM_BEGIN);
+    }
     static Tile get_tile_by_address(const RAM& ram, unsigned short address){
         std::array<unsigned char, 16> arr{};
         for (int i = 0; i < 16; ++i){
@@ -155,13 +159,13 @@ struct DebugWindow {
             }
         }
     }
-    void draw(){
+    void draw(float font_sz = 30.f){
         move_check();
         DrawRectangleLinesEx(rec, 1, BLACK);
-        DrawText(header.c_str(), rec.x, rec.y, 30.f, BLACK);
+        DrawText(header.c_str(), rec.x, rec.y, font_sz, BLACK);
         DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{rec.x+1, rec.y+30, width-20, height-50}, {0, 0}, 0.0f, WHITE);
     }
-    void draw_text(float font_sz) {
+    void draw_text(float font_sz = 30.f) {
         move_check();
         DrawRectangleLinesEx(rec, 1, BLACK);
         DrawText(header.c_str(), rec.x, rec.y, font_sz, BLACK);
@@ -222,6 +226,86 @@ struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
         }
         update_tiles(ram);
         DW::draw();
+    }
+};
+
+template <size_t pwidth, size_t pheight, size_t width, size_t height>
+struct SpriteWindow: public DebugWindow<pwidth, pheight, width, height>{
+    using DW = DebugWindow<pwidth, pheight,width,height>;
+    std::array<Sprite, 40> sprites;
+    std::array<Tile, 40> tiles;
+    SpriteWindow(float x, float y):
+            DebugWindow<pwidth, pheight,width,height>(x, y){
+    }
+    void update_tiles(RAM& ram){
+        std::stringstream ss;
+        ss << "Tiles address:" << std::hex << constants::OAM_BEGIN;
+        auto str = ss.str();
+        int x_begin = 0;
+        int y_begin = 0;
+        DW::header = ss.str();
+
+        unsigned sprites_counter{};
+        for (int i = 0; i < 160; i+=4) {
+            sprites[sprites_counter++] = (
+                Sprite{
+                        .y_pos = ram.read_unsafe(constants::OAM_BEGIN + i),
+                        .x_pos = static_cast<unsigned char>(ram.read_unsafe(
+                                constants::OAM_BEGIN + i + 1)),
+                        .index_tile = ram.read_unsafe(constants::OAM_BEGIN + i + 2),
+                        .attrib = ram.read_unsafe(constants::OAM_BEGIN + i + 3),
+                });
+            }
+
+        for (int i = 0; i < 40; ++i) tiles[i] = DebugTools::get_sprite_tile(ram, sprites[i]);
+
+        int x = x_begin;
+        int y = y_begin;
+        size_t count = 0;
+        int current_x = x;
+        int current_y = y;
+        auto prev_x = x;
+        for (auto& colors: tiles) {
+            for (auto&& row: colors){
+                for (auto el: row) {
+                    DW::buffer[y][x++] = Pixel::get_pixel_color(el);
+                }
+                ++y;
+                prev_x = std::exchange(x, current_x);
+            }
+            if ((prev_x + 1 >= pwidth)){
+                y = current_y = y;
+                x = current_x = x_begin;
+            } else {
+                y = current_y;
+                x = current_x = prev_x;
+            }
+        }
+        DW::update();
+    }
+
+    void handle(RAM& ram){
+        update_tiles(ram);
+        DW::draw();
+    }
+};
+
+template <size_t pwidth, size_t pheight, size_t width, size_t height>
+struct SpriteWindowText: public DebugWindow<pwidth, pheight, width, height>{
+    using DW = DebugWindow<pwidth, pheight,width,height>;
+    SpriteWindowText(float x, float y):
+            DebugWindow<pwidth, pheight,width,height>(x, y){
+    }
+    void handle(auto& sprite_window){
+        std::stringstream ss;
+        for (int i = 0; i < 40; i += 5){
+            for (int j = 0; j < 5; ++j){
+                ss << "[ " <<  (i + j) << " X:" << (unsigned)sprite_window.sprites[i + j].x_pos << " Y:" << (unsigned)sprite_window.sprites[i + j].y_pos << " ]";
+            }
+            ss << '\n';
+        }
+        DW::header = ss.str();
+        DW::draw_text(18.f);
     }
 };
 
@@ -475,7 +559,9 @@ struct GameBoyVM{
 
 #if DEBUG_MODE
         TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
-        RegWindows<160,144,300,400> rw(810,500);
+        SpriteWindow<80,70,300,300> sw(820, 517);
+        RegWindows<160,144,300,400> rw(1150,517);
+        SpriteWindowText<80,70,600,200> swt(10, 750);
 #endif
 
         auto cpu_r = cpu.instruction_async_loop(ram);
@@ -486,8 +572,11 @@ struct GameBoyVM{
                ClearBackground(WHITE);
                DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, LCD_WIDTH, LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
 #if DEBUG_MODE
+
                 tw.handle(ram);
+                sw.handle(ram);
                 rw.handle(cpu);
+                swt.handle(sw);
 #endif
 // PRINT PIXELS
 #if 0

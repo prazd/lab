@@ -166,7 +166,7 @@ Pixel PPU::pixel_mixing(RAM &ram) {
 std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
    if (!sprite_buffer.empty()) {
        auto current = sprite_buffer.top();
-       if ((int)(current.first.x_pos - 8) <= current_pixel_x && current_pixel_x < current.first.x_pos) {
+       if ((int)(current.first.x_pos - 8) <= current_pixel_x) {
            sprite_buffer.pop();
            return current.first;
        }
@@ -177,16 +177,11 @@ std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
 void PPU::draw(RAM &ram)  {
     buffer[current_line][current_pixel_x++] = pixel_mixing(ram).color;
     if (!pixel_fetcher.is_windows_drawing && is_windows_fetching_ready(ram)) {
-        std::cout << "CurrentWindowLine:" << (unsigned)pixel_fetcher.current_window_line << '\n';
         pixel_fetcher.reset();
         if (!is_win_init){
-//            pixel_fetcher.current_window_line = ram.read_unsafe(constants::LY_ADDRESS) - ram.read_unsafe(constants::WY_ADDRESS);
             pixel_fetcher.current_window_line = 0;
             is_win_init = true;
         }
-
-//                use_saved_window_ly ? (use_saved_window_ly = false, save_window_ly) :
-//                ram.read_unsafe(constants::LY_ADDRESS) - ram.read_unsafe(constants::WY_ADDRESS);
         pixel_fetcher.is_windows_drawing = true;
         pixel_fetcher.windows_current_tile_x = 0;
     }
@@ -212,6 +207,7 @@ void PPU::tick(RAM &ram)  {
     update_regs(ram);
     set_ppu_mode(ram);
     lyc_ly_compare(ram);
+
     if (current_mode == OAM){
 #if DEBUG_T_CYCLE
         ++debug_t_cycles;
@@ -320,7 +316,6 @@ void PPU::tick(RAM &ram)  {
             sprite_fetcher.reset();
             pixel_fetcher.reset();
             pixel_fetcher.windows_current_tile_x = 0;
-
             if (ram.read_unsafe(constants::STAT_ADDRESS) & (1 << 3))
                 ram.write_unsafe(constants::IF_ADDRESS, (ram.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
 

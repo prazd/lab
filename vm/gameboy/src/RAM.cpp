@@ -64,7 +64,10 @@ bool RAM::is_ram_avaliable(unsigned short index) const {
     return !(((index >=  constants::VRAM_BEGIN && index <=  constants::VRAM_END) && ((current_ppu_mode == 3 && lcd_enabled()))) ||
              ((index >=  constants::EXTERNAL_RAM_BEGIN && index <=  constants::EXTERNAL_RAM_END) && (!external_ram_enabled)) || // todo: check external RAM
              ((index >=  constants::OAM_BEGIN && index <= constants::OAM_END) && ppu_oam_usage) || // (((current_ppu_mode == 2 || current_ppu_mode == 3) && lcd_enabled())))
-             ((index >=  constants::NOT_USABLE_BEGIN && index <=  constants::NOT_USABLE_END)));
+             ((index >=  constants::NOT_USABLE_BEGIN && index <=  constants::NOT_USABLE_END))
+    );
+//             ||
+//             (!(index >= constants::HRAM_BEGIN && index <= constants::HRAM_END) && dma_active));
 }
 
 unsigned char RAM::get_ppu_mode() const {
@@ -114,7 +117,6 @@ void RAM::write(unsigned short index, unsigned char value) {
     if (is_ram_avaliable(index)){
         mem[index] = value;
     }
-
 }
 
 unsigned char RAM::read(unsigned short index) const {
