@@ -2,48 +2,31 @@
 #include "raylib.h"
 
 void Joypad::update_state(RAM& ram) {
-    unsigned char res = ram.read_unsafe(constants::JOYPAD) & 0xf0;
-    bool interrupt = false;
-    auto keys_update = [&] (bool is_direction){
-        int begin = is_direction ? 0 : 4;
-        int end = is_direction ? 4 : 8;
-        unsigned char result = 0xf;
-        for (int i = begin; i < end; ++i){
-            if (IsKeyDown(keyboard_keys[i])){
-                result &= ~(1 << key_shifts[i]);
-            } else {
-                bool current = res & (1 << key_shifts[i]);
-                if (!current) interrupt = true;
-                result |= (1 << key_shifts[i]);
-            }
-        }
-        return result;
-    };
-
-    if (!((res >> 5) & 1) && ((res >> 4) & 1)){          // Select mode
-        res |= keys_update(false);
-        ram.write_unsafe(constants::JOYPAD, res);
-        if (interrupt) ram.write_unsafe(constants::IF_ADDRESS, ram.read_unsafe(constants::IF_ADDRESS) | (1 << 4));
-    } else if (!((res >> 4) & 1) && ((res >> 5) & 1)) {  // Direction mode
-        res |= keys_update(true);
-        ram.write_unsafe(constants::JOYPAD, res);
-        if (interrupt) ram.write_unsafe(constants::IF_ADDRESS, ram.read_unsafe(constants::IF_ADDRESS) | (1 << 4));
-    } else {
+    unsigned char res = ram.read_unsafe(constants::JOYPAD);
+    bool is_select_mode = !((res >> 5) & 1) && ((res >> 4) & 1);
+    bool is_direction_mode = !((res >> 4) & 1) && ((res >> 5) & 1);
+    if (!is_select_mode && !is_direction_mode){
         ram.write_unsafe(constants::JOYPAD, 0xff);
+        return;
     }
+    auto pressed= current_pressed_values(is_direction_mode);
+    res |= pressed.first;
+    ram.write_unsafe(constants::JOYPAD, res);
+    if (pressed.second) ram.write_unsafe(constants::IF_ADDRESS, ram.read_unsafe(constants::IF_ADDRESS) | (1 << 4));
 }
 
-unsigned char Joypad::current_pressed_values(unsigned char current) {
-    if (((current >> 4) & 0x3) == 0x3)
-        return 0xff;
-    bool is_direction = !((current >> 4) & 1) && ((current >> 5) & 1);
+std::pair<unsigned char, bool> Joypad::current_pressed_values(bool is_direction) {
     int begin = is_direction ? 0 : 4;
     int end = is_direction ? 4 : 8;
     unsigned char result = 0xf;
+    bool interrupt = false;
     for (int i = begin; i < end; ++i){
         if (IsKeyDown(keyboard_keys[i])){
             result &= ~(1 << key_shifts[i]);
+        } else {
+            bool current = result & (1 << key_shifts[i]);
+            if (!current) interrupt = true;
         }
     }
-    return result;
+    return {result, interrupt};
 }

@@ -14,10 +14,10 @@ struct Joypad {
     };
 
     KeyboardKey keyboard_keys[8]{
-            KEY_D,     // RIGHT
-            KEY_A,     // LEFT
-            KEY_W,     // UP
-            KEY_S,     // DOWN
+            KEY_RIGHT,     // RIGHT
+            KEY_LEFT,     // LEFT
+            KEY_UP,     // UP
+            KEY_DOWN,     // DOWN
 
             KEY_Q,     // B
             KEY_E,     // A
@@ -37,6 +37,6 @@ struct Joypad {
     };
 
     void update_state(RAM&);
-    unsigned char current_pressed_values(unsigned char);
+    std::pair<unsigned char, bool> current_pressed_values(bool);
 };
 #endif //RAM_H_JOYPAD_H

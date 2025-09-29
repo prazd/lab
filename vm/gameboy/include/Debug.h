@@ -319,18 +319,18 @@ struct JoypadWindow: public DebugWindow<pwidth, pheight, width, height> {
     JoypadWindow(float x, float y): DW(x, y){}
     void handle(RAM& ram, Joypad& jp){
         std::stringstream ss;
-        auto current = jp.current_pressed_values(0x1f);
+        auto current = jp.current_pressed_values(false);
         ss << std::hex << " Register: " << std::hex << constants::JOYPAD << '\n' <<
-           " Start: " << ((current >> 3) & 1)  << "\n" <<
-           " Select: " << ((current >> 2) & 1)  << "\n" <<
-           " B: " << ((current >> 1) & 1)  << "\n" <<
-           " A: " << ((current) & 1)  << "\n";
-        current = jp.current_pressed_values(0x2f);
+           " Start: " << ((current.first >> 3) & 1)  << "\n" <<
+           " Select: " << ((current.first >> 2) & 1)  << "\n" <<
+           " B: " << ((current.first >> 1) & 1)  << "\n" <<
+           " A: " << ((current.first) & 1)  << "\n";
+        current = jp.current_pressed_values(true);
         ss <<
-           " Down: " << ((current >> 3) & 1)  << "\n" <<
-           " Up: " << ((current >> 2) & 1)  << "\n" <<
-           " Left: " << ((current >> 1) & 1)  << "\n" <<
-           " Right: " << ((current) & 1)  << "\n";
+           " Down: " << ((current.first >> 3) & 1)  << "\n" <<
+           " Up: " << ((current.first >> 2) & 1)  << "\n" <<
+           " Left: " << ((current.first >> 1) & 1)  << "\n" <<
+           " Right: " << ((current.first) & 1)  << "\n";
         DW::header = ss.str();
         DW::draw_text(24.f);
     }

@@ -257,6 +257,9 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
                 high = ram.read_unsafe(tile_address + (line_in_tile * 2) + 1);
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete,cpx, sprite);
 
+//                while (pixels.size() < 8)
+//                    pixels.push_front(Pixel{.color = WHITE});
+
                 // X-flip
                 if (sprite.attrib >> 5 & 1) std::reverse(pixels.begin(), pixels.end());
 
@@ -280,14 +283,6 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
                         pixels.pop_front();
                     }
                 }
-
-//                while (fifo.size() < 8) {
-//                    if (sprite.attrib >> 5 & 1) {
-//                        fifo.push_front(Pixel{.color = WHITE});
-//                    } else {
-//                        fifo.push_back(Pixel{.color = WHITE});
-//                    }
-//                }
                 break;
             }
         }
@@ -302,8 +297,8 @@ class PPU {
         Drawing = 0b11     // Pixel Transfer
     };
     Mode current_mode = OAM;
-    Color buffer[144][160]{};
 
+    Color buffer[144][160]{};
 
     size_t last_t_cycles = 0;
     size_t prev_t_cycles = 0;
@@ -377,5 +372,4 @@ public:
     Mode get_current_mode() const;
     void print_buffer() const;
 };
-
 #endif //GAMEBOY_PPU_H
