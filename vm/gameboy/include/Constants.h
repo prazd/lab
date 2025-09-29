@@ -2,7 +2,23 @@
 #define GAMEBOY_CONSTANTS_H
 #include <iostream>
 
+#define DEBUG_MODE 1
+
 namespace constants {
+    constexpr size_t DEBUG_WIDTH = 1500;
+    constexpr size_t DEBUG_HEIGHT = 1500;
+
+    constexpr size_t LCD_WIDTH = 800;
+    constexpr size_t LCD_HEIGHT = 720;
+
+    constexpr size_t WIDTH = DEBUG_MODE ? DEBUG_WIDTH : LCD_WIDTH;
+    constexpr size_t HEIGHT = DEBUG_MODE ? DEBUG_HEIGHT: LCD_HEIGHT;
+
+    constexpr size_t DISPLAY_HEIGHT = 144;
+    constexpr size_t DISPLAY_WIDTH = 160;
+    constexpr double CPU_FREQUENCY = 4194304.0;
+    constexpr double CPU_CYCLE_TIME = 1/CPU_FREQUENCY;
+
     constexpr size_t DMA = 0xFF46;
     constexpr size_t BANK_ROM_SZ = 16384;       // 16KiB
     constexpr size_t EXTERNAL_RAM_SZ = 8192;    // 8KiB
@@ -95,10 +111,5 @@ namespace constants {
     constexpr size_t NR50_ADDRESS = 0xFF24;
     constexpr size_t NR51_ADDRESS = 0xFF25;
     constexpr size_t NR52_ADDRESS = 0xFF26;
-
-
-
-
 }
-
 #endif //GAMEBOY_CONSTANTS_H

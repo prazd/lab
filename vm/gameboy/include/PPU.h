@@ -280,15 +280,14 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
                         pixels.pop_front();
                     }
                 }
-                if (fifo.size() < 8) {
-                    while (fifo.size() < 8) {
-                        if (sprite.attrib >> 5 & 1) {
-                            fifo.push_front(Pixel{.color = WHITE});
-                        } else {
-                            fifo.push_back(Pixel{.color = WHITE});
-                        }
-                    }
-                }
+
+//                while (fifo.size() < 8) {
+//                    if (sprite.attrib >> 5 & 1) {
+//                        fifo.push_front(Pixel{.color = WHITE});
+//                    } else {
+//                        fifo.push_back(Pixel{.color = WHITE});
+//                    }
+//                }
                 break;
             }
         }

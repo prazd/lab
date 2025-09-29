@@ -36,8 +36,7 @@ struct Joypad {
             Select_Up,
     };
 
-
-    bool is_select_buttons = false;
     void update_state(RAM&);
+    unsigned char current_pressed_values(unsigned char);
 };
 #endif //RAM_H_JOYPAD_H

@@ -29,8 +29,11 @@ std::deque<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprit
     unsigned char hc{};
     Color color;
 
+
     int x_in_tile = pcx - (s.x_pos - 8);
     for (int i = x_in_tile; i < 8; ++i) {
+//    int pcount = 8 - (pcx - (s.x_pos - 8));
+//    for (int i = 0; i < pcount; ++i) {
         lc = (l >> (7 - i)) & 1;
         hc = (h >> (7 - i)) & 1;
         color = Pixel::get_pixel_color((hc << 1 | lc));
@@ -166,7 +169,7 @@ Pixel PPU::pixel_mixing(RAM &ram) {
 std::optional<Sprite> PPU::sprite_on_x(RAM &ram)  {
    if (!sprite_buffer.empty()) {
        auto current = sprite_buffer.top();
-       if ((int)(current.first.x_pos - 8) <= current_pixel_x) {
+       if (current.first.x_pos - 8 <= current_pixel_x) {
            sprite_buffer.pop();
            return current.first;
        }
@@ -483,7 +486,6 @@ void PPU::reset(RAM& ram) {
 
 void PPU::set_start_mode() {
     current_mode = OAM;
-
 }
 
 void PPU::lyc_ly_compare(RAM& ram) {

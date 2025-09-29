@@ -2,7 +2,7 @@
 #include "raylib.h"
 
 void Joypad::update_state(RAM& ram) {
-    unsigned char res = ram.read_unsafe(constants::JOYPAD);
+    unsigned char res = ram.read_unsafe(constants::JOYPAD) & 0xf0;
     bool interrupt = false;
     auto keys_update = [&] (bool is_direction){
         int begin = is_direction ? 0 : 4;
@@ -31,4 +31,19 @@ void Joypad::update_state(RAM& ram) {
     } else {
         ram.write_unsafe(constants::JOYPAD, 0xff);
     }
+}
+
+unsigned char Joypad::current_pressed_values(unsigned char current) {
+    if (((current >> 4) & 0x3) == 0x3)
+        return 0xff;
+    bool is_direction = !((current >> 4) & 1) && ((current >> 5) & 1);
+    int begin = is_direction ? 0 : 4;
+    int end = is_direction ? 4 : 8;
+    unsigned char result = 0xf;
+    for (int i = begin; i < end; ++i){
+        if (IsKeyDown(keyboard_keys[i])){
+            result &= ~(1 << key_shifts[i]);
+        }
+    }
+    return result;
 }

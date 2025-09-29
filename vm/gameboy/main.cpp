@@ -9,331 +9,7 @@
 #include <filesystem>
 #include <sstream>
 #include <fstream>
-#include <span>
-
-#define DEBUG_MODE 1
-constexpr size_t DEBUG_WIDTH = 1500;
-constexpr size_t DEBUG_HEIGHT = 1500;
-
-constexpr size_t LCD_WIDTH = 800;
-constexpr size_t LCD_HEIGHT = 720;
-
-constexpr size_t WIDTH = DEBUG_MODE ? DEBUG_WIDTH : LCD_WIDTH;
-constexpr size_t HEIGHT = DEBUG_MODE ? DEBUG_HEIGHT: LCD_HEIGHT;
-
-constexpr size_t DISPLAY_HEIGHT = 144;
-constexpr size_t DISPLAY_WIDTH = 160;
-constexpr double CPU_FREQUENCY = 4194304.0;
-constexpr double CPU_CYCLE_TIME = 1/CPU_FREQUENCY;
-
-using Tile = std::array<std::array<int, 8>, 8>;
-
-struct DebugTools {
-    static Tile get_sprite_tile(const RAM& ram, const Sprite& sprite) {
-        auto lcdc_mode = (ram.read_unsafe(constants::LCDC_ADDRESS) >> 2) & 1;
-        return get_tile_by_address(ram, ((lcdc_mode ? sprite.index_tile & 0xfe : sprite.index_tile) * 16) + constants::VRAM_BEGIN);
-    }
-    static Tile get_tile_by_address(const RAM& ram, unsigned short address){
-        std::array<unsigned char, 16> arr{};
-        for (int i = 0; i < 16; ++i){
-            arr[i] = ram.read_unsafe(address + i);
-        }
-        std::array<std::array<int, 8>, 8> colors{};
-        std::array<int, 8> tmp{};
-        size_t current{};
-        for (size_t i = 0; i < 16; i+=2){
-            auto l = arr[i];
-            auto h = arr[i+1];
-            for (int j = 0; j < 8; ++j) {
-                auto lc = (l >> (7 - j)) & 1;
-                auto hc = (h >> (7 - j)) & 1;
-                tmp[j] = (hc << 1 | lc);
-            }
-            colors[current++] = tmp;
-        }
-        return colors;
-    };
-
-    template<size_t height, size_t width>
-    static auto print_rects(Color c){
-        std::array<Rectangle, height * width> res{};
-        float x_pos = 0.0f;
-        float y_pos = 0.0f;
-
-        float step_x = LCD_WIDTH/width;
-        float step_y = LCD_HEIGHT/height;
-        int z = 0;
-        for (int i = 0; i < height; ++i){
-            for (int j = 0; j < width; ++j) {
-                res[z++] = Rectangle{x_pos, y_pos, step_x, step_y};
-                x_pos += step_x;
-            }
-            x_pos = 0;
-            y_pos += step_y;
-        }
-        for (const auto& el: res){
-            DrawRectangleLinesEx({el.x, el.y, el.width, el.height}, 1, c);
-        }
-    };
-
-    static void print_segment(const RAM& ram, unsigned short address, int n) {
-        std::cout << "\n=============================\n";
-        for (int i = 0; i < n; ++i){
-            std::cout << std::hex << address + i <<  ":" << (unsigned)ram.read_unsafe(address + i) << '\n';
-        }
-        std::cout << "\n=============================\n";
-        std::cout << std::dec;
-    }
-
-    static void draw_n_tiles(const RAM& ram, unsigned short begin_address, Rectangle rec, int n_tiles) {
-        std::stringstream ss;
-        ss << "Address:" << std::hex << begin_address;
-        auto str = ss.str();
-        float x_begin = rec.x;
-        float y_begin = rec.y;
-        DrawRectangleLinesEx(rec, 1, BLACK);
-        y_begin+=10.f;
-        DrawText(str.c_str(), x_begin, y_begin, 30.f, BLACK);
-        y_begin += 30.f;
-        std::vector<Tile> vec{};
-        for (int i = 0; i < n_tiles; ++i)
-            vec.push_back(get_tile_by_address(ram, begin_address + (16 * i)));
-
-        float xstep = (rec.width/20)/8;
-        float ystep = (rec.height/20)/8;
-        float x = x_begin;
-        float y = y_begin;
-        size_t count = 0;
-        float current_x = x;
-        float current_y = y;
-        auto prev_x = x;
-        for (auto& colors: vec) {
-            for (auto&& row: colors){
-                for (auto el: row) {
-                    DrawRectangle(x, y, xstep, ystep, Pixel::get_pixel_color(el));
-                    x+=xstep;
-                }
-                y += ystep;
-                prev_x = std::exchange(x, current_x);
-            }
-            if ((prev_x + (xstep) >= rec.x + rec.width)){
-                y = current_y = y + ystep;
-                x = current_x = x_begin;
-            } else {
-                y = current_y;
-                x = current_x = prev_x;
-            }
-        }
-    }
-};
-
-template <size_t pwidth, size_t pheight, size_t width, size_t height>
-struct DebugWindow {
-    using Buffer = std::array<std::array<Color, pwidth>, pheight>;
-    Rectangle rec;
-    Texture2D target;
-    Buffer buffer{};
-    std::string header;
-    DebugWindow(float x, float y):
-        rec({x, y, width, height}){
-
-        Image img(GenImageColor(pwidth, pheight, WHITE));
-        target = LoadTextureFromImage(img);
-        UnloadImage(img);
-
-        for (size_t i = 0; i < pheight; ++i) {
-            for (size_t j = 0 ; j < pwidth; ++j) {
-                buffer[i][j] = WHITE;
-            }
-        }
-        UpdateTexture(target, buffer.data());
-    }
-    void update() {
-        UpdateTexture(target, buffer.data());
-    }
-    void move_check() {
-        if (CheckCollisionPointRec(GetMousePosition(), rec)){
-            if (IsMouseButtonDown(0)) {
-                rec.x = GetMousePosition().x - (width/2);
-                rec.y = GetMousePosition().y - (height/2);
-            }
-        }
-    }
-    void draw(float font_sz = 30.f){
-        move_check();
-        DrawRectangleLinesEx(rec, 1, BLACK);
-        DrawText(header.c_str(), rec.x, rec.y, font_sz, BLACK);
-        DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{rec.x+1, rec.y+30, width-20, height-50}, {0, 0}, 0.0f, WHITE);
-    }
-    void draw_text(float font_sz = 30.f) {
-        move_check();
-        DrawRectangleLinesEx(rec, 1, BLACK);
-        DrawText(header.c_str(), rec.x, rec.y, font_sz, BLACK);
-    }
-};
-
-template <size_t pwidth, size_t pheight, size_t width, size_t height, size_t n_tiles>
-struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
-    using DW = DebugWindow<pwidth, pheight,width,height>;
-    unsigned short base_address{};
-    std::array<Tile, n_tiles> tiles;
-    TileWindow(float x, float y, unsigned short base_address):
-        DebugWindow<pwidth, pheight,width,height>(x, y),
-        base_address(base_address){
-    }
-    void update_tiles(RAM& ram){
-        std::stringstream ss;
-        ss << "Tiles address:" << std::hex << base_address;
-        auto str = ss.str();
-        int x_begin = 0;
-        int y_begin = 0;
-        DW::header = ss.str();
-
-        for (int i = 0; i < n_tiles; ++i)
-            tiles[i] = DebugTools::get_tile_by_address(ram, base_address + (16 * i));
-
-        int x = x_begin;
-        int y = y_begin;
-        size_t count = 0;
-        int current_x = x;
-        int current_y = y;
-        auto prev_x = x;
-        for (auto& colors: tiles) {
-            for (auto&& row: colors){
-                for (auto el: row) {
-                    DW::buffer[y][x++] = Pixel::get_pixel_color(el);
-                }
-                ++y;
-                prev_x = std::exchange(x, current_x);
-            }
-            if ((prev_x + 1 >= pwidth)){
-                y = current_y = y;
-                x = current_x = x_begin;
-            } else {
-                y = current_y;
-                x = current_x = prev_x;
-            }
-        }
-        DW::update();
-    }
-    void handle(RAM& ram){
-        if (CheckCollisionPointRec(GetMousePosition(), DW::rec)){
-            if (IsKeyDown(KEY_DOWN)){
-                base_address += (20 * 16);
-            } else if (IsKeyDown(KEY_UP)) {
-                base_address -= (20 * 16);
-            }
-        }
-        update_tiles(ram);
-        DW::draw();
-    }
-};
-
-template <size_t pwidth, size_t pheight, size_t width, size_t height>
-struct SpriteWindow: public DebugWindow<pwidth, pheight, width, height>{
-    using DW = DebugWindow<pwidth, pheight,width,height>;
-    std::array<Sprite, 40> sprites;
-    std::array<Tile, 40> tiles;
-    SpriteWindow(float x, float y):
-            DebugWindow<pwidth, pheight,width,height>(x, y){
-    }
-    void update_tiles(RAM& ram){
-        std::stringstream ss;
-        ss << "Tiles address:" << std::hex << constants::OAM_BEGIN;
-        auto str = ss.str();
-        int x_begin = 0;
-        int y_begin = 0;
-        DW::header = ss.str();
-
-        unsigned sprites_counter{};
-        for (int i = 0; i < 160; i+=4) {
-            sprites[sprites_counter++] = (
-                Sprite{
-                        .y_pos = ram.read_unsafe(constants::OAM_BEGIN + i),
-                        .x_pos = static_cast<unsigned char>(ram.read_unsafe(
-                                constants::OAM_BEGIN + i + 1)),
-                        .index_tile = ram.read_unsafe(constants::OAM_BEGIN + i + 2),
-                        .attrib = ram.read_unsafe(constants::OAM_BEGIN + i + 3),
-                });
-            }
-
-        for (int i = 0; i < 40; ++i) tiles[i] = DebugTools::get_sprite_tile(ram, sprites[i]);
-
-        int x = x_begin;
-        int y = y_begin;
-        size_t count = 0;
-        int current_x = x;
-        int current_y = y;
-        auto prev_x = x;
-        for (auto& colors: tiles) {
-            for (auto&& row: colors){
-                for (auto el: row) {
-                    DW::buffer[y][x++] = Pixel::get_pixel_color(el);
-                }
-                ++y;
-                prev_x = std::exchange(x, current_x);
-            }
-            if ((prev_x + 1 >= pwidth)){
-                y = current_y = y;
-                x = current_x = x_begin;
-            } else {
-                y = current_y;
-                x = current_x = prev_x;
-            }
-        }
-        DW::update();
-    }
-
-    void handle(RAM& ram){
-        update_tiles(ram);
-        DW::draw();
-    }
-};
-
-template <size_t pwidth, size_t pheight, size_t width, size_t height>
-struct SpriteWindowText: public DebugWindow<pwidth, pheight, width, height>{
-    using DW = DebugWindow<pwidth, pheight,width,height>;
-    SpriteWindowText(float x, float y):
-            DebugWindow<pwidth, pheight,width,height>(x, y){
-    }
-    void handle(auto& sprite_window){
-        std::stringstream ss;
-        for (int i = 0; i < 40; i += 5){
-            for (int j = 0; j < 5; ++j){
-                ss << "[ " <<  (i + j) << " X:" << (unsigned)sprite_window.sprites[i + j].x_pos << " Y:" << (unsigned)sprite_window.sprites[i + j].y_pos << " ]";
-            }
-            ss << '\n';
-        }
-        DW::header = ss.str();
-        DW::draw_text(18.f);
-    }
-};
-
-template <size_t pwidth, size_t pheight, size_t width, size_t height>
-struct RegWindows: public DebugWindow<pwidth, pheight, width, height> {
-    using DW = DebugWindow<pwidth, pheight,width,height>;
-    RegWindows(float x, float y): DW(x, y){}
-    void handle(CPU& cpu){
-        std::stringstream ss;
-        ss << std::hex << " Registers:\n" <<
-           " A:" << (unsigned)cpu.regs[CPU::A] << "\n" <<
-           " F:" <<  (unsigned)cpu.regs[CPU::F] << "\n" <<
-           " B:" <<  (unsigned)cpu.regs[CPU::B] << "\n" <<
-           " C:" <<  (unsigned)cpu.regs[CPU::C] << "\n" <<
-           " D:" <<  (unsigned)cpu.regs[CPU::D] << "\n" <<
-           " E:" <<  (unsigned)cpu.regs[CPU::E] << "\n" <<
-           " H:" <<  (unsigned)cpu.regs[CPU::H] << "\n" <<
-           " L:" <<  (unsigned)cpu.regs[CPU::L] << "\n" <<
-           " SP:" <<  cpu.sp << "\n" <<
-           " PC:" <<  cpu.pc << "\n" <<
-           " ZeroFlag:" << (unsigned)cpu.get_flag(CPU::Zf) << '\n' <<
-           " NegFlag:" << (unsigned)cpu.get_flag(CPU::Nf) << '\n' <<
-           " HalfFlag:" << (unsigned)cpu.get_flag(CPU::Hf) << '\n' <<
-           " CarryFlag:" << (unsigned)cpu.get_flag(CPU::Cf) << '\n';
-            DW::header = ss.str();
-            DW::draw_text(24.f);
-    }
-};
+#include "Debug.h"
 
 struct GameBoyVM{
     CPU cpu;
@@ -539,19 +215,19 @@ struct GameBoyVM{
     }
     
     void run() {
-        InitWindow(WIDTH, HEIGHT, "GameBoy");
+        InitWindow(constants::WIDTH, constants::HEIGHT, "GameBoy");
         SetTargetFPS(60); // 59.7275 FPS
         SetExitKey(0);
 
         // texture init
-        Image img = GenImageColor(DISPLAY_WIDTH, DISPLAY_HEIGHT, WHITE);
+        Image img = GenImageColor(constants::DISPLAY_WIDTH, constants::DISPLAY_HEIGHT, WHITE);
         Texture2D target = LoadTextureFromImage(img);
         UnloadImage(img);
-        std::array<std::array<Color, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display_buffer{};
+        std::array<std::array<Color, constants::DISPLAY_WIDTH>, constants::DISPLAY_HEIGHT> display_buffer{};
 
         // init display
-        for (size_t i = 0; i < DISPLAY_HEIGHT; ++i) {
-            for (size_t j = 0 ; j < DISPLAY_WIDTH; ++j) {
+        for (size_t i = 0; i < constants::DISPLAY_HEIGHT; ++i) {
+            for (size_t j = 0 ; j < constants::DISPLAY_WIDTH; ++j) {
                 display_buffer[i][j] = BLACK;
             }
         }
@@ -559,9 +235,10 @@ struct GameBoyVM{
 
 #if DEBUG_MODE
         TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
-        SpriteWindow<80,70,300,300> sw(820, 517);
-        RegWindows<160,144,300,400> rw(1150,517);
-        SpriteWindowText<80,70,600,200> swt(10, 750);
+        SpriteWindow<80, 32, 300, 200> sw(820, 517);
+        RegWindow<0,0,300,400> rw(1150, 517);
+        SpriteWindowText<0,0,600,200> swt(10, 750);
+        JoypadWindow<0,0,300,250> jw(820, 730);
 #endif
 
         auto cpu_r = cpu.instruction_async_loop(ram);
@@ -570,13 +247,14 @@ struct GameBoyVM{
             UpdateTexture(target, ppu.read_buffer());
             BeginDrawing();
                ClearBackground(WHITE);
-               DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, LCD_WIDTH, LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
+               DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, constants::LCD_WIDTH, constants::LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
 #if DEBUG_MODE
 
                 tw.handle(ram);
                 sw.handle(ram);
                 rw.handle(cpu);
                 swt.handle(sw);
+                jw.handle(ram, joypad);
 #endif
 // PRINT PIXELS
 #if 0
@@ -655,7 +333,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();
