@@ -258,7 +258,8 @@ struct GameBoyVM{
 #endif
 // PRINT PIXELS
 #if 0
-//             DebugTools::print_rects<DISPLAY_HEIGHT, DISPLAY_WIDTH>(GREEN);
+
+              DebugTools::print_rects<constants::DISPLAY_HEIGHT, constants::DISPLAY_WIDTH>(GREEN);
               DebugTools::print_rects<18, 20>(RED);
 #endif
                 DrawFPS(700, 10);
@@ -301,10 +302,13 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode3_timing.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb
+// /Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb
 
 // /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb +-
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
+
+
 
 // Failed:
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb - failed
@@ -315,7 +319,6 @@ struct GameBoyVM{
 
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb ?
 // /Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb
-// /Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_lcdc_bg_en_change.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/misc/ppu/vblank_stat_intr-C.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/sources-GS.gb
@@ -333,7 +336,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

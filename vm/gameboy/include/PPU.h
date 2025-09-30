@@ -44,8 +44,7 @@ struct Pixel {
     unsigned char attrib{};     // Palette: OBP0 / OBP1 for DMG, a value between 0 and 7 on CGB
     static Color get_pixel_color(unsigned char id);
     static int get_color_id(Color c);
-    static std::deque<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char, unsigned char);
-    static std::deque<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char, unsigned char current_pixel, const Sprite&);
+    static std::deque<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char);
 };
 
 template <typename Fetcher, typename ... Args>
@@ -107,7 +106,7 @@ struct BaseFetcher {
             case FetcherState::Low:      {low = ram.read_unsafe(tile_address + (line_in_tile * 2)); break;}
             case FetcherState::High:     {
                 high = ram.read_unsafe(tile_address + (line_in_tile * 2) + 1);
-                pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete, args...);
+                pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete);
                 next_t_cycle = 1;
                 auto scx_offset= (ram.read_unsafe(constants::SCX_ADDRESS) % 8);
                 if (fetcher_current_tile_x == 0 || fetcher_current_tile_x == 1) {
@@ -255,13 +254,16 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
                         tile_address + (line_in_tile * 2)); break;}
             case FetcherState::High:     {
                 high = ram.read_unsafe(tile_address + (line_in_tile * 2) + 1);
-                pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete,cpx, sprite);
 
-//                while (pixels.size() < 8)
-//                    pixels.push_front(Pixel{.color = WHITE});
+                pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete);
 
                 // X-flip
                 if (sprite.attrib >> 5 & 1) std::reverse(pixels.begin(), pixels.end());
+
+                int x_in_tile = cpx - (sprite.x_pos - 8);
+                for (int i = 0; i < x_in_tile; ++i) pixels.pop_front();
+
+                while(pixels.size() < 8) pixels.push_back(Pixel{.color = WHITE});
 
                 if (fifo.empty()) {
                     while (fifo.size() < 8 && !pixels.empty()) {

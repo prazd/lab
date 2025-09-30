@@ -21,28 +21,7 @@ int Pixel::get_color_id(Color c)  {
     return 3;
 }
 
-std::deque<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete, unsigned char pcx, const Sprite& s)  {
-    unsigned char l = row & 0xff;
-    unsigned char h = (row >> 8) & 0xff;
-    std::deque<Pixel> result{};
-    unsigned char lc{};
-    unsigned char hc{};
-    Color color;
-
-
-    int x_in_tile = pcx - (s.x_pos - 8);
-    for (int i = x_in_tile; i < 8; ++i) {
-//    int pcount = 8 - (pcx - (s.x_pos - 8));
-//    for (int i = 0; i < pcount; ++i) {
-        lc = (l >> (7 - i)) & 1;
-        hc = (h >> (7 - i)) & 1;
-        color = Pixel::get_pixel_color((hc << 1 | lc));
-        result.push_back(Pixel{.color = color, .is_sprite = is_sprite, .attrib = pallete});
-    }
-    return result;
-}
-
-std::deque<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete, unsigned char)  { // todo: maybe refactoring
+std::deque<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete)  {
     unsigned char l = row & 0xff;
     unsigned char h = (row >> 8) & 0xff;
     std::deque<Pixel> result{};
