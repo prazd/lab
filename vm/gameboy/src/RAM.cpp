@@ -33,28 +33,29 @@ void RAM::handle_mbc1(unsigned short index, unsigned char value) {
     }
 
     if (current_banking_mode == Simple) {
-        current_rom_bank1 = (mbc_high_bits << 5) | mbc_low_bits;
+        current_cart_ram = 0;
         if (rom_sz <= 32) {
             current_rom_bank0 = 0;
-            current_rom_bank1 = mbc_low_bits;
+            current_rom_bank1 = mbc_low_bits % rom_sz;
         } else if (rom_sz == 64){
             current_rom_bank0 = 0;
-            current_rom_bank1 = ((mbc_high_bits & 1) << 5) | mbc_low_bits;
+            current_rom_bank1 = (((mbc_high_bits & 1) << 5) | mbc_low_bits) % rom_sz;
         } else if (rom_sz >= 128) {
             current_rom_bank0 = 0;
-            current_rom_bank1 = (mbc_high_bits << 5) | mbc_low_bits;
+            current_rom_bank1 = ((mbc_high_bits << 5) | mbc_low_bits) % rom_sz;
         }
     } else {
-        current_cart_ram = mbc_high_bits;
+        if (mbc_high_bits <= max_ram_bank_value)
+            current_cart_ram = mbc_high_bits;
         if (rom_sz <= 32) {
             current_rom_bank0 = 0;
-            current_rom_bank1 = mbc_low_bits;
+            current_rom_bank1 =  mbc_low_bits % rom_sz;
         } else if (rom_sz == 64){
-            current_rom_bank0 = ((mbc_high_bits & 1) << 5);
-            current_rom_bank1 = ((mbc_high_bits & 1) << 5) | mbc_low_bits;
+            current_rom_bank0 =  ((mbc_high_bits & 1) << 5) % rom_sz;
+            current_rom_bank1 =  ((mbc_high_bits & 1) << 5 | mbc_low_bits) % rom_sz;
         } else if (rom_sz >= 128) {
-            current_rom_bank0 = (mbc_high_bits << 5);
-            current_rom_bank1 = (mbc_high_bits << 5) | mbc_low_bits;
+            current_rom_bank0 = (mbc_high_bits << 5) % rom_sz;
+            current_rom_bank1 = ((mbc_high_bits << 5) | mbc_low_bits) % rom_sz;
         }
     }
 }

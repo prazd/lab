@@ -112,7 +112,7 @@ struct GameBoyVM{
         // 0x01 - Unused
         // Listed in various unofficial docs as 2 KiB. However, a 2 KiB RAM chip was never used in a cartridge.
         // The source of this value is unknown.
-        return 0; // No ram
+        return -1; // No ram
     }
 
     void init_raw_rom(const std::string_view& path) {
@@ -191,8 +191,13 @@ struct GameBoyVM{
         }
 
         ram.rom_sz = get_rom_size(ram.rom);
+        ram.max_rom_bank_value = ram.rom_sz-1;
+        ram.ram_sz = get_ram_size(ram.rom);
         boot();
-        ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
+        if (ram.ram_sz != -1){
+            ram.max_ram_bank_value = ram.ram_sz-1;
+            ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
+        }
         ram.current_mbc = get_mbc_type(ram.rom);
         ram.current_rom_bank_max = get_rom_size(ram.rom);
         try_to_use_save();
@@ -285,8 +290,6 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_bank2.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_ramg.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/bits_mode.gb
-
-// Failed:
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/ram_256kb.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/ram_64kb.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_16Mb.gb
@@ -294,6 +297,8 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_2Mb.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_4Mb.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/emulator-only/mbc1/rom_512kb.gb
+
+// Failed:
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_oam_ok_timing.gb
 
 // PPU
@@ -307,8 +312,6 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb +-
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
-
-
 
 // Failed:
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb - failed
@@ -336,7 +339,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_oam_ok_timing.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
         vm.run();

@@ -21,6 +21,15 @@ void print_segment(unsigned short address, auto n, RAM& ram) {
     std::cout << std::dec;
 }
 
+void print_external_ram(unsigned short address, auto n, RAM& ram) {
+    std::cout << "\n=============================\n";
+    for (int i = 0; i < n; ++i){
+        std::cout << std::hex << address + i <<  ":" << (unsigned)ram.cart_ram[address + i] << '\n';
+    }
+    std::cout << "\n=============================\n";
+    std::cout << std::dec;
+}
+
 void print_bytes(unsigned short address, auto n, RAM& ram) {
     std::cout << "\n=============================\n";
     for (int i = 0; i < n; ++i){

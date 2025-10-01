@@ -23,6 +23,9 @@ struct RAM {
 
     std::vector<char> rom{};
     size_t rom_sz = 0;
+    size_t ram_sz = 0;
+    size_t max_ram_bank_value = 0;
+    size_t max_rom_bank_value = 0;
     size_t current_rom_bank0 = 0;
     size_t current_rom_bank1 = 1;
 
