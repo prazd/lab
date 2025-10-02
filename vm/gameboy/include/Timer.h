@@ -1,8 +1,8 @@
 #ifndef GAMEBOY_TIMER_H
 #define GAMEBOY_TIMER_H
-#include "RAM.h"
+#include "Memory.h"
 struct Timer {
     unsigned short div_internal = 0;
-    void tick(RAM&);
+    void tick(Memory&);
 };
 #endif

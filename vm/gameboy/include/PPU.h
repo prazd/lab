@@ -1,6 +1,6 @@
 #ifndef GAMEBOY_PPU_H
 #define GAMEBOY_PPU_H
-#include "RAM.h"
+#include "Memory.h"
 #include <raylib.h>
 #include <iostream>
 #include "Constants.h"
@@ -12,28 +12,28 @@ constexpr size_t NEXT_T_CYCLE_VAL = 2;
 
 bool operator==(Color lhs, Color rhs);
 
-void print_segment(unsigned short address, auto n, RAM& ram) {
+void print_segment(unsigned short address, auto n, Memory& mem) {
     std::cout << "\n=============================\n";
     for (int i = 0; i < n; ++i){
-        std::cout << std::hex << address + i <<  ":" << (unsigned)ram.mem[address + i] << '\n';
+        std::cout << std::hex << address + i << ":" << (unsigned)mem.map[address + i] << '\n';
     }
     std::cout << "\n=============================\n";
     std::cout << std::dec;
 }
 
-void print_external_ram(unsigned short address, auto n, RAM& ram) {
+void print_external_ram(unsigned short address, auto n, Memory& mem) {
     std::cout << "\n=============================\n";
     for (int i = 0; i < n; ++i){
-        std::cout << std::hex << address + i <<  ":" << (unsigned)ram.cart_ram[address + i] << '\n';
+        std::cout << std::hex << address + i <<  ":" << (unsigned)mem.cart_ram[address + i] << '\n';
     }
     std::cout << "\n=============================\n";
     std::cout << std::dec;
 }
 
-void print_bytes(unsigned short address, auto n, RAM& ram) {
+void print_bytes(unsigned short address, auto n, Memory& mem) {
     std::cout << "\n=============================\n";
     for (int i = 0; i < n; ++i){
-        std::cout << std::hex << "0x" << (unsigned)ram.mem[address + i] << ',';
+        std::cout << std::hex << "0x" << (unsigned)mem.map[address + i] << ',';
     }
     std::cout << "\n=============================\n";
     std::cout << std::dec;
@@ -79,14 +79,14 @@ struct BaseFetcher {
     unsigned char line_in_tile{};
     bool is_window = false;
 
-    auto get_window_tile_map_area(const RAM& ram) {
-        if (((ram.read_unsafe(constants::LCDC_ADDRESS) >> 6) & 1))
+    auto get_window_tile_map_area(const Memory& mem) {
+        if (((mem.read_unsafe(constants::LCDC_ADDRESS) >> 6) & 1))
             return 0x9C00;
         return 0x9800;
     }
 
-    auto get_bg_tile_map_area(const RAM& ram) {
-        if (((ram.read_unsafe(constants::LCDC_ADDRESS) >> 3) & 1))
+    auto get_bg_tile_map_area(const Memory& mem) {
+        if (((mem.read_unsafe(constants::LCDC_ADDRESS) >> 3) & 1))
             return 0x9C00;
         return 0x9800;
     }
@@ -109,15 +109,15 @@ struct BaseFetcher {
         next_t_cycle = NEXT_T_CYCLE_VAL;
     }
 
-    void step(RAM& ram, Args&&... args) {
+    void step(Memory& mem, Args&&... args) {
         switch(current_state) {
-            case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(ram, std::forward<Args>(args)...); break;} // Low
-            case FetcherState::Low:      {low = ram.read_unsafe(tile_address + (line_in_tile * 2)); break;}
+            case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(mem, std::forward<Args>(args)...); break;} // Low
+            case FetcherState::Low:      {low = mem.read_unsafe(tile_address + (line_in_tile * 2)); break;}
             case FetcherState::High:     {
-                high = ram.read_unsafe(tile_address + (line_in_tile * 2) + 1);
+                high = mem.read_unsafe(tile_address + (line_in_tile * 2) + 1);
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete);
                 next_t_cycle = 1;
-                auto scx_offset= (ram.read_unsafe(constants::SCX_ADDRESS) % 8);
+                auto scx_offset= (mem.read_unsafe(constants::SCX_ADDRESS) % 8);
                 if (fetcher_current_tile_x == 0 || fetcher_current_tile_x == 1) {
                    next_t_cycle += 6;
                 }
@@ -142,11 +142,11 @@ struct BaseFetcher {
         }
     }
 
-    void fetch(RAM& ram, Args&&... args) {
+    void fetch(Memory& mem, Args&&... args) {
         switch(current_state) {
-            case FetcherState::GetTile:  {step(ram, std::forward<Args>(args)...); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::Low;  break;}
-            case FetcherState::Low:      {step(ram, std::forward<Args>(args)...); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::High; break;}
-            case FetcherState::High:     {step(ram, std::forward<Args>(args)...);
+            case FetcherState::GetTile:  {step(mem, std::forward<Args>(args)...); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::Low;  break;}
+            case FetcherState::Low:      {step(mem, std::forward<Args>(args)...); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::High; break;}
+            case FetcherState::High:     {step(mem, std::forward<Args>(args)...);
                 if (fifo.size() == 8 && pixels.empty()) {
                     if (is_window) {
                         windows_current_tile_x = (windows_current_tile_x + 1) % 21;
@@ -160,7 +160,7 @@ struct BaseFetcher {
                 }
                 break;}
             case FetcherState::Sleep:    {
-                step(ram, std::forward<Args>(args)...);
+                step(mem, std::forward<Args>(args)...);
                 if (fifo.size() == 8 && pixels.empty()) {
                     if (is_window) {
                         windows_current_tile_x = (windows_current_tile_x + 1) % 21;
@@ -175,7 +175,7 @@ struct BaseFetcher {
                 }
                 break;}
             case FetcherState::Push:     {
-                step(ram, std::forward<Args>(args)...);
+                step(mem, std::forward<Args>(args)...);
                 next_t_cycle = 1;
                 if (pixels.empty()){
                     if (is_window) {
@@ -192,33 +192,33 @@ struct BaseFetcher {
 
 struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
     unsigned char current_window_line{};
-    unsigned short update_tile_base(auto& ram, unsigned char current_pixel_x) {
-        auto wy = ram.read_unsafe(constants::WY_ADDRESS);
-        auto wx = ram.read_unsafe(constants::WX_ADDRESS);
-        auto scy = ram.read_unsafe(constants::SCY_ADDRESS);
-        auto ly  = ram.read_unsafe(constants::LY_ADDRESS);
-        auto scx = ram.read_unsafe(constants::SCX_ADDRESS);
-        unsigned short tile_base = ((ram.read_unsafe(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8000 : 0x9000;
+    unsigned short update_tile_base(auto& mem, unsigned char current_pixel_x) {
+        auto wy = mem.read_unsafe(constants::WY_ADDRESS);
+        auto wx = mem.read_unsafe(constants::WX_ADDRESS);
+        auto scy = mem.read_unsafe(constants::SCY_ADDRESS);
+        auto ly  = mem.read_unsafe(constants::LY_ADDRESS);
+        auto scx = mem.read_unsafe(constants::SCX_ADDRESS);
+        unsigned short tile_base = ((mem.read_unsafe(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8000 : 0x9000;
 
         unsigned short tilemap_base{};
         unsigned char  tilemap_x{};
         unsigned char  tilemap_y{};
 
         if (is_windows_drawing) {
-            tilemap_base = get_window_tile_map_area(ram);
+            tilemap_base = get_window_tile_map_area(mem);
             tilemap_x = windows_current_tile_x;
             tilemap_y = current_window_line/8;
             line_in_tile = current_window_line % 8;
             is_window = true;
         } else {
-            tilemap_base = get_bg_tile_map_area(ram);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
+            tilemap_base = get_bg_tile_map_area(mem);                  // (SCX / 8) + fetcher’s X coordinate) & $1F
             tilemap_x = (fetcher_current_tile_x + (scx / 8)) & 0x1f;   // Because of this formula, fetcherX can be between 0 and 31 - todo: update fetcher X
             tilemap_y = ((ly + scy) & 0xff) / 8;                       // Because of this formula, fetcherY can be between 0 and 255
             line_in_tile = (ly + scy) % 8;
             is_window = false;
         }
         unsigned short tilemap_address = (tilemap_x + tilemap_y * 32) + tilemap_base;
-        unsigned char tile_index = ram.read_unsafe(tilemap_address);
+        unsigned char tile_index = mem.read_unsafe(tilemap_address);
 
         unsigned short res{};
         if (tile_base == 0x8000)
@@ -230,11 +230,11 @@ struct PixelFetcher: BaseFetcher<PixelFetcher, unsigned char> {
 };
 
 struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
-    unsigned short update_tile_base(auto& ram, unsigned char cpx, const Sprite& sprite) {
+    unsigned short update_tile_base(auto& mem, unsigned char cpx, const Sprite& sprite) {
         is_sprite = true;
         pallete = sprite.attrib;
-        auto lcdc_mode = (ram.read_unsafe(constants::LCDC_ADDRESS) >> 2) & 1;
-        line_in_tile = ram.read_unsafe(constants::LY_ADDRESS) - (sprite.y_pos - 16);
+        auto lcdc_mode = (mem.read_unsafe(constants::LCDC_ADDRESS) >> 2) & 1;
+        line_in_tile = mem.read_unsafe(constants::LY_ADDRESS) - (sprite.y_pos - 16);
         if ((sprite.attrib >> 6) & 1)
             line_in_tile = ((lcdc_mode ? 16 : 8)) - line_in_tile - 1;
 //        In this mode, this byte specifies the index of the first (top) tile of the object.
@@ -244,10 +244,10 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
         return ((lcdc_mode ? sprite.index_tile & 0xfe : sprite.index_tile) * 16) + constants::VRAM_BEGIN;
     }
 
-    void fetch(RAM& ram, unsigned char cpx, const Sprite& sprite) {
+    void fetch(Memory& mem, unsigned char cpx, const Sprite& sprite) {
         switch(current_state) {
-            case FetcherState::GetTile:  {step(ram, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::High; break;}
-            case FetcherState::High:     {step(ram, cpx, sprite);
+            case FetcherState::GetTile:  {step(mem, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::High; break;}
+            case FetcherState::High:     {step(mem, cpx, sprite);
                     pixels = {};
                     fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 21;
                     current_state = FetcherState::GetTile;
@@ -257,12 +257,12 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
         }
     }
 
-    void step(RAM& ram, unsigned char cpx, const Sprite& sprite) {
+    void step(Memory& mem, unsigned char cpx, const Sprite& sprite) {
         switch(current_state) {
-            case FetcherState::GetTile:  {tile_address = update_tile_base(ram, cpx, sprite); low  = ram.read_unsafe(
+            case FetcherState::GetTile:  {tile_address = update_tile_base(mem, cpx, sprite); low  = mem.read_unsafe(
                         tile_address + (line_in_tile * 2)); break;}
             case FetcherState::High:     {
-                high = ram.read_unsafe(tile_address + (line_in_tile * 2) + 1);
+                high = mem.read_unsafe(tile_address + (line_in_tile * 2) + 1);
 
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete);
 
@@ -353,30 +353,30 @@ class PPU {
     PixelFetcher pixel_fetcher;
     SpriteFetcher sprite_fetcher;
 
-    void set_ppu_reg(unsigned short address, unsigned char value, RAM& ram);
-    void set_ppu_mode(RAM& ram);
-    void update_lcd(const RAM& ram);
-    void update_window(const RAM& ram);
-    void update_obj(const RAM& ram);
-    void update_bg(const RAM& ram);
-    void update_regs(const RAM& ram);
+    void set_ppu_reg(unsigned short address, unsigned char value, Memory& mem);
+    void set_ppu_mode(Memory& mem);
+    void update_lcd(const Memory& mem);
+    void update_window(const Memory& mem);
+    void update_obj(const Memory& mem);
+    void update_bg(const Memory& mem);
+    void update_regs(const Memory& mem);
 
     bool is_win_init = false;
     bool use_saved_window_ly = false;
     unsigned char save_window_ly{};
-    bool is_windows_fetching_ready(RAM& ram);
+    bool is_windows_fetching_ready(Memory& mem);
 
-    unsigned char get_obj_size(const RAM& ram);
-    Pixel pixel_mixing(RAM& ram);
-    std::optional<Sprite> sprite_on_x(RAM& ram);
-    void draw(RAM& ram);
-    void set_bg_palette(RAM& ram, Pixel&);
-    void set_sprite_palette(RAM& ram, Pixel&);
+    unsigned char get_obj_size(const Memory& mem);
+    Pixel pixel_mixing(Memory& mem);
+    std::optional<Sprite> sprite_on_x(Memory& mem);
+    void draw(Memory& mem);
+    void set_bg_palette(Memory& mem, Pixel&);
+    void set_sprite_palette(Memory& mem, Pixel&);
 public:
-    void tick(RAM& ram);
+    void tick(Memory& mem);
     void set_start_mode();
-    void lyc_ly_compare(RAM& ram);
-    void reset(RAM&);
+    void lyc_ly_compare(Memory& mem);
+    void reset(Memory&);
     unsigned short get_bg_fetcher_tile_address() const;
     unsigned short get_sprite_fetcher_tile_address() const;
     auto  read_buffer() const -> const Color(&)[144][160];

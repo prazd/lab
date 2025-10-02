@@ -2,20 +2,20 @@
 #define MAIN_CPP_DEBUG_H
 #include <array>
 #include <iostream>
-#include "RAM.h"
+#include "Memory.h"
 #include "PPU.h"
 
 using Tile = std::array<std::array<int, 8>, 8>;
 
 struct DebugTools {
-    static Tile get_sprite_tile(const RAM& ram, const Sprite& sprite) {
-        auto lcdc_mode = (ram.read_unsafe(constants::LCDC_ADDRESS) >> 2) & 1;
-        return get_tile_by_address(ram, ((lcdc_mode ? sprite.index_tile & 0xfe : sprite.index_tile) * 16) + constants::VRAM_BEGIN);
+    static Tile get_sprite_tile(const Memory& mem, const Sprite& sprite) {
+        auto lcdc_mode = (mem.read_unsafe(constants::LCDC_ADDRESS) >> 2) & 1;
+        return get_tile_by_address(mem, ((lcdc_mode ? sprite.index_tile & 0xfe : sprite.index_tile) * 16) + constants::VRAM_BEGIN);
     }
-    static Tile get_tile_by_address(const RAM& ram, unsigned short address){
+    static Tile get_tile_by_address(const Memory& mem, unsigned short address){
         std::array<unsigned char, 16> arr{};
         for (int i = 0; i < 16; ++i){
-            arr[i] = ram.read_unsafe(address + i);
+            arr[i] = mem.read_unsafe(address + i);
         }
         std::array<std::array<int, 8>, 8> colors{};
         std::array<int, 8> tmp{};
@@ -55,16 +55,16 @@ struct DebugTools {
         }
     };
 
-    static void print_segment(const RAM& ram, unsigned short address, int n) {
+    static void print_segment(const Memory& mem, unsigned short address, int n) {
         std::cout << "\n=============================\n";
         for (int i = 0; i < n; ++i){
-            std::cout << std::hex << address + i <<  ":" << (unsigned)ram.read_unsafe(address + i) << '\n';
+            std::cout << std::hex << address + i <<  ":" << (unsigned)mem.read_unsafe(address + i) << '\n';
         }
         std::cout << "\n=============================\n";
         std::cout << std::dec;
     }
 
-    static void draw_n_tiles(const RAM& ram, unsigned short begin_address, Rectangle rec, int n_tiles) {
+    static void draw_n_tiles(const Memory& mem, unsigned short begin_address, Rectangle rec, int n_tiles) {
         std::stringstream ss;
         ss << "Address:" << std::hex << begin_address;
         auto str = ss.str();
@@ -76,7 +76,7 @@ struct DebugTools {
         y_begin += 30.f;
         std::vector<Tile> vec{};
         for (int i = 0; i < n_tiles; ++i)
-            vec.push_back(get_tile_by_address(ram, begin_address + (16 * i)));
+            vec.push_back(get_tile_by_address(mem, begin_address + (16 * i)));
 
         float xstep = (rec.width/20)/8;
         float ystep = (rec.height/20)/8;
@@ -160,7 +160,7 @@ struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
             DebugWindow<pwidth, pheight,width,height>(x, y),
             base_address(base_address){
     }
-    void update_tiles(RAM& ram){
+    void update_tiles(Memory& mem){
         std::stringstream ss;
         ss << "Tiles address:" << std::hex << base_address;
         auto str = ss.str();
@@ -169,7 +169,7 @@ struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
         DW::header = ss.str();
 
         for (int i = 0; i < n_tiles; ++i)
-            tiles[i] = DebugTools::get_tile_by_address(ram, base_address + (16 * i));
+            tiles[i] = DebugTools::get_tile_by_address(mem, base_address + (16 * i));
 
         int x = x_begin;
         int y = y_begin;
@@ -195,7 +195,7 @@ struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
         }
         DW::update();
     }
-    void handle(RAM& ram){
+    void handle(Memory& mem){
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec)){
             if (IsKeyDown(KEY_DOWN)){
                 base_address += (20 * 16);
@@ -203,7 +203,7 @@ struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
                 base_address -= (20 * 16);
             }
         }
-        update_tiles(ram);
+        update_tiles(mem);
         DW::draw();
     }
 };
@@ -216,7 +216,7 @@ struct SpriteWindow: public DebugWindow<pwidth, pheight, width, height>{
     SpriteWindow(float x, float y):
             DebugWindow<pwidth, pheight,width,height>(x, y){
     }
-    void update_tiles(RAM& ram){
+    void update_tiles(Memory& mem){
         std::stringstream ss;
         ss << "Tiles address:" << std::hex << constants::OAM_BEGIN;
         auto str = ss.str();
@@ -228,15 +228,15 @@ struct SpriteWindow: public DebugWindow<pwidth, pheight, width, height>{
         for (int i = 0; i < 160; i+=4) {
             sprites[sprites_counter++] = (
                     Sprite{
-                            .y_pos = ram.read_unsafe(constants::OAM_BEGIN + i),
-                            .x_pos = static_cast<unsigned char>(ram.read_unsafe(
+                            .y_pos = mem.read_unsafe(constants::OAM_BEGIN + i),
+                            .x_pos = static_cast<unsigned char>(mem.read_unsafe(
                                     constants::OAM_BEGIN + i + 1)),
-                            .index_tile = ram.read_unsafe(constants::OAM_BEGIN + i + 2),
-                            .attrib = ram.read_unsafe(constants::OAM_BEGIN + i + 3),
+                            .index_tile = mem.read_unsafe(constants::OAM_BEGIN + i + 2),
+                            .attrib = mem.read_unsafe(constants::OAM_BEGIN + i + 3),
                     });
         }
 
-        for (int i = 0; i < 40; ++i) tiles[i] = DebugTools::get_sprite_tile(ram, sprites[i]);
+        for (int i = 0; i < 40; ++i) tiles[i] = DebugTools::get_sprite_tile(mem, sprites[i]);
 
         int x = x_begin;
         int y = y_begin;
@@ -262,8 +262,8 @@ struct SpriteWindow: public DebugWindow<pwidth, pheight, width, height>{
         DW::update();
     }
 
-    void handle(RAM& ram){
-        update_tiles(ram);
+    void handle(Memory& mem){
+        update_tiles(mem);
         DW::draw();
     }
 };
@@ -317,7 +317,7 @@ template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct JoypadWindow: public DebugWindow<pwidth, pheight, width, height> {
     using DW = DebugWindow<pwidth, pheight,width,height>;
     JoypadWindow(float x, float y): DW(x, y){}
-    void handle(RAM& ram, Joypad& jp){
+    void handle(Memory& mem, Joypad& jp){
         std::stringstream ss;
         auto current = jp.current_pressed_values(false);
         ss << std::hex << " Register: " << std::hex << constants::JOYPAD << '\n' <<

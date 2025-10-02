@@ -1,22 +1,23 @@
-#include "RAM.h"
+#include "Memory.h"
 
-bool RAM::lcd_enabled() const {
-    return mem[constants::LCDC_ADDRESS] & 0x80;
+bool Memory::lcd_enabled() const {
+    return map[constants::LCDC_ADDRESS] & 0x80;
 }
 
-void RAM::handle_mbc(unsigned short index, unsigned char value) {
+void Memory::handle_mbc(unsigned short index, unsigned char value) {
     switch (current_mbc) {
         case MBC0: {handle_mbc0(index, value); break;}
         case MBC1: {handle_mbc1(index, value); break;}
+        case MBC3: {handle_mbc3(index, value); break;}
     }
 }
 
-void RAM::handle_mbc0(unsigned short index, unsigned char value) {
+void Memory::handle_mbc0(unsigned short index, unsigned char value) {
     if (index >= 0x0000 && index <= 0x1FFF) external_ram_enabled = (value & 0xf) == 0x0A;
 }
 
 
-void RAM::handle_mbc1(unsigned short index, unsigned char value) {
+void Memory::handle_mbc1(unsigned short index, unsigned char value) {
     // MBC-1
     // https://hacktix.github.io/GBEDG/mbcs/mbc1/
     if (index <= 0x1FFF) {
@@ -60,10 +61,51 @@ void RAM::handle_mbc1(unsigned short index, unsigned char value) {
     }
 }
 
-bool RAM::is_ram_avaliable(unsigned short index) const {
+void Memory::handle_mbc3(unsigned short index, unsigned char value) {
+    if (index <= 0x1FFF) {
+        external_ram_enabled = (value & 0xf) == 0x0A;
+    } else if (index >= 0x2000 && index <= constants::ROM_BANK_00_END) {
+        if (value == 0) value = 1;
+        mbc_low_bits = value;
+    } else if (index >= constants::ROM_BANK_01_BEGIN && index <= 0x5FFF) {
+        mbc_high_bits = value & 0x3;
+    }  else if (index >= 0x6000 && index <= constants::ROM_BANK_01_END) {
+        if (value & 1) current_banking_mode = Advanced;
+        else current_banking_mode = Simple;
+    }
+
+    if (current_banking_mode == Simple) {
+        current_cart_ram = 0;
+        if (rom_sz <= 32) {
+            current_rom_bank0 = 0;
+            current_rom_bank1 = mbc_low_bits % rom_sz;
+        } else if (rom_sz == 64){
+            current_rom_bank0 = 0;
+            current_rom_bank1 = (((mbc_high_bits & 1) << 5) | mbc_low_bits) % rom_sz;
+        } else if (rom_sz >= 128) {
+            current_rom_bank0 = 0;
+            current_rom_bank1 = ((mbc_high_bits << 5) | mbc_low_bits) % rom_sz;
+        }
+    } else {
+        if (mbc_high_bits <= max_ram_bank_value)
+            current_cart_ram = mbc_high_bits;
+        if (rom_sz <= 32) {
+            current_rom_bank0 = 0;
+            current_rom_bank1 =  mbc_low_bits % rom_sz;
+        } else if (rom_sz == 64){
+            current_rom_bank0 =  ((mbc_high_bits & 1) << 5) % rom_sz;
+            current_rom_bank1 =  ((mbc_high_bits & 1) << 5 | mbc_low_bits) % rom_sz;
+        } else if (rom_sz >= 128) {
+            current_rom_bank0 = (mbc_high_bits << 5) % rom_sz;
+            current_rom_bank1 = ((mbc_high_bits << 5) | mbc_low_bits) % rom_sz;
+        }
+    }
+}
+
+bool Memory::is_ram_avaliable(unsigned short index) const {
     auto current_ppu_mode = get_ppu_mode();
     return !(((index >=  constants::VRAM_BEGIN && index <=  constants::VRAM_END) && ((current_ppu_mode == 3 && lcd_enabled()))) ||
-             ((index >=  constants::EXTERNAL_RAM_BEGIN && index <=  constants::EXTERNAL_RAM_END) && (!external_ram_enabled)) || // todo: check external RAM
+             ((index >=  constants::EXTERNAL_RAM_BEGIN && index <=  constants::EXTERNAL_RAM_END) && (!external_ram_enabled)) || // todo: check external Memory
              ((index >=  constants::OAM_BEGIN && index <= constants::OAM_END) && ppu_oam_usage) || // (((current_ppu_mode == 2 || current_ppu_mode == 3) && lcd_enabled())))
              ((index >=  constants::NOT_USABLE_BEGIN && index <=  constants::NOT_USABLE_END))
     );
@@ -71,11 +113,11 @@ bool RAM::is_ram_avaliable(unsigned short index) const {
 //             (!(index >= constants::HRAM_BEGIN && index <= constants::HRAM_END) && dma_active));
 }
 
-unsigned char RAM::get_ppu_mode() const {
-    return mem[constants::STAT_ADDRESS] & 0x03;
+unsigned char Memory::get_ppu_mode() const {
+    return map[constants::STAT_ADDRESS] & 0x03;
 }
 
-void RAM::write(unsigned short index, unsigned char value) {
+void Memory::write(unsigned short index, unsigned char value) {
     if (index >= constants::OAM_BEGIN && index <= constants::OAM_END && dma_active){
         return;
     }
@@ -116,11 +158,11 @@ void RAM::write(unsigned short index, unsigned char value) {
     }
 
     if (is_ram_avaliable(index)){
-        mem[index] = value;
+        map[index] = value;
     }
 }
 
-unsigned char RAM::read(unsigned short index) const {
+unsigned char Memory::read(unsigned short index) const {
     if (index >= constants::OAM_BEGIN && index <= constants::OAM_END && dma_active){
         return dummy_reg;
     }
@@ -134,7 +176,7 @@ unsigned char RAM::read(unsigned short index) const {
     }
 
     if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END){
-        std::cout << "ECHO RAM READ!" << '\n';
+        std::cout << "ECHO Memory READ!" << '\n';
         index -= 0x2000;
     }
 
@@ -147,13 +189,13 @@ unsigned char RAM::read(unsigned short index) const {
     }
 
     if (is_ram_avaliable(index)){
-        return mem[index];
+        return map[index];
     }
 
     return dummy_reg;
 }
 
-void RAM::write_unsafe(unsigned short index, unsigned char value) {
+void Memory::write_unsafe(unsigned short index, unsigned char value) {
     if (index <= constants::ROM_BANK_01_END){
         handle_mbc(index, value);
         return;
@@ -187,9 +229,9 @@ void RAM::write_unsafe(unsigned short index, unsigned char value) {
     }
 
     if (index == constants::TAC_REGISTER){
-        bool old_enabled = (mem[constants::TAC_REGISTER] >> 2) & 1;
-        auto old_value = mem[constants::TAC_REGISTER];
-        mem[constants::TAC_REGISTER] = value;
+        bool old_enabled = (map[constants::TAC_REGISTER] >> 2) & 1;
+        auto old_value = map[constants::TAC_REGISTER];
+        map[constants::TAC_REGISTER] = value;
 
         unsigned char shift = 0;
         switch (old_value & 3) {
@@ -202,9 +244,9 @@ void RAM::write_unsafe(unsigned short index, unsigned char value) {
         }
         if (old_enabled && (div_internal_sync >> shift) & 1){
             unsigned char prev = read(constants::TIMA_REGISTER);
-            mem[constants::TIMA_REGISTER] =  prev + 1;
+            map[constants::TIMA_REGISTER] = prev + 1;
             if (prev == 0xff) {
-                mem[constants::IF_ADDRESS] =  read(constants::IF_ADDRESS) | (1 << 2);
+                map[constants::IF_ADDRESS] = read(constants::IF_ADDRESS) | (1 << 2);
                 glitch_overflow = true;
             }
         }
@@ -217,10 +259,10 @@ void RAM::write_unsafe(unsigned short index, unsigned char value) {
         return;
     }
 
-    mem[index] = value;
+    map[index] = value;
 }
 
-unsigned char RAM::read_unsafe(unsigned short index) const {
+unsigned char Memory::read_unsafe(unsigned short index) const {
     if (index >= constants::ROM_BANK_00_BEGIN && index <= constants::ROM_BANK_00_END){
         return rom[(current_rom_bank0 * constants::BANK_ROM_SZ) + index];
     }
@@ -242,10 +284,10 @@ unsigned char RAM::read_unsafe(unsigned short index) const {
             return cart_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_cart_ram * 8192)];
         return dummy_reg;
     }
-    return mem[index];
+    return map[index];
 }
 
-void RAM::dma_tick() {
+void Memory::dma_tick() {
     ++dma_t;
     if (dma_t % 4 == 0) {
         write_unsafe(constants::OAM_BEGIN + dma_counter, read_unsafe(dma_address + dma_counter));

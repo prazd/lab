@@ -2,7 +2,7 @@
 #define GAMEBOY_RAM_H
 #include "Constants.h"
 #include <vector>
-struct RAM {
+struct Memory {
     // 0xE000–0xFDFF: Echo RAM (Mirror of 0xC000–0xDDFF) Nintendo says use of this area is prohibited.
     // 0xFEA0–0xFEFF: Not Usable
     // 0x0000–0x3FFF: 16 KiB ROM Bank 00 (Fixed Bank)
@@ -14,11 +14,12 @@ struct RAM {
     // 0xFE00–0xFE9F: Object Attribute Memory (OAM)
     // 0xFF00–0xFF7F: I/O Registers
     // 0xFF80–0xFFFE: High RAM (HRAM)
-    unsigned char mem[0x10000]{}; // 64KiB
+    unsigned char map[0x10000]{}; // 64KiB
 
     enum MBC {
         MBC0,
-        MBC1
+        MBC1,
+        MBC3
     } current_mbc = MBC0;
 
     std::vector<char> rom{};
@@ -60,6 +61,7 @@ struct RAM {
     void handle_mbc(unsigned short index, unsigned char value);
     void handle_mbc0(unsigned short index, unsigned char value);
     void handle_mbc1(unsigned short index, unsigned char value);
+    void handle_mbc3(unsigned short index, unsigned char value);
     void dma_tick();
 
 

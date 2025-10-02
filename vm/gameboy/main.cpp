@@ -3,7 +3,7 @@
 #include "PPU.h"
 #include <queue>
 #include <array>
-#include "RAM.h"
+#include "Memory.h"
 #include "CPU.h"
 #include "Joypad.h"
 #include <filesystem>
@@ -13,75 +13,81 @@
 
 struct GameBoyVM{
     CPU cpu;
-    RAM ram;
+    Memory mem;
     PPU ppu;
     Joypad joypad;
     std::string_view ram_path;
 
-    RAM::MBC get_mbc_type(const auto& data) {
+    Memory::MBC get_mbc_type(const auto& data) {
         switch (data[0x0147]) {
             case 0x01:
-            case 0x02: // MBC1 + RAM
-            case 0x03: // MBC1 + RAM + Battery
-                {return RAM::MBC1;}
+            case 0x02: // MBC1 + Memory
+            case 0x03: // MBC1 + Memory + Battery
+                {return Memory::MBC1;}
+            case 0x0f:
+            case 0x10:
+            case 0x11:
+            case 0x12:
+            case 0x13:
+                return Memory::MBC3;
             // todo: finish other mbc types
             default:{
-                return RAM::MBC0;
+                return Memory::MBC0;
             }
         }
     }
 
     void try_to_use_save() {
-        if (ram.rom[0x147] != 0x03) return;
+        if (mem.rom[0x147] != 0x03) return;
         std::cout << "\nMBC1 with battery save\n";
         std::string spath(ram_path.substr(0, ram_path.size()-3));
         spath += ".sav";
         std::ifstream ifile(spath, std::ios::binary | std::ios::in);
         if (!ifile.is_open()){ std::cout << "Can't open save file:" << spath << '\n'; return;}
-        ifile.read((char*)ram.cart_ram.data(), ram.cart_ram.size()); // todo: check
+        ifile.read((char*)mem.cart_ram.data(), mem.cart_ram.size()); // todo: check
         ifile.close();
     }
 
     void main_loop_async(auto& cpu_r) {
         int current_t_cycle = 0;
-        bool prev_lcdc_on = ram.mem[constants::LCDC_ADDRESS] & 0x80;
+        bool prev_lcdc_on = mem.map[constants::LCDC_ADDRESS] & 0x80;
         int lcdc_on_count = 0;
         bool lcdc_init_finished = true;
         while(current_t_cycle++ < 70'224) {
-                joypad.update_state(ram);
-                cpu.timer.tick(ram);
+                joypad.update_state(mem);
+                cpu.timer.tick(mem);
 
 #if 0
-                std::cout << cpu.instruction_str[cpu.decode(ram.read(cpu.pc))] << " REG[A]:" << (int)(cpu.regs[CPU::A]) << '\n';
-                std::cout << "TIMA:" << (int)ram.read(constants::TIMA_REGISTER) << '\n';
+                std::cout << cpu.instruction_str[cpu.decode(mem.read(cpu.pc))] << " REG[A]:" << (int)(cpu.regs[CPU::A]) << '\n';
+                std::cout << "TIMA:" << (int)mem.read(constants::TIMA_REGISTER) << '\n';
 #endif
 
-                if (ram.mem[constants::LCDC_ADDRESS] & 0x80) {
-                    ram.mem[constants::STAT_ADDRESS] |= 0x80;
+                if (mem.map[constants::LCDC_ADDRESS] & 0x80) {
+                    mem.map[constants::STAT_ADDRESS] |= 0x80;
                     if (!prev_lcdc_on) {
                         lcdc_init_finished = false;
                         lcdc_on_count = 12;
                         prev_lcdc_on = true;
-                        ppu.lyc_ly_compare(ram);
+                        ppu.lyc_ly_compare(mem);
                     } else {
                        if (!lcdc_init_finished && lcdc_on_count-- == 0) {
                            lcdc_init_finished = true;
-                           ppu.reset(ram);
+                           ppu.reset(mem);
                            ppu.set_start_mode();
-                           ram.ppu_oam_usage = true;
+                           mem.ppu_oam_usage = true;
                        }
                        if (lcdc_init_finished){
-                             ppu.tick(ram);
+                             ppu.tick(mem);
                        }
                     }
                 }
                 cpu_r.resume();
-                if (!(ram.mem[constants::LCDC_ADDRESS] & 0x80) && prev_lcdc_on) {
+                if (!(mem.map[constants::LCDC_ADDRESS] & 0x80) && prev_lcdc_on) {
                     prev_lcdc_on = false;
-                    ppu.reset(ram);
+                    ppu.reset(mem);
                 }
 
-                if (!cpu.halted && ram.dma_active) ram.dma_tick();
+                if (!cpu.halted && mem.dma_active) mem.dma_tick();
         }
     }
 
@@ -110,9 +116,9 @@ struct GameBoyVM{
             case 0x5: return 8; // 8 banks of 8KiB (64KiB)
         }
         // 0x01 - Unused
-        // Listed in various unofficial docs as 2 KiB. However, a 2 KiB RAM chip was never used in a cartridge.
+        // Listed in various unofficial docs as 2 KiB. However, a 2 KiB Memory chip was never used in a cartridge.
         // The source of this value is unknown.
-        return -1; // No ram
+        return -1; // No mem
     }
 
     void init_raw_rom(const std::string_view& path) {
@@ -126,8 +132,8 @@ struct GameBoyVM{
         f.seekg(0, std::ios::beg);
         f.read(res.data(), sz);
         f.close();
-        ram.rom = std::move(res);
-        std::cout << ram.rom.size();
+        mem.rom = std::move(res);
+        std::cout << mem.rom.size();
     }
 
     // https://gbdev.io/pandocs/Power_Up_Sequence.html#register-initialization
@@ -143,80 +149,80 @@ struct GameBoyVM{
         cpu.pc = 0x0100;
         cpu.sp = 0xFFFE;
 
-        ram.mem[constants::JOYPAD] = 0xcf;
-        ram.mem[constants::SC_ADDRESS] = 0x7e;
-        ram.mem[constants::DIV_REGISTER] = 0xAB; // --
-        ram.mem[constants::TAC_REGISTER] = 0xF8;
-        ram.mem[constants::IF_ADDRESS] = 0xE1;
+        mem.map[constants::JOYPAD] = 0xcf;
+        mem.map[constants::SC_ADDRESS] = 0x7e;
+        mem.map[constants::DIV_REGISTER] = 0xAB; // --
+        mem.map[constants::TAC_REGISTER] = 0xF8;
+        mem.map[constants::IF_ADDRESS] = 0xE1;
 
-        ram.mem[constants::NR10_ADDRESS] = 0x80;
-        ram.mem[constants::NR11_ADDRESS] = 0xBF;
-        ram.mem[constants::NR12_ADDRESS] = 0xF3;
-        ram.mem[constants::NR13_ADDRESS] = 0xFF;
-        ram.mem[constants::NR14_ADDRESS] = 0xBF;
+        mem.map[constants::NR10_ADDRESS] = 0x80;
+        mem.map[constants::NR11_ADDRESS] = 0xBF;
+        mem.map[constants::NR12_ADDRESS] = 0xF3;
+        mem.map[constants::NR13_ADDRESS] = 0xFF;
+        mem.map[constants::NR14_ADDRESS] = 0xBF;
 
-        ram.mem[constants::NR21_ADDRESS] = 0x3F;
-        ram.mem[constants::NR22_ADDRESS] = 0x00;
-        ram.mem[constants::NR23_ADDRESS] = 0xFF;
-        ram.mem[constants::NR24_ADDRESS] = 0xBF;
+        mem.map[constants::NR21_ADDRESS] = 0x3F;
+        mem.map[constants::NR22_ADDRESS] = 0x00;
+        mem.map[constants::NR23_ADDRESS] = 0xFF;
+        mem.map[constants::NR24_ADDRESS] = 0xBF;
 
-        ram.mem[constants::NR30_ADDRESS] = 0x7F;
-        ram.mem[constants::NR31_ADDRESS] = 0xFF;
-        ram.mem[constants::NR32_ADDRESS] = 0x9F;
-        ram.mem[constants::NR33_ADDRESS] = 0xFF;
-        ram.mem[constants::NR34_ADDRESS] = 0xBF;
+        mem.map[constants::NR30_ADDRESS] = 0x7F;
+        mem.map[constants::NR31_ADDRESS] = 0xFF;
+        mem.map[constants::NR32_ADDRESS] = 0x9F;
+        mem.map[constants::NR33_ADDRESS] = 0xFF;
+        mem.map[constants::NR34_ADDRESS] = 0xBF;
 
-        ram.mem[constants::NR41_ADDRESS] = 0xFF;
-        ram.mem[constants::NR42_ADDRESS] = 0x00;
-        ram.mem[constants::NR43_ADDRESS] = 0x00;
-        ram.mem[constants::NR44_ADDRESS] = 0xBF;
+        mem.map[constants::NR41_ADDRESS] = 0xFF;
+        mem.map[constants::NR42_ADDRESS] = 0x00;
+        mem.map[constants::NR43_ADDRESS] = 0x00;
+        mem.map[constants::NR44_ADDRESS] = 0xBF;
 
-        ram.mem[constants::NR50_ADDRESS] = 0x77;
-        ram.mem[constants::NR51_ADDRESS] = 0xF3;
-        ram.mem[constants::NR52_ADDRESS] = 0xF1;
+        mem.map[constants::NR50_ADDRESS] = 0x77;
+        mem.map[constants::NR51_ADDRESS] = 0xF3;
+        mem.map[constants::NR52_ADDRESS] = 0xF1;
 
 
-        ram.mem[constants::LCDC_ADDRESS] = 0x91;
-        ram.mem[constants::STAT_ADDRESS] = 0x85; // --
-        ram.mem[constants::DMA] = 0xFF;
-        ram.mem[constants::BGP] = 0xFC;
+        mem.map[constants::LCDC_ADDRESS] = 0x91;
+        mem.map[constants::STAT_ADDRESS] = 0x85; // --
+        mem.map[constants::DMA] = 0xFF;
+        mem.map[constants::BGP] = 0xFC;
     }
 
     explicit GameBoyVM(const std::string_view& path): ram_path(path) {
         init_raw_rom(path);
         // init rom
-        if ((unsigned char)ram.rom[0x143] == 0xc0) {
+        if ((unsigned char)mem.rom[0x143] == 0xc0) {
             std::cout << "\nGameBoyColor unsupported\n";
             std::abort();
         }
 
-        ram.rom_sz = get_rom_size(ram.rom);
-        ram.max_rom_bank_value = ram.rom_sz-1;
-        ram.ram_sz = get_ram_size(ram.rom);
+        mem.rom_sz = get_rom_size(mem.rom);
+        mem.max_rom_bank_value = mem.rom_sz - 1;
+        mem.ram_sz = get_ram_size(mem.rom);
         boot();
-        if (ram.ram_sz != -1){
-            ram.max_ram_bank_value = ram.ram_sz-1;
-            ram.cart_ram.resize(get_ram_size(ram.rom) * constants::EXTERNAL_RAM_SZ);
+        if (mem.ram_sz != -1){
+            mem.max_ram_bank_value = mem.ram_sz - 1;
+            mem.cart_ram.resize(get_ram_size(mem.rom) * constants::EXTERNAL_RAM_SZ);
         }
-        ram.current_mbc = get_mbc_type(ram.rom);
-        ram.current_rom_bank_max = get_rom_size(ram.rom);
+        mem.current_mbc = get_mbc_type(mem.rom);
+        mem.current_rom_bank_max = get_rom_size(mem.rom);
         try_to_use_save();
     }
 
     ~GameBoyVM(){
-        if (ram.rom[0x147] == 0x03){
+        if (mem.rom[0x147] == 0x03){
             std::string save_path(ram_path.substr(0, ram_path.size()-3));
             save_path += ".sav";
             std::ofstream save_file(save_path, std::ios::binary | std::ios::out);
             if (save_file.is_open()) {
 
-                save_file.write((char*)ram.cart_ram.data(), ram.cart_ram.size());
+                save_file.write((char*)mem.cart_ram.data(), mem.cart_ram.size());
                 std::cout << "\nSaved succesfully\n";
             } else {
                 std::cout << "!!!!!!!!!!! Save error !!!!!!!!!!!" << '\n';
             }
             save_file.close();
-        } // MBC1 + RAM + Battery
+        } // MBC1 + Memory + Battery
     }
     
     void run() {
@@ -246,7 +252,7 @@ struct GameBoyVM{
         JoypadWindow<0,0,300,250> jw(820, 730);
 #endif
 
-        auto cpu_r = cpu.instruction_async_loop(ram);
+        auto cpu_r = cpu.instruction_async_loop(mem);
         while(!WindowShouldClose()){
             main_loop_async(cpu_r);
             UpdateTexture(target, ppu.read_buffer());
@@ -255,11 +261,11 @@ struct GameBoyVM{
                DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, constants::LCD_WIDTH, constants::LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
 #if DEBUG_MODE
 
-                tw.handle(ram);
-                sw.handle(ram);
+                tw.handle(mem);
+                sw.handle(mem);
                 rw.handle(cpu);
                 swt.handle(sw);
-                jw.handle(ram, joypad);
+                jw.handle(mem, joypad);
 #endif
 // PRINT PIXELS
 #if 0
@@ -339,8 +345,8 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_oam_ok_timing.gb");
-        std::cout << "\nRAM sz:" << vm.get_ram_size(vm.ram.rom) << '\n';
-        std::cout << "\nROM sz:" << vm.get_rom_size(vm.ram.rom) << '\n';
+        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
+        std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
+        std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
 }

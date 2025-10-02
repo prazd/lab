@@ -1,7 +1,7 @@
 #ifndef GAMEBOY_CPU_H
 #define GAMEBOY_CPU_H
 #include "Constants.h"
-#include "RAM.h"
+#include "Memory.h"
 #include "Timer.h"
 #include <unordered_map>
 #include "Resumable.h"
@@ -136,20 +136,20 @@ struct CPU {
     bool timer_interrupt_enabled = false;
     bool serial_interrupt_enabled = false;
     bool joypad_interrupt_enabled = false;
-    void fetch_IE_value(RAM& ram);
+    void fetch_IE_value(Memory& mem);
 
     bool vblank_interrupt_req = false;
     bool lcd_interrupt_req = false;
     bool timer_interrupt_req = false;
     bool serial_interrupt_req = false;
     bool joypad_interrupt_req = false;
-    void fetch_IF_value(RAM& ram);
+    void fetch_IF_value(Memory& mem);
 
-    void update_interrupts_status(RAM& ram);
+    void update_interrupts_status(Memory& mem);
 
     Timer timer;
-    unsigned char tread(RAM& ram, unsigned short);
-    void twrite(RAM& ram, unsigned short index, unsigned char value);
+    unsigned char tread(Memory& mem, unsigned short);
+    void twrite(Memory& mem, unsigned short index, unsigned char value);
     enum InterruptFlag{VBlank_I, LCD_I, Timer_I, Serial_I, Joypad_I};
 
     static constexpr unsigned short interrupt_jump_addresses[] = {
@@ -163,14 +163,14 @@ struct CPU {
     bool ie_status[5]{};
     bool if_status[5]{};
 
-    void off_IF_value(InterruptFlag, RAM&);
+    void off_IF_value(InterruptFlag, Memory&);
 
     int t_cycle_by_ins(Instruction ins, unsigned char value = 0);
     int t_cycle_by_ins_0xCB(Instruction0xCB ins, unsigned char value = 0);
 
     int pc_inc_by_ins(Instruction ins, unsigned char value = 0);
 
-    void push_stack(unsigned char l, unsigned char h, RAM& ram);
+    void push_stack(unsigned char l, unsigned char h, Memory& mem);
 
     void set_flag(Flag f, bool val);
     unsigned char get_flag(Flag f) const;
@@ -199,21 +199,21 @@ struct CPU {
     void xor_reg_A(unsigned char val);
     void sub_reg_A_flags_only(unsigned char val);
 
-    void inc_reg(unsigned char i, RAM& ram);
-    void dec_reg(unsigned char i, RAM& ram);
+    void inc_reg(unsigned char i, Memory& mem);
+    void dec_reg(unsigned char i, Memory& mem);
 
     unsigned short HL_data() const;
 
-    unsigned char read_regs(unsigned char i, RAM& ram);
-    void update_regs(unsigned char i, RAM& ram, unsigned char value);
+    unsigned char read_regs(unsigned char i, Memory& mem);
+    void update_regs(unsigned char i, Memory& mem, unsigned char value);
 
     bool get_cc_flag(unsigned char val);
 
-    unsigned char fetch(RAM& ram);
+    unsigned char fetch(Memory& mem);
     Instruction decode(unsigned char ins);
     Instruction0xCB decode_0xCB(unsigned char ins);
-    int execute(unsigned char i, Instruction itype, RAM& ram);
-    Resumable instruction_async_loop(RAM& ram);
+    int execute(unsigned char i, Instruction itype, Memory& mem);
+    Resumable instruction_async_loop(Memory& mem);
     void print_regs() const;
 
     std::unordered_map<Instruction, std::string_view> instruction_str = {

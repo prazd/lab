@@ -1,6 +1,6 @@
 #ifndef RAM_H_JOYPAD_H
 #define RAM_H_JOYPAD_H
-#include "RAM.h"
+#include "Memory.h"
 #include "raylib.h"
 struct Joypad {
     enum JoypadKeys {
@@ -36,7 +36,7 @@ struct Joypad {
             Select_Up,
     };
 
-    void update_state(RAM&);
+    void update_state(Memory&);
     std::pair<unsigned char, bool> current_pressed_values(bool);
 };
 #endif //RAM_H_JOYPAD_H

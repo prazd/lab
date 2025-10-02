@@ -1,18 +1,18 @@
 #include "Joypad.h"
 #include "raylib.h"
 
-void Joypad::update_state(RAM& ram) {
-    unsigned char res = ram.read_unsafe(constants::JOYPAD);
+void Joypad::update_state(Memory& mem) {
+    unsigned char res = mem.read_unsafe(constants::JOYPAD);
     bool is_select_mode = !((res >> 5) & 1) && ((res >> 4) & 1);
     bool is_direction_mode = !((res >> 4) & 1) && ((res >> 5) & 1);
     if (!is_select_mode && !is_direction_mode){
-        ram.write_unsafe(constants::JOYPAD, 0xff);
+        mem.write_unsafe(constants::JOYPAD, 0xff);
         return;
     }
     auto pressed= current_pressed_values(is_direction_mode);
     res |= pressed.first;
-    ram.write_unsafe(constants::JOYPAD, res);
-    if (pressed.second) ram.write_unsafe(constants::IF_ADDRESS, ram.read_unsafe(constants::IF_ADDRESS) | (1 << 4));
+    mem.write_unsafe(constants::JOYPAD, res);
+    if (pressed.second) mem.write_unsafe(constants::IF_ADDRESS, mem.read_unsafe(constants::IF_ADDRESS) | (1 << 4));
 }
 
 std::pair<unsigned char, bool> Joypad::current_pressed_values(bool is_direction) {

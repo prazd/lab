@@ -105,27 +105,27 @@ void CPU::sub_reg_A_flags_only(unsigned char val)  {
     set_flag(Hf, ((regs[A] & 0xf) - (val & 0xf) < 0)); // todo: check((val & 0xf) > (regs[A] & 0xf)));
 }
 
-void CPU::inc_reg(unsigned char i, RAM &ram)  {
-    auto reg = read_regs(i, ram);
+void CPU::inc_reg(unsigned char i, Memory &mem)  {
+    auto reg = read_regs(i, mem);
     auto cp = reg;
     unsigned char result = reg + 1;
     set_flag(Nf, 0);
     set_flag(Zf, result == 0);
     set_flag(Hf, (cp & 0xf) == 0xf);
-    update_regs(i, ram, result);
+    update_regs(i, mem, result);
 }
 
-void CPU::dec_reg(unsigned char i, RAM &ram)  {
-    auto reg = read_regs(i, ram);
+void CPU::dec_reg(unsigned char i, Memory &mem)  {
+    auto reg = read_regs(i, mem);
     auto cp = reg;
     unsigned char result = reg - 1;
     set_flag(Nf, 1);
     set_flag(Zf, result == 0);
     set_flag(Hf, (cp & 0xf) == 0);
-    update_regs(i, ram, result);
+    update_regs(i, mem, result);
 }
 
-unsigned char CPU::read_regs(unsigned char i, RAM &ram)  {
+unsigned char CPU::read_regs(unsigned char i, Memory &mem)  {
     switch(i){
         case 0b000: {return regs[B];}
         case 0b001: {return regs[C];}
@@ -133,13 +133,13 @@ unsigned char CPU::read_regs(unsigned char i, RAM &ram)  {
         case 0b011: {return regs[E];}
         case 0b100: {return regs[H];}
         case 0b101: {return regs[L];}
-        case 0b110: {return tread(ram, HL_data());}
+        case 0b110: {return tread(mem, HL_data());}
         case 0b111: {return regs[A];}
     }
     throw std::invalid_argument("Unknown register");
 }
 
-void CPU::update_regs(unsigned char i, RAM &ram, unsigned char value)  {
+void CPU::update_regs(unsigned char i, Memory &mem, unsigned char value)  {
     switch(i){
         case 0b000: {regs[B] = value; return;}
         case 0b001: {regs[C] = value; return;}
@@ -148,7 +148,7 @@ void CPU::update_regs(unsigned char i, RAM &ram, unsigned char value)  {
         case 0b100: {regs[H] = value; return;}
         case 0b101: {regs[L] = value; return;}
         case 0b110: {
-            twrite(ram, HL_data(), value); return;
+            twrite(mem, HL_data(), value); return;
         }
         case 0b111: {regs[A] = value; return;}
     }
@@ -162,8 +162,8 @@ bool CPU::get_cc_flag(unsigned char val)  {
             val == 0b11 && get_flag(Cf));
 }
 
-unsigned char CPU::fetch(RAM &ram)   {
-    return tread(ram,pc);
+unsigned char CPU::fetch(Memory &mem)   {
+    return tread(mem,pc);
 }
 
 CPU::Instruction CPU::decode(unsigned char ins)  {
@@ -481,17 +481,17 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
     }
 }
 
-void CPU::off_IF_value(CPU::InterruptFlag flag, RAM& ram) {
-    auto if_value = ram.read( constants::IF_ADDRESS);
+void CPU::off_IF_value(CPU::InterruptFlag flag, Memory& mem) {
+    auto if_value = mem.read( constants::IF_ADDRESS);
 //    std::cout << "OFF IF value" << '\n';
     switch (flag) {
-        case VBlank_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xfe); break;}
-        case LCD_I:      {ram.write(constants::IF_ADDRESS, if_value & 0xfd); break;}
-        case Timer_I:    {ram.write(constants::IF_ADDRESS, if_value & 0xfb); break;}
-        case Serial_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xf7); break;}
-        case Joypad_I:   {ram.write(constants::IF_ADDRESS, if_value & 0xef); break;}
+        case VBlank_I:   {mem.write(constants::IF_ADDRESS, if_value & 0xfe); break;}
+        case LCD_I:      {mem.write(constants::IF_ADDRESS, if_value & 0xfd); break;}
+        case Timer_I:    {mem.write(constants::IF_ADDRESS, if_value & 0xfb); break;}
+        case Serial_I:   {mem.write(constants::IF_ADDRESS, if_value & 0xf7); break;}
+        case Joypad_I:   {mem.write(constants::IF_ADDRESS, if_value & 0xef); break;}
     }
-//    std::cout << "OFF IF value:" << (unsigned)ram.read(constants::IF_ADDRESS) << '\n';
+//    std::cout << "OFF IF value:" << (unsigned)mem.read(constants::IF_ADDRESS) << '\n';
 }
 
 void CPU::print_regs() const {
@@ -509,8 +509,8 @@ void CPU::print_regs() const {
     std::cout << "SP:" << sp << '\n';
 }
 
-void CPU::fetch_IF_value(RAM& ram) {
-    auto if_value = ram.read(constants::IF_ADDRESS);
+void CPU::fetch_IF_value(Memory& mem) {
+    auto if_value = mem.read(constants::IF_ADDRESS);
     if_status[0] = vblank_interrupt_req = (if_value & 1);
     if_status[1] = lcd_interrupt_req =    ((if_value >> 1) & 1);
     if_status[2] = timer_interrupt_req =  ((if_value >> 2) & 1);
@@ -518,8 +518,8 @@ void CPU::fetch_IF_value(RAM& ram) {
     if_status[4] = joypad_interrupt_req = ((if_value >> 4) & 1);
 }
 
-void CPU::fetch_IE_value(RAM& ram) {
-    auto if_value =    ram.read(constants::IE_ADDRESS);
+void CPU::fetch_IE_value(Memory& mem) {
+    auto if_value =    mem.read(constants::IE_ADDRESS);
     ie_status[0] = vblank_interrupt_enabled =  (if_value & 1);
     ie_status[1] = lcd_interrupt_enabled    =  ((if_value >> 1) & 1);
     ie_status[2] = timer_interrupt_enabled  =  ((if_value >> 2) & 1);
@@ -527,18 +527,18 @@ void CPU::fetch_IE_value(RAM& ram) {
     ie_status[4] = joypad_interrupt_enabled =  ((if_value >> 4) & 1);
 }
 
-void CPU::push_stack(unsigned char l, unsigned char h, RAM& ram) {
+void CPU::push_stack(unsigned char l, unsigned char h, Memory& mem) {
     sp-=2;
-    twrite(ram, sp, l);
-    twrite(ram,sp + 1, h);
+    twrite(mem, sp, l);
+    twrite(mem,sp + 1, h);
 }
 
-unsigned char CPU::tread(RAM &ram, unsigned short index) {
-    return ram.read(index);
+unsigned char CPU::tread(Memory &mem, unsigned short index) {
+    return mem.read(index);
 }
 
-void CPU::twrite(RAM &ram, unsigned short index, unsigned char value) {
-    ram.write(index, value);
+void CPU::twrite(Memory &mem, unsigned short index, unsigned char value) {
+    mem.write(index, value);
 }
 
 int CPU::pc_inc_by_ins(CPU::Instruction ins, unsigned char value) {
@@ -631,7 +631,7 @@ int CPU::pc_inc_by_ins(CPU::Instruction ins, unsigned char value) {
     }
 }
 
-Resumable CPU::instruction_async_loop(RAM &ram) {
+Resumable CPU::instruction_async_loop(Memory &mem) {
 #if 1
     auto print_hex = [&](auto val){
         auto num_bytes = sizeof(val);
@@ -653,17 +653,17 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                   "L:" <<  print_hex(regs[CPU::L]).str() << " " <<
                   "SP:" <<  print_hex(sp).str() << " " <<
                   "PC:" <<  print_hex(pc).str() << " " <<
-                  "PCMEM:" <<  print_hex(ram.read(pc)).str() << "," <<
-                  print_hex(ram.read(pc + 1)).str() << "," <<
-                  print_hex(ram.read(pc + 2)).str() << "," <<
-                  print_hex(ram.read(pc + 3)).str() << '\n';
+                  "PCMEM:" <<  print_hex(mem.read(pc)).str() << "," <<
+                  print_hex(mem.read(pc + 1)).str() << "," <<
+                  print_hex(mem.read(pc + 2)).str() << "," <<
+                  print_hex(mem.read(pc + 3)).str() << '\n';
         std::cout << std::dec;
     }
 #endif
     while (true) {
         if (halted) {
-            auto ie_value = ram.read(constants::IE_ADDRESS);
-            auto if_value = ram.read(constants::IF_ADDRESS);
+            auto ie_value = mem.read(constants::IE_ADDRESS);
+            auto if_value = mem.read(constants::IF_ADDRESS);
             if (ime) {
                 if ((if_value & ie_value & 0x1f) == 0) {
                     WAIT(1)
@@ -676,7 +676,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         skip_interrupt = false;
                     } else {
                         halt_bug = true;
-//                        t_cycle = cpu.execute(next_ins, decoded_ins, ram);
+//                        t_cycle = cpu.execute(next_ins, decoded_ins, mem);
 //                        pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
                         halted = false;
                     }
@@ -688,30 +688,30 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
         }
         prev_pc = pc;
-        unsigned char arg0 = tread(ram, pc);
-        unsigned char arg1 = tread(ram, pc + 1);
-        unsigned char arg2 = tread(ram, pc + 2);
+        unsigned char arg0 = tread(mem, pc);
+        unsigned char arg1 = tread(mem, pc + 1);
+        unsigned char arg2 = tread(mem, pc + 2);
         if (halt_bug) {
             auto tmp = arg1;
             arg1 = arg0;
             arg2 = tmp;
         }
         if (ime) { // Interrupt
-            auto if_value = ram.read(constants::IF_ADDRESS);
-            auto ie_value = ram.read(constants::IE_ADDRESS);
+            auto if_value = mem.read(constants::IF_ADDRESS);
+            auto ie_value = mem.read(constants::IE_ADDRESS);
             if ((if_value & ie_value & 0x1f) != 0) {
                 unsigned char pc_l = pc & 0xff;
                 unsigned char pc_h = (pc >> 8) & 0xff;
                 WAIT(4)
-                update_interrupts_status(ram);
+                update_interrupts_status(mem);
                 for (int i = 0; i < 5; ++i) {
                     if (ie_status[i] && if_status[i]) {
                         if (halted) halted = false;
                         ime = false;
                         sp-=1;
                         WAIT(4)
-                        twrite(ram, sp, pc_h);
-                        update_interrupts_status(ram);
+                        twrite(mem, sp, pc_h);
+                        update_interrupts_status(mem);
                         if (!ie_status[i] || !if_status[i]) {
                             bool updated = false;
                             for(int j = i; j < 5; ++j){
@@ -728,10 +728,10 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         }
                         sp-=1;
                         WAIT(4)
-                        twrite(ram, sp, pc_l);
+                        twrite(mem, sp, pc_l);
                         if_status[i] = false;
                         WAIT(4)
-                        off_IF_value( static_cast<InterruptFlag>(i), ram);
+                        off_IF_value( static_cast<InterruptFlag>(i), mem);
                         pc = interrupt_jump_addresses[i];
                         break;
                     }
@@ -742,9 +742,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
         }
 #if DEBUG
     //    std::cout << "HL value:" << HL_data() << '\n';
-    //    std::cout << "RAM value by HL_address:" << (unsigned)ram.read(HL_data()) << '\n';
+    //    std::cout << "Memory value by HL_address:" << (unsigned)mem.read(HL_data()) << '\n';
     //    auto print_range = [&](int n){
-    //        while(n--) std::cout << "mem[" << pc + n << "] :" << (unsigned)ram.read(pc + n) << '\n';
+    //        while(n--) std::cout << "map[" << pc + n << "] :" << (unsigned)mem.read(pc + n) << '\n';
     //    };
 
     //    std::cout << "\n==============================\n";
@@ -780,118 +780,118 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
         } d{.cpuref = *this};
 
         WAIT(3) // fetch/decode
-        auto i = fetch(ram);
+        auto i = fetch(mem);
         auto itype = decode(i);
 
         switch (itype) {
             case LD_0b01xxxyyy: { // 4/8 t-cycle
                 // todo: check
 //                WAIT(4)
-                update_regs(read345(i), ram, read_regs(read012(i), ram));
+                update_regs(read345(i), mem, read_regs(read012(i), mem));
 //                unsigned char value {};
 //                if (read345(i) != HL)
-//                    value = read_regs(read345(i), ram);
+//                    value = read_regs(read345(i), mem);
 //                else {
 //                    WAIT(4)
-//                    value = tread(ram, HL_data());
+//                    value = tread(mem, HL_data());
 //                }
-//                update_regs(read345(i), ram, value);
+//                update_regs(read345(i), mem, value);
                 break;
             }
             case LD_0b01xxx110: { // 8 t-cycles
                 WAIT(4)
-                auto regs_val = read_regs(HL, ram);
-                update_regs(read345(i), ram, regs_val);
+                auto regs_val = read_regs(HL, mem);
+                update_regs(read345(i), mem, regs_val);
                 break;
             }
             case LD_0b00xxx110: {
                 WAIT(4)
-                update_regs(read345(i), ram, arg1);
+                update_regs(read345(i), mem, arg1);
                 break;
             }
             case LD_0b01110xxx: {
                 WAIT(4)
-                update_regs(HL, ram, read_regs(read012(i), ram));
+                update_regs(HL, mem, read_regs(read012(i), mem));
                 break;
             }
             case LD_0b00110110: {
                 WAIT(8)
-                update_regs(HL, ram, arg1);
+                update_regs(HL, mem, arg1);
                 break;
             };
             case LD_0b00001010: {
                 WAIT(4)
-                regs[A] = tread(ram, ((regs[B] << 8) | regs[C]));
+                regs[A] = tread(mem, ((regs[B] << 8) | regs[C]));
                 break;
             }
             case LD_0b00011010: {
                 WAIT(4)
-                regs[A] = tread(ram, ((regs[D] << 8) | regs[E]));
+                regs[A] = tread(mem, ((regs[D] << 8) | regs[E]));
                 break;
             }
             case LD_0b00000010: {
                 WAIT(4)
-                twrite(ram, ((regs[B] << 8) | regs[C]), regs[A]);
+                twrite(mem, ((regs[B] << 8) | regs[C]), regs[A]);
                 break;
             }
             case LD_0b00010010: {
                 WAIT(4)
-                twrite(ram, ((regs[D] << 8) | regs[E]), regs[A]);
+                twrite(mem, ((regs[D] << 8) | regs[E]), regs[A]);
                 break;
             }
             case LD_0b11111010: {
                 WAIT(12)
-                regs[A] = tread(ram, arg1 | (arg2 << 8));
+                regs[A] = tread(mem, arg1 | (arg2 << 8));
                 break;
             }
             case LD_0b11101010: {
                 WAIT(12)
-                twrite(ram, (arg1 | (arg2 << 8)), regs[A]);
+                twrite(mem, (arg1 | (arg2 << 8)), regs[A]);
                 break;
             }
             case LDH_0b11110010: {
                 WAIT(4)
-                regs[A] = tread(ram, 0xff00 | regs[C]);
+                regs[A] = tread(mem, 0xff00 | regs[C]);
                 break;
             }
             case LDH_0b11100010: {
                 WAIT(4)
-                twrite(ram, (0xff00 | regs[C]), regs[A]);
+                twrite(mem, (0xff00 | regs[C]), regs[A]);
                 break;
             }
             case LDH_0b11110000: {
                 WAIT(4)
                 unsigned short address = (0xff00 | arg1);
                 WAIT(4)
-                regs[A] = tread(ram, address);
+                regs[A] = tread(mem, address);
                 break;
             }
             case LDH_0b11100000: {
                 WAIT(8)
-                twrite(ram, (0xff00 | arg1), regs[A]);
+                twrite(mem, (0xff00 | arg1), regs[A]);
                 break;
             }
             case LD_0b00111010: {
                 WAIT(4)
-                regs[A] = read_regs(HL, ram);
+                regs[A] = read_regs(HL, mem);
                 decrement_pair(L, H);
                 break;
             }
             case LD_0b00110010: {
                 WAIT(4)
-                update_regs(HL, ram, regs[A]);
+                update_regs(HL, mem, regs[A]);
                 decrement_pair(L, H);
                 break;
             }
             case LD_0b00101010: {
                 WAIT(4)
-                regs[A] = read_regs(HL, ram);
+                regs[A] = read_regs(HL, mem);
                 increment_pair(L, H);
                 break;
             }
             case LD_0b00100010: {
                 WAIT(4)
-                update_regs(HL, ram, regs[A]);
+                update_regs(HL, mem, regs[A]);
                 increment_pair(L, H);
                 break;
             }
@@ -904,9 +904,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 WAIT(8)
                 unsigned short address = (arg1 | (arg2 << 8));
                 WAIT(4)
-                twrite(ram, address, sp & 0xff);
+                twrite(mem, address, sp & 0xff);
                 WAIT(4)
-                twrite(ram, address + 1, ((sp >> 8) & 0xff));
+                twrite(mem, address + 1, ((sp >> 8) & 0xff));
                 break;
             }
             case LD_0b11111001: {
@@ -919,16 +919,16 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 auto val = stack_getpair(read45(i));
                 sp -= 2;
                 WAIT(4)
-                twrite(ram, sp, (val & 0xff));
+                twrite(mem, sp, (val & 0xff));
                 WAIT(4)
-                twrite(ram, sp + 1, ((val >> 8) & 0xff));
+                twrite(mem, sp + 1, ((val >> 8) & 0xff));
                 break;
             } // stack push xx
             case POP_0b11xx0001: {
                 WAIT(4)
-                auto a1 = tread(ram, sp);
+                auto a1 = tread(mem, sp);
                 WAIT(4)
-                auto a2 = tread(ram, sp + 1);
+                auto a2 = tread(mem, sp + 1);
                 update_pair_pop(a1, a2, read45(i));
                 sp += 2;
                 break;
@@ -947,12 +947,12 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 break;
             }
             case ADD_0b10000xxx: {
-                add_reg_A(read_regs(read012(i), ram));
+                add_reg_A(read_regs(read012(i), mem));
                 break;
             }
             case ADD_0b10000110: {
                 WAIT(4)
-                add_reg_A(read_regs(HL, ram));
+                add_reg_A(read_regs(HL, mem));
                 break;
             }
             case ADD_0b11000110: {
@@ -961,12 +961,12 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 break;
             }
             case ADC_0b10001xxx: {
-                add_reg_A_plus(read_regs(read012(i), ram), get_flag(Cf));
+                add_reg_A_plus(read_regs(read012(i), mem), get_flag(Cf));
                 break;
             }
             case ADC_0b10001110: {
                 WAIT(4)
-                add_reg_A_plus(read_regs(HL, ram), get_flag(Cf));
+                add_reg_A_plus(read_regs(HL, mem), get_flag(Cf));
                 break;
             }
             case ADC_0b11001110: {
@@ -975,12 +975,12 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 break;
             }
             case SUB_0b10010xxx: {
-                sub_reg_A(read_regs(read012(i), ram));
+                sub_reg_A(read_regs(read012(i), mem));
                 break;
             }
             case SUB_0b10010110: {
                 WAIT(4)
-                sub_reg_A(read_regs(HL, ram));
+                sub_reg_A(read_regs(HL, mem));
                 break;
             }
             case SUB_0b11010110: {
@@ -989,12 +989,12 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 break;
             }
             case SBC_0b10011xxx: {
-                sub_reg_A_plus(read_regs(read012(i), ram), get_flag(Cf));
+                sub_reg_A_plus(read_regs(read012(i), mem), get_flag(Cf));
                 break;
             } // (reg[A] - r - reg[C]) == reg[A] - (r + reg[C])
             case SBC_0b10011110: {
                 WAIT(4)
-                sub_reg_A_plus(read_regs(HL, ram), get_flag(Cf));
+                sub_reg_A_plus(read_regs(HL, mem), get_flag(Cf));
                 break;
             }
             case SBC_0b11011110: {
@@ -1003,12 +1003,12 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 break;
             }
             case CP_0b10111xxx: {
-                sub_reg_A_flags_only(read_regs(read012(i), ram));
+                sub_reg_A_flags_only(read_regs(read012(i), mem));
                 break;
             }
             case CP_0b10111110: {
                 WAIT(4)
-                sub_reg_A_flags_only(read_regs(HL, ram));
+                sub_reg_A_flags_only(read_regs(HL, mem));
                 break;
             }
             case CP_0b11111110: {
@@ -1017,44 +1017,44 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 break;
             }
             case INC_0b00xxx100: {
-                inc_reg(read345(i), ram);
+                inc_reg(read345(i), mem);
                 break;
             }
             case INC_0b00110100: {
                 WAIT(4) // todo: check
-                auto reg = read_regs(HL, ram);
+                auto reg = read_regs(HL, mem);
                 auto cp = reg;
                 unsigned char result = reg + 1;
                 set_flag(Nf, 0);
                 set_flag(Zf, result == 0);
                 set_flag(Hf, (cp & 0xf) == 0xf);
                 WAIT(4)
-                update_regs(HL, ram, result);
+                update_regs(HL, mem, result);
                 break;
             }
             case DEC_0b00xxx101: {
-                dec_reg(read345(i), ram);
+                dec_reg(read345(i), mem);
                 break;
             }
             case DEC_0b00110101: {
                 WAIT(4)
-                auto reg = read_regs(HL, ram);
+                auto reg = read_regs(HL, mem);
                 auto cp = reg;
                 unsigned char result = reg - 1;
                 set_flag(Nf, 1);
                 set_flag(Zf, result == 0);
                 set_flag(Hf, (cp & 0xf) == 0);
                 WAIT(4)
-                update_regs(HL, ram, result);
+                update_regs(HL, mem, result);
                 break;
             }
             case AND_0b10100xxx: {
-                and_reg_A(read_regs(read012(i), ram));
+                and_reg_A(read_regs(read012(i), mem));
                 break;
             }
             case AND_0b10100110: {
                 WAIT(4)
-                and_reg_A(read_regs(HL, ram));
+                and_reg_A(read_regs(HL, mem));
                 break;
             }
             case AND_0b11100110: {
@@ -1063,7 +1063,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 break;
             }
             case OR_0b10110xxx: {
-                or_reg_A(read_regs(read012(i), ram));
+                or_reg_A(read_regs(read012(i), mem));
 #if DEBUG
                 std::cout << "OR C, Zf: " << (unsigned)get_flag(Zf) << " BC: " << (short)getpair(0) << '\n';
 #endif
@@ -1071,7 +1071,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
             case OR_0b10110110: {
                 WAIT(4)
-                or_reg_A(read_regs(HL, ram));
+                or_reg_A(read_regs(HL, mem));
                 break;
             }
             case OR_0b11110110: {
@@ -1080,12 +1080,12 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 break;
             }
             case XOR_0b10101xxx: {
-                xor_reg_A(read_regs(read012(i), ram));
+                xor_reg_A(read_regs(read012(i), mem));
                 break;
             }
             case XOR_0b10101110: {
                 WAIT(4)
-                xor_reg_A(read_regs(HL, ram));
+                xor_reg_A(read_regs(HL, mem));
                 break;
             }
             case XOR_0b11101110: {
@@ -1210,7 +1210,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        auto reg = read_regs(rid, ram);
+                        auto reg = read_regs(rid, mem);
                         auto res = std::rotl(reg, 1);
                         set_flag(Zf, res == 0);
                         set_flag(Nf, 0);
@@ -1219,7 +1219,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        update_regs(rid, ram, res);
+                        update_regs(rid, mem, res);
                         break;
                     }
                     case RRC_0xCB_0b00001xxx: {
@@ -1228,7 +1228,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        auto reg = read_regs(rid, ram);
+                        auto reg = read_regs(rid, mem);
                         auto res = std::rotr(reg, 1);
                         set_flag(Zf, res == 0);
                         set_flag(Nf, 0);
@@ -1237,7 +1237,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL){
                             WAIT(4)
                         }
-                        update_regs(rid, ram, res);
+                        update_regs(rid, mem, res);
                         break;
                     }
                     case RL_0xCB_0b00010xxx: {
@@ -1246,7 +1246,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        auto reg = read_regs(rid, ram);
+                        auto reg = read_regs(rid, mem);
                         auto carry = get_flag(Cf);
                         unsigned char res = ((reg << 1) | carry);
                         set_flag(Cf, reg & 0x80);
@@ -1256,7 +1256,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        update_regs(rid, ram, res);
+                        update_regs(rid, mem, res);
                         break;
                     }
                     case RR_0xCB_0b00011xxx: {
@@ -1265,7 +1265,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        auto reg = read_regs(rid, ram);
+                        auto reg = read_regs(rid, mem);
                         auto carry = get_flag(Cf);
                         unsigned char res = ((reg >> 1) | carry << 7);
                         set_flag(Cf, reg & 1);
@@ -1275,7 +1275,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        update_regs(rid, ram, res);
+                        update_regs(rid, mem, res);
                         break;
                     }
                     case SLA_0xCB_0b00100xxx: {
@@ -1284,7 +1284,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        auto reg = read_regs(rid, ram);
+                        auto reg = read_regs(rid, mem);
                         unsigned char res = reg << 1;
                         set_flag(Cf, reg & 0x80);
                         set_flag(Zf, res == 0);
@@ -1293,7 +1293,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        update_regs(rid, ram, res);
+                        update_regs(rid, mem, res);
                         break;
                     }
                     case SRA_0xCB_0b00101xxx: {
@@ -1302,7 +1302,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        auto reg = read_regs(rid, ram);
+                        auto reg = read_regs(rid, mem);
                         auto sign_bit = reg & 0x80;
                         unsigned char res = ((reg >> 1) | sign_bit);
                         set_flag(Cf, reg & 1);
@@ -1312,7 +1312,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        update_regs(rid, ram, res);
+                        update_regs(rid, mem, res);
                         break;
                     }
                     case SWAP_0xCB_0b00110xxx: {
@@ -1321,7 +1321,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        auto reg = read_regs(rid, ram);
+                        auto reg = read_regs(rid, mem);
                         unsigned char l = reg & 0x0f;
                         unsigned char h = reg & 0xf0;
                         unsigned char res = (l << 4 | h >> 4);
@@ -1332,7 +1332,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        update_regs(rid, ram, res);
+                        update_regs(rid, mem, res);
                         break;
                     }
                     case SRL_0xCB_0b00111xxx: {
@@ -1341,7 +1341,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        auto reg = read_regs(rid, ram);
+                        auto reg = read_regs(rid, mem);
                         unsigned char res = reg >> 1;
                         set_flag(Cf, reg & 1);
                         set_flag(Zf, res == 0);
@@ -1350,7 +1350,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        update_regs(rid, ram, res);
+                        update_regs(rid, mem, res);
                         break;
                     }
                     case BIT_0xCB_0b01xxxxxx: {
@@ -1359,7 +1359,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (read012(pc_next) == HL) {
                             WAIT(4)
                         }
-                        auto reg = read_regs(read012(pc_next), ram);
+                        auto reg = read_regs(read012(pc_next), mem);
                         set_flag(Zf, !((reg >> bit_n) & 1));
                         set_flag(Nf, 0);
                         set_flag(Hf, 1);
@@ -1372,11 +1372,11 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        auto reg = read_regs(rid, ram);
+                        auto reg = read_regs(rid, mem);
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        update_regs(rid, ram, reg & ~(1 << bit_n));
+                        update_regs(rid, mem, reg & ~(1 << bit_n));
                         break;
                     }
                     case SET_0xCB_0b11xxxxxx: {
@@ -1386,11 +1386,11 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        auto reg = read_regs(rid, ram);
+                        auto reg = read_regs(rid, mem);
                         if (rid == HL) {
                             WAIT(4)
                         }
-                        update_regs(rid, ram, reg | (1 << bit_n));
+                        update_regs(rid, mem, reg | (1 << bit_n));
                         break;
                     }
                 }
@@ -1442,9 +1442,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 unsigned short nn = ((arg2 << 8) | arg1);
                 sp -= 2;
                 WAIT(4)
-                twrite(ram, sp, (pc + 3) & 0xff);
+                twrite(mem, sp, (pc + 3) & 0xff);
                 WAIT(4)
-                twrite(ram, sp + 1, ((pc + 3) >> 8));
+                twrite(mem, sp + 1, ((pc + 3) >> 8));
                 WAIT(4)
                 pc = nn;
                 break;
@@ -1457,9 +1457,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 if (cc_flag) {
                     sp -= 2;
                     WAIT(4)
-                    twrite(ram, sp, (pc + 3) & 0xff);
+                    twrite(mem, sp, (pc + 3) & 0xff);
                     WAIT(4)
-                    twrite(ram, sp + 1, ((pc + 3) >> 8) & 0xff);
+                    twrite(mem, sp + 1, ((pc + 3) >> 8) & 0xff);
                     WAIT(4)
                     pc = nn;
                 } else {
@@ -1469,9 +1469,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
             case RET_0b11001001: {
                 WAIT(4)
-                unsigned short a1 = (tread(ram, sp + 1) << 8);
+                unsigned short a1 = (tread(mem, sp + 1) << 8);
                 WAIT(4)
-                unsigned short a2 = tread(ram, sp);
+                unsigned short a2 = tread(mem, sp);
                 pc = (a1 | a2);
                 WAIT(4)
                 sp += 2;
@@ -1483,9 +1483,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 auto cc_flag = get_cc_flag(val);
                 if (cc_flag) {
                     WAIT(4)
-                    unsigned short a1 = (tread(ram, sp + 1) << 8);
+                    unsigned short a1 = (tread(mem, sp + 1) << 8);
                     WAIT(4)
-                    unsigned short a2 = tread(ram, sp);
+                    unsigned short a2 = tread(mem, sp);
                     WAIT(4)
                     pc = (a1 | a2);
                     sp += 2;
@@ -1496,9 +1496,9 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
             case RETI_0b11011001: {
                 WAIT(4)
-                unsigned short a1 = (tread(ram, sp + 1) << 8);
+                unsigned short a1 = (tread(mem, sp + 1) << 8);
                 WAIT(4)
-                unsigned short a2 = tread(ram, sp);
+                unsigned short a2 = tread(mem, sp);
                 WAIT(4)
                 pc = (a1 | a2);
                 sp += 2;
@@ -1510,10 +1510,10 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 unsigned short nn = ((0x0 << 8) | rst_vec[read345(i)]);
                 --sp;
                 WAIT(4)
-                twrite(ram, sp, ((pc + 1) >> 8));
+                twrite(mem, sp, ((pc + 1) >> 8));
                 --sp;
                 WAIT(4)
-                twrite(ram, sp, (pc + 1) & 0xff);
+                twrite(mem, sp, (pc + 1) & 0xff);
                 pc = nn;
                 break;
             }
@@ -1526,7 +1526,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                 break;
             }
             case STOP: {
-//            if (tread(ram, constants::LY_ADDRESS) == 144)
+//            if (tread(mem, constants::LY_ADDRESS) == 144)
 //                ++pc;
                 break;
             }
@@ -1538,7 +1538,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
             }
             case EI_0b11111011: {
                 ime_requested = true;
-                ime_req_count = 0;  /*std::cout << "IF:" << (unsigned)tread(ram,constants::IF_ADDRESS) << '\n'*/;
+                ime_req_count = 0;  /*std::cout << "IF:" << (unsigned)tread(mem,constants::IF_ADDRESS) << '\n'*/;
                 break;
             } // todo: check
             case NOP_0b00000000: {
@@ -1566,10 +1566,10 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
                               "L:" <<  print_hex(regs[CPU::L]).str() << " " <<
                               "SP:" <<  print_hex(sp).str() << " " <<
                               "PC:" <<  print_hex(pc).str() << " " <<
-                              "PCMEM:" <<  print_hex(ram.read(pc)).str() << "," <<
-                              print_hex(ram.read(pc + 1)).str() << "," <<
-                              print_hex(ram.read(pc + 2)).str() << "," <<
-                              print_hex(ram.read(pc + 3)).str() << '\n';
+                              "PCMEM:" <<  print_hex(mem.read(pc)).str() << "," <<
+                              print_hex(mem.read(pc + 1)).str() << "," <<
+                              print_hex(mem.read(pc + 2)).str() << "," <<
+                              print_hex(mem.read(pc + 3)).str() << '\n';
                     std::cout << std::dec;
                 }
 
@@ -1580,7 +1580,7 @@ Resumable CPU::instruction_async_loop(RAM &ram) {
     }
 }
 
-void CPU::update_interrupts_status(RAM& ram) {
-    fetch_IE_value(ram);
-    fetch_IF_value(ram);
+void CPU::update_interrupts_status(Memory& mem) {
+    fetch_IE_value(mem);
+    fetch_IF_value(mem);
 }
