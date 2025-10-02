@@ -24,7 +24,7 @@ void print_segment(unsigned short address, auto n, Memory& mem) {
 void print_external_ram(unsigned short address, auto n, Memory& mem) {
     std::cout << "\n=============================\n";
     for (int i = 0; i < n; ++i){
-        std::cout << std::hex << address + i <<  ":" << (unsigned)mem.cart_ram[address + i] << '\n';
+        std::cout << std::hex << address + i << ":" << (unsigned)mem.external_ram[address + i] << '\n';
     }
     std::cout << "\n=============================\n";
     std::cout << std::dec;
@@ -109,9 +109,9 @@ struct BaseFetcher {
         next_t_cycle = NEXT_T_CYCLE_VAL;
     }
 
-    void step(Memory& mem, Args&&... args) {
+    void step(Memory& mem, int current_pixel_x) {
         switch(current_state) {
-            case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(mem, std::forward<Args>(args)...); break;} // Low
+            case FetcherState::GetTile:  {tile_address = static_cast<Fetcher*>(this)->update_tile_base(mem, current_pixel_x); break;} // Low
             case FetcherState::Low:      {low = mem.read_unsafe(tile_address + (line_in_tile * 2)); break;}
             case FetcherState::High:     {
                 high = mem.read_unsafe(tile_address + (line_in_tile * 2) + 1);
@@ -128,6 +128,12 @@ struct BaseFetcher {
                     next_t_cycle += scx_offset; // todo: check
                     break;
                 }
+                else if (is_window && windows_current_tile_x == 0) {
+                    //todo: check
+                    auto wx = mem.read_unsafe(constants::WX_ADDRESS);
+                    for (int i = wx; i < 7; ++i) pixels.pop_front();
+                }
+
                 try_to_fill_fifo();
                 break;}
             case FetcherState::Sleep:    {

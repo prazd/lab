@@ -1,5 +1,5 @@
 #include "Memory.h"
-
+#include <ctime>
 bool Memory::lcd_enabled() const {
     return map[constants::LCDC_ADDRESS] & 0x80;
 }
@@ -34,7 +34,7 @@ void Memory::handle_mbc1(unsigned short index, unsigned char value) {
     }
 
     if (current_banking_mode == Simple) {
-        current_cart_ram = 0;
+        current_external_ram_n = 0;
         if (rom_sz <= 32) {
             current_rom_bank0 = 0;
             current_rom_bank1 = mbc_low_bits % rom_sz;
@@ -47,7 +47,7 @@ void Memory::handle_mbc1(unsigned short index, unsigned char value) {
         }
     } else {
         if (mbc_high_bits <= max_ram_bank_value)
-            current_cart_ram = mbc_high_bits;
+            current_external_ram_n = mbc_high_bits;
         if (rom_sz <= 32) {
             current_rom_bank0 = 0;
             current_rom_bank1 =  mbc_low_bits % rom_sz;
@@ -62,42 +62,33 @@ void Memory::handle_mbc1(unsigned short index, unsigned char value) {
 }
 
 void Memory::handle_mbc3(unsigned short index, unsigned char value) {
-    if (index <= 0x1FFF) {
-        external_ram_enabled = (value & 0xf) == 0x0A;
-    } else if (index >= 0x2000 && index <= constants::ROM_BANK_00_END) {
-        if (value == 0) value = 1;
-        mbc_low_bits = value;
-    } else if (index >= constants::ROM_BANK_01_BEGIN && index <= 0x5FFF) {
-        mbc_high_bits = value & 0x3;
-    }  else if (index >= 0x6000 && index <= constants::ROM_BANK_01_END) {
-        if (value & 1) current_banking_mode = Advanced;
-        else current_banking_mode = Simple;
+    static bool prev_00 = false;
+    if (index >= 0x2000 && index <= 0x3fff){
+        current_rom_bank1 = value;
     }
-
-    if (current_banking_mode == Simple) {
-        current_cart_ram = 0;
-        if (rom_sz <= 32) {
-            current_rom_bank0 = 0;
-            current_rom_bank1 = mbc_low_bits % rom_sz;
-        } else if (rom_sz == 64){
-            current_rom_bank0 = 0;
-            current_rom_bank1 = (((mbc_high_bits & 1) << 5) | mbc_low_bits) % rom_sz;
-        } else if (rom_sz >= 128) {
-            current_rom_bank0 = 0;
-            current_rom_bank1 = ((mbc_high_bits << 5) | mbc_low_bits) % rom_sz;
-        }
-    } else {
-        if (mbc_high_bits <= max_ram_bank_value)
-            current_cart_ram = mbc_high_bits;
-        if (rom_sz <= 32) {
-            current_rom_bank0 = 0;
-            current_rom_bank1 =  mbc_low_bits % rom_sz;
-        } else if (rom_sz == 64){
-            current_rom_bank0 =  ((mbc_high_bits & 1) << 5) % rom_sz;
-            current_rom_bank1 =  ((mbc_high_bits & 1) << 5 | mbc_low_bits) % rom_sz;
-        } else if (rom_sz >= 128) {
-            current_rom_bank0 = (mbc_high_bits << 5) % rom_sz;
-            current_rom_bank1 = ((mbc_high_bits << 5) | mbc_low_bits) % rom_sz;
+    if (index >= 0x4000 && index <= 0x5fff){
+        current_external_ram_n = value;
+    }
+    if (index >= 0x6000 && index <= 0x7fff){
+        if (value == 0) {prev_00 = true; return;}
+        if (value == 1){
+            prev_00 = false;
+            if ((map[0xC] >> 6) & 0x1) return; // HALT
+            auto now = std::chrono::system_clock::now();
+            auto t = std::chrono::system_clock::to_time_t(now);
+            auto local = *std::localtime(&t);
+            map[0x08] = local.tm_sec;
+            map[0x09] = local.tm_min;
+            map[0xA] = local.tm_hour;
+            unsigned short current_day = (((map[0xC] & 0x1) << 8) | map[0xB]);
+            unsigned short day = (t / (60 * 60 * 24) % 512);
+            bool day_overflow = (current_day == 511 && day == 0);
+            map[0xB] = day & 0xff;
+            map[0xC] = ((day >> 8) | (map[0xC] & 0xfe));
+            if (day_overflow)
+                map[0xC] |= (1 << 7);
+            else
+                map[0xC] &= ~(1 << 7);
         }
     }
 }
@@ -138,10 +129,10 @@ void Memory::write(unsigned short index, unsigned char value) {
         index -= 0x2000;
     }
 
-   if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END && external_ram_enabled && !cart_ram.empty()) {
+   if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END && external_ram_enabled && !external_ram.empty()) {
         auto current_address = index - constants::EXTERNAL_RAM_BEGIN;
-        if (current_address + (current_cart_ram * 8192) <= cart_ram.size())
-            cart_ram[current_address + (current_cart_ram * 8192)] = value;
+        if (current_address + (current_external_ram_n * 8192) <= external_ram.size())
+            external_ram[current_address + (current_external_ram_n * 8192)] = value;
        return;
    }
 
@@ -185,7 +176,7 @@ unsigned char Memory::read(unsigned short index) const {
     }
 
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
-        return external_ram_enabled ? cart_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_cart_ram * 8192)] : dummy_reg;
+        return external_ram_enabled ? external_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_external_ram_n * 8192)] : dummy_reg;
     }
 
     if (is_ram_avaliable(index)){
@@ -255,7 +246,7 @@ void Memory::write_unsafe(unsigned short index, unsigned char value) {
 
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
         auto current_address = index - constants::EXTERNAL_RAM_BEGIN;
-        cart_ram[current_address + (current_cart_ram * 8192)] = value;
+        external_ram[current_address + (current_external_ram_n * 8192)] = value;
         return;
     }
 
@@ -281,7 +272,7 @@ unsigned char Memory::read_unsafe(unsigned short index) const {
 
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
         if (external_ram_enabled)
-            return cart_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_cart_ram * 8192)];
+            return external_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_external_ram_n * 8192)];
         return dummy_reg;
     }
     return map[index];

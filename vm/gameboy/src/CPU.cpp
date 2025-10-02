@@ -105,7 +105,7 @@ void CPU::sub_reg_A_flags_only(unsigned char val)  {
     set_flag(Hf, ((regs[A] & 0xf) - (val & 0xf) < 0)); // todo: check((val & 0xf) > (regs[A] & 0xf)));
 }
 
-void CPU::inc_reg(unsigned char i, Memory &mem)  {
+void CPU::inc_reg(unsigned char i, Memory& mem)  {
     auto reg = read_regs(i, mem);
     auto cp = reg;
     unsigned char result = reg + 1;
@@ -115,7 +115,7 @@ void CPU::inc_reg(unsigned char i, Memory &mem)  {
     update_regs(i, mem, result);
 }
 
-void CPU::dec_reg(unsigned char i, Memory &mem)  {
+void CPU::dec_reg(unsigned char i, Memory& mem)  {
     auto reg = read_regs(i, mem);
     auto cp = reg;
     unsigned char result = reg - 1;
@@ -125,7 +125,7 @@ void CPU::dec_reg(unsigned char i, Memory &mem)  {
     update_regs(i, mem, result);
 }
 
-unsigned char CPU::read_regs(unsigned char i, Memory &mem)  {
+unsigned char CPU::read_regs(unsigned char i, Memory& mem)  {
     switch(i){
         case 0b000: {return regs[B];}
         case 0b001: {return regs[C];}
@@ -139,7 +139,7 @@ unsigned char CPU::read_regs(unsigned char i, Memory &mem)  {
     throw std::invalid_argument("Unknown register");
 }
 
-void CPU::update_regs(unsigned char i, Memory &mem, unsigned char value)  {
+void CPU::update_regs(unsigned char i, Memory& mem, unsigned char value)  {
     switch(i){
         case 0b000: {regs[B] = value; return;}
         case 0b001: {regs[C] = value; return;}
@@ -162,7 +162,7 @@ bool CPU::get_cc_flag(unsigned char val)  {
             val == 0b11 && get_flag(Cf));
 }
 
-unsigned char CPU::fetch(Memory &mem)   {
+unsigned char CPU::fetch(Memory& mem)   {
     return tread(mem,pc);
 }
 
@@ -533,11 +533,11 @@ void CPU::push_stack(unsigned char l, unsigned char h, Memory& mem) {
     twrite(mem,sp + 1, h);
 }
 
-unsigned char CPU::tread(Memory &mem, unsigned short index) {
+unsigned char CPU::tread(Memory& mem, unsigned short index) {
     return mem.read(index);
 }
 
-void CPU::twrite(Memory &mem, unsigned short index, unsigned char value) {
+void CPU::twrite(Memory& mem, unsigned short index, unsigned char value) {
     mem.write(index, value);
 }
 
@@ -631,7 +631,7 @@ int CPU::pc_inc_by_ins(CPU::Instruction ins, unsigned char value) {
     }
 }
 
-Resumable CPU::instruction_async_loop(Memory &mem) {
+Resumable CPU::instruction_async_loop(Memory& mem) {
 #if 1
     auto print_hex = [&](auto val){
         auto num_bytes = sizeof(val);

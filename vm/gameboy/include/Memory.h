@@ -33,8 +33,8 @@ struct Memory {
     size_t mbc_high_bits = 0;
     size_t mbc_low_bits = 1;
 
-    std::vector<unsigned char> cart_ram{};
-    size_t current_cart_ram = 0;
+    std::vector<unsigned char> external_ram{};
+    size_t current_external_ram_n = 0;
     size_t current_rom_bank_max = 0;
 
     unsigned char dummy_reg = 0xFF;

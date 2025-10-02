@@ -37,14 +37,19 @@ struct GameBoyVM{
         }
     }
 
+    bool is_cartridge_with_save(){
+        return (mem.rom[0x147] == 0x03 ||
+                mem.current_mbc == Memory::MBC3
+        );
+    }
     void try_to_use_save() {
-        if (mem.rom[0x147] != 0x03) return;
+        if (!is_cartridge_with_save()) return;
         std::cout << "\nMBC1 with battery save\n";
         std::string spath(ram_path.substr(0, ram_path.size()-3));
         spath += ".sav";
         std::ifstream ifile(spath, std::ios::binary | std::ios::in);
         if (!ifile.is_open()){ std::cout << "Can't open save file:" << spath << '\n'; return;}
-        ifile.read((char*)mem.cart_ram.data(), mem.cart_ram.size()); // todo: check
+        ifile.read((char*)mem.external_ram.data(), mem.external_ram.size()); // todo: check
         ifile.close();
     }
 
@@ -202,27 +207,28 @@ struct GameBoyVM{
         boot();
         if (mem.ram_sz != -1){
             mem.max_ram_bank_value = mem.ram_sz - 1;
-            mem.cart_ram.resize(get_ram_size(mem.rom) * constants::EXTERNAL_RAM_SZ);
+            mem.external_ram.resize(get_ram_size(mem.rom) * constants::EXTERNAL_RAM_SZ);
         }
         mem.current_mbc = get_mbc_type(mem.rom);
+        if (mem.current_mbc == Memory::MBC3)
+            mem.external_ram_enabled = true;
         mem.current_rom_bank_max = get_rom_size(mem.rom);
         try_to_use_save();
     }
 
     ~GameBoyVM(){
-        if (mem.rom[0x147] == 0x03){
-            std::string save_path(ram_path.substr(0, ram_path.size()-3));
-            save_path += ".sav";
-            std::ofstream save_file(save_path, std::ios::binary | std::ios::out);
-            if (save_file.is_open()) {
+        if (!is_cartridge_with_save()) return;
+        std::string save_path(ram_path.substr(0, ram_path.size()-3));
+        save_path += ".sav";
+        std::ofstream save_file(save_path, std::ios::binary | std::ios::out);
+        if (save_file.is_open()) {
 
-                save_file.write((char*)mem.cart_ram.data(), mem.cart_ram.size());
-                std::cout << "\nSaved succesfully\n";
-            } else {
-                std::cout << "!!!!!!!!!!! Save error !!!!!!!!!!!" << '\n';
-            }
-            save_file.close();
-        } // MBC1 + Memory + Battery
+            save_file.write((char*)mem.external_ram.data(), mem.external_ram.size());
+            std::cout << "\nSaved succesfully\n";
+        } else {
+            std::cout << "!!!!!!!!!!! Save error !!!!!!!!!!!" << '\n';
+        }
+        save_file.close();
     }
     
     void run() {
@@ -271,7 +277,7 @@ struct GameBoyVM{
 #if 0
 
               DebugTools::print_rects<constants::DISPLAY_HEIGHT, constants::DISPLAY_WIDTH>(GREEN);
-              DebugTools::print_rects<18, 20>(RED);
+//              DebugTools::print_rects<18, 20>(RED);
 #endif
                 DrawFPS(700, 10);
             EndDrawing();
@@ -345,7 +351,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/PokemonBlueVersion.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
