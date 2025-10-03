@@ -8,7 +8,9 @@ void Memory::handle_mbc(unsigned short index, unsigned char value) {
     switch (current_mbc) {
         case MBC0: {handle_mbc0(index, value); break;}
         case MBC1: {handle_mbc1(index, value); break;}
+        case MBC2: {handle_mbc2(index, value); break;}
         case MBC3: {handle_mbc3(index, value); break;}
+        case MBC5: {handle_mbc5(index, value); break;}
     }
 }
 
@@ -16,6 +18,32 @@ void Memory::handle_mbc0(unsigned short index, unsigned char value) {
     if (index >= 0x0000 && index <= 0x1FFF) external_ram_enabled = (value & 0xf) == 0x0A;
 }
 
+void Memory::handle_mbc2(unsigned short index, unsigned char value) {
+    if (index <= constants::ROM_BANK_00_END) {
+        if ((index >> 8) & 1){
+            auto v = value & 0xf;
+            if (v == 0) v = 1;
+            current_rom_bank1 = v % 16;
+        } else {
+            external_ram_enabled = ((value & 0xf) == 0xA);
+        }
+    }
+}
+
+void Memory::handle_mbc5(unsigned short index, unsigned char value) {
+    if (index <= 0x1FFF) {
+        if (value == 0xA) external_ram_enabled = true;
+        else if (value == 0) external_ram_enabled = false;
+    } else if (index >= 0x2000 && index <= 0x2fff) {
+        mbc_low_bits = value;
+        current_rom_bank1 = ((mbc_high_bits << 8) | mbc_low_bits);
+    } else if (index >= 0x3000 && index <=  0x3fff) {
+        mbc_high_bits = (value & 0x1);
+        current_rom_bank1 = ((mbc_high_bits << 8) | mbc_low_bits);
+    } else if (index >= 0x4000 && index <= 0x5FFF) {
+        if (value <= max_ram_bank_value) current_external_ram_n = value;
+    }
+}
 
 void Memory::handle_mbc1(unsigned short index, unsigned char value) {
     // MBC-1
@@ -130,6 +158,10 @@ void Memory::write(unsigned short index, unsigned char value) {
     }
 
    if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END && external_ram_enabled && !external_ram.empty()) {
+       if (current_mbc == MBC2) {
+           index = (index % 512) + constants::EXTERNAL_RAM_BEGIN;
+           value &= 0xf;
+       }
         auto current_address = index - constants::EXTERNAL_RAM_BEGIN;
         if (current_address + (current_external_ram_n * 8192) <= external_ram.size())
             external_ram[current_address + (current_external_ram_n * 8192)] = value;
@@ -176,6 +208,7 @@ unsigned char Memory::read(unsigned short index) const {
     }
 
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
+        // todo: maybe do (res | 0xF0) for MBC2 type
         return external_ram_enabled ? external_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_external_ram_n * 8192)] : dummy_reg;
     }
 
@@ -245,6 +278,10 @@ void Memory::write_unsafe(unsigned short index, unsigned char value) {
     }
 
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
+        if (current_mbc == MBC2) {
+            index = (index % 512) + constants::EXTERNAL_RAM_BEGIN;
+            value &= 0xf;
+        }
         auto current_address = index - constants::EXTERNAL_RAM_BEGIN;
         external_ram[current_address + (current_external_ram_n * 8192)] = value;
         return;
@@ -271,9 +308,8 @@ unsigned char Memory::read_unsafe(unsigned short index) const {
     }
 
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
-        if (external_ram_enabled)
-            return external_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_external_ram_n * 8192)];
-        return dummy_reg;
+        // todo: maybe do (res | 0xF0) for MBC2 type
+        return external_ram_enabled ? external_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_external_ram_n * 8192)] : dummy_reg;
     }
     return map[index];
 }

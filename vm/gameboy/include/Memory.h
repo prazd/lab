@@ -19,12 +19,14 @@ struct Memory {
     enum MBC {
         MBC0,
         MBC1,
-        MBC3
+        MBC2,
+        MBC3,
+        MBC5
     } current_mbc = MBC0;
 
     std::vector<char> rom{};
     size_t rom_sz = 0;
-    size_t ram_sz = 0;
+    int ram_sz = 0;
     size_t max_ram_bank_value = 0;
     size_t max_rom_bank_value = 0;
     size_t current_rom_bank0 = 0;
@@ -61,7 +63,9 @@ struct Memory {
     void handle_mbc(unsigned short index, unsigned char value);
     void handle_mbc0(unsigned short index, unsigned char value);
     void handle_mbc1(unsigned short index, unsigned char value);
+    void handle_mbc2(unsigned short index, unsigned char value);
     void handle_mbc3(unsigned short index, unsigned char value);
+    void handle_mbc5(unsigned short index, unsigned char value);
     void dma_tick();
 
 

@@ -24,22 +24,38 @@ struct GameBoyVM{
             case 0x02: // MBC1 + Memory
             case 0x03: // MBC1 + Memory + Battery
                 {return Memory::MBC1;}
+
+            case 0x5:
+            case 0x6:
+                {return Memory::MBC2;}
+
             case 0x0f:
             case 0x10:
             case 0x11:
             case 0x12:
             case 0x13:
-                return Memory::MBC3;
-            // todo: finish other mbc types
+                {return Memory::MBC3;}
+
+            case 0x19:
+            case 0x1A:
+            case 0x1B:
+            case 0x1C:
+            case 0x1D:
+            case 0x1E:
+                {return Memory::MBC5;}
+
             default:{
-                return Memory::MBC0;
+                {return Memory::MBC0;}
             }
         }
     }
 
     bool is_cartridge_with_save(){
+        // todo: update
         return (mem.rom[0x147] == 0x03 ||
-                mem.current_mbc == Memory::MBC3
+                mem.current_mbc == Memory::MBC3 ||
+                mem.current_mbc == Memory::MBC2 ||
+                mem.current_mbc == Memory::MBC5
         );
     }
     void try_to_use_save() {
@@ -123,7 +139,7 @@ struct GameBoyVM{
         // 0x01 - Unused
         // Listed in various unofficial docs as 2 KiB. However, a 2 KiB Memory chip was never used in a cartridge.
         // The source of this value is unknown.
-        return -1; // No mem
+        return 1; // No mem
     }
 
     void init_raw_rom(const std::string_view& path) {
@@ -203,13 +219,15 @@ struct GameBoyVM{
 
         mem.rom_sz = get_rom_size(mem.rom);
         mem.max_rom_bank_value = mem.rom_sz - 1;
+        mem.current_mbc = get_mbc_type(mem.rom);
         mem.ram_sz = get_ram_size(mem.rom);
         boot();
-        if (mem.ram_sz != -1){
-            mem.max_ram_bank_value = mem.ram_sz - 1;
+        mem.max_ram_bank_value = mem.ram_sz - 1;
+        if (mem.current_mbc == Memory::MBC2)
+            mem.external_ram.resize(512);
+        else
             mem.external_ram.resize(get_ram_size(mem.rom) * constants::EXTERNAL_RAM_SZ);
-        }
-        mem.current_mbc = get_mbc_type(mem.rom);
+
         if (mem.current_mbc == Memory::MBC3)
             mem.external_ram_enabled = true;
         mem.current_rom_bank_max = get_rom_size(mem.rom);
@@ -351,7 +369,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/PokemonBlueVersion.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/DragonWarrior12.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
