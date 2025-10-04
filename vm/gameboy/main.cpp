@@ -20,28 +20,28 @@ struct GameBoyVM{
 
     Memory::MBC get_mbc_type(const auto& data) {
         switch (data[0x0147]) {
-            case 0x01:
+            case 0x01: // MBC1
             case 0x02: // MBC1 + Memory
             case 0x03: // MBC1 + Memory + Battery
                 {return Memory::MBC1;}
 
-            case 0x5:
-            case 0x6:
+            case 0x5:  // MBC2
+            case 0x6:  // MBC2+BATTERY
                 {return Memory::MBC2;}
 
-            case 0x0f:
-            case 0x10:
-            case 0x11:
-            case 0x12:
-            case 0x13:
+            case 0x0f: // MBC3+TIMER+BATTERY
+            case 0x10: // MBC3+TIMER+RAM+BATTERY
+            case 0x11: // MBC3
+            case 0x12: // MBC3+RAM
+            case 0x13: // MBC3+RAM+BATTERY
                 {return Memory::MBC3;}
 
-            case 0x19:
-            case 0x1A:
-            case 0x1B:
-            case 0x1C:
-            case 0x1D:
-            case 0x1E:
+            case 0x19: // MBC5
+            case 0x1A: // MBC5+RAM
+            case 0x1B: // MBC5+RAM+BATTERY
+            case 0x1C: // MBC5+RUMBLE
+            case 0x1D: // MBC5+RUMBLE+RAM
+            case 0x1E: // MBC5+RUMBLE+RAM+BATTERY
                 {return Memory::MBC5;}
 
             default:{
@@ -51,12 +51,12 @@ struct GameBoyVM{
     }
 
     bool is_cartridge_with_save(){
-        // todo: update
-        return (mem.rom[0x147] == 0x03 ||
-                mem.current_mbc == Memory::MBC3 ||
-                mem.current_mbc == Memory::MBC2 ||
-                mem.current_mbc == Memory::MBC5
-        );
+        constexpr static int mbc_with_battery_types[] = {
+                0x03, 0x6, 0x0f, 0x10,0x13, 0x1B, 0x1E
+        };
+        return std::any_of(std::begin(mbc_with_battery_types),
+                           std::end(mbc_with_battery_types),
+                           [cartridge_type= mem.rom[0x147]](auto& el){return el == cartridge_type;});
     }
     void try_to_use_save() {
         if (!is_cartridge_with_save()) return;
