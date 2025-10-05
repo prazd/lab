@@ -34,7 +34,6 @@ void Timer::tick(Memory& mem) {
     }
     prev_bit = std::exchange(cur_bit, (div_internal >> shift) & 1);
     ++div_internal;
-//    std::cout << "DIV TICK\n";
     mem.map[constants::DIV_REGISTER] = (div_internal >> 8) & 0xff;
     mem.div_internal_sync = div_internal;
     if ((mem.map[constants::TAC_REGISTER] >> 2) & 1) {

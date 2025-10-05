@@ -335,4 +335,32 @@ struct JoypadWindow: public DebugWindow<pwidth, pheight, width, height> {
         DW::draw_text(24.f);
     }
 };
+
+void print_segment(unsigned short address, auto n, Memory& mem) {
+    std::cout << "\n=============================\n";
+    for (int i = 0; i < n; ++i){
+        std::cout << std::hex << address + i << ":" << (unsigned)mem.map[address + i] << '\n';
+    }
+    std::cout << "\n=============================\n";
+    std::cout << std::dec;
+}
+
+void print_external_ram(unsigned short address, auto n, Memory& mem) {
+    std::cout << "\n=============================\n";
+    for (int i = 0; i < n; ++i){
+        std::cout << std::hex << address + i << ":" << (unsigned)mem.external_ram[address + i] << '\n';
+    }
+    std::cout << "\n=============================\n";
+    std::cout << std::dec;
+}
+
+void print_bytes(unsigned short address, auto n, Memory& mem) {
+    std::cout << "\n=============================\n";
+    for (int i = 0; i < n; ++i){
+        std::cout << std::hex << "0x" << (unsigned)mem.map[address + i] << ',';
+    }
+    std::cout << "\n=============================\n";
+    std::cout << std::dec;
+}
+
 #endif //MAIN_CPP_DEBUG_H

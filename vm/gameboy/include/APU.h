@@ -4,18 +4,47 @@
 
 struct Channel {
     unsigned short freq_timer{};
-    unsigned short length_counter{};
-    unsigned short envelope_timer{};
-    unsigned short sweep_timer{};
-    unsigned char phase_counter{};
+    unsigned char length_counter{};
     bool active{};
 };
 
+struct CH1: Channel {
+    unsigned short envelope_timer{};
+    unsigned short sweep_timer{};
+    float duty{};
+    void update_duty(Memory& mem);
+    void update_length_timer(Memory& mem);
+};
+
+struct CH2: Channel {
+    unsigned short envelope_timer{};
+    unsigned char duty{};
+    void update_length_timer(Memory& mem);
+};
+
+struct CH3: Channel {
+    unsigned char wave{};
+    unsigned char volume{};
+    void update_length_timer(Memory& mem);
+};
+
+struct CH4: Channel {
+    unsigned char lsfr{};
+    unsigned short envelope_timer{};
+    void update_length_timer(Memory& mem);
+};
+
+struct FrameSequencer {
+    unsigned char step{};
+    unsigned short frame_seq_counter{};
+    void tick();
+};
+
 struct APU {
-    Channel ch1;
-    Channel ch2;
-    Channel ch3;
-    Channel ch4;
+    CH1 ch1;
+    CH2 ch2;
+    CH3 ch3;
+    CH4 ch4;
 
     void tick(Memory&);
 };

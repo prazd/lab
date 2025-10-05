@@ -12,33 +12,6 @@ constexpr size_t NEXT_T_CYCLE_VAL = 2;
 
 bool operator==(Color lhs, Color rhs);
 
-void print_segment(unsigned short address, auto n, Memory& mem) {
-    std::cout << "\n=============================\n";
-    for (int i = 0; i < n; ++i){
-        std::cout << std::hex << address + i << ":" << (unsigned)mem.map[address + i] << '\n';
-    }
-    std::cout << "\n=============================\n";
-    std::cout << std::dec;
-}
-
-void print_external_ram(unsigned short address, auto n, Memory& mem) {
-    std::cout << "\n=============================\n";
-    for (int i = 0; i < n; ++i){
-        std::cout << std::hex << address + i << ":" << (unsigned)mem.external_ram[address + i] << '\n';
-    }
-    std::cout << "\n=============================\n";
-    std::cout << std::dec;
-}
-
-void print_bytes(unsigned short address, auto n, Memory& mem) {
-    std::cout << "\n=============================\n";
-    for (int i = 0; i < n; ++i){
-        std::cout << std::hex << "0x" << (unsigned)mem.map[address + i] << ',';
-    }
-    std::cout << "\n=============================\n";
-    std::cout << std::dec;
-}
-
 struct Sprite {
     unsigned char y_pos{};
     unsigned char x_pos{};
@@ -81,14 +54,14 @@ struct BaseFetcher {
 
     auto get_window_tile_map_area(const Memory& mem) {
         if (((mem.read_unsafe(constants::LCDC_ADDRESS) >> 6) & 1))
-            return 0x9C00;
-        return 0x9800;
+            return constants::BG_TILE_MAP2;
+        return constants::BG_TILE_MAP1;
     }
 
     auto get_bg_tile_map_area(const Memory& mem) {
         if (((mem.read_unsafe(constants::LCDC_ADDRESS) >> 3) & 1))
-            return 0x9C00;
-        return 0x9800;
+            return constants::BG_TILE_MAP2;
+        return constants::BG_TILE_MAP1;
     }
 
     void try_to_fill_fifo() {
@@ -338,12 +311,7 @@ class PPU {
     bool window_visible = false;
     bool obj_enable = false; // sprites
     bool bg_enable = false;
-    bool pixel_fetcher_paused = false;
-    int oam_next_t_cycle = 2;
-    int oam_sprite_get = 2;
-    size_t oam_next_t_sprite_t_cycle = 2;
     unsigned short current_oam_obj = 0;
-    bool win_disabled = false;
 
     std::priority_queue<std::pair<Sprite, int>, std::vector<std::pair<Sprite, int>>, decltype([](auto& a, auto& b){
         return !(a.first.x_pos < b.first.x_pos || (a.first.x_pos == b.first.x_pos && a.second < b.second));
@@ -368,8 +336,6 @@ class PPU {
     void update_regs(const Memory& mem);
 
     bool is_win_init = false;
-    bool use_saved_window_ly = false;
-    unsigned char save_window_ly{};
     bool is_windows_fetching_ready(Memory& mem);
 
     unsigned char get_obj_size(const Memory& mem);

@@ -232,8 +232,6 @@ void PPU::tick(Memory& mem)  {
             mem.ppu_oam_usage = false;
             read_sprite_count = 2;
             oam_gap_count = 2;
-
-            oam_next_t_cycle = 2;
             current_oam_obj = 0;
             current_pixel_x = 0;
             current_mode = Drawing;
@@ -371,7 +369,6 @@ void PPU::tick(Memory& mem)  {
                 if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
                     mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                 sprite_buffer = {};
-                oam_next_t_cycle = 2;
                 current_oam_obj = 0;
             }
             if (pixel_fetcher.is_windows_drawing) {
@@ -399,7 +396,6 @@ void PPU::tick(Memory& mem)  {
                 if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
                     mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                 current_oam_obj = 0;
-                oam_next_t_cycle = 2;
                 current_line = 0;
 #if DEBUG_T_CYCLE
                 std::cout << "internal_t_cycles:" << internal_t_cycles << '\n';
@@ -407,9 +403,7 @@ void PPU::tick(Memory& mem)  {
                 internal_t_cycles = 0;
                 set_ppu_reg(constants::LY_ADDRESS, current_line, mem);
                 current_pixel_x = 0;
-                use_saved_window_ly = false;
                 is_win_init = false;
-                save_window_ly = 0;
                 current_t_cycle_count = 0;
                 pixel_fetcher.is_windows_drawing = false;
             } else {

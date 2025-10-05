@@ -274,6 +274,8 @@ struct GameBoyVM{
         RegWindow<0,0,300,400> rw(1150, 517);
         SpriteWindowText<0,0,600,200> swt(10, 750);
         JoypadWindow<0,0,300,250> jw(820, 730);
+        bool print_pixels = false;
+        bool print_tiles = false;
 #endif
 
         auto cpu_r = cpu.instruction_async_loop(mem);
@@ -292,10 +294,14 @@ struct GameBoyVM{
                 jw.handle(mem, joypad);
 #endif
 // PRINT PIXELS
-#if 0
+#if 1
+              if (IsKeyPressed(KEY_T))
+                  print_tiles = !print_tiles;
+              if (IsKeyPressed(KEY_P))
+                  print_pixels = !print_pixels;
 
-              DebugTools::print_rects<constants::DISPLAY_HEIGHT, constants::DISPLAY_WIDTH>(GREEN);
-//              DebugTools::print_rects<18, 20>(RED);
+              if (print_pixels) DebugTools::print_rects<constants::DISPLAY_HEIGHT, constants::DISPLAY_WIDTH>(GREEN);
+              if (print_tiles)  DebugTools::print_rects<18, 20>(RED);
 #endif
                 DrawFPS(700, 10);
             EndDrawing();
@@ -369,7 +375,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/DragonWarrior12.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
