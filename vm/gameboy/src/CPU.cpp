@@ -676,8 +676,6 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
                         skip_interrupt = false;
                     } else {
                         halt_bug = true;
-//                        t_cycle = cpu.execute(next_ins, decoded_ins, mem);
-//                        pc += cpu.pc_inc_by_ins(decoded_ins) - 1;
                         halted = false;
                     }
                 } else {
@@ -868,6 +866,10 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
             }
             case LDH_0b11100000: {
                 WAIT(8)
+//                if ((0xff00 | arg1) == constants::DIV_REGISTER){
+//                    std::cout << "DIV:" << mem.div_internal_sync << '\n';
+//                    arg1 += 0;
+//                }
                 twrite(mem, (0xff00 | arg1), regs[A]);
                 break;
             }

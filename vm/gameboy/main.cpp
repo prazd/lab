@@ -173,6 +173,7 @@ struct GameBoyVM{
         mem.map[constants::JOYPAD] = 0xcf;
         mem.map[constants::SC_ADDRESS] = 0x7e;
         mem.map[constants::DIV_REGISTER] = 0xAB; // --
+        cpu.timer.div_internal = (0xAB << 8);
         mem.map[constants::TAC_REGISTER] = 0xF8;
         mem.map[constants::IF_ADDRESS] = 0xE1;
 
@@ -314,7 +315,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/basic.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/acceptance/oam_dma/reg_read.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/halt_ime0_ei.gb
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
+
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb
 // /Users/prazd/Desktop/dev/mts-20211031-1956-1ae00bf/madness/mgb_oam_dma_halt_sprites.gb (halt bug) - check
 // /Users/prazd/Desktop/dev/gb-test-roms/instr_timing/instr_timing.gb
@@ -336,6 +337,9 @@ struct GameBoyVM{
 
 // Failed:
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_oam_ok_timing.gb
+
+// Timer:
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
 
 // PPU
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_1_2_timing-GS.gb
@@ -375,7 +379,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tim00.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

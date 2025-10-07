@@ -252,31 +252,6 @@ void Memory::write_unsafe(unsigned short index, unsigned char value) {
         div_written = true;
     }
 
-    if (index == constants::TAC_REGISTER){
-        bool old_enabled = (map[constants::TAC_REGISTER] >> 2) & 1;
-        auto old_value = map[constants::TAC_REGISTER];
-        map[constants::TAC_REGISTER] = value;
-
-        unsigned char shift = 0;
-        switch (old_value & 3) {
-            case 0b00: {shift = 9; break;}
-            case 0b01: {shift = 3; break;}
-            case 0b10: {shift = 5; break;}
-            default:
-                shift = 7;
-                break;
-        }
-        if (old_enabled && (div_internal_sync >> shift) & 1){
-            unsigned char prev = read(constants::TIMA_REGISTER);
-            map[constants::TIMA_REGISTER] = prev + 1;
-            if (prev == 0xff) {
-                map[constants::IF_ADDRESS] = read(constants::IF_ADDRESS) | (1 << 2);
-                glitch_overflow = true;
-            }
-        }
-        return;
-    }
-
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
         if (current_mbc == MBC2) {
             index = (index % 512) + constants::EXTERNAL_RAM_BEGIN;

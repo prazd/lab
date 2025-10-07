@@ -353,8 +353,13 @@ void PPU::tick(Memory& mem)  {
                 current_mode = VBlank;
                 // VBlank Interrupt
                 mem.write_unsafe(constants::IF_ADDRESS, mem.read_unsafe(constants::IF_ADDRESS) | 1);
+
                 // LCDC
                 if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 4))
+                    mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
+
+                // OAM interrupt
+                if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
                     mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                 current_v_blank_t_cycle_count = 0;
             } else {
@@ -365,9 +370,6 @@ void PPU::tick(Memory& mem)  {
 #endif
                 current_mode = OAM;
                 pixel_fetcher.windows_current_tile_x = 0;
-                // LCD Interrupt
-                if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
-                    mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                 sprite_buffer = {};
                 current_oam_obj = 0;
             }
