@@ -340,7 +340,17 @@ struct GameBoyVM{
 
 // Timer:
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/div_write.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tim00.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tim01.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tim10.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tim11.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tim00_div_trigger.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tim01_div_trigger.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tim10_div_trigger.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tim11_div_trigger.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tma_write_reloading.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tima_write_reloading.gb
+
 
 // PPU
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_1_2_timing-GS.gb
@@ -380,7 +390,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tima_reload.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tima_write_reloading.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

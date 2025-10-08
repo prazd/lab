@@ -53,11 +53,10 @@ void Timer::tick(Memory& mem) {
                 mem.tima_overflow = true;
             }
         }
-        return;
     }
     ++current_t_cycle;
-    prev_bit = std::exchange(cur_bit, (div_internal >> shift) & 1);
     ++div_internal;
+    prev_bit = std::exchange(cur_bit, (div_internal >> shift) & 1);
     mem.map[constants::DIV_REGISTER] = ((div_internal >> 8) & 0xff);
     mem.div_internal_sync = div_internal;
 
@@ -75,18 +74,24 @@ void Timer::tick(Memory& mem) {
 //        }
         mem.tac_written = false;
     }
+//    std::cout << "\n----------------\n";
+//    std::cout << "Div:" << div_internal << '\n';
+//    std::cout << " mem.map[constants::TIMA_REGISTER]:" <<  (unsigned)mem.map[constants::TIMA_REGISTER] << '\n';
+//    std::cout << "Prev bit:" << (unsigned)prev_bit << '\n';
+//    std::cout << "Cur bit:" << (unsigned)cur_bit << '\n';
+
+    // todo: check
+    if (tima_overflow && overflow_counter == 0 && mem.tima_written) {
+        tima_overflow = false;
+    }
 
     if ((mem.map[constants::TAC_REGISTER] >> 2) & 1) {
         if (tima_overflow) {
             if (overflow_counter++ != 4) return;
             overflow_counter = 0;
             tima_overflow = false;
-            if (mem.tima_written) {
-                mem.tima_written = false;
-            } else {
-                mem.map[constants::TIMA_REGISTER] = mem.map[constants::TMA_REGISTER];
-                mem.map[constants::IF_ADDRESS] = (mem.map[constants::IF_ADDRESS] | (1 << 2));
-            }
+            mem.map[constants::TIMA_REGISTER] = mem.map[constants::TMA_REGISTER];
+            mem.map[constants::IF_ADDRESS] = (mem.map[constants::IF_ADDRESS] | (1 << 2));
         } else if (prev_bit && !cur_bit) {
             current_t_cycle = 0;
             unsigned char prev = mem.map[constants::TIMA_REGISTER];
