@@ -180,6 +180,10 @@ void Memory::write(unsigned short index, unsigned char value) {
         div_written = true;
     }
 
+    if (index == constants::TAC_REGISTER) {
+        tac_written = true;
+    }
+
     if (is_ram_avaliable(index)){
         map[index] = value;
     }

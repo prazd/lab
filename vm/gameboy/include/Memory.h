@@ -48,6 +48,7 @@ struct Memory {
 
     bool tima_written = false;
     bool div_written = false;
+    bool tac_written = false;
     bool glitch_overflow = false;
     bool tima_overflow = false;
     bool ppu_oam_usage = false;

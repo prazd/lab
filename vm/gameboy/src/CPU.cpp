@@ -782,18 +782,8 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
         auto itype = decode(i);
 
         switch (itype) {
-            case LD_0b01xxxyyy: { // 4/8 t-cycle
-                // todo: check
-//                WAIT(4)
+            case LD_0b01xxxyyy: { // 4/8 t-cycle // todo: check
                 update_regs(read345(i), mem, read_regs(read012(i), mem));
-//                unsigned char value {};
-//                if (read345(i) != HL)
-//                    value = read_regs(read345(i), mem);
-//                else {
-//                    WAIT(4)
-//                    value = tread(mem, HL_data());
-//                }
-//                update_regs(read345(i), mem, value);
                 break;
             }
             case LD_0b01xxx110: { // 8 t-cycles
@@ -861,15 +851,13 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
                 WAIT(4)
                 unsigned short address = (0xff00 | arg1);
                 WAIT(4)
+//                if (address == constants::TIMA_REGISTER)
+//                    address += 0;
                 regs[A] = tread(mem, address);
                 break;
             }
             case LDH_0b11100000: {
                 WAIT(8)
-//                if ((0xff00 | arg1) == constants::DIV_REGISTER){
-//                    std::cout << "DIV:" << mem.div_internal_sync << '\n';
-//                    arg1 += 0;
-//                }
                 twrite(mem, (0xff00 | arg1), regs[A]);
                 break;
             }
