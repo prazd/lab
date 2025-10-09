@@ -128,7 +128,6 @@ bool Memory::is_ram_avaliable(unsigned short index) const {
              ((index >=  constants::OAM_BEGIN && index <= constants::OAM_END) && ppu_oam_usage) || // (((current_ppu_mode == 2 || current_ppu_mode == 3) && lcd_enabled())))
              ((index >=  constants::NOT_USABLE_BEGIN && index <=  constants::NOT_USABLE_END))
     );
-//             ||
 //             (!(index >= constants::HRAM_BEGIN && index <= constants::HRAM_END) && dma_active));
 }
 
@@ -170,14 +169,16 @@ void Memory::write(unsigned short index, unsigned char value) {
 
     if (index == constants::DIV_REGISTER){
         value = 0;
+        div_written = true;
     }
 
     if (index == constants::TIMA_REGISTER) {
+        if (tima_overflow) return;
         tima_written = true;
     }
 
-    if (index == constants::DIV_REGISTER){
-        div_written = true;
+    if (index == constants::TMA_REGISTER) {
+        tma_written = true;
     }
 
     if (index == constants::TAC_REGISTER) {
@@ -207,10 +208,6 @@ unsigned char Memory::read(unsigned short index) const {
         index -= 0x2000;
     }
 
-    if (index == constants::DIV_REGISTER){
-        return div_internal_sync >> 8;
-    }
-
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
         // todo: maybe do (res | 0xF0) for MBC2 type
         return external_ram_enabled ? external_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_external_ram_n * 8192)] : dummy_reg;
@@ -236,24 +233,17 @@ void Memory::write_unsafe(unsigned short index, unsigned char value) {
         dma_t = 0;
     }
 
-    if (index == constants::DIV_REGISTER){
-        value = 0;
-    }
-
     if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END){
         index -= 0x2000;
     }
 
-    if (index == constants::TIMA_REGISTER) {
-        tima_written = true;
-        if (tima_overflow || glitch_overflow) {
-            tima_overflow = false;
-            glitch_overflow = false;
-        }
+    if (index == constants::DIV_REGISTER){
+        value = 0;
+        div_written = true;
     }
 
-    if (index == constants::DIV_REGISTER){
-        div_written = true;
+    if (index == constants::TAC_REGISTER) {
+        tac_written = true;
     }
 
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {
@@ -265,7 +255,6 @@ void Memory::write_unsafe(unsigned short index, unsigned char value) {
         external_ram[current_address + (current_external_ram_n * 8192)] = value;
         return;
     }
-
     map[index] = value;
 }
 
@@ -280,10 +269,6 @@ unsigned char Memory::read_unsafe(unsigned short index) const {
 
     if (index >= constants::ECHO_RAM_BEGIN && index <= constants::ECHO_RAM_END){
         index -= 0x2000;
-    }
-
-    if (index == constants::DIV_REGISTER){
-        return div_internal_sync >> 8;
     }
 
     if (index >= constants::EXTERNAL_RAM_BEGIN && index <= constants::EXTERNAL_RAM_END) {

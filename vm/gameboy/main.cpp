@@ -350,6 +350,8 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tim11_div_trigger.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tma_write_reloading.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tima_write_reloading.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tima_reload.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/rapid_toggle.gb
 
 
 // PPU
@@ -390,7 +392,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/tima_write_reloading.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/rapid_toggle.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

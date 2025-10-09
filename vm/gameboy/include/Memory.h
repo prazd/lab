@@ -51,6 +51,7 @@ struct Memory {
     bool tac_written = false;
     bool glitch_overflow = false;
     bool tima_overflow = false;
+    bool tma_written = false;
     bool ppu_oam_usage = false;
     size_t ppu_internal_t_cycle = 0;
     unsigned short div_internal_sync = 0;
