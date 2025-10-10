@@ -361,13 +361,14 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode3_timing.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb
 // /Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb
 
 // /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb +-
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
 
 // Failed:
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb - failed
+//  - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_irq_blocking.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/lcdon_write_timing-GS.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/hblank_ly_scx_timing-GS.gb - failed
@@ -392,7 +393,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/timer/rapid_toggle.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing_sprites.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

@@ -323,6 +323,7 @@ class PPU {
     int current_t_cycle_count = {};
     int current_v_blank_t_cycle_count = {};
     bool sprite_render = false;
+    int sprite_finished_count = 0;
 
     PixelFetcher pixel_fetcher;
     SpriteFetcher sprite_fetcher;

@@ -160,7 +160,7 @@ void PPU::draw(Memory& mem)  {
 }
 
 void PPU::tick(Memory& mem)  {
-#define DEBUG_T_CYCLE 0
+#define DEBUG_T_CYCLE 1
 #define PRINT_T_CYCLE(x, t_cycles) std::cout << x << ": " << t_cycles << '\n'; t_cycles = 0;
 #define PRINT_DOTS(n) for (int i = 0; i < n; ++i) std::cout << '-'; std::cout << '\n';
 #define PRINT_LINE(line) std::cout << "Line: " << (unsigned)line << '\n';
@@ -179,7 +179,6 @@ void PPU::tick(Memory& mem)  {
     update_regs(mem);
     set_ppu_mode(mem);
     lyc_ly_compare(mem);
-
     if (current_mode == OAM){
 #if DEBUG_T_CYCLE
         ++debug_t_cycles;
@@ -351,6 +350,7 @@ void PPU::tick(Memory& mem)  {
                 PRINT_T_CYCLE("HBlank", debug_t_cycles)
 #endif
                 current_mode = VBlank;
+
                 // VBlank Interrupt
                 mem.write_unsafe(constants::IF_ADDRESS, mem.read_unsafe(constants::IF_ADDRESS) | 1);
 
@@ -358,9 +358,6 @@ void PPU::tick(Memory& mem)  {
                 if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 4))
                     mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
 
-                // OAM interrupt
-                if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
-                    mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                 current_v_blank_t_cycle_count = 0;
             } else {
 #if DEBUG_T_CYCLE
@@ -369,6 +366,8 @@ void PPU::tick(Memory& mem)  {
                     PRINT_DOTS(20)
 #endif
                 current_mode = OAM;
+                if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
+                    mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                 pixel_fetcher.windows_current_tile_x = 0;
                 sprite_buffer = {};
                 current_oam_obj = 0;
