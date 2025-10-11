@@ -1,67 +1,66 @@
 #include "raylib.h"
 #include <math.h>
+#include <stdlib.h>
 
-#define PARTICLE_COUNT 1000
+#define SAMPLE_RATE   44100
+#define BUFFER_SIZE   512
+#define CHANNELS      1     // моно
+#define SAMPLE_SIZE   16
 
-typedef struct Particle {
-    Vector2 position;
-    Vector2 velocity;
-    float lifetime;
-    Color color;
-} Particle;
+static float phase_square = 0.0f;
+static float phase_noise = 0.0f;
 
-void InitParticles(Particle particles[], Vector2 origin) {
-    for (int i = 0; i < PARTICLE_COUNT; i++) {
-        particles[i].position = origin;
-        float angle = GetRandomValue(0, 360) * DEG2RAD;
-        float speed = GetRandomValue(100, 300) / 100.0f;
-        particles[i].velocity = (Vector2){ cos(angle) * speed, sin(angle) * speed };
-        particles[i].lifetime = GetRandomValue(10, 50) / 10.0f;
-        particles[i].color = (Color){ (unsigned char)GetRandomValue(200, 255), (unsigned char)GetRandomValue(50, 150), 0, 255 };
+
+static unsigned short lfsr = 0xACE1u;
+
+static float next_noise_sample() {
+    unsigned bit  = ((lfsr >> 0) ^ (lfsr >> 1)) & 1;
+    lfsr =  (lfsr >> 1) | (bit << 15);
+    return (lfsr & 1) ? 0.3f : -0.3f;
+}
+
+static float next_square_sample(float freq, float duty) {
+    float period = (float)SAMPLE_RATE / freq;
+    phase_square += 1.0f;
+    if (phase_square >= period) phase_square -= period;
+    return (phase_square / period < duty) ? 0.5f : -0.5f;
+}
+
+static void generate_audio(short *buffer, int samples) {
+    for (int i = 0; i < samples; i++) {
+        float sq = next_square_sample(440.0f, 0.5f); // 440 Hz, 50% duty
+        float ns = next_noise_sample();
+        float mix = sq * 0.7f + ns * 0.3f;
+        if (mix > 1.0f) mix = 1.0f;
+        if (mix < -1.0f) mix = -1.0f;
+        buffer[i] = (short)(mix * 32767);
     }
 }
 
-void UpdateParticles(Particle particles[], float deltaTime) {
-    for (int i = 0; i < PARTICLE_COUNT; i++) {
-        particles[i].position.x += particles[i].velocity.x;
-        particles[i].position.y += particles[i].velocity.y;
-        particles[i].lifetime -= deltaTime;
-        particles[i].color.a = (unsigned char)(particles[i].lifetime * 255); // Плавное исчезновение
-    }
-}
+int main(void) {
+    InitWindow(400, 200, "Raylib realtime sound (Game Boy style)");
+    InitAudioDevice();
 
-void DrawParticles(Particle particles[]) {
-    for (int i = 0; i < PARTICLE_COUNT; i++) {
-        if (particles[i].lifetime > 0) {
-            DrawCircleV(particles[i].position, 2, particles[i].color);
-        }
-    }
-}
+    AudioStream stream = LoadAudioStream(SAMPLE_RATE, SAMPLE_SIZE, CHANNELS);
+    PlayAudioStream(stream);
 
-int main() {
-    InitWindow(800, 600, "Particle Explosion");
-
-    Particle particles[PARTICLE_COUNT];
-    Vector2 origin = { 400, 300 };
-    InitParticles(particles, origin);
-
-    SetTargetFPS(60);
+    short buffer[BUFFER_SIZE];
 
     while (!WindowShouldClose()) {
-        float deltaTime = GetFrameTime();
+        if (IsAudioStreamProcessed(stream)) {
+            generate_audio(buffer, BUFFER_SIZE);
+            UpdateAudioStream(stream, buffer, BUFFER_SIZE);
+        }
 
-        // Обновление частиц
-        UpdateParticles(particles, deltaTime);
-
-        // Рендеринг
         BeginDrawing();
-        ClearBackground(WHITE);
-
-        DrawParticles(particles);
-
+        ClearBackground(RAYWHITE);
+        DrawText("Streaming audio... (Square + Noise)", 40, 80, 20, DARKGRAY);
         EndDrawing();
     }
 
+    StopAudioStream(stream);
+    UnloadAudioStream(stream);
+    CloseAudioDevice();
     CloseWindow();
     return 0;
 }
