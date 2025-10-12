@@ -172,7 +172,8 @@ void PPU::tick(Memory& mem)  {
 #endif
     ++internal_t_cycles;
     ++current_t_cycle_count;
-
+    static int same_sprites_count = 0;
+    static int sprite_stall = 0;
     mem.ppu_internal_t_cycle = current_t_cycle_count;
 
     ++last_t_cycles;
@@ -243,7 +244,7 @@ void PPU::tick(Memory& mem)  {
     } else if (current_mode == Drawing) {
 #if DEBUG_T_CYCLE
         ++debug_t_cycles;
-//            std::cout << "debug_t_cycles:" << debug_t_cycles << '\n';
+//        std::cout << "debug_t_cycles:" << debug_t_cycles << '\n';
 #endif
         if (current_pixel_x < 160) {
             if (!pixel_fetcher.is_windows_drawing && is_windows_fetching_ready(mem)) {
@@ -267,19 +268,41 @@ void PPU::tick(Memory& mem)  {
                 auto sprite = sprite_on_x(mem);
                 if (sprite.has_value()) {
                     current_sprite = sprite.value();
+                    same_sprites_count = 0;
+//                    if (!sprite_buffer.empty()) {
+//                        for (int i = 0; i < sprite_buffer.size(); ++i){
+//                            auto cur = sprite_buffer.top();
+//                            if (cur.first.x_pos == current_sprite.x_pos) {
+//                                sprite_buffer.pop();
+//                                ++same_sprites_count;
+//                            } else {
+//                                break;
+//                            }
+//                        }
+//                    }
+//                    sprite_stall = 3;
                     sprite_render = true;
+//                    sprite_start_rendering = true;
                     pixel_fetcher.paused = true;
                     sprite_fetcher.finished = false;
                 }
             }
 
+//            if (!sprite_render && sprite_start_rendering && --sprite_stall == 0){
+//                sprite_stall = 0;
+//                sprite_render = true;
+//            }
+
             if (sprite_render) {
+//                if (sprite_buffer.size() > 5)
+//                    sprite_fetcher.next_t_cycle += 0;
                 --sprite_fetcher.next_t_cycle;
                 if (sprite_fetcher.next_t_cycle == 0) {
                     sprite_fetcher.fetch(mem, current_pixel_x, current_sprite);
                     if (sprite_fetcher.finished) {
                         pixel_fetcher.paused = false;
                         sprite_render = false;
+                        sprite_start_rendering = false;
                         sprite_fetcher.finished = false;
                     }
                 }
@@ -296,20 +319,6 @@ void PPU::tick(Memory& mem)  {
             if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 3))
                 mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
 
-            switch(mem.read_unsafe(constants::SCX_ADDRESS) % 8){
-                case 0: {ly_increment_delay = 51; break;}
-                case 1:
-                case 2:
-                case 3:
-                case 4:
-                {ly_increment_delay = 50; break;}
-                case 5:
-                case 6:
-                case 7:
-                {ly_increment_delay = 49; break;}
-            }
-            ly_increment_done = false;
-
 
 #if DEBUG_T_CYCLE
             if (debug_t_cycles != 172){
@@ -324,14 +333,6 @@ void PPU::tick(Memory& mem)  {
 #if DEBUG_T_CYCLE
         ++debug_t_cycles;
 #endif
-//            if (!ly_increment_done && --ly_increment_delay == 0) {
-//                ly_increment_done = true;
-//
-//                if (current_line == 70) {
-//                    current_line+=0;
-//                }
-//            }
-//            std::cout << "ly_increment_delay:" << ly_increment_delay << '\n';
         if (current_t_cycle_count >= 456){
 #if DEBUG_T_CYCLE
             //                assert(current_t_cycle_count == 456);
@@ -392,7 +393,6 @@ void PPU::tick(Memory& mem)  {
 #endif
                 last_t_cycles = 0;
                 current_mode = OAM;
-
                 // LCD Interrupt
                 if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
                     mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));

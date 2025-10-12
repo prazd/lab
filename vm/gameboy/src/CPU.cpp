@@ -731,6 +731,7 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
                         break;
                     }
                 }
+//                WAIT(4)
                 continue;
             }
         }

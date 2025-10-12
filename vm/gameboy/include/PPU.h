@@ -96,7 +96,7 @@ struct BaseFetcher {
                 }
                 if ((!is_window && !is_sprite) && fetcher_current_tile_x == 0 && scx_offset > 0) {
                     for (int i = 0; i < scx_offset; ++i){
-                        pixels.pop_front();
+                        if (!pixels.empty()) pixels.pop_front();
                     }
                     next_t_cycle += scx_offset; // todo: check
                     break;
@@ -104,7 +104,7 @@ struct BaseFetcher {
                 else if (is_window && windows_current_tile_x == 0) {
                     //todo: check
                     auto wx = mem.read_unsafe(constants::WX_ADDRESS);
-                    for (int i = wx; i < 7; ++i) pixels.pop_front();
+                    for (int i = wx; i < 7; ++i) if (!pixels.empty()) pixels.pop_front();
                 }
 
                 try_to_fill_fifo();
@@ -225,8 +225,13 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
 
     void fetch(Memory& mem, unsigned char cpx, const Sprite& sprite) {
         switch(current_state) {
-            case FetcherState::GetTile:  {step(mem, cpx, sprite); next_t_cycle = NEXT_T_CYCLE_VAL; current_state = FetcherState::High; break;}
-            case FetcherState::High:     {step(mem, cpx, sprite);
+            case FetcherState::GetTile:  {
+                step(mem, cpx, sprite);
+                next_t_cycle = 5;
+                current_state = FetcherState::High;
+                break;}
+            case FetcherState::High:     {
+                    step(mem, cpx, sprite);
                     pixels = {};
                     fetcher_current_tile_x = (fetcher_current_tile_x + 1) % 21;
                     current_state = FetcherState::GetTile;
@@ -242,14 +247,15 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
                         tile_address + (line_in_tile * 2)); break;}
             case FetcherState::High:     {
                 high = mem.read_unsafe(tile_address + (line_in_tile * 2) + 1);
-
                 pixels = Pixel::tile_row_to_pixel_arr((high << 8 | low), is_sprite, pallete);
 
                 // X-flip
                 if (sprite.attrib >> 5 & 1) std::reverse(pixels.begin(), pixels.end());
 
                 int x_in_tile = cpx - (sprite.x_pos - 8);
-                for (int i = 0; i < x_in_tile; ++i) pixels.pop_front();
+                for (int i = 0; i < x_in_tile; ++i) {
+                    if (!pixels.empty()) pixels.pop_front();
+                }
 
                 while(pixels.size() < 8) pixels.push_back(Pixel{.color = WHITE});
 
@@ -295,7 +301,6 @@ class PPU {
     unsigned char sprite_x = 0;
     Sprite current_sprite{};
     size_t internal_t_cycles = 0;
-    size_t ly_increment_delay = 0;
     bool ly_increment_done = false;
     bool start_oam = false;
     bool oam_start = true;
@@ -310,6 +315,7 @@ class PPU {
     bool lcd_enable = true;
     bool window_visible = false;
     bool obj_enable = false; // sprites
+    bool sprite_start_rendering = false;
     bool bg_enable = false;
     unsigned short current_oam_obj = 0;
 
