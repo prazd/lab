@@ -17,6 +17,10 @@ struct GameBoyVM{
     PPU ppu;
     Joypad joypad;
     std::string_view ram_path;
+    bool is_valid_logo = false;
+#if DEBUG_MODE
+    bool running = true;
+#endif
 
     Memory::MBC get_mbc_type(const auto& data) {
         switch (data[0x0147]) {
@@ -69,6 +73,14 @@ struct GameBoyVM{
         ifile.close();
     }
 
+    void init_boot_rom() {
+        memcpy(mem.cartridge_backup, mem.rom.data(), 256);
+        std::ifstream ifile("/Users/prazd/Desktop/dev/gb-bootroms/bin/dmg.bin", std::ios::binary | std::ios::in);
+        if (!ifile.is_open()){ std::cout << "Can't open save file:" << "/Users/prazd/Desktop/dev/gb-bootroms/bin/dmg.gb" << '\n'; return;}
+        ifile.read((char*)mem.rom.data(), 256);
+        ifile.close();
+    }
+
     void main_loop_async(auto& cpu_r) {
         int current_t_cycle = 0;
         bool prev_lcdc_on = mem.map[constants::LCDC_ADDRESS] & 0x80;
@@ -102,7 +114,17 @@ struct GameBoyVM{
                        }
                     }
                 }
-                cpu_r.resume();
+#if DEBUG_MODE
+            if (running) cpu_r.resume();
+#else
+            cpu_r.resume();
+#endif
+
+                if (!is_valid_logo && mem.map[constants::R_BANK] & 1){
+                    is_valid_logo = true;
+                    memcpy(mem.rom.data(), mem.cartridge_backup, 256);
+                    cpu.pc = 0x100;
+                }
                 if (!(mem.map[constants::LCDC_ADDRESS] & 0x80) && prev_lcdc_on) {
                     prev_lcdc_on = false;
                     ppu.reset(mem);
@@ -149,7 +171,8 @@ struct GameBoyVM{
             std::abort();
         }
         auto sz = std::filesystem::file_size(path);
-        std::vector<char> res(sz);
+        std::vector<char> res;
+        res.reserve(sz < 32000 ? 32000 : sz); // min 32Kb
         f.seekg(0, std::ios::beg);
         f.read(res.data(), sz);
         f.close();
@@ -167,7 +190,7 @@ struct GameBoyVM{
         cpu.regs[CPU::E] = 0xD8;
         cpu.regs[CPU::H] = 0x01;
         cpu.regs[CPU::L] = 0x4D;
-        cpu.pc = 0x0100;
+        cpu.pc = 0x0000;
         cpu.sp = 0xFFFE;
 
         mem.map[constants::JOYPAD] = 0xcf;
@@ -208,6 +231,7 @@ struct GameBoyVM{
         mem.map[constants::STAT_ADDRESS] = 0x85; // --
         mem.map[constants::DMA] = 0xFF;
         mem.map[constants::BGP] = 0xFC;
+        init_boot_rom();
     }
 
     explicit GameBoyVM(const std::string_view& path): ram_path(path) {
@@ -241,7 +265,6 @@ struct GameBoyVM{
         save_path += ".sav";
         std::ofstream save_file(save_path, std::ios::binary | std::ios::out);
         if (save_file.is_open()) {
-
             save_file.write((char*)mem.external_ram.data(), mem.external_ram.size());
             std::cout << "\nSaved succesfully\n";
         } else {
@@ -293,13 +316,16 @@ struct GameBoyVM{
                 rw.handle(cpu);
                 swt.handle(sw);
                 jw.handle(mem, joypad);
+//                DebugTools::print_segment(mem, constants::BG_TILE_MAP1 + 10, 30);
 #endif
 // PRINT PIXELS
-#if 1
+#if DEBUG_MODE
               if (IsKeyPressed(KEY_T))
                   print_tiles = !print_tiles;
               if (IsKeyPressed(KEY_P))
                   print_pixels = !print_pixels;
+              if (IsKeyPressed(KEY_S))
+                  running = !running;
 
               if (print_pixels) DebugTools::print_rects<constants::DISPLAY_HEIGHT, constants::DISPLAY_WIDTH>(GREEN);
               if (print_tiles)  DebugTools::print_rects<18, 20>(RED);
@@ -362,17 +388,18 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb
 // /Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb
-
 // /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb +-
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
+
+// /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m2_win_en_toggle.gb
 
 // Failed:
 //  - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_irq_blocking.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/lcdon_write_timing-GS.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/hblank_ly_scx_timing-GS.gb - failed
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing_sprites.gb - failed
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing_sprites.gb - failed !!!!!!!!!
 
 // /Users/prazd/Desktop/dev/gb-test-roms/oam_bug/oam_bug.gb ?
 // /Users/prazd/Desktop/dev/gb-test-roms/halt_bug.gb
@@ -393,7 +420,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing_sprites.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_obp0_change.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

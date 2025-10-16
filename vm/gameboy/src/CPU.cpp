@@ -95,6 +95,10 @@ void CPU::xor_reg_A(unsigned char val)  {
 
 void CPU::sub_reg_A_flags_only(unsigned char val)  {
     auto res = (int)regs[A] - (int)val;
+    // TODO: Debug init
+//    if (res == 0){
+//        res += 0;
+//    }
     auto res8 = (unsigned char)(res & 0xff);
     set_flag(Nf, true);
     set_flag(Zf, (res8 == 0));

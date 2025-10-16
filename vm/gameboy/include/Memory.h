@@ -16,6 +16,8 @@ struct Memory {
     // 0xFF80–0xFFFE: High RAM (HRAM)
     unsigned char map[0x10000]{}; // 64KiB
 
+    unsigned char cartridge_backup[0x100]{};
+
     enum MBC {
         MBC0,
         MBC1,

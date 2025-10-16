@@ -160,7 +160,7 @@ void PPU::draw(Memory& mem)  {
 }
 
 void PPU::tick(Memory& mem)  {
-#define DEBUG_T_CYCLE 1
+#define DEBUG_T_CYCLE 0
 #define PRINT_T_CYCLE(x, t_cycles) std::cout << x << ": " << t_cycles << '\n'; t_cycles = 0;
 #define PRINT_DOTS(n) for (int i = 0; i < n; ++i) std::cout << '-'; std::cout << '\n';
 #define PRINT_LINE(line) std::cout << "Line: " << (unsigned)line << '\n';
@@ -267,35 +267,19 @@ void PPU::tick(Memory& mem)  {
             if (!sprite_render && mem.read_unsafe(constants::LCDC_ADDRESS) & (1 << 1)){
                 auto sprite = sprite_on_x(mem);
                 if (sprite.has_value()) {
+                    // todo: check stall
+                    // sprite_stall -= sprite_stall >= 5 ? std::min(5u, (unsigned)((current_sprite.x_pos % 8))) : 0;
+                    // sprite_stall += 11 - std::min(5u, (unsigned)((current_sprite.x_pos + mem.read_unsafe(constants::SCX_ADDRESS)) % 8));
                     current_sprite = sprite.value();
-                    same_sprites_count = 0;
-//                    if (!sprite_buffer.empty()) {
-//                        for (int i = 0; i < sprite_buffer.size(); ++i){
-//                            auto cur = sprite_buffer.top();
-//                            if (cur.first.x_pos == current_sprite.x_pos) {
-//                                sprite_buffer.pop();
-//                                ++same_sprites_count;
-//                            } else {
-//                                break;
-//                            }
-//                        }
-//                    }
-//                    sprite_stall = 3;
                     sprite_render = true;
-//                    sprite_start_rendering = true;
                     pixel_fetcher.paused = true;
                     sprite_fetcher.finished = false;
                 }
             }
 
-//            if (!sprite_render && sprite_start_rendering && --sprite_stall == 0){
-//                sprite_stall = 0;
-//                sprite_render = true;
-//            }
-
             if (sprite_render) {
-//                if (sprite_buffer.size() > 5)
-//                    sprite_fetcher.next_t_cycle += 0;
+                // todo: check
+                // At this point the fetcher is advanced one step until it’s at step 5 or until the background FIFO is not empty.
                 --sprite_fetcher.next_t_cycle;
                 if (sprite_fetcher.next_t_cycle == 0) {
                     sprite_fetcher.fetch(mem, current_pixel_x, current_sprite);
@@ -345,7 +329,6 @@ void PPU::tick(Memory& mem)  {
             current_t_cycle_count = 0;
 
             // LYC == LY
-
             if (current_line == 143){
 #if DEBUG_T_CYCLE
                 PRINT_T_CYCLE("HBlank", debug_t_cycles)
