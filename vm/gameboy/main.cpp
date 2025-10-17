@@ -74,11 +74,12 @@ struct GameBoyVM{
     }
 
     void init_boot_rom() {
-        memcpy(mem.cartridge_backup, mem.rom.data(), 256);
-        std::ifstream ifile("/Users/prazd/Desktop/dev/gb-bootroms/bin/dmg.bin", std::ios::binary | std::ios::in);
-        if (!ifile.is_open()){ std::cout << "Can't open save file:" << "/Users/prazd/Desktop/dev/gb-bootroms/bin/dmg.gb" << '\n'; return;}
-        ifile.read((char*)mem.rom.data(), 256);
-        ifile.close();
+        std::copy(mem.rom.begin(), mem.rom.begin() + 256, mem.cartridge_backup.begin());
+        std::copy(constants::boot_rom.begin(), constants::boot_rom.end(), mem.rom.begin());
+    }
+
+    void load_from_backup(){
+        std::copy(mem.cartridge_backup.begin(), mem.cartridge_backup.end(), mem.rom.begin());
     }
 
     void main_loop_async(auto& cpu_r) {
@@ -94,7 +95,6 @@ struct GameBoyVM{
                 std::cout << cpu.instruction_str[cpu.decode(mem.read(cpu.pc))] << " REG[A]:" << (int)(cpu.regs[CPU::A]) << '\n';
                 std::cout << "TIMA:" << (int)mem.read(constants::TIMA_REGISTER) << '\n';
 #endif
-
                 if (mem.map[constants::LCDC_ADDRESS] & 0x80) {
                     mem.map[constants::STAT_ADDRESS] |= 0x80;
                     if (!prev_lcdc_on) {
@@ -122,7 +122,7 @@ struct GameBoyVM{
 
                 if (!is_valid_logo && mem.map[constants::R_BANK] & 1){
                     is_valid_logo = true;
-                    memcpy(mem.rom.data(), mem.cartridge_backup, 256);
+                    load_from_backup();
                     cpu.pc = 0x100;
                 }
                 if (!(mem.map[constants::LCDC_ADDRESS] & 0x80) && prev_lcdc_on) {
@@ -227,7 +227,8 @@ struct GameBoyVM{
         mem.map[constants::NR52_ADDRESS] = 0xF1;
 
 
-        mem.map[constants::LCDC_ADDRESS] = 0x91;
+         // Init in bootrom logic
+//       mem.map[constants::LCDC_ADDRESS] = 0x91;
         mem.map[constants::STAT_ADDRESS] = 0x85; // --
         mem.map[constants::DMA] = 0xFF;
         mem.map[constants::BGP] = 0xFC;
@@ -420,7 +421,7 @@ struct GameBoyVM{
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_obp0_change.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
