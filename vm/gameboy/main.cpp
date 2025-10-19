@@ -19,7 +19,7 @@ struct GameBoyVM{
     std::string_view ram_path;
     bool is_valid_logo = false;
 #if DEBUG_MODE
-    bool running = true;
+    bool cpu_running = true;
 #endif
 
     Memory::MBC get_mbc_type(const auto& data) {
@@ -75,7 +75,11 @@ struct GameBoyVM{
 
     void init_boot_rom() {
         std::copy(mem.rom.begin(), mem.rom.begin() + 256, mem.cartridge_backup.begin());
+#if DEBUG_BOOTROM
+        std::copy(constants::debug_boot_rom.begin(), constants::debug_boot_rom.end(), mem.rom.begin());
+#else
         std::copy(constants::boot_rom.begin(), constants::boot_rom.end(), mem.rom.begin());
+#endif
     }
 
     void load_from_backup(){
@@ -90,11 +94,6 @@ struct GameBoyVM{
         while(current_t_cycle++ < 70'224) {
                 joypad.update_state(mem);
                 cpu.timer.tick(mem);
-
-#if 0
-                std::cout << cpu.instruction_str[cpu.decode(mem.read(cpu.pc))] << " REG[A]:" << (int)(cpu.regs[CPU::A]) << '\n';
-                std::cout << "TIMA:" << (int)mem.read(constants::TIMA_REGISTER) << '\n';
-#endif
                 if (mem.map[constants::LCDC_ADDRESS] & 0x80) {
                     mem.map[constants::STAT_ADDRESS] |= 0x80;
                     if (!prev_lcdc_on) {
@@ -115,16 +114,20 @@ struct GameBoyVM{
                     }
                 }
 #if DEBUG_MODE
-            if (running) cpu_r.resume();
+            if (cpu_running) cpu_r.resume();
 #else
             cpu_r.resume();
 #endif
+
+#if BOOTROM_INIT
 
                 if (!is_valid_logo && mem.map[constants::R_BANK] & 1){
                     is_valid_logo = true;
                     load_from_backup();
                     cpu.pc = 0x100;
                 }
+#endif
+
                 if (!(mem.map[constants::LCDC_ADDRESS] & 0x80) && prev_lcdc_on) {
                     prev_lcdc_on = false;
                     ppu.reset(mem);
@@ -190,7 +193,11 @@ struct GameBoyVM{
         cpu.regs[CPU::E] = 0xD8;
         cpu.regs[CPU::H] = 0x01;
         cpu.regs[CPU::L] = 0x4D;
+#if BOOTROM_INIT
         cpu.pc = 0x0000;
+#else
+        cpu.pc = 0x100;
+#endif
         cpu.sp = 0xFFFE;
 
         mem.map[constants::JOYPAD] = 0xcf;
@@ -226,13 +233,15 @@ struct GameBoyVM{
         mem.map[constants::NR51_ADDRESS] = 0xF3;
         mem.map[constants::NR52_ADDRESS] = 0xF1;
 
-
-         // Init in bootrom logic
-//       mem.map[constants::LCDC_ADDRESS] = 0x91;
         mem.map[constants::STAT_ADDRESS] = 0x85; // --
         mem.map[constants::DMA] = 0xFF;
         mem.map[constants::BGP] = 0xFC;
+#if BOOTROM_INIT
+        // LCDC on in bootrom logic
         init_boot_rom();
+#else
+        mem.map[constants::LCDC_ADDRESS] = 0x91;
+#endif
     }
 
     explicit GameBoyVM(const std::string_view& path): ram_path(path) {
@@ -326,7 +335,7 @@ struct GameBoyVM{
               if (IsKeyPressed(KEY_P))
                   print_pixels = !print_pixels;
               if (IsKeyPressed(KEY_S))
-                  running = !running;
+                  cpu_running = !cpu_running;
 
               if (print_pixels) DebugTools::print_rects<constants::DISPLAY_HEIGHT, constants::DISPLAY_WIDTH>(GREEN);
               if (print_tiles)  DebugTools::print_rects<18, 20>(RED);
@@ -420,8 +429,11 @@ struct GameBoyVM{
 
 // Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
 
+// TODO:
+// - bootrom optional
+// - mealybug-tearoom-tests
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_obp0_change.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
