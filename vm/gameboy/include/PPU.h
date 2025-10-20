@@ -361,5 +361,12 @@ public:
     auto  read_buffer() const -> const Color(&)[144][160];
     Mode get_current_mode() const;
     void print_buffer() const;
+#if DEBUG_MODE
+    static inline bool sprite_change_color = false;
+    static inline bool bg_change_color1 = false;
+    static inline bool bg_change_color2 = false;
+    static inline bool bg_change_color3 = false;
+    static inline bool bg_change_color4 = false;
+#endif
 };
 #endif //GAMEBOY_PPU_H

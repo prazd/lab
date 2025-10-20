@@ -287,6 +287,8 @@ struct SpriteWindowText: public DebugWindow<pwidth, pheight, width, height>{
     }
 };
 
+
+
 template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct RegWindow: public DebugWindow<pwidth, pheight, width, height> {
     using DW = DebugWindow<pwidth, pheight,width,height>;
@@ -312,6 +314,23 @@ struct RegWindow: public DebugWindow<pwidth, pheight, width, height> {
         DW::draw_text(24.f);
     }
 };
+
+template <size_t pwidth, size_t pheight, size_t width, size_t height>
+struct PPURegistersText: public DebugWindow<pwidth, pheight, width, height> {
+    using DW = DebugWindow<pwidth, pheight,width,height>;
+    PPURegistersText(float x, float y): DW(x, y){}
+    void handle(Memory& mem){
+        std::stringstream ss;
+        ss << std::hex << " PPU REGS:\n" <<
+           " SCX:" << (unsigned)mem.read_unsafe(constants::SCX_ADDRESS) << "\n" <<
+           " SCY:" <<  (unsigned)mem.read_unsafe(constants::SCY_ADDRESS) << "\n" <<
+           " LYC:" <<  (unsigned)mem.read_unsafe(constants::LYC_ADDRESS) << "\n" <<
+           " LY:" <<  (unsigned)mem.read_unsafe(constants::LY_ADDRESS) << "\n";
+        DW::header = ss.str();
+        DW::draw_text(24.f);
+    }
+};
+
 
 template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct JoypadWindow: public DebugWindow<pwidth, pheight, width, height> {

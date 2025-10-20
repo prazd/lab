@@ -167,7 +167,7 @@ struct GameBoyVM{
         return 1; // No mem
     }
 
-    void init_raw_rom(const std::string_view& path) {
+    void init_raw_rom(std::string_view path) {
         std::ifstream f{path, std::ios::binary | std::ios::in};
         if (!f.is_open()) {
             std::cout << "Cannot open file";
@@ -175,7 +175,7 @@ struct GameBoyVM{
         }
         auto sz = std::filesystem::file_size(path);
         std::vector<char> res;
-        res.reserve(sz < 32000 ? 32000 : sz); // min 32Kb
+        res.resize(sz < 32000 ? 32000 : sz); // min 32Kb
         f.seekg(0, std::ios::beg);
         f.read(res.data(), sz);
         f.close();
@@ -244,7 +244,32 @@ struct GameBoyVM{
 #endif
     }
 
-    explicit GameBoyVM(const std::string_view& path): ram_path(path) {
+    void init() {
+        init_raw_rom(ram_path);
+        // init rom
+        if ((unsigned char)mem.rom[0x143] == 0xc0) {
+            std::cout << "\nGameBoyColor unsupported\n";
+            std::abort();
+        }
+
+        mem.rom_sz = get_rom_size(mem.rom);
+        mem.max_rom_bank_value = mem.rom_sz - 1;
+        mem.current_mbc = get_mbc_type(mem.rom);
+        mem.ram_sz = get_ram_size(mem.rom);
+        boot();
+        mem.max_ram_bank_value = mem.ram_sz - 1;
+        if (mem.current_mbc == Memory::MBC2)
+            mem.external_ram.resize(512);
+        else
+            mem.external_ram.resize(get_ram_size(mem.rom) * constants::EXTERNAL_RAM_SZ);
+
+        if (mem.current_mbc == Memory::MBC3)
+            mem.external_ram_enabled = true;
+        mem.current_rom_bank_max = get_rom_size(mem.rom);
+        try_to_use_save();
+    }
+
+    explicit GameBoyVM(const std::string_view path): ram_path(path) {
         init_raw_rom(path);
         // init rom
         if ((unsigned char)mem.rom[0x143] == 0xc0) {
@@ -267,6 +292,10 @@ struct GameBoyVM{
             mem.external_ram_enabled = true;
         mem.current_rom_bank_max = get_rom_size(mem.rom);
         try_to_use_save();
+    }
+
+    void restart() {
+        *this = GameBoyVM{this->ram_path};
     }
 
     ~GameBoyVM(){
@@ -304,12 +333,21 @@ struct GameBoyVM{
 
 #if DEBUG_MODE
         TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
+        PPURegistersText<0,0,200,100> ppurt(1320, 0);
         SpriteWindow<80, 32, 300, 200> sw(820, 517);
         RegWindow<0,0,300,400> rw(1150, 517);
         SpriteWindowText<0,0,600,200> swt(10, 750);
         JoypadWindow<0,0,300,250> jw(820, 730);
         bool print_pixels = false;
         bool print_tiles = false;
+        enum FPS {
+            SuperLow = 5,
+            Low = 15,
+            Mid = 30,
+            High = 60
+        };
+        FPS fps_states[] = {SuperLow,Low, Mid, High};
+        unsigned char current_fps_state = std::size(fps_states) - 1;
 #endif
 
         auto cpu_r = cpu.instruction_async_loop(mem);
@@ -326,6 +364,7 @@ struct GameBoyVM{
                 rw.handle(cpu);
                 swt.handle(sw);
                 jw.handle(mem, joypad);
+                ppurt.handle(mem);
 //                DebugTools::print_segment(mem, constants::BG_TILE_MAP1 + 10, 30);
 #endif
 // PRINT PIXELS
@@ -336,6 +375,22 @@ struct GameBoyVM{
                   print_pixels = !print_pixels;
               if (IsKeyPressed(KEY_S))
                   cpu_running = !cpu_running;
+              if (IsKeyPressed(KEY_ONE))
+                  ppu.bg_change_color1 = !ppu.bg_change_color1;
+              if (IsKeyPressed(KEY_TWO))
+                  ppu.bg_change_color2 = !ppu.bg_change_color2;
+              if (IsKeyPressed(KEY_THREE))
+                  ppu.bg_change_color3 = !ppu.bg_change_color3;
+              if (IsKeyPressed(KEY_FOUR))
+                  ppu.bg_change_color4 = !ppu.bg_change_color4;
+              if (IsKeyPressed(KEY_FIVE))
+                  ppu.sprite_change_color = !ppu.sprite_change_color;
+              if (IsKeyPressed(KEY_F)) {
+                  current_fps_state = ((current_fps_state + 1) % std::size(fps_states));
+                  SetTargetFPS(fps_states[current_fps_state]);
+              }
+              if (IsKeyPressed(KEY_ZERO))
+                  restart();
 
               if (print_pixels) DebugTools::print_rects<constants::DISPLAY_HEIGHT, constants::DISPLAY_WIDTH>(GREEN);
               if (print_tiles)  DebugTools::print_rects<18, 20>(RED);
@@ -431,9 +486,12 @@ struct GameBoyVM{
 
 // TODO:
 // - bootrom optional
-// - mealybug-tearoom-tests
+// - mealybug-tearoom-tests:
+// /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_bgp_change.gb
+// /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_bgp_change_sprites.gb
+// /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_lcdc_bg_en_change.gb
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_obp0_change.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

@@ -49,7 +49,7 @@ PPU::Mode PPU::get_current_mode() const {
 }
 
 void PPU::set_ppu_reg(unsigned short address, unsigned char value, Memory& mem) {
-    mem.write_unsafe(address, value);
+    mem.map[address] = value;
 }
 
 void PPU::set_ppu_mode(Memory& mem) {
@@ -117,31 +117,76 @@ Pixel PPU::pixel_mixing(Memory& mem) {
     }
 
     if (!(mem.read_unsafe(constants::LCDC_ADDRESS) & 0x2)) {
+#if DEBUG_MODE
+        if (bg_change_color1) {
+            return Pixel{.color = GREEN};
+        } else {
+            set_bg_palette(mem, bg_pixel);
+            return bg_pixel;
+        }
+#else
         set_bg_palette(mem, bg_pixel);
         return bg_pixel;
+#endif
     }
 
     if (sprite_fetcher.fifo.empty()) {
+#if DEBUG_MODE
+        if (bg_change_color2) {
+            return Pixel{.color = YELLOW};
+        } else {
+            set_bg_palette(mem, bg_pixel);
+            return bg_pixel;
+        }
+#else
         set_bg_palette(mem, bg_pixel);
         return bg_pixel;
+#endif
     }
 
     auto sprite_pixel = sprite_fetcher.fifo.front();  sprite_fetcher.fifo.pop_front();
     //  If the color number of the Sprite Pixel is 0, the Background Pixel is pushed to the buffer.
     if (Pixel::get_color_id(sprite_pixel.color) == 0){
+#if DEBUG_MODE
+        if (bg_change_color3) {
+            return Pixel{.color = BROWN};
+        } else {
+            set_bg_palette(mem, bg_pixel);
+            return bg_pixel;
+        }
+#else
         set_bg_palette(mem, bg_pixel);
         return bg_pixel;
+#endif
     }
 
     //  If the BG-to-OBJ-Priority bit is 1 and the color number of the Background Pixel is anything other than 0,
     //  the Background Pixel is pushed to the buffer
     if ((sprite_pixel.attrib >> 7 & 1) && Pixel::get_color_id(bg_pixel.color) != 0){
+#if DEBUG_MODE
+        if (bg_change_color4) {
+            return Pixel{.color = PINK};
+        } else {
+            set_bg_palette(mem, bg_pixel);
+            return bg_pixel;
+        }
+#else
         set_bg_palette(mem, bg_pixel);
         return bg_pixel;
+#endif
     }
 
+#if DEBUG_MODE
+    if (sprite_change_color) {
+        return Pixel{.color = BLUE};
+    } else {
+        set_sprite_palette(mem, sprite_pixel);
+        return sprite_pixel;
+    }
+#else
     set_sprite_palette(mem, sprite_pixel);
     return sprite_pixel;
+#endif
 }
 
 std::optional<Sprite> PPU::sprite_on_x(Memory& mem)  {
