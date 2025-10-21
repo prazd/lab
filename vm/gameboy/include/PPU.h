@@ -243,7 +243,7 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
 
     void step(Memory& mem, unsigned char cpx, const Sprite& sprite) {
         switch(current_state) {
-            case FetcherState::GetTile:  {tile_address = update_tile_base(mem, cpx, sprite); low  = mem.read_unsafe(
+            case FetcherState::GetTile:  {tile_address = update_tile_base(mem, cpx, sprite); low = mem.read_unsafe(
                         tile_address + (line_in_tile * 2)); break;}
             case FetcherState::High:     {
                 high = mem.read_unsafe(tile_address + (line_in_tile * 2) + 1);
@@ -278,9 +278,6 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
                         fifo.push_back(pixels.front());
                         pixels.pop_front();
                     }
-//                    if (fifo.size() != 8) {
-//                        x_in_tile += 0;
-//                    }
                 }
                 break;
             }

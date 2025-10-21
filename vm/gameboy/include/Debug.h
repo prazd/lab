@@ -34,7 +34,7 @@ struct DebugTools {
     };
 
     template<size_t height, size_t width>
-    static auto print_rects(Color c){
+    static auto print_rects(Color c, float add_x, float add_y){
         std::array<Rectangle, height * width> res{};
         float x_pos = 0.0f;
         float y_pos = 0.0f;
@@ -50,8 +50,26 @@ struct DebugTools {
             x_pos = 0;
             y_pos += step_y;
         }
+        std::stringstream ss;
+        int count = 0;
+        bool collision = false;
+        auto mouse_pos = GetMousePosition();
         for (const auto& el: res){
-            DrawRectangleLinesEx({el.x, el.y, el.width, el.height}, 1, c);
+            if (CheckCollisionPointRec(mouse_pos, {el.x, el.y, el.width, el.height})){
+                collision = true;
+                DrawRectangleLinesEx({el.x, el.y, el.width, el.height}, 1, YELLOW);
+                DrawRectangle(mouse_pos.x + add_x , mouse_pos.y + add_y, 100,50,  WHITE);
+                ss << " X:" << count % width << " Y:" << count / width << '\n';
+                auto str = ss.str();
+                DrawText(str.c_str(), mouse_pos.x + add_x , mouse_pos.y + add_y, 20.f, RED);
+            } else {
+                if (collision && (CheckCollisionPointRec({el.x, el.y}, {mouse_pos.x + add_x, mouse_pos.y, 100, 50.f + add_y})
+                || CheckCollisionRecs({el.x, el.y, el.width, el.height},{mouse_pos.x + add_x , mouse_pos.y, 100, 50.f + add_y})
+                ))
+                    continue;
+                DrawRectangleLinesEx({el.x, el.y, el.width, el.height}, 1, c);
+            }
+            ++count;
         }
     };
 

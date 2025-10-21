@@ -797,10 +797,6 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
             }
             case LD_0b00xxx110: {
                 WAIT(4)
-                // todo: debug
-//                if (read345(i) == 0 && arg1 == 00) {
-//                    i += 0;
-//                }
                 update_regs(read345(i), mem, arg1);
                 break;
             }
@@ -864,11 +860,6 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
             }
             case LDH_0b11100000: {
                 WAIT(8)
-                // todo: debug
-//                if ((0xff00 | arg1) == constants::STAT_ADDRESS)
-//                    arg1 += 0;
-//                if ((0xff00 | arg1) == constants::IE_ADDRESS)
-//                    arg1 += 0;
                 twrite(mem, (0xff00 | arg1), regs[A]);
                 break;
             }

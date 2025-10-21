@@ -421,15 +421,6 @@ void PPU::tick(Memory& mem)  {
                 is_win_init = false;
                 current_t_cycle_count = 0;
                 pixel_fetcher.is_windows_drawing = false;
-//
-//
-//                oam_start = true;
-//                current_oam_mode = ReadSprite;
-//                mem.ppu_oam_usage = false;
-//                read_sprite_count = 2;
-//                oam_gap_count = 2;
-//                current_oam_obj = 0;
-//                current_pixel_x = 0;
             } else {
                 set_ppu_reg(constants::LY_ADDRESS, current_line, mem);
             }
@@ -471,7 +462,7 @@ unsigned short PPU::get_bg_fetcher_tile_address() const {
 
 void PPU::reset(Memory& mem) {
     lyc_ly_compare(mem);
-    current_mode = PPU::OAM;
+//    current_mode = PPU::OAM;
     last_t_cycles = 0;
     internal_t_cycles = 0;
     oam_start = true;
