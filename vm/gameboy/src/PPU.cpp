@@ -55,23 +55,6 @@ void PPU::set_ppu_reg(unsigned short address, unsigned char value, Memory& mem) 
 void PPU::set_ppu_mode(Memory& mem) {
     mem.write_unsafe(constants::STAT_ADDRESS, (mem.read_unsafe(constants::STAT_ADDRESS) & 0xFC) | current_mode);
 }
-void PPU::update_lcd(const Memory& mem) {
-    lcd_enable = (((mem.read_unsafe(constants::LCDC_ADDRESS)) >> 7) & 1);
-}
-void PPU::update_window(const Memory& mem) {
-    window_visible = (((mem.read_unsafe(constants::LCDC_ADDRESS)) >> 5) & 1);
-}
-void PPU::update_obj(const Memory& mem) {
-    obj_enable = (((mem.read_unsafe(constants::LCDC_ADDRESS)) >> 1) & 1);
-}
-void PPU::update_bg(const Memory& mem)  {
-    bg_enable = ((mem.read_unsafe(constants::LCDC_ADDRESS)) & 1);
-}
-void PPU::update_regs(const Memory& mem) {
-    update_window(mem);
-    update_obj(mem);
-    update_bg(mem);
-}
 
 unsigned char PPU::get_obj_size(const Memory& mem)  {
     return (((mem.read_unsafe(constants::LCDC_ADDRESS)) >> 2) & 1) ? 16 : 8;
@@ -205,7 +188,8 @@ void PPU::draw(Memory& mem)  {
 }
 
 void PPU::tick(Memory& mem)  {
-#define DEBUG_T_CYCLE 0
+#define DEBUG_PRINTS_PPU 0
+#define DEBUG_ASSERTS_PPU 1
 #define PRINT_T_CYCLE(x, t_cycles) std::cout << x << ": " << t_cycles << '\n'; t_cycles = 0;
 #define PRINT_DOTS(n) for (int i = 0; i < n; ++i) std::cout << '-'; std::cout << '\n';
 #define PRINT_LINE(line) std::cout << "Line: " << (unsigned)line << '\n';
@@ -222,11 +206,10 @@ void PPU::tick(Memory& mem)  {
     mem.ppu_internal_t_cycle = current_t_cycle_count;
 
     ++last_t_cycles;
-    update_regs(mem);
     set_ppu_mode(mem);
     lyc_ly_compare(mem);
     if (current_mode == OAM){
-#if DEBUG_T_CYCLE
+#if DEBUG_PRINTS_PPU
         ++debug_t_cycles;
 #endif
         if (current_t_cycle_count != 80) {
@@ -281,13 +264,13 @@ void PPU::tick(Memory& mem)  {
             current_pixel_x = 0;
             current_mode = Drawing;
 
-#if DEBUG_T_CYCLE
+#if DEBUG_PRINTS_PPU
             PRINT_T_CYCLE("OAM", debug_t_cycles);
 #endif
-//                set_ppu_mode(mem);
+//          set_ppu_mode(mem);
         }
     } else if (current_mode == Drawing) {
-#if DEBUG_T_CYCLE
+#if DEBUG_PRINTS_PPU
         ++debug_t_cycles;
 //        std::cout << "debug_t_cycles:" << debug_t_cycles << '\n';
 #endif
@@ -331,7 +314,6 @@ void PPU::tick(Memory& mem)  {
                     if (sprite_fetcher.finished) {
                         pixel_fetcher.paused = false;
                         sprite_render = false;
-                        sprite_start_rendering = false;
                         sprite_fetcher.finished = false;
                     }
                 }
@@ -349,7 +331,7 @@ void PPU::tick(Memory& mem)  {
                 mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
 
 
-#if DEBUG_T_CYCLE
+#if DEBUG_PRINTS_PPU
             if (debug_t_cycles != 172){
                        debug_t_cycles += 0;
                    }
@@ -359,12 +341,12 @@ void PPU::tick(Memory& mem)  {
 //                    set_ppu_mode(mem);
         }
     } else if (current_mode == HBlank) {
-#if DEBUG_T_CYCLE
+#if DEBUG_PRINTS_PPU
         ++debug_t_cycles;
 #endif
         if (current_t_cycle_count >= 456){
-#if DEBUG_T_CYCLE
-            //                assert(current_t_cycle_count == 456);
+#if DEBUG_ASSERTS_PPU
+            assert(current_t_cycle_count == 456);
 #endif
 //            pixel_fetcher.current_window_line = 0;
             pixel_fetcher.windows_current_tile_x = 0;
@@ -375,7 +357,7 @@ void PPU::tick(Memory& mem)  {
 
             // LYC == LY
             if (current_line == 143){
-#if DEBUG_T_CYCLE
+#if DEBUG_PRINTS_PPU
                 PRINT_T_CYCLE("HBlank", debug_t_cycles)
 #endif
                 current_mode = VBlank;
@@ -389,7 +371,7 @@ void PPU::tick(Memory& mem)  {
 
                 current_v_blank_t_cycle_count = 0;
             } else {
-#if DEBUG_T_CYCLE
+#if DEBUG_PRINTS_PPU
                 PRINT_T_CYCLE("HBlank", debug_t_cycles)
                     PRINT_LINE(current_line)
                     PRINT_DOTS(20)
@@ -408,14 +390,14 @@ void PPU::tick(Memory& mem)  {
             set_ppu_reg(constants::LY_ADDRESS, ++current_line, mem);
         }
     } else if (current_mode == VBlank) {
-#if DEBUG_T_CYCLE
+#if DEBUG_PRINTS_PPU
         ++debug_t_cycles;
 #endif
         if (++current_v_blank_t_cycle_count == 456){
             ++current_line;
             current_v_blank_t_cycle_count = 0;
             if (current_line == 154) {
-#if DEBUG_T_CYCLE
+#if DEBUG_PRINTS_PPU
                 PRINT_T_CYCLE("VBlank", debug_t_cycles)
                     PRINT_DOTS(20)
 #endif
@@ -426,18 +408,30 @@ void PPU::tick(Memory& mem)  {
                     mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
                 current_oam_obj = 0;
                 current_line = 0;
-#if DEBUG_T_CYCLE
+#if DEBUG_PRINTS_PPU
                 std::cout << "internal_t_cycles:" << internal_t_cycles << '\n';
 #endif
+#if DEBUG_ASSERTS_PPU
+                assert(internal_t_cycles == 70'224);
+#endif
+
                 internal_t_cycles = 0;
                 set_ppu_reg(constants::LY_ADDRESS, current_line, mem);
                 current_pixel_x = 0;
                 is_win_init = false;
                 current_t_cycle_count = 0;
                 pixel_fetcher.is_windows_drawing = false;
+//
+//
+//                oam_start = true;
+//                current_oam_mode = ReadSprite;
+//                mem.ppu_oam_usage = false;
+//                read_sprite_count = 2;
+//                oam_gap_count = 2;
+//                current_oam_obj = 0;
+//                current_pixel_x = 0;
             } else {
                 set_ppu_reg(constants::LY_ADDRESS, current_line, mem);
-                prev_t_cycles = last_t_cycles;
             }
         }
     }
@@ -477,8 +471,24 @@ unsigned short PPU::get_bg_fetcher_tile_address() const {
 
 void PPU::reset(Memory& mem) {
     lyc_ly_compare(mem);
-    *this = PPU{};
-    current_mode = HBlank;
+    current_mode = PPU::OAM;
+    last_t_cycles = 0;
+    internal_t_cycles = 0;
+    oam_start = true;
+    current_oam_mode = PPU::ReadSprite;
+    read_sprite_count = 2;
+    oam_gap_count = 2;
+    current_oam_obj = 0;
+    sprite_buffer = {};
+    current_pixel_x = 0;
+    current_line = 0;
+    sprite_render = false;
+    current_t_cycle_count = 0;
+    current_v_blank_t_cycle_count = 0;
+    pixel_fetcher.reset();
+    sprite_fetcher.reset();
+    // todo: check tests
+     current_mode = HBlank;
     set_ppu_reg(constants::LY_ADDRESS, current_line, mem);
     mem.ppu_internal_t_cycle = internal_t_cycles;
     set_ppu_mode(mem);

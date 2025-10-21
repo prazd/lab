@@ -91,7 +91,32 @@ struct GameBoyVM{
         bool prev_lcdc_on = mem.map[constants::LCDC_ADDRESS] & 0x80;
         int lcdc_on_count = 0;
         bool lcdc_init_finished = true;
-        while(current_t_cycle++ < 70'224) {
+// todo: debug (fix LY) + optimize
+//        ppu.reset(mem);
+
+//        ppu.lyc_ly_compare(mem);
+//        ppu.current_mode = PPU::OAM;
+//        ppu.last_t_cycles = 0;
+//        ppu.internal_t_cycles = 0;
+//        ppu.oam_start = true;
+//        ppu.current_oam_mode = PPU::ReadSprite;
+//        ppu.read_sprite_count = 2;
+//        ppu.oam_gap_count = 4;
+//        ppu.current_oam_obj = 0;
+//        ppu.sprite_buffer = {};
+//        ppu.current_pixel_x = 0;
+//        ppu.current_line = 0;
+//        ppu.sprite_render = false;
+//        ppu.current_t_cycle_count = 0;
+//        ppu.current_v_blank_t_cycle_count = 0;
+//        ppu.pixel_fetcher.reset();
+//        ppu.sprite_fetcher.reset();
+//        // todo: check tests
+//        // current_mode = HBlank;
+//        ppu.set_ppu_reg(constants::LY_ADDRESS, ppu.current_line, mem);
+//        mem.ppu_internal_t_cycle = ppu.internal_t_cycles;
+//        ppu.set_ppu_mode(mem);
+        while(current_t_cycle++ < constants::T_CYCLES_PER_FRAME) {
                 joypad.update_state(mem);
                 cpu.timer.tick(mem);
                 if (mem.map[constants::LCDC_ADDRESS] & 0x80) {
@@ -348,11 +373,18 @@ struct GameBoyVM{
         };
         FPS fps_states[] = {SuperLow,Low, Mid, High};
         unsigned char current_fps_state = std::size(fps_states) - 1;
+
+        unsigned char current_speed = 1;
 #endif
 
         auto cpu_r = cpu.instruction_async_loop(mem);
         while(!WindowShouldClose()){
+#ifdef DEBUG_MODE
+            for (int i = 0; i < current_speed; ++i)
+                main_loop_async(cpu_r);
+#else
             main_loop_async(cpu_r);
+#endif
             UpdateTexture(target, ppu.read_buffer());
             BeginDrawing();
                ClearBackground(WHITE);
@@ -391,6 +423,10 @@ struct GameBoyVM{
               }
               if (IsKeyPressed(KEY_ZERO))
                   restart();
+              if (IsKeyPressed(KEY_X)){
+                  // todo: debug
+                  current_speed = std::max(1, ((current_speed + 1) % 4));
+              }
 
               if (print_pixels) DebugTools::print_rects<constants::DISPLAY_HEIGHT, constants::DISPLAY_WIDTH>(GREEN);
               if (print_tiles)  DebugTools::print_rects<18, 20>(RED);
@@ -491,7 +527,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_bgp_change_sprites.gb
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_lcdc_bg_en_change.gb
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

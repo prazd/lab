@@ -265,7 +265,7 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
                         pixels.pop_front();
                     }
                 } else {
-                    for (auto &el: fifo) {
+                    for (auto& el: fifo) {
                         if (!pixels.empty()) {
                             if (Pixel::get_color_id(el.color) == 0 &&
                                 Pixel::get_color_id(pixels.front().color) != 0) {
@@ -278,6 +278,9 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
                         fifo.push_back(pixels.front());
                         pixels.pop_front();
                     }
+//                    if (fifo.size() != 8) {
+//                        x_in_tile += 0;
+//                    }
                 }
                 break;
             }
@@ -285,7 +288,7 @@ struct SpriteFetcher: BaseFetcher<SpriteFetcher, unsigned char, const Sprite&> {
     }
 };
 
-class PPU {
+struct PPU {
     enum Mode {
         HBlank =  0b00,    // H-Blank
         VBlank =  0b01,    // V-Blank
@@ -297,12 +300,8 @@ class PPU {
     Color buffer[144][160]{};
 
     size_t last_t_cycles = 0;
-    size_t prev_t_cycles = 0;
-    unsigned char sprite_x = 0;
     Sprite current_sprite{};
     size_t internal_t_cycles = 0;
-    bool ly_increment_done = false;
-    bool start_oam = false;
     bool oam_start = true;
 
     enum OamMode {
@@ -312,11 +311,6 @@ class PPU {
     int read_sprite_count = 2;
     int oam_gap_count = 2;
 
-    bool lcd_enable = true;
-    bool window_visible = false;
-    bool obj_enable = false; // sprites
-    bool sprite_start_rendering = false;
-    bool bg_enable = false;
     unsigned short current_oam_obj = 0;
 
     std::priority_queue<std::pair<Sprite, int>, std::vector<std::pair<Sprite, int>>, decltype([](auto& a, auto& b){
@@ -329,18 +323,12 @@ class PPU {
     int current_t_cycle_count = {};
     int current_v_blank_t_cycle_count = {};
     bool sprite_render = false;
-    int sprite_finished_count = 0;
 
     PixelFetcher pixel_fetcher;
     SpriteFetcher sprite_fetcher;
 
     void set_ppu_reg(unsigned short address, unsigned char value, Memory& mem);
     void set_ppu_mode(Memory& mem);
-    void update_lcd(const Memory& mem);
-    void update_window(const Memory& mem);
-    void update_obj(const Memory& mem);
-    void update_bg(const Memory& mem);
-    void update_regs(const Memory& mem);
 
     bool is_win_init = false;
     bool is_windows_fetching_ready(Memory& mem);
