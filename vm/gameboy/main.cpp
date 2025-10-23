@@ -341,7 +341,7 @@ struct GameBoyVM{
         TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
         PPURegistersText<0,0,200,150> ppurt(1320, 0);
         SpriteWindow<80, 32, 300, 200> sw(820, 517);
-        RegWindow<0,0,300,400> rw(1150, 517);
+        RegWindow<0,0,300,465> rw(1150, 517);
         SpriteWindowText<0,0,600,200> swt(10, 750);
         JoypadWindow<0,0,300,250> jw(820, 730);
         bool print_pixels = false;
@@ -374,7 +374,7 @@ struct GameBoyVM{
 
                 tw.handle(mem);
                 sw.handle(mem);
-                rw.handle(cpu);
+                rw.handle(mem, cpu);
                 swt.handle(sw);
                 jw.handle(mem, joypad);
                 ppurt.handle(mem);

@@ -173,12 +173,13 @@ template <size_t pwidth, size_t pheight, size_t width, size_t height, size_t n_t
 struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
     using DW = DebugWindow<pwidth, pheight,width,height>;
     unsigned short base_address{};
+    unsigned char mouse_wheel_speed = 1;
     std::array<Tile, n_tiles> tiles;
     TileWindow(float x, float y, unsigned short base_address):
             DebugWindow<pwidth, pheight,width,height>(x, y),
             base_address(base_address){
     }
-    void update_tiles(Memory& mem){
+    void update_tiles(const Memory& mem){
         std::stringstream ss;
         ss << "Tiles address:" << std::hex << base_address;
         auto str = ss.str();
@@ -213,13 +214,13 @@ struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
         }
         DW::update();
     }
-    void handle(Memory& mem){
+    void handle(const Memory& mem){
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec)){
-            if (IsKeyDown(KEY_DOWN)){
+            auto mouse_wheel_move = GetMouseWheelMove();
+            if (mouse_wheel_move > 0)
                 base_address += (20 * 16);
-            } else if (IsKeyDown(KEY_UP)) {
+            else if (mouse_wheel_move < 0)
                 base_address -= (20 * 16);
-            }
         }
         update_tiles(mem);
         DW::draw();
@@ -234,7 +235,7 @@ struct SpriteWindow: public DebugWindow<pwidth, pheight, width, height>{
     SpriteWindow(float x, float y):
             DebugWindow<pwidth, pheight,width,height>(x, y){
     }
-    void update_tiles(Memory& mem){
+    void update_tiles(const Memory& mem){
         std::stringstream ss;
         ss << "Tiles address:" << std::hex << constants::OAM_BEGIN;
         auto str = ss.str();
@@ -280,7 +281,7 @@ struct SpriteWindow: public DebugWindow<pwidth, pheight, width, height>{
         DW::update();
     }
 
-    void handle(Memory& mem){
+    void handle(const Memory& mem){
         update_tiles(mem);
         DW::draw();
     }
@@ -292,7 +293,7 @@ struct SpriteWindowText: public DebugWindow<pwidth, pheight, width, height>{
     SpriteWindowText(float x, float y):
             DebugWindow<pwidth, pheight,width,height>(x, y){
     }
-    void handle(auto& sprite_window){
+    void handle(const auto& sprite_window){
         std::stringstream ss;
         for (int i = 0; i < 40; i += 5){
             for (int j = 0; j < 5; ++j){
@@ -311,7 +312,7 @@ template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct RegWindow: public DebugWindow<pwidth, pheight, width, height> {
     using DW = DebugWindow<pwidth, pheight,width,height>;
     RegWindow(float x, float y): DW(x, y){}
-    void handle(CPU& cpu){
+    void handle(const Memory& mem, const CPU& cpu){
         std::stringstream ss;
         ss << std::hex << " Registers:\n" <<
            " A:" << (unsigned)cpu.regs[CPU::A] << "\n" <<
@@ -327,7 +328,10 @@ struct RegWindow: public DebugWindow<pwidth, pheight, width, height> {
            " ZeroFlag:" << (unsigned)cpu.get_flag(CPU::Zf) << '\n' <<
            " NegFlag:" << (unsigned)cpu.get_flag(CPU::Nf) << '\n' <<
            " HalfFlag:" << (unsigned)cpu.get_flag(CPU::Hf) << '\n' <<
-           " CarryFlag:" << (unsigned)cpu.get_flag(CPU::Cf) << '\n';
+           " CarryFlag:" << (unsigned)cpu.get_flag(CPU::Cf) << '\n' <<
+           " IE: " << std::bitset<8>(mem.map[constants::IE_ADDRESS]).to_string() << '\n' <<
+           " IF: " << std::bitset<8>(mem.map[constants::IF_ADDRESS]).to_string() << '\n' <<
+           " STAT: " << std::bitset<8>(mem.map[constants::STAT_ADDRESS]).to_string();
         DW::header = ss.str();
         DW::draw_text(24.f);
     }
@@ -337,7 +341,7 @@ template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct PPURegistersText: public DebugWindow<pwidth, pheight, width, height> {
     using DW = DebugWindow<pwidth, pheight,width,height>;
     PPURegistersText(float x, float y): DW(x, y){}
-    void handle(Memory& mem){
+    void handle(const Memory& mem){
         std::stringstream ss;
         ss << std::hex << " PPU REGS:\n" <<
            " SCX:" << (unsigned)mem.read_unsafe(constants::SCX_ADDRESS) << "\n" <<
@@ -354,7 +358,7 @@ template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct JoypadWindow: public DebugWindow<pwidth, pheight, width, height> {
     using DW = DebugWindow<pwidth, pheight,width,height>;
     JoypadWindow(float x, float y): DW(x, y){}
-    void handle(Memory& mem, Joypad& jp){
+    void handle(const Memory& mem, Joypad& jp){
         std::stringstream ss;
         auto current = jp.current_pressed_values(false);
         ss << std::hex << " Register: " << std::hex << constants::JOYPAD << '\n' <<
@@ -373,7 +377,7 @@ struct JoypadWindow: public DebugWindow<pwidth, pheight, width, height> {
     }
 };
 
-void print_segment(unsigned short address, auto n, Memory& mem) {
+void print_segment(unsigned short address, auto n, const Memory& mem) {
     std::cout << "\n=============================\n";
     for (int i = 0; i < n; ++i){
         std::cout << std::hex << address + i << ":" << (unsigned)mem.map[address + i] << '\n';
@@ -382,7 +386,7 @@ void print_segment(unsigned short address, auto n, Memory& mem) {
     std::cout << std::dec;
 }
 
-void print_external_ram(unsigned short address, auto n, Memory& mem) {
+void print_external_ram(unsigned short address, auto n, const Memory& mem) {
     std::cout << "\n=============================\n";
     for (int i = 0; i < n; ++i){
         std::cout << std::hex << address + i << ":" << (unsigned)mem.external_ram[address + i] << '\n';
@@ -391,7 +395,7 @@ void print_external_ram(unsigned short address, auto n, Memory& mem) {
     std::cout << std::dec;
 }
 
-void print_bytes(unsigned short address, auto n, Memory& mem) {
+void print_bytes(unsigned short address, auto n, const Memory& mem) {
     std::cout << "\n=============================\n";
     for (int i = 0; i < n; ++i){
         std::cout << std::hex << "0x" << (unsigned)mem.map[address + i] << ',';

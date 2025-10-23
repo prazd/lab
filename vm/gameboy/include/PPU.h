@@ -320,6 +320,9 @@ struct PPU {
     int current_t_cycle_count = {};
     int current_v_blank_t_cycle_count = {};
     bool sprite_render = false;
+    int line_0_gap = 0;
+    bool oam_interrupt = false;
+    bool init_oam_interrupt = false;
 
     PixelFetcher pixel_fetcher;
     SpriteFetcher sprite_fetcher;

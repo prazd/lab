@@ -194,6 +194,18 @@ void PPU::tick(Memory& mem)  {
 #define PRINT_DOTS(n) for (int i = 0; i < n; ++i) std::cout << '-'; std::cout << '\n';
 #define PRINT_LINE(line) std::cout << "Line: " << (unsigned)line << '\n';
 
+    // todo: debug
+    if (current_line == 0 && line_0_gap != 4) {
+        ++line_0_gap;
+        return;
+    }
+
+    if (current_line == 0 && line_0_gap == 4 && !init_oam_interrupt){
+        if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
+            mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
+        init_oam_interrupt = true;
+    }
+
     static size_t debug_t_cycles = 0;
 #if 0
     mem.write_unchecked(constants::LY_ADDRESS, 0x90);
@@ -355,7 +367,6 @@ void PPU::tick(Memory& mem)  {
             current_pixel_x = 0;
             current_t_cycle_count = 0;
 
-            // LYC == LY
             if (current_line == 143){
 #if DEBUG_PRINTS_PPU
                 PRINT_T_CYCLE("HBlank", debug_t_cycles)
@@ -403,9 +414,8 @@ void PPU::tick(Memory& mem)  {
 #endif
                 last_t_cycles = 0;
                 current_mode = OAM;
-                // LCD Interrupt
-                if (mem.read_unsafe(constants::STAT_ADDRESS) & (1 << 5))
-                    mem.write_unsafe(constants::IF_ADDRESS, (mem.read_unsafe(constants::IF_ADDRESS) | (1 << 1)));
+                init_oam_interrupt = false;
+                line_0_gap = 0;
                 current_oam_obj = 0;
                 current_line = 0;
 #if DEBUG_PRINTS_PPU
@@ -473,6 +483,7 @@ void PPU::reset(Memory& mem) {
     sprite_buffer = {};
     current_pixel_x = 0;
     current_line = 0;
+    line_0_gap = 0;
     sprite_render = false;
     current_t_cycle_count = 0;
     current_v_blank_t_cycle_count = 0;
