@@ -1,14 +1,15 @@
 #include <iostream>
-#include "raylib.h"
-#include "PPU.h"
 #include <queue>
 #include <array>
-#include "Memory.h"
-#include "CPU.h"
-#include "Joypad.h"
 #include <filesystem>
 #include <sstream>
 #include <fstream>
+#include "raylib.h"
+#include "PPU.h"
+#include "Memory.h"
+#include "CPU.h"
+#include "Joypad.h"
+#include "APU.h"
 #include "Debug.h"
 
 struct GameBoyVM{
@@ -21,7 +22,9 @@ struct GameBoyVM{
 #if DEBUG_MODE
     bool cpu_running = true;
 #endif
-
+#if APU_ON
+    APU apu;
+#endif
     Memory::MBC get_mbc_type(const auto& data) {
         switch (data[0x0147]) {
             case 0x01: // MBC1
@@ -133,11 +136,14 @@ struct GameBoyVM{
                     cpu.pc = 0x100;
                 }
 #endif
-
                 if (!(mem.map[constants::LCDC_ADDRESS] & 0x80) && prev_lcdc_on) {
                     prev_lcdc_on = false;
                     ppu.reset(mem);
                 }
+#if APU_ON
+                apu.tick(mem);
+                apu.frame_sequencer.tick();
+#endif                 
 
                 if (!cpu.halted && mem.dma_active) mem.dma_tick();
         }
@@ -250,31 +256,6 @@ struct GameBoyVM{
 #endif
     }
 
-    void init() {
-        init_raw_rom(ram_path);
-        // init rom
-        if ((unsigned char)mem.rom[0x143] == 0xc0) {
-            std::cout << "\nGameBoyColor unsupported\n";
-            std::abort();
-        }
-
-        mem.rom_sz = get_rom_size(mem.rom);
-        mem.max_rom_bank_value = mem.rom_sz - 1;
-        mem.current_mbc = get_mbc_type(mem.rom);
-        mem.ram_sz = get_ram_size(mem.rom);
-        boot();
-        mem.max_ram_bank_value = mem.ram_sz - 1;
-        if (mem.current_mbc == Memory::MBC2)
-            mem.external_ram.resize(512);
-        else
-            mem.external_ram.resize(get_ram_size(mem.rom) * constants::EXTERNAL_RAM_SZ);
-
-        if (mem.current_mbc == Memory::MBC3)
-            mem.external_ram_enabled = true;
-        mem.current_rom_bank_max = get_rom_size(mem.rom);
-        try_to_use_save();
-    }
-
     explicit GameBoyVM(const std::string_view path): ram_path(path) {
         init_raw_rom(path);
         // init rom
@@ -336,6 +317,13 @@ struct GameBoyVM{
             }
         }
         UpdateTexture(target, display_buffer.data());
+        
+        
+#if APU_ON        
+        InitAudioDevice();
+        AudioStream stream = LoadAudioStream(10'000, 16, 1);
+        PlayAudioStream(stream);
+#endif        
 
 #if DEBUG_MODE
         TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
@@ -417,6 +405,11 @@ struct GameBoyVM{
 #endif
                 DrawFPS(700, 10);
             EndDrawing();
+#if APU_ON            
+            if (IsAudioStreamProcessed(stream)) {
+                UpdateAudioStream(stream, apu.buffer, 750);
+            }
+#endif            
         }
     }
 };
@@ -511,7 +504,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_bgp_change_sprites.gb
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_lcdc_bg_en_change.gb
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
