@@ -173,7 +173,6 @@ template <size_t pwidth, size_t pheight, size_t width, size_t height, size_t n_t
 struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
     using DW = DebugWindow<pwidth, pheight,width,height>;
     unsigned short base_address{};
-    unsigned char mouse_wheel_speed = 1;
     std::array<Tile, n_tiles> tiles;
     TileWindow(float x, float y, unsigned short base_address):
             DebugWindow<pwidth, pheight,width,height>(x, y),
@@ -348,6 +347,22 @@ struct PPURegistersText: public DebugWindow<pwidth, pheight, width, height> {
            " SCY:" <<  (unsigned)mem.read_unsafe(constants::SCY_ADDRESS) << "\n" <<
            " LYC:" <<  (unsigned)mem.read_unsafe(constants::LYC_ADDRESS) << "\n" <<
            " LY:" <<  (unsigned)mem.read_unsafe(constants::LY_ADDRESS) << "\n";
+        DW::header = ss.str();
+        DW::draw_text(24.f);
+    }
+};
+
+template <size_t pwidth, size_t pheight, size_t width, size_t height>
+struct APURegistersText: public DebugWindow<pwidth, pheight, width, height> {
+    using DW = DebugWindow<pwidth, pheight,width,height>;
+    APURegistersText(float x, float y): DW(x, y){}
+    void handle(const Memory& mem){
+        std::stringstream ss;
+        ss << std::hex << " APU REGS:\n" <<
+           " NR11:" <<  std::bitset<8>(mem.read_unsafe(constants::NR11_ADDRESS)).to_string() << "\n" <<
+           " NR12:" <<  std::bitset<8>(mem.read_unsafe(constants::NR12_ADDRESS)).to_string() << "\n" <<
+           " NR13:" <<  std::bitset<8>(mem.read_unsafe(constants::NR13_ADDRESS)).to_string() << "\n" <<
+           " NR14:" <<  std::bitset<8>(mem.read_unsafe(constants::NR14_ADDRESS)).to_string() << "\n";
         DW::header = ss.str();
         DW::draw_text(24.f);
     }

@@ -321,13 +321,15 @@ struct GameBoyVM{
         
 #if APU_ON        
         InitAudioDevice();
-        AudioStream stream = LoadAudioStream(10'000, 16, 1);
+        // sample rate: 44100, sample size: 16bit-short, channels: 1-mono
+        AudioStream stream = LoadAudioStream(40'100, 16, 1);
         PlayAudioStream(stream);
 #endif        
 
 #if DEBUG_MODE
         TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
         PPURegistersText<0,0,200,150> ppurt(1320, 0);
+        APURegistersText<0,0,200,150> apurt(1320, 150);
         SpriteWindow<80, 32, 300, 200> sw(820, 517);
         RegWindow<0,0,300,465> rw(1150, 517);
         SpriteWindowText<0,0,600,200> swt(10, 750);
@@ -366,6 +368,7 @@ struct GameBoyVM{
                 swt.handle(sw);
                 jw.handle(mem, joypad);
                 ppurt.handle(mem);
+                apurt.handle(mem);
 //                DebugTools::print_segment(mem, constants::BG_TILE_MAP1 + 10, 30);
 #endif
 // PRINT PIXELS
@@ -405,7 +408,7 @@ struct GameBoyVM{
 #endif
                 DrawFPS(700, 10);
             EndDrawing();
-#if APU_ON            
+#if APU_ON
             if (IsAudioStreamProcessed(stream)) {
                 UpdateAudioStream(stream, apu.buffer, 750);
             }
