@@ -26,6 +26,5 @@ file(MAKE_DIRECTORY ${GCC_MODULE_CACHE})
 
 target_compile_options(Main PRIVATE
     -fmodules-ts
-    -stdlib=libc++
-    -fprebuilt-module-path=${CMAKE_BINARY_DIR}/cmake-std-modules
+    -stdlib=libc++   
 )
