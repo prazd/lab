@@ -1,0 +1,31 @@
+cmake_minimum_required(VERSION 4.1)
+
+set(CMAKE_CXX_COMPILER c++-15)
+set(CMAKE_C_COMPILER gcc)
+
+# THIS IS CRITICAL - Enable experimental import std support
+set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "d0edc3af-4c50-42ea-a356-e2862fe7a444")
+
+project(Main)
+
+add_executable(Main main.cpp)
+
+set_target_properties(Main PROPERTIES
+    CXX_STANDARD 23
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+    CXX_MODULE_STD 1  # This is required for import std; to work!
+)
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_SCAN_FOR_MODULES ON)
+set(GCC_MODULE_CACHE "${CMAKE_BINARY_DIR}/gcm.cache")
+file(MAKE_DIRECTORY ${GCC_MODULE_CACHE})
+
+target_compile_options(Main PRIVATE
+    -fmodules-ts
+    -stdlib=libc++
+    -fprebuilt-module-path=${CMAKE_BINARY_DIR}/cmake-std-modules
+)
