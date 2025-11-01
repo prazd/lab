@@ -480,7 +480,6 @@ int CPU::t_cycle_by_ins(CPU::Instruction ins, unsigned char value)  { // value -
 
 void CPU::off_IF_value(CPU::InterruptFlag flag, Memory& mem) {
     auto if_value = mem.read( constants::IF_ADDRESS);
-//    std::cout << "OFF IF value" << '\n';
     switch (flag) {
         case VBlank_I:   {mem.write(constants::IF_ADDRESS, if_value & 0xfe); break;}
         case LCD_I:      {mem.write(constants::IF_ADDRESS, if_value & 0xfd); break;}
@@ -488,7 +487,6 @@ void CPU::off_IF_value(CPU::InterruptFlag flag, Memory& mem) {
         case Serial_I:   {mem.write(constants::IF_ADDRESS, if_value & 0xf7); break;}
         case Joypad_I:   {mem.write(constants::IF_ADDRESS, if_value & 0xef); break;}
     }
-//    std::cout << "OFF IF value:" << (unsigned)mem.read(constants::IF_ADDRESS) << '\n';
 }
 
 void CPU::print_regs() const {

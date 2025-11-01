@@ -142,7 +142,7 @@ struct GameBoyVM{
                 }
 #if APU_ON
                 apu.tick(mem);
-                apu.frame_sequencer.tick();
+                apu.frame_sequencer.tick(mem);
 #endif                 
 
                 if (!cpu.halted && mem.dma_active) mem.dma_tick();

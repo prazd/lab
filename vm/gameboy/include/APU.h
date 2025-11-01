@@ -10,24 +10,24 @@ struct Channel {
     bool active{};
 };
 
-struct CH1: Channel {
-    short pitch{};
+struct SquareWaveChannel: Channel {
     unsigned shadow_frequency{};
     unsigned short envelope_timer{};
     unsigned char envelope_volume{};
     unsigned short sweep_timer{};
     unsigned char duty{};
-    void init(const Memory&);
-    void update_duty(const Memory& mem);
-    void update_pitch(const Memory& mem);
+    void update_duty(const Memory& mem, unsigned short);
+    void update_pitch(const Memory& mem, unsigned short l_addr, unsigned short h_addr);
     void disable_check(Memory& mem);
+};
+
+struct CH1: SquareWaveChannel {
+    void init(const Memory&);
     void sweep_step(Memory& mem);
 };
 
-struct CH2: Channel {
-    unsigned short envelope_timer{};
-    unsigned char duty{};
-    void update_length_timer(const Memory& mem);
+struct CH2: SquareWaveChannel {
+    void init(const Memory&);
 };
 
 struct CH3: Channel {
@@ -45,7 +45,7 @@ struct CH4: Channel {
 struct FrameSequencer {
     unsigned char step{};
     unsigned short frame_seq_counter{};
-    void tick();
+    void tick(Memory&);
 };
 
 struct APU {
@@ -53,9 +53,9 @@ struct APU {
     CH2 ch2;
     CH3 ch3;
     CH4 ch4;
-    short buffer[1024]{};
+    short buffer[750]{};
     FrameSequencer frame_sequencer;
     void tick(Memory&);
-    void fram_seq_handler(Memory& mem);
+    void frame_seq_handler(Memory& mem);
 };
 #endif //MAIN_CPP_APU_H

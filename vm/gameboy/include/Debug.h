@@ -362,7 +362,8 @@ struct APURegistersText: public DebugWindow<pwidth, pheight, width, height> {
            " NR11:" <<  std::bitset<8>(mem.read_unsafe(constants::NR11_ADDRESS)).to_string() << "\n" <<
            " NR12:" <<  std::bitset<8>(mem.read_unsafe(constants::NR12_ADDRESS)).to_string() << "\n" <<
            " NR13:" <<  std::bitset<8>(mem.read_unsafe(constants::NR13_ADDRESS)).to_string() << "\n" <<
-           " NR14:" <<  std::bitset<8>(mem.read_unsafe(constants::NR14_ADDRESS)).to_string() << "\n";
+           " NR14:" <<  std::bitset<8>(mem.read_unsafe(constants::NR14_ADDRESS)).to_string() << "\n" <<
+           " NR52:" <<  std::bitset<8>(mem.read_unsafe(constants::NR52_ADDRESS)).to_string() << "\n";
         DW::header = ss.str();
         DW::draw_text(24.f);
     }
