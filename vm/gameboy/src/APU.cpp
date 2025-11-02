@@ -3,9 +3,9 @@
 void SquareWaveChannel::update_duty(const Memory& mem, unsigned short address) {
     switch ((mem.read_unsafe(address) >> 6)) {
         case 0b00: {duty = 0b0000'0001;  break;} // 12.5%
-        case 0b01: {duty = 0b1000'0001;  break;} // 25%
-        case 0b10: {duty = 0b1000'0111;  break;} // 50%
-        case 0b11: {duty = 0b0111'1110;  break;} // 75%
+        case 0b01: {duty = 0b1000'0011;  break;} // 25%
+        case 0b10: {duty = 0b0000'1111;  break;} // 50%
+        case 0b11: {duty = 0b1111'1110;  break;} // 75%
     }
 }
 
@@ -27,7 +27,6 @@ void CH1::init(const Memory& mem) {
     freq_timer = freq_timer_period;
     envelope_volume = (mem.read_unsafe(constants::NR12_ADDRESS) >> 4) & 0xf;
     envelope_timer = (mem.read_unsafe(constants::NR12_ADDRESS) & 0x7);
-    if (envelope_timer == 0) envelope_timer = 8;
     sweep_timer = ((mem.read_unsafe(constants::NR10_ADDRESS) >> 4) & 0x7);
     if (sweep_timer == 0)
         sweep_timer = 8;

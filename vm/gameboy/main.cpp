@@ -305,6 +305,9 @@ struct GameBoyVM{
         SetExitKey(0);
 
         // texture init
+#if DEBUG_MODE
+        RenderTexture2D base = LoadRenderTexture(constants::WIDTH, constants::HEIGHT);
+#endif
         Image img = GenImageColor(constants::DISPLAY_WIDTH, constants::DISPLAY_HEIGHT, WHITE);
         Texture2D target = LoadTextureFromImage(img);
         UnloadImage(img);
@@ -317,7 +320,6 @@ struct GameBoyVM{
             }
         }
         UpdateTexture(target, display_buffer.data());
-        
         
 #if APU_ON        
         InitAudioDevice();
@@ -334,6 +336,10 @@ struct GameBoyVM{
         RegWindow<0,0,300,465> rw(1150, 517);
         SpriteWindowText<0,0,600,200> swt(10, 750);
         JoypadWindow<0,0,300,250> jw(820, 730);
+
+        RectsPrint<160,144, constants::LCD_WIDTH, constants::LCD_HEIGHT> pp(0, 0);
+        RectsPrint<20 ,18, constants::LCD_WIDTH, constants::LCD_HEIGHT> tp(0, 0);
+
         bool print_pixels = false;
         bool print_tiles = false;
         enum FPS {
@@ -344,32 +350,50 @@ struct GameBoyVM{
         };
         FPS fps_states[] = {SuperLow,Low, Mid, High};
         unsigned char current_fps_state = std::size(fps_states) - 1;
-
         unsigned char current_speed = 1;
 #endif
 
         auto cpu_r = cpu.instruction_async_loop(mem);
         while(!WindowShouldClose()){
-#ifdef DEBUG_MODE
-            for (int i = 0; i < current_speed; ++i)
-                main_loop_async(cpu_r);
+#if DEBUG_MODE
+                for (int i = 0; i < current_speed; ++i)
+                    main_loop_async(cpu_r);
+                UpdateTexture(target, ppu.read_buffer());
+
+                if (print_pixels) {pp.update(mem, 0, 0);}
+                if (print_tiles)  {tp.update(mem, 0, print_pixels ? 50 : 0);}
+
+                BeginTextureMode(base);
+                    ClearBackground(BLANK);
+                    DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height},
+                               Rectangle{0, 0, constants::LCD_WIDTH, constants::LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
+                    tw.handle(mem);
+                    sw.handle(mem);
+                    rw.handle(mem, cpu);
+                    swt.handle(sw);
+                    jw.handle(mem, joypad);
+                    ppurt.handle(mem);
+                    apurt.handle(mem);
+                    if (print_pixels) pp.handle(GREEN, 0, 0);
+                    if (print_tiles)  tp.handle(RED, 0, print_pixels ? 50 : 0);
+                EndTextureMode();
+
+
 #else
             main_loop_async(cpu_r);
-#endif
             UpdateTexture(target, ppu.read_buffer());
+#endif
+
             BeginDrawing();
                ClearBackground(WHITE);
+#if DEBUG_MODE
+            DrawTextureRec(base.texture, {0, 0, (float)base.texture.width, -(float)base.texture.height}, {0, 0}, WHITE);
+#else
                DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, constants::LCD_WIDTH, constants::LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
+#endif
+
 #if DEBUG_MODE
 
-                tw.handle(mem);
-                sw.handle(mem);
-                rw.handle(mem, cpu);
-                swt.handle(sw);
-                jw.handle(mem, joypad);
-                ppurt.handle(mem);
-                apurt.handle(mem);
-//                DebugTools::print_segment(mem, constants::BG_TILE_MAP1 + 10, 30);
 #endif
 // PRINT PIXELS
 #if DEBUG_MODE
@@ -400,11 +424,6 @@ struct GameBoyVM{
                   current_speed = std::max(1, ((current_speed + 1) % 4));
               }
 
-
-              if (print_pixels)
-                    DebugTools::print_rects<constants::DISPLAY_HEIGHT, constants::DISPLAY_WIDTH>(GREEN, 0, 0);
-              if (print_tiles)
-                    DebugTools::print_rects<18, 20>(RED, 0, print_pixels ? 50 : 0);
 #endif
                 DrawFPS(700, 10);
             EndDrawing();

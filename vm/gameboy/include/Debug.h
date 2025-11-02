@@ -4,6 +4,7 @@
 #include <iostream>
 #include "Memory.h"
 #include "PPU.h"
+#include "rlgl.h"
 
 using Tile = std::array<std::array<int, 8>, 8>;
 
@@ -31,46 +32,6 @@ struct DebugTools {
             colors[current++] = tmp;
         }
         return colors;
-    };
-
-    template<size_t height, size_t width>
-    static auto print_rects(Color c, float add_x, float add_y){
-        std::array<Rectangle, height * width> res{};
-        float x_pos = 0.0f;
-        float y_pos = 0.0f;
-
-        float step_x = constants::LCD_WIDTH/width;
-        float step_y = constants::LCD_HEIGHT/height;
-        int z = 0;
-        for (int i = 0; i < height; ++i){
-            for (int j = 0; j < width; ++j) {
-                res[z++] = Rectangle{x_pos, y_pos, step_x, step_y};
-                x_pos += step_x;
-            }
-            x_pos = 0;
-            y_pos += step_y;
-        }
-        std::stringstream ss;
-        int count = 0;
-        bool collision = false;
-        auto mouse_pos = GetMousePosition();
-        for (const auto& el: res){
-            if (CheckCollisionPointRec(mouse_pos, {el.x, el.y, el.width, el.height})){
-                collision = true;
-                DrawRectangleLinesEx({el.x, el.y, el.width, el.height}, 1, YELLOW);
-                DrawRectangle(mouse_pos.x + add_x , mouse_pos.y + add_y, 100,50,  WHITE);
-                ss << " X:" << count % width << " Y:" << count / width << '\n';
-                auto str = ss.str();
-                DrawText(str.c_str(), mouse_pos.x + add_x , mouse_pos.y + add_y, 20.f, RED);
-            } else {
-                if (collision && (CheckCollisionPointRec({el.x, el.y}, {mouse_pos.x + add_x, mouse_pos.y, 100, 50.f + add_y})
-                || CheckCollisionRecs({el.x, el.y, el.width, el.height},{mouse_pos.x + add_x , mouse_pos.y, 100, 50.f + add_y})
-                ))
-                    continue;
-                DrawRectangleLinesEx({el.x, el.y, el.width, el.height}, 1, c);
-            }
-            ++count;
-        }
     };
 
     static void print_segment(const Memory& mem, unsigned short address, int n) {
@@ -129,21 +90,14 @@ struct DebugWindow {
     using Buffer = std::array<std::array<Color, pwidth>, pheight>;
     Rectangle rec;
     Texture2D target;
+    RenderTexture2D target_renderer;
     Buffer buffer{};
     std::string header;
     DebugWindow(float x, float y):
-            rec({x, y, width, height}){
-
+            rec({x, y, width, height}), target_renderer(LoadRenderTexture(width, height)){
         Image img(GenImageColor(pwidth, pheight, WHITE));
         target = LoadTextureFromImage(img);
         UnloadImage(img);
-
-        for (size_t i = 0; i < pheight; ++i) {
-            for (size_t j = 0 ; j < pwidth; ++j) {
-                buffer[i][j] = WHITE;
-            }
-        }
-        UpdateTexture(target, buffer.data());
     }
     void update() {
         UpdateTexture(target, buffer.data());
@@ -166,6 +120,73 @@ struct DebugWindow {
         move_check();
         DrawRectangleLinesEx(rec, 1, BLACK);
         DrawText(header.c_str(), rec.x, rec.y, font_sz, BLACK);
+    }
+    void draw_render_texture() {
+        DrawTexturePro(target_renderer.texture, {0, 0, (float)target_renderer.texture.width, -(float)target_renderer.texture.height}, Rectangle{rec.x, rec.y, width, height}, {0, 0}, 0.0f, WHITE);
+    }
+};
+
+template <size_t pwidth, size_t pheight, size_t width, size_t height>
+struct RectsPrint: public DebugWindow<0, 0, width + 150, height + 150>{
+    using DW = DebugWindow<0, 0, width + 150, height + 150>;
+    std::array<Rectangle, pwidth * pheight> res{};
+    RectsPrint(float x, float y):
+            DW(x, y){
+    }
+    void update(const Memory& mem, float add_x, float add_y){
+        float x_pos = 0.0f;
+        float y_pos = 0.0f;
+
+        float step_x = width/pwidth;
+        float step_y = height/pheight;
+        int z = 0;
+        for (int i = 0; i < pheight; ++i){
+            for (int j = 0; j < pwidth; ++j) {
+                res[z++] = Rectangle{x_pos, y_pos, step_x, step_y};
+                x_pos += step_x;
+            }
+            x_pos = 0;
+            y_pos += step_y;
+        }
+        std::stringstream ss;
+        int count = 0;
+        auto mouse_pos = GetMousePosition();
+        BeginTextureMode(DW::target_renderer);
+        ClearBackground(BLANK);
+            for (const auto& el: res){
+                if (CheckCollisionPointRec(mouse_pos, {el.x, el.y, el.width, el.height})){
+                    DrawLine(el.x, el.y, el.x + el.width, el.y, YELLOW);
+                    DrawLine(el.x+1.f, el.y+1.f, el.x+1.f + el.width, el.y+1.f, YELLOW);
+                    DrawLine(el.x, el.y, el.x, el.y + el.height, YELLOW);
+                    DrawLine(el.x + 1.f, el.y + 1.f, el.x + 1.f, el.y + 1.f + el.height, YELLOW);
+
+                    DrawRectangle(mouse_pos.x + add_x ,  mouse_pos.y + add_y, 100,50,  WHITE);
+                    ss << " X:" << count % pwidth << " Y:" << count / pwidth << '\n';
+                    auto str = ss.str();
+                    DrawText(str.c_str(), mouse_pos.x + add_x , mouse_pos.y + add_y, 20.f, RED);
+                }
+                ++count;
+            }
+        EndTextureMode();
+    }
+
+    void handle(Color c, float add_x, float add_y) {
+        rlBegin(RL_LINES);
+        rlColor4ub(c.r, c.g, c.b, c.a);
+        auto mouse_pos = GetMousePosition();
+        auto snap = [](float val){return std::floor(val) + 0.5f;};
+        for (const auto& el: res){
+            if ((CheckCollisionPointRec({el.x, el.y}, {mouse_pos.x, mouse_pos.y, 100 + add_x, 50.f + add_y})
+                              || CheckCollisionRecs({el.x, el.y, el.width, el.height},{mouse_pos.x , mouse_pos.y, 100, 50.f + add_y})
+            ))
+                continue;
+            rlVertex2f(snap(el.x), snap(el.y));
+            rlVertex2f(snap(el.x) + snap(el.width), snap(el.y));
+            rlVertex2f(snap(el.x), snap(el.y));
+            rlVertex2f(snap(el.x), snap(el.y) + snap(el.height));
+        }
+        rlEnd();
+        DW::draw_render_texture();
     }
 };
 
