@@ -324,18 +324,34 @@ struct GameBoyVM{
 #if APU_ON        
         InitAudioDevice();
         // sample rate: 44100, sample size: 16bit-short, channels: 1-mono
-        AudioStream stream = LoadAudioStream(40'100, 16, 1);
+        AudioStream stream = LoadAudioStream(44'100, 16, 1);
+        SetAudioStreamBufferSizeDefault(2048);
         PlayAudioStream(stream);
 #endif        
 
 #if DEBUG_MODE
+        // tile view modes
         TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
+        BgTileMapWindow<500,500> bgtm(810,0);
+
         PPURegistersText<0,0,200,150> ppurt(1320, 0);
         APURegistersText<0,0,200,150> apurt(1320, 150);
         SpriteWindow<80, 32, 300, 200> sw(820, 517);
         RegWindow<0,0,300,465> rw(1150, 517);
         SpriteWindowText<0,0,600,200> swt(10, 750);
         JoypadWindow<0,0,300,250> jw(820, 730);
+        enum TileViewModes{
+            TileWindow,
+            BgTileMapWindow,
+            ViewModesCount
+        };
+        unsigned char current_tile_view_mode = 0;
+        auto tile_view_mode_handle = [&]{
+            switch (current_tile_view_mode) {
+                case TileWindow:       {tw.handle(mem); break;}
+                case BgTileMapWindow:  {bgtm.handle(mem); break;}
+            }
+        };
 
         RectsPrint<160,144, constants::LCD_WIDTH, constants::LCD_HEIGHT> pp(0, 0);
         RectsPrint<20 ,18, constants::LCD_WIDTH, constants::LCD_HEIGHT> tp(0, 0);
@@ -349,6 +365,7 @@ struct GameBoyVM{
             High = 60
         };
         FPS fps_states[] = {SuperLow,Low, Mid, High};
+
         unsigned char current_fps_state = std::size(fps_states) - 1;
         unsigned char current_speed = 1;
 #endif
@@ -356,8 +373,12 @@ struct GameBoyVM{
         auto cpu_r = cpu.instruction_async_loop(mem);
         while(!WindowShouldClose()){
 #if DEBUG_MODE
+                auto begin = std::chrono::steady_clock::now();
                 for (int i = 0; i < current_speed; ++i)
                     main_loop_async(cpu_r);
+                auto end = std::chrono::steady_clock::now();
+                std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms\n";
+
                 UpdateTexture(target, ppu.read_buffer());
 
                 if (print_pixels) {pp.update(mem, 0, 0);}
@@ -367,18 +388,17 @@ struct GameBoyVM{
                     ClearBackground(BLANK);
                     DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height},
                                Rectangle{0, 0, constants::LCD_WIDTH, constants::LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
-                    tw.handle(mem);
+                    tile_view_mode_handle();
                     sw.handle(mem);
                     rw.handle(mem, cpu);
                     swt.handle(sw);
                     jw.handle(mem, joypad);
                     ppurt.handle(mem);
                     apurt.handle(mem);
+
                     if (print_pixels) pp.handle(GREEN, 0, 0);
                     if (print_tiles)  tp.handle(RED, 0, print_pixels ? 50 : 0);
                 EndTextureMode();
-
-
 #else
             main_loop_async(cpu_r);
             UpdateTexture(target, ppu.read_buffer());
@@ -417,6 +437,8 @@ struct GameBoyVM{
                   current_fps_state = ((current_fps_state + 1) % std::size(fps_states));
                   SetTargetFPS(fps_states[current_fps_state]);
               }
+              if (IsKeyPressed(KEY_M))
+                  current_tile_view_mode = (current_tile_view_mode + 1) % ViewModesCount;
               if (IsKeyPressed(KEY_ZERO))
                   restart();
               if (IsKeyPressed(KEY_X)){
@@ -429,7 +451,9 @@ struct GameBoyVM{
             EndDrawing();
 #if APU_ON
             if (IsAudioStreamProcessed(stream)) {
-                UpdateAudioStream(stream, apu.buffer, 750);
+                short tmp[2048]{};
+                std::copy(std::begin(apu.buffer), std::end(apu.buffer), tmp);
+                UpdateAudioStream(stream, tmp, 750);
             }
 #endif            
         }
@@ -526,7 +550,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_bgp_change_sprites.gb
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_lcdc_bg_en_change.gb
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

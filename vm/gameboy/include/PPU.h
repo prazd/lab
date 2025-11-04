@@ -20,13 +20,63 @@ struct Sprite {
     auto operator<=>(const Sprite&) const = default;
 };
 
+template <typename T, size_t sz>
+class SimpleDeque {
+    std::array<T, sz> queue{};
+    size_t current = 0;
+public:
+    void push_back(const T& p) {
+        queue[current++] = p;
+    }
+    void push_front(const T& p) {
+        auto tmp = queue[0];
+        for (int i = 1; i <= current; ++i){
+            queue[i] = std::exchange(tmp, queue[i]);
+        }
+        queue[0] = p;
+        ++current;
+    }
+    auto pop_front() {
+        auto tmp = queue[0];
+        for (int i = 1; i < sz; ++i){
+            queue[i-1] = queue[i];
+        }
+        --current;
+        return tmp;
+    }
+
+    auto pop_back() {
+        return queue[--current];
+    }
+
+    size_t size() const {
+        return current;
+    }
+
+    auto& front() {
+        return queue[0];
+    }
+    bool empty() const {
+        return !current;
+    }
+    auto& back() {
+        return queue[current-1];
+    }
+    auto begin() {
+        return queue.begin();
+    }
+    auto end() {
+        return queue.begin() + current;
+    }
+};
+
 struct Pixel {
     bool is_sprite;
     Color color{};      // The color number (IGNORING the palette, this value is the color value from the tile data)
     unsigned char attrib{};     // Palette: OBP0 / OBP1 for DMG, a value between 0 and 7 on CGB
     static Color get_pixel_color(unsigned char id);
     static int get_color_id(Color c);
-    static std::deque<Pixel> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char);
+    static SimpleDeque<Pixel,8> tile_row_to_pixel_arr(unsigned short row, bool, unsigned char);
 };
 
 template <typename Fetcher, typename ... Args>
@@ -47,8 +97,8 @@ struct BaseFetcher {
     bool finished = false;
     bool is_windows_drawing = false;
     size_t next_t_cycle = NEXT_T_CYCLE_VAL; // Start GetTile 2 T-cycle
-    std::deque<Pixel> pixels{};
-    std::deque<Pixel> fifo{};
+    SimpleDeque<Pixel, 8> pixels{};
+    SimpleDeque<Pixel, 8> fifo{};
     unsigned char line_in_tile{};
     bool is_window = false;
 

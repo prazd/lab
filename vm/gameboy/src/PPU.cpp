@@ -21,10 +21,10 @@ int Pixel::get_color_id(Color c)  {
     return 3;
 }
 
-std::deque<Pixel> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete)  {
+SimpleDeque<Pixel, 8> Pixel::tile_row_to_pixel_arr(unsigned short row, bool is_sprite, unsigned char pallete)  {
     unsigned char l = row & 0xff;
     unsigned char h = (row >> 8) & 0xff;
-    std::deque<Pixel> result{};
+    SimpleDeque<Pixel, 8> result{};
     unsigned char lc{};
     unsigned char hc{};
     Color color;

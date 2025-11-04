@@ -243,7 +243,74 @@ struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
                 base_address -= (20 * 16);
         }
         update_tiles(mem);
-        DW::draw();
+        DW::draw(20.f);
+    }
+};
+
+template <size_t width, size_t height>
+struct BgTileMapWindow: public DebugWindow<256, 256, width, height>{
+    using DW = DebugWindow<256, 256,width,height>;
+    unsigned short base_address = constants::BG_TILE_MAP1;
+    unsigned char scx = 0;
+    unsigned char scy = 0;
+    std::array<Tile, 1024> tiles;
+    BgTileMapWindow(float x, float y): DW(x, y){}
+    void update_tiles(const Memory& mem){
+        std::stringstream ss;
+        ss << "Tiles address:" << std::hex << base_address;
+        auto str = ss.str();
+        int x_begin = 0;
+        int y_begin = 0;
+        DW::header = ss.str();
+
+        unsigned short tile_base = ((mem.read_unsafe(constants::LCDC_ADDRESS) >> 4) & 1) ? 0x8000 : 0x9000;
+
+        size_t count = 0;
+        for (int i = 0; i < 32; ++i)
+            for (int j = 0; j < 32; ++j)
+                 tiles[count++] = DebugTools::get_tile_by_address(mem,  tile_base == 0x8000 ?
+                 tile_base + (mem.read_unsafe((base_address + (j + 32 * i))) * 16):
+                 tile_base + ((char)mem.read_unsafe((base_address + (j + 32 * i))) * 16));
+
+
+        unsigned char scx_value = mem.read_unsafe(constants::SCX_ADDRESS);
+        if (scx_value)
+            scx = scx_value;
+        unsigned char scy_value = mem.read_unsafe(constants::SCY_ADDRESS);
+        if (scy_value)
+            scy = scx_value;
+
+        int x = x_begin;
+        int y = y_begin;
+        int current_x = x;
+        int current_y = y;
+        auto prev_x = x;
+        for (auto& colors: tiles) {
+            for (auto&& row: colors){
+                for (auto el: row) {
+                    DW::buffer[y][x++] = (
+                            (y <= (scy + 143) % 256) &&
+                                    ((x == scx || x == ((scx + 160) % 256)) ||
+                                    ((y == scy || y == (scy + 143) % 256) &&
+                                    (scx >= 95 ? (x >= scx || x <= (scx + 160) % 256) : (x >= scx && x <= (scx + 160) % 256))))
+                                    ) ? RED : Pixel::get_pixel_color(el);
+                }
+                ++y;
+                prev_x = std::exchange(x, current_x);
+            }
+            if ((prev_x + 1 >= 256)){
+                y = current_y = y;
+                x = current_x = x_begin;
+            } else {
+                y = current_y;
+                x = current_x = prev_x;
+            }
+        }
+        DW::update();
+    }
+    void handle(const Memory& mem){
+        update_tiles(mem);
+        DW::draw(20.f);
     }
 };
 
@@ -325,7 +392,6 @@ struct SpriteWindowText: public DebugWindow<pwidth, pheight, width, height>{
         DW::draw_text(18.f);
     }
 };
-
 
 
 template <size_t pwidth, size_t pheight, size_t width, size_t height>
