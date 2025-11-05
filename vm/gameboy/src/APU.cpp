@@ -154,7 +154,7 @@ void APU::frame_seq_handler(Memory& mem) {
 }
 
 static float next_square_sample(float dac_value){
-    return (dac_value/15.0f);
+    return (dac_value/15.f);
 }
 
 void APU::tick(Memory& mem) {
@@ -166,20 +166,18 @@ void APU::tick(Memory& mem) {
     static bool skip_sample = false;
     auto master_control =  mem.read_unsafe(constants::NR52_ADDRESS);
 
-    if (!prev_trigger_ch1 && ((mem.read_unsafe(constants::NR14_ADDRESS) >> 7) & 1)
+    if (mem.ch1_trigger
          && (mem.read_unsafe(constants::NR12_ADDRESS) & 0xf8) != 0) {
         ch1.init(mem);
         ch1.active = true;
-        // todo: handle in mem
-        mem.write_unsafe(constants::NR14_ADDRESS, mem.read_unsafe(constants::NR14_ADDRESS) & 0x7f);
+        mem.ch1_trigger = false;
     }
 
-    // todo: debug prev_trigger_ch2
-    if (!prev_trigger_ch1 && ((mem.read_unsafe(constants::NR24_ADDRESS) >> 7) & 1)
+    if (mem.ch2_trigger
         && (mem.read_unsafe(constants::NR22_ADDRESS) & 0xf8) != 0) {
         ch2.init(mem);
         ch2.active = true;
-        mem.write_unsafe(constants::NR24_ADDRESS, mem.read_unsafe(constants::NR24_ADDRESS) & 0x7f);
+        mem.ch2_trigger = false;
     }
 
     if (ch1.active) {

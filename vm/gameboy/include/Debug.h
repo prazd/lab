@@ -251,11 +251,9 @@ template <size_t width, size_t height>
 struct BgTileMapWindow: public DebugWindow<256, 256, width, height>{
     using DW = DebugWindow<256, 256,width,height>;
     unsigned short base_address = constants::BG_TILE_MAP1;
-    unsigned char scx = 0;
-    unsigned char scy = 0;
     std::array<Tile, 1024> tiles;
     BgTileMapWindow(float x, float y): DW(x, y){}
-    void update_tiles(const Memory& mem){
+    void update_tiles(const Memory& mem, unsigned char scx, unsigned char scy){
         std::stringstream ss;
         ss << "Tiles address:" << std::hex << base_address;
         auto str = ss.str();
@@ -289,10 +287,9 @@ struct BgTileMapWindow: public DebugWindow<256, 256, width, height>{
             for (auto&& row: colors){
                 for (auto el: row) {
                     DW::buffer[y][x++] = (
-                            (y <= (scy + 143) % 256) &&
-                                    ((x == scx || x == ((scx + 160) % 256)) ||
-                                    ((y == scy || y == (scy + 143) % 256) &&
-                                    (scx >= 95 ? (x >= scx || x <= (scx + 160) % 256) : (x >= scx && x <= (scx + 160) % 256))))
+                            (((y == scy || y == (scy + 144) % 256) &&
+                                    (scx >= 95 ? (x >= scx || x <= (scx + 160) % 256) : (x >= scx && x <= (scx + 160) % 256))) ||
+                                    (scx == x || x == (scx + 160) % 256) && (scy < 112 ? (y >= scy && y <= (scy + 144) % 256) : (y >= scy || y <= (scy + 144) % 256)))
                                     ) ? RED : Pixel::get_pixel_color(el);
                 }
                 ++y;
@@ -308,8 +305,8 @@ struct BgTileMapWindow: public DebugWindow<256, 256, width, height>{
         }
         DW::update();
     }
-    void handle(const Memory& mem){
-        update_tiles(mem);
+    void handle(const Memory& mem,  unsigned char scx, unsigned char scy){
+        update_tiles(mem, scx, scy);
         DW::draw(20.f);
     }
 };
@@ -427,11 +424,11 @@ template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct PPURegistersText: public DebugWindow<pwidth, pheight, width, height> {
     using DW = DebugWindow<pwidth, pheight,width,height>;
     PPURegistersText(float x, float y): DW(x, y){}
-    void handle(const Memory& mem){
+    void handle(const Memory& mem, unsigned char scx, unsigned char scy){
         std::stringstream ss;
         ss << std::hex << " PPU REGS:\n" <<
-           " SCX:" << (unsigned)mem.read_unsafe(constants::SCX_ADDRESS) << "\n" <<
-           " SCY:" <<  (unsigned)mem.read_unsafe(constants::SCY_ADDRESS) << "\n" <<
+           " SCX:" << (unsigned)scx << "\n" <<
+           " SCY:" <<  (unsigned)scy << "\n" <<
            " LYC:" <<  (unsigned)mem.read_unsafe(constants::LYC_ADDRESS) << "\n" <<
            " LY:" <<  (unsigned)mem.read_unsafe(constants::LY_ADDRESS) << "\n";
         DW::header = ss.str();

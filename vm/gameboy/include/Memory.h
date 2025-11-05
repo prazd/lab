@@ -55,8 +55,11 @@ struct Memory {
     bool tima_overflow = false;
     bool tma_written = false;
     bool ppu_oam_usage = false;
+    bool ch1_trigger = false;
+    bool ch2_trigger = false;
     size_t ppu_internal_t_cycle = 0;
     unsigned short div_internal_sync = 0;
+
 
     enum BankingMode {
         Simple,
@@ -85,6 +88,8 @@ struct Memory {
     unsigned char read(unsigned short index) const;
     void write_unsafe(unsigned short index, unsigned char value);
     unsigned char read_unsafe(unsigned short index) const;
+
+    void update_channels_triggers(unsigned short, unsigned char);
 };
 
 #endif //GAMEBOY_RAM_H

@@ -349,7 +349,7 @@ struct GameBoyVM{
         auto tile_view_mode_handle = [&]{
             switch (current_tile_view_mode) {
                 case TileWindow:       {tw.handle(mem); break;}
-                case BgTileMapWindow:  {bgtm.handle(mem); break;}
+                case BgTileMapWindow:  {bgtm.handle(mem, ppu.last_scx, ppu.last_scy); break;}
             }
         };
 
@@ -373,11 +373,12 @@ struct GameBoyVM{
         auto cpu_r = cpu.instruction_async_loop(mem);
         while(!WindowShouldClose()){
 #if DEBUG_MODE
-                auto begin = std::chrono::steady_clock::now();
+//                auto begin = std::chrono::steady_clock::now();
                 for (int i = 0; i < current_speed; ++i)
                     main_loop_async(cpu_r);
-                auto end = std::chrono::steady_clock::now();
-                std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms\n";
+
+//                auto end = std::chrono::steady_clock::now();
+//                std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms\n";
 
                 UpdateTexture(target, ppu.read_buffer());
 
@@ -389,11 +390,12 @@ struct GameBoyVM{
                     DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height},
                                Rectangle{0, 0, constants::LCD_WIDTH, constants::LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
                     tile_view_mode_handle();
+
                     sw.handle(mem);
                     rw.handle(mem, cpu);
                     swt.handle(sw);
                     jw.handle(mem, joypad);
-                    ppurt.handle(mem);
+                    ppurt.handle(mem, ppu.last_scx, ppu.last_scy);
                     apurt.handle(mem);
 
                     if (print_pixels) pp.handle(GREEN, 0, 0);
@@ -550,7 +552,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_bgp_change_sprites.gb
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_lcdc_bg_en_change.gb
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

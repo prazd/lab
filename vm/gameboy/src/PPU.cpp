@@ -371,6 +371,11 @@ void PPU::tick(Memory& mem)  {
 #if DEBUG_PRINTS_PPU
                 PRINT_T_CYCLE("HBlank", debug_t_cycles)
 #endif
+#if DEBUG_MODE
+                // set before v-blank interrupt
+                last_scx = mem.read_unsafe(constants::SCX_ADDRESS);
+                last_scy = mem.read_unsafe(constants::SCY_ADDRESS);
+#endif
                 current_mode = VBlank;
 
                 // VBlank Interrupt

@@ -185,6 +185,8 @@ void Memory::write(unsigned short index, unsigned char value) {
         tac_written = true;
     }
 
+    update_channels_triggers(index, value);
+
     if (is_ram_avaliable(index)){
         map[index] = value;
     }
@@ -219,6 +221,8 @@ unsigned char Memory::read(unsigned short index) const {
 
     return dummy_reg;
 }
+
+
 
 void Memory::write_unsafe(unsigned short index, unsigned char value) {
     if (index <= constants::ROM_BANK_01_END){
@@ -255,6 +259,7 @@ void Memory::write_unsafe(unsigned short index, unsigned char value) {
         external_ram[current_address + (current_external_ram_n * 8192)] = value;
         return;
     }
+    update_channels_triggers(index, value);
     map[index] = value;
 }
 
@@ -276,6 +281,13 @@ unsigned char Memory::read_unsafe(unsigned short index) const {
         return external_ram_enabled ? external_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_external_ram_n * 8192)] : dummy_reg;
     }
     return map[index];
+}
+
+void Memory::update_channels_triggers(unsigned short address, unsigned char value) {
+    if (address == constants::NR14_ADDRESS)
+        ch1_trigger = (((value >> 7) & 1));
+    else if (address == constants::NR24_ADDRESS)
+    ch2_trigger = (((value >> 7) & 1));
 }
 
 void Memory::dma_tick() {

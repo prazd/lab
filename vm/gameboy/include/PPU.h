@@ -349,6 +349,10 @@ struct PPU {
     size_t last_t_cycles = 0;
     Sprite current_sprite{};
     size_t internal_t_cycles = 0;
+#if DEBUG_MODE
+    unsigned char last_scx = 0;
+    unsigned char last_scy = 0;
+#endif
     bool oam_start = true;
 
     enum OamMode {
