@@ -190,6 +190,41 @@ struct RectsPrint: public DebugWindow<0, 0, width + 150, height + 150>{
     }
 };
 
+template <size_t width, size_t height>
+struct APUChansActive: public DebugWindow<0, 0, width, height>{
+    using DW = DebugWindow<0, 0, width, height>;
+    APUChansActive(float x, float y):
+            DW(x, y){
+    }
+    void update(Memory& mem) {
+        Rectangle ch1rec = {0, 0, 100, 50};
+        Rectangle ch2rec = {0,  55, 100, 50};
+        std::stringstream ss;
+        auto draw_channel_button = [&](Rectangle rec, std::string_view text, Color c) {
+            DrawRectangleRec(rec,  c);
+            ss << text;
+            auto s = ss.str();
+            DrawText(s.c_str(), rec.x, rec.y, 20.f, BLACK);
+            ss.str("");
+        };
+        BeginTextureMode(DW::target_renderer);
+            ClearBackground(BLANK);
+            if (CheckCollisionPointRec(GetMousePosition(), {DW::rec.x, DW::rec.y, 100, 50}) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+                mem.custom_ch1_active = !mem.custom_ch1_active;
+
+            if (CheckCollisionPointRec(GetMousePosition(), {DW::rec.x, DW::rec.y + 55, 100, 50}) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+                mem.custom_ch2_active = !mem.custom_ch2_active;
+
+            draw_channel_button(ch1rec, "CH1", mem.custom_ch1_active ? GREEN : RED);
+            draw_channel_button(ch2rec, "CH2", mem.custom_ch2_active ? GREEN : RED);
+
+        EndTextureMode();
+    }
+    void handle() {
+        DW::draw_render_texture();
+    }
+};
+
 template <size_t pwidth, size_t pheight, size_t width, size_t height, size_t n_tiles>
 struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
     using DW = DebugWindow<pwidth, pheight,width,height>;

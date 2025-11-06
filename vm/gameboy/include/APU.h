@@ -26,11 +26,13 @@ struct CH1: SquareWaveChannel {
     void init(const Memory&);
     void sweep_step(Memory& mem);
     void disable_check(Memory& mem);
+    void disable();
 };
 
 struct CH2: SquareWaveChannel {
     void init(const Memory&);
     void disable_check(Memory& mem);
+    void disable();
 };
 
 struct CH3: Channel {

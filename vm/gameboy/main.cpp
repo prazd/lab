@@ -335,12 +335,29 @@ struct GameBoyVM{
         BgTileMapWindow<500,500> bgtm(810,0);
 
         PPURegistersText<0,0,200,150> ppurt(1320, 0);
-        APURegistersText<0,0,200,150> apurt(1320, 150);
+
         SpriteWindow<80, 32, 300, 200> sw(820, 517);
         RegWindow<0,0,300,465> rw(1150, 517);
         SpriteWindowText<0,0,600,200> swt(10, 750);
         JoypadWindow<0,0,300,250> jw(820, 730);
-        enum TileViewModes{
+
+#if APU_ON
+        APURegistersText<0,0,200,150> apurt(1320, 150);
+        APUChansActive<300,300> apuc(1320, 150);
+        enum APUViewMode {
+            ApuRegs,
+            ApuChans,
+            ApuViewModesCount
+        };
+        int current_apu_view_mode = 0;
+        auto apu_view_mode_handle = [&]{
+            switch (current_apu_view_mode) {
+                case ApuRegs: {apurt.handle(mem); break;}
+                case ApuChans: {apuc.handle(); break;}
+            }
+        };
+#endif
+        enum TileViewMode{
             TileWindow,
             BgTileMapWindow,
             ViewModesCount
@@ -384,6 +401,9 @@ struct GameBoyVM{
 
                 if (print_pixels) {pp.update(mem, 0, 0);}
                 if (print_tiles)  {tp.update(mem, 0, print_pixels ? 50 : 0);}
+#if APU_ON
+                if (current_apu_view_mode == ApuChans) apuc.update(mem);
+#endif
 
                 BeginTextureMode(base);
                     ClearBackground(BLANK);
@@ -396,10 +416,11 @@ struct GameBoyVM{
                     swt.handle(sw);
                     jw.handle(mem, joypad);
                     ppurt.handle(mem, ppu.last_scx, ppu.last_scy);
-                    apurt.handle(mem);
-
                     if (print_pixels) pp.handle(GREEN, 0, 0);
                     if (print_tiles)  tp.handle(RED, 0, print_pixels ? 50 : 0);
+#if APU_ON
+                apu_view_mode_handle();
+#endif
                 EndTextureMode();
 #else
             main_loop_async(cpu_r);
@@ -441,6 +462,8 @@ struct GameBoyVM{
               }
               if (IsKeyPressed(KEY_M))
                   current_tile_view_mode = (current_tile_view_mode + 1) % ViewModesCount;
+              if (IsKeyPressed(KEY_A))
+                  current_apu_view_mode = (current_apu_view_mode + 1) % ApuViewModesCount;
               if (IsKeyPressed(KEY_ZERO))
                   restart();
               if (IsKeyPressed(KEY_X)){
