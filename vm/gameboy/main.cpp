@@ -575,7 +575,8 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_bgp_change_sprites.gb
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_lcdc_bg_en_change.gb
 int main() {
-        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
+//      /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/04-sweep.gb
+        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/04-sweep.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

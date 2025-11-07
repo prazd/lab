@@ -478,6 +478,7 @@ struct APURegistersText: public DebugWindow<pwidth, pheight, width, height> {
     void handle(const Memory& mem){
         std::stringstream ss;
         ss << std::hex << " APU REGS:\n" <<
+           " NR10:" <<  std::bitset<8>(mem.read_unsafe(constants::NR10_ADDRESS)).to_string() << "\n" <<
            " NR11:" <<  std::bitset<8>(mem.read_unsafe(constants::NR11_ADDRESS)).to_string() << "\n" <<
            " NR12:" <<  std::bitset<8>(mem.read_unsafe(constants::NR12_ADDRESS)).to_string() << "\n" <<
            " NR13:" <<  std::bitset<8>(mem.read_unsafe(constants::NR13_ADDRESS)).to_string() << "\n" <<

@@ -259,7 +259,6 @@ void Memory::write_unsafe(unsigned short index, unsigned char value) {
         external_ram[current_address + (current_external_ram_n * 8192)] = value;
         return;
     }
-    update_channels_triggers(index, value);
     map[index] = value;
 }
 
