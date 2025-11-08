@@ -65,16 +65,17 @@ void CH2::disable_check(Memory& mem) {
     if (length_counter == 0 && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1) disable(mem);
 }
 
-void CH1::sweep_step(Memory &mem) {
+void CH1::sweep_step(Memory &mem, bool init) {
     auto nr10 = mem.read_unsafe(constants::NR10_ADDRESS);
+    sweep_timer = ((nr10 >> 4) & 0x7);
     bool neg = (nr10 >> 3) & 1;
     unsigned char shift = nr10 & 0x7;
-    if (shift == 0) {
+    if (shift == 0 && sweep_timer == 0) return;
+    if (sweep_timer == 0) sweep_timer = 8;
+    if (shift == 0 && init) {
         unsigned char l = mem.read_unsafe(constants::NR13_ADDRESS);
         unsigned char h = (mem.read_unsafe(constants::NR14_ADDRESS) & 0x7);
         shadow_frequency =  ((h << 8) | l);
-        sweep_timer = ((mem.read_unsafe(constants::NR10_ADDRESS) >> 4) & 0x7);
-        if (sweep_timer == 0) sweep_timer = 8;
         return;
     }
     auto delta = shadow_frequency >> shift;
@@ -88,8 +89,6 @@ void CH1::sweep_step(Memory &mem) {
     mem.write_unsafe(constants::NR13_ADDRESS, new_val & 0xff);
     mem.write_unsafe(constants::NR14_ADDRESS,
                      (mem.read_unsafe(constants::NR14_ADDRESS) & 0xf8) | ((new_val >> 8) & 0x7));
-    sweep_timer = ((mem.read_unsafe(constants::NR10_ADDRESS) >> 4) & 0x7);
-    if (sweep_timer == 0) sweep_timer = 8;
     // todo: maybe second overflow check
     update_pitch(mem, constants::NR13_ADDRESS, constants::NR14_ADDRESS);
 }
@@ -124,8 +123,8 @@ void APU::frame_seq_handler(Memory& mem) {
         case 2: {
             if (ch1.active && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1) --ch1.length_counter;
             if (ch2.active && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1) --ch2.length_counter;
-            if (!ch1.sweep_timer) ch1.sweep_step(mem);
-            else --ch1.sweep_timer;
+            --ch1.sweep_timer;
+            if (!ch1.sweep_timer) ch1.sweep_step(mem, false);
             break;
         }
         case 4: {
@@ -136,8 +135,8 @@ void APU::frame_seq_handler(Memory& mem) {
         case 6: {
             if (ch1.active && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)  --ch1.length_counter;
             if (ch2.active && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)  --ch2.length_counter;
-            if (!ch1.sweep_timer) ch1.sweep_step(mem);
-            else --ch1.sweep_timer;
+            --ch1.sweep_timer;
+            if (!ch1.sweep_timer) ch1.sweep_step(mem, false);
             break;
         }
         case 7: {
@@ -197,7 +196,7 @@ void APU::tick(Memory& mem) {
         mem.ch1_trigger = false;
 
         // sweep overflow check
-        ch1.sweep_step(mem);
+        ch1.sweep_step(mem, true);
     }
 
     if (mem.ch2_trigger

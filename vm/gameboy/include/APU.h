@@ -24,7 +24,7 @@ struct SquareWaveChannel: Channel {
 
 struct CH1: SquareWaveChannel {
     void init(Memory&);
-    void sweep_step(Memory& mem);
+    void sweep_step(Memory& mem, bool);
     void disable_check(Memory& mem);
     void disable(Memory& mem);
 };
