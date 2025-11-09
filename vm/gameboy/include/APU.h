@@ -47,20 +47,16 @@ struct CH4: Channel {
     void update_length_timer(const Memory& mem);
 };
 
-struct FrameSequencer {
-    unsigned char step{};
-    unsigned short frame_seq_counter{};
-    void tick(Memory&);
-};
-
 struct APU {
     CH1 ch1;
     CH2 ch2;
     CH3 ch3;
     CH4 ch4;
     short buffer[2048]{};
-    FrameSequencer frame_sequencer;
+    unsigned char frame_sequencer_step{};
+    unsigned frame_seq_t_cycle{};
     void tick(Memory&);
-    void frame_seq_handler(Memory& mem);
+    void frame_seq_tick(Memory&);
+    void frame_seq_handler(Memory& mem, unsigned char step);
 };
 #endif //MAIN_CPP_APU_H

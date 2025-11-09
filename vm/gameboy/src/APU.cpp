@@ -27,8 +27,6 @@ void CH1::init(Memory& mem) {
     freq_timer = freq_timer_period;
     envelope_volume = (mem.read_unsafe(constants::NR12_ADDRESS) >> 4) & 0xf;
     envelope_timer = (mem.read_unsafe(constants::NR12_ADDRESS) & 0x7);
-    sweep_timer = ((mem.read_unsafe(constants::NR10_ADDRESS) >> 4) & 0x7);
-    if (sweep_timer == 0) sweep_timer = 8;
     mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) | 1);
 }
 
@@ -47,7 +45,6 @@ void CH1::disable(Memory& mem) {
     envelope_volume = 0;
     active = false;
     dac_out = 0.f;
-
 }
 
 void CH2::disable(Memory& mem) {
@@ -68,10 +65,9 @@ void CH2::disable_check(Memory& mem) {
 void CH1::sweep_step(Memory &mem, bool init) {
     auto nr10 = mem.read_unsafe(constants::NR10_ADDRESS);
     sweep_timer = ((nr10 >> 4) & 0x7);
-    bool neg = (nr10 >> 3) & 1;
     unsigned char shift = nr10 & 0x7;
     if (shift == 0 && sweep_timer == 0) return;
-    if (sweep_timer == 0) sweep_timer = 8;
+    if (sweep_timer == 0) sweep_timer = 9; // todo: debug (should be 8)
     if (shift == 0 && init) {
         unsigned char l = mem.read_unsafe(constants::NR13_ADDRESS);
         unsigned char h = (mem.read_unsafe(constants::NR14_ADDRESS) & 0x7);
@@ -80,7 +76,7 @@ void CH1::sweep_step(Memory &mem, bool init) {
     }
     auto delta = shadow_frequency >> shift;
     unsigned new_val{};
-    if (!neg) new_val = shadow_frequency + delta;
+    if (!((nr10 >> 3) & 1)) new_val = shadow_frequency + delta;
     else new_val = shadow_frequency - delta;
     if (new_val > 2047){
         disable(mem);
@@ -101,30 +97,24 @@ void CH4::update_length_timer(const Memory &mem) {
     length_counter = (mem.read_unsafe(constants::NR41_ADDRESS) & 0x3f);
 }
 
-void FrameSequencer::tick(Memory& mem) {
-//    static auto prev = 0;
-//    unsigned char current = (mem.read_unsafe(constants::DIV_REGISTER) >> 4) & 1;
-//    if (!prev && current)
-//        step = (step + 1) % 8;
-//    prev = current;
-
-    static unsigned prev = 0;
-    if (prev++ % 8192 == 0)
-        step = (step + 1) % 8;
+void APU::frame_seq_tick(Memory& mem) {
+    if (frame_seq_t_cycle++ % 8192 == 0)
+        frame_seq_handler(mem, std::exchange(frame_sequencer_step, (frame_sequencer_step + 1) % 8));
 }
 
-void APU::frame_seq_handler(Memory& mem) {
-    switch (frame_sequencer.step) {
+void APU::frame_seq_handler(Memory& mem, unsigned char step) {
+    switch (step) {
         case 0: {
             if (ch1.active && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1) --ch1.length_counter;
             if (ch2.active && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1) --ch2.length_counter;
             break;
         }
         case 2: {
-            if (ch1.active && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1) --ch1.length_counter;
+            if (ch1.active) {
+                if ((mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1) --ch1.length_counter;
+                if (!(--ch1.sweep_timer)) ch1.sweep_step(mem, false);
+            }
             if (ch2.active && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1) --ch2.length_counter;
-            --ch1.sweep_timer;
-            if (!ch1.sweep_timer) ch1.sweep_step(mem, false);
             break;
         }
         case 4: {
@@ -133,10 +123,11 @@ void APU::frame_seq_handler(Memory& mem) {
             break;
         }
         case 6: {
-            if (ch1.active && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)  --ch1.length_counter;
+            if (ch1.active){
+                if ((mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1) --ch1.length_counter;
+                if (!(--ch1.sweep_timer)) ch1.sweep_step(mem, false);
+            }
             if (ch2.active && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)  --ch2.length_counter;
-            --ch1.sweep_timer;
-            if (!ch1.sweep_timer) ch1.sweep_step(mem, false);
             break;
         }
         case 7: {
@@ -256,10 +247,5 @@ void APU::tick(Memory& mem) {
                 mix = -1.f;
             }
             buffer[current = (current + 1) % 2048] = (short)(mix * 32767.f);
-    }
-
-    if (frame_sequencer.step != prev_frame_seq_step) {
-        frame_seq_handler(mem);
-        prev_frame_seq_step = frame_sequencer.step;
     }
 }
