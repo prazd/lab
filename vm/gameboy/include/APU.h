@@ -36,9 +36,16 @@ struct CH2: SquareWaveChannel {
 };
 
 struct CH3: Channel {
+    bool length_enabled{};
+    unsigned char envelope_volume{};
+    float dac_out{};
+    unsigned short freq{};
     unsigned char wave{};
+    unsigned char nibble{};
     unsigned char volume{};
-    void update_length_timer(const Memory& mem);
+    void disable_check(Memory& mem);
+    void disable(Memory& mem);
+    void init(Memory&);
 };
 
 struct CH4: Channel {

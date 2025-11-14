@@ -199,6 +199,8 @@ struct APUChansActive: public DebugWindow<0, 0, width, height>{
     void update(Memory& mem) {
         Rectangle ch1rec = {0, 0, 100, 50};
         Rectangle ch2rec = {0,  55, 100, 50};
+        Rectangle ch3rec = {0,  110, 100, 50};
+
         std::stringstream ss;
         auto draw_channel_button = [&](Rectangle rec, std::string_view text, Color c) {
             DrawRectangleRec(rec,  c);
@@ -215,8 +217,12 @@ struct APUChansActive: public DebugWindow<0, 0, width, height>{
             if (CheckCollisionPointRec(GetMousePosition(), {DW::rec.x, DW::rec.y + 55, 100, 50}) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
                 mem.custom_ch2_active = !mem.custom_ch2_active;
 
+            if (CheckCollisionPointRec(GetMousePosition(), {DW::rec.x, DW::rec.y + 110, 100, 50}) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+                mem.custom_ch3_active = !mem.custom_ch3_active;
+
             draw_channel_button(ch1rec, "CH1", mem.custom_ch1_active ? GREEN : RED);
             draw_channel_button(ch2rec, "CH2", mem.custom_ch2_active ? GREEN : RED);
+            draw_channel_button(ch3rec, "CH3", mem.custom_ch3_active ? GREEN : RED);
 
         EndTextureMode();
     }

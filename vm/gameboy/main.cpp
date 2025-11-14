@@ -324,7 +324,7 @@ struct GameBoyVM{
 #if APU_ON        
         InitAudioDevice();
         // sample rate: 44100, sample size: 16bit-short, channels: 1-mono
-        AudioStream stream = LoadAudioStream(44'100, 16, 1);
+        AudioStream stream = LoadAudioStream(44'100, 16, 2);
         SetAudioStreamBufferSizeDefault(2048);
         PlayAudioStream(stream);
 #endif        
