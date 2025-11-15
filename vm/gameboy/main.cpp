@@ -323,9 +323,9 @@ struct GameBoyVM{
         
 #if APU_ON        
         InitAudioDevice();
-        // sample rate: 44100, sample size: 16bit-short, channels: 1-mono
+        // sample rate: 44100, sample size: 16bit-short, channels: 2
         AudioStream stream = LoadAudioStream(44'100, 16, 2);
-        SetAudioStreamBufferSizeDefault(2048);
+        SetAudioStreamBufferSizeDefault(constants::SAMPLE_BUFFER_SIZE);
         PlayAudioStream(stream);
 #endif        
 
@@ -476,7 +476,7 @@ struct GameBoyVM{
             EndDrawing();
 #if APU_ON
             if (IsAudioStreamProcessed(stream)) {
-                short tmp[2048]{};
+                short tmp[constants::SAMPLE_BUFFER_SIZE]{};
                 std::copy(std::begin(apu.buffer), std::end(apu.buffer), tmp);
                 UpdateAudioStream(stream, tmp, 750);
             }
@@ -577,7 +577,7 @@ struct GameBoyVM{
 int main() {
 //      /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/04-sweep.gb
 //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/05-sweep details.gb"
-        GameBoyVM vm("/Users/prazd/Desktop/dev/tetris.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

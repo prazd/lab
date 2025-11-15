@@ -58,8 +58,8 @@ struct Memory {
     bool ch1_trigger = false;
     bool ch2_trigger = false;
     bool ch3_trigger = false;
-    bool nr33_written = false;
-    bool nr34_written = false;
+//    bool nr33_written = false;
+//    bool nr34_written = false;
     size_t ppu_internal_t_cycle = 0;
     unsigned short div_internal_sync = 0;
 #if DEBUG_MODE

@@ -14,7 +14,7 @@ struct SquareWaveChannel: Channel {
     float dac_out{};
     unsigned shadow_frequency{};
     unsigned short envelope_timer{};
-    unsigned char envelope_volume{};
+    char envelope_volume{};
     unsigned short sweep_timer{};
     unsigned char duty{};
     void update_duty(const Memory& mem, unsigned short);
@@ -37,12 +37,10 @@ struct CH2: SquareWaveChannel {
 
 struct CH3: Channel {
     bool length_enabled{};
-    unsigned char envelope_volume{};
     float dac_out{};
     unsigned short freq{};
     unsigned char wave{};
     unsigned char nibble{};
-    unsigned char volume{};
     void disable_check(Memory& mem);
     void disable(Memory& mem);
     void init(Memory&);
@@ -59,7 +57,7 @@ struct APU {
     CH2 ch2;
     CH3 ch3;
     CH4 ch4;
-    short buffer[2048]{};
+    short buffer[constants::SAMPLE_BUFFER_SIZE]{};
     unsigned char frame_sequencer_step{};
     unsigned frame_seq_t_cycle{};
     void tick(Memory&);
