@@ -4,7 +4,7 @@
 
 #define DEBUG_MODE 1
 #define BOOTROM_INIT 1
-#define DEBUG_BOOTROM 0
+#define DEBUG_BOOTROM 1
 #define APU_ON 1
 
 namespace constants {

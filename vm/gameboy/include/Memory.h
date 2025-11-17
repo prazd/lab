@@ -58,14 +58,14 @@ struct Memory {
     bool ch1_trigger = false;
     bool ch2_trigger = false;
     bool ch3_trigger = false;
-//    bool nr33_written = false;
-//    bool nr34_written = false;
+    bool ch4_trigger = false;
     size_t ppu_internal_t_cycle = 0;
     unsigned short div_internal_sync = 0;
 #if DEBUG_MODE
     bool custom_ch1_active = true;
     bool custom_ch2_active = true;
     bool custom_ch3_active = true;
+    bool custom_ch4_active = true;
 #endif
 
     enum BankingMode {

@@ -289,6 +289,8 @@ void Memory::update_channels_triggers(unsigned short address, unsigned char valu
     ch2_trigger = (((value >> 7) & 1));
     else if (address == constants::NR34_ADDRESS)
     ch3_trigger = ((value >> 7) & 1);
+    else if (address == constants::NR44_ADDRESS)
+    ch4_trigger = ((value >> 7) & 1);
 }
 
 void Memory::dma_tick() {

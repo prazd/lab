@@ -47,9 +47,21 @@ struct CH3: Channel {
 };
 
 struct CH4: Channel {
+    unsigned char dividers[8]{
+      8,16,32,48,64, 80, 96, 112
+    };
+    bool length_enabled{};
+    unsigned char envelope_volume{};
     unsigned short envelope_timer{};
-    unsigned char lsfr{};
+    bool lsfr_width{};
+    unsigned freq_timer{};
+    unsigned freq_period{};
+    float dac_out{};
+    unsigned short lsfr{};
     void update_length_timer(const Memory& mem);
+    void init(const Memory&);
+    void disable_check(Memory& mem);
+    void disable(Memory& mem);
 };
 
 struct APU {
