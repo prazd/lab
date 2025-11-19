@@ -69,11 +69,20 @@ struct APU {
     CH2 ch2;
     CH3 ch3;
     CH4 ch4;
+    unsigned accum{};
+    int current_buffer_i {};
+    int current_FIR_buffer_i{};
+    int current_FIR_buffer_j{};
+    static constexpr unsigned long step = 44100;
     short buffer[constants::SAMPLE_BUFFER_SIZE]{};
+    float FIR_buffer_left[32];
+    float FIR_buffer_right[32];
     unsigned char frame_sequencer_step{};
     unsigned frame_seq_t_cycle{};
     void tick(Memory&);
     void frame_seq_tick(Memory&);
     void frame_seq_handler(Memory& mem, unsigned char step);
+    std::pair<float, float> next_sample_2ch(Memory& mem);
+    std::pair<float, float> next_FIR_sample_2ch(Memory& mem);
 };
 #endif //MAIN_CPP_APU_H
