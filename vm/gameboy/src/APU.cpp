@@ -1,13 +1,14 @@
 #include "APU.h"
 #include <cmath>
 #include <numeric>
+
 void SquareWaveChannel::update_duty(const Memory& mem, unsigned short address) {
-    // TODO: check
+    // https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware
     switch ((mem.read_unsafe(address) >> 6) & 0x3) {
         case 0b00: {duty = 0b0000'0001;  break;} // 12.5%
-        case 0b01: {duty = 0b0000'0011;  break;} // 25%
-        case 0b10: {duty = 0b0000'1111;  break;} // 50%
-        case 0b11: {duty = 0b0011'1111;  break;} // 75%
+        case 0b01: {duty = 0b1000'0001;  break;} // 25%
+        case 0b10: {duty = 0b1000'0111;  break;} // 50%
+        case 0b11: {duty = 0b0111'1110;  break;} // 75%
     }
 }
 
@@ -49,8 +50,8 @@ void CH2::init(const Memory& mem) {
 
 
 void CH3::init(Memory& mem) {
-//    nibble = 0;
-//    wave = 0;
+    nibble = 0;
+    wave = 0;
     freq = ((mem.read_unsafe(constants::NR34_ADDRESS) & 0x7) << 8) | (mem.read_unsafe(constants::NR33_ADDRESS));
     length_enabled = (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1;
     if (length_enabled) length_counter = 256 - mem.read_unsafe(constants::NR31_ADDRESS);
@@ -75,7 +76,6 @@ void CH4::init(const Memory& mem) {
 void CH1::disable(Memory& mem) {
     mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xE);
     envelope_volume = 0;
-    sweep_timer = 0;
     active = false;
     dac_out = 0.f;
 }
@@ -225,37 +225,23 @@ void APU::frame_seq_handler(Memory& mem, unsigned char step) {
     ch4.disable_check(mem);
 }
 
-static float next_square_sample(float dac_value){
-    return (dac_value/15.f);
-}
 
 template <bool left>
 float highpass(float x) {
     static float in_prev = 0.f;
     static float y_prev = 0.f;
     static float x_prev = 0.f;
-    static constexpr float a = 0.99958f;
+    static constexpr float a = 0.996f;
     float res = x - x_prev + (a * y_prev);
     y_prev = res;
     x_prev = x;
     return res;
 }
 
-template <bool left>
-float lowpass(float x) {
-    static float prev_y = 0;
-    static constexpr float a = 0.505f;
-    float out = a * prev_y + (1 - a) * x;
-    prev_y = out;
-    return out;
-}
-
 std::pair<float, float> APU::next_sample_2ch(Memory &mem) {
     auto nr51 = mem.read_unsafe(constants::NR51_ADDRESS);
-    auto nr50 = mem.read_unsafe(constants::NR50_ADDRESS);
     auto mix_left = 0.f;
     auto mix_right = 0.f;
-    float count = 0.f;
     bool ch1_right_active = (nr51) & 1;
     bool ch2_right_active = ((nr51)>>1) & 1;
     bool ch3_right_active = ((nr51)>>2) & 1;
@@ -269,41 +255,35 @@ std::pair<float, float> APU::next_sample_2ch(Memory &mem) {
     if (ch1.active){
 #if DEBUG_MODE
         if (mem.custom_ch1_active){
-            mix_left += ch1_left_active ? (next_square_sample(ch1.dac_out)) : 0;
-            mix_right += ch1_right_active ? (next_square_sample(ch1.dac_out)) : 0;
-            count += 1.f;
+            mix_left += ch1_left_active ? ch1.dac_out/15.f : 0;
+            mix_right += ch1_right_active ? ch1.dac_out/15.f : 0;
         }
 #else
-        mix_left += ch1_left_active ? (next_square_sample(ch1.dac_out)) : 0;
-                mix_right += ch1_right_active ? (next_square_sample(ch1.dac_out)) : 0;
-                count += 1.f;
+        mix_left += ch1_left_active ? ch1.dac_out/15.f : 0;
+        mix_right += ch1_right_active ? ch1.dac_out/15.f : 0;
 #endif
     }
     if (ch2.active){
 #if DEBUG_MODE
         if (mem.custom_ch2_active){
-            mix_left += ch2_left_active ? next_square_sample(ch2.dac_out) : 0;
-            mix_right += ch2_right_active ?  next_square_sample(ch2.dac_out) : 0;
-            count += 1.f;
+            mix_left += ch2_left_active ? ch2.dac_out/15.f : 0;
+            mix_right += ch2_right_active ?  ch2.dac_out/15.f : 0;
         }
 #else
-        mix_left += ch2_left_active ? (next_square_sample(ch2.dac_out)) : 0;
-                mix_right += ch2_right_active ? (next_square_sample(ch2.dac_out)) : 0;
-                count += 1.f;
+        mix_left += ch2_left_active ? ch2.dac_out/15.f : 0;
+        mix_right += ch2_right_active ? ch2.dac_out/15.f : 0;
 #endif
     }
 
     if (ch3.active){
 #if DEBUG_MODE
         if (mem.custom_ch3_active){
-            mix_left += ch3_left_active ? ch3.dac_out/2 : 0;
-            mix_right += ch3_right_active ? ch3.dac_out/2: 0;
-            count += 1.f;
+            mix_left += ch3_left_active ? (ch3.dac_out/15.f)/2 : 0;
+            mix_right += ch3_right_active ? (ch3.dac_out/15.f)/2: 0;
         }
 #else
-        mix_left += ch3_left_active ?  ch3.dac_out : 0;
-                mix_right += ch3_right_active ? ch3.dac_out : 0;
-                count += 1.f;
+        mix_left += ch3_left_active ?   (ch3.dac_out/15.f)/2 : 0;
+        mix_right += ch3_right_active ?  (ch3.dac_out/15.f)/2 : 0;
 #endif
     }
 
@@ -311,27 +291,17 @@ std::pair<float, float> APU::next_sample_2ch(Memory &mem) {
     if (ch4.active){
 #if DEBUG_MODE
         if (mem.custom_ch4_active){
-            mix_left += ch4_left_active ? ch4.dac_out : 0;
-            mix_right += ch4_right_active ? ch4.dac_out : 0;
-            count += 1.f;
+            mix_left += ch4_left_active ? ch4.dac_out/15.f/2 : 0;
+            mix_right += ch4_right_active ? ch4.dac_out/15.f/2 : 0;
         }
 #else
-        mix_left += ch4_left_active ?  ch4.dac_out : 0;
-                mix_right += ch4_right_active ? ch4.dac_out : 0;
-                count += 1.f;
+        mix_left += ch4_left_active ?  ch4.dac_out/15.f/2 : 0;
+        mix_right += ch4_right_active ? ch4.dac_out/15.f/2 : 0;
 #endif
     }
     mix_left  = std::clamp(mix_left , -1.f, 1.f);
     mix_right = std::clamp(mix_right, -1.f, 1.f);
     return {mix_left, mix_right};
-}
-
-
-// TODO: check + debug
-std::pair<float, float> APU::next_FIR_sample_2ch(Memory &mem) {
-    float left_res = std::accumulate(std::begin(FIR_buffer_left), std::end(FIR_buffer_left), 0.f);
-    float right_res = std::accumulate(std::begin(FIR_buffer_right), std::end(FIR_buffer_right), 0.f);
-    return {left_res/32.f, right_res/32.f};
 }
 
 void APU::tick(Memory& mem) {
@@ -394,13 +364,14 @@ void APU::tick(Memory& mem) {
             ch3.disable(mem);
         } else if (!(--ch3.freq_timer)) {
             unsigned char val = mem.read_unsafe(constants::CH3_WAVES_BASE + ch3.wave);
-            ch3.dac_out = ch3.nibble == 0 ? float((val >> 4) & 0xf) : float(val & 0xf);
+            unsigned char current_val = ch3.nibble == 0 ? (val >> 4) & 0xf : val & 0xf;
             switch ((mem.read_unsafe(constants::NR32_ADDRESS) >> 5) & 0x3) {
-                case 0b00: {ch3.dac_out = 0; break;}
-                case 0b01: {ch3.dac_out = (ch3.dac_out - 7.5f)/7.5f;       break;}
-                case 0b10: {ch3.dac_out = ((ch3.dac_out / 2) - 7.5f)/15.f; break;}
-                case 0b11: {ch3.dac_out = ((ch3.dac_out / 4) - 7.5f)/30.f; break;}
+                case 0b00: {current_val = 0; break;}
+                case 0b01: {break;}
+                case 0b10: {current_val>>=1; break;}
+                case 0b11: {current_val>>=2; break;}
             }
+            ch3.dac_out = ((float)current_val);
             if (ch3.nibble == 1) {ch3.nibble = 0; ch3.wave = (ch3.wave + 1) % 16;}
             else if (ch3.nibble == 0) {ch3.nibble = 1;}
             ch3.freq = ((mem.read_unsafe(constants::NR34_ADDRESS) & 0x7) << 8) | (mem.read_unsafe(constants::NR33_ADDRESS));
@@ -417,7 +388,7 @@ void APU::tick(Memory& mem) {
                 ch4.lsfr &= ~(1 << 6);
                 ch4.lsfr |= (next_bit << 6);
             } else {
-                ch4.lsfr &= 0x7f'ff;
+                ch4.lsfr &= 0x7fff;
                 ch4.lsfr &= ~(1 << 14);
                 ch4.lsfr |= (next_bit << 14);
             }
@@ -426,18 +397,13 @@ void APU::tick(Memory& mem) {
         }
     }
 
-    // FIR
-    auto sample =  next_sample_2ch(mem);
-    FIR_buffer_left[std::exchange(current_FIR_buffer_i, (current_FIR_buffer_i + 1) % 32)] = sample.first;
-    FIR_buffer_right[std::exchange(current_FIR_buffer_j, (current_FIR_buffer_j + 1) % 32)] = sample.second;
 
     accum += 44100;
     if (accum >= 4194304) {
         accum-=4194304;
-        auto sample = next_FIR_sample_2ch(mem);
-        auto left = (highpass<true>(lowpass<true>(sample.first)) * 32767.f);
-        auto right = (highpass<false>(lowpass<false>(sample.second)) * 32767.f);
-
+        auto sample = next_sample_2ch(mem);
+        auto left = (highpass<true>((sample.first)) * 32767.f);
+        auto right = (highpass<false>((sample.second)) * 32767.f);
         buffer[std::exchange(current_buffer_i, (current_buffer_i + 1) % constants::SAMPLE_BUFFER_SIZE)] = std::isnan(left) ? 0 : (short)left;
         buffer[std::exchange(current_buffer_i, (current_buffer_i + 1) % constants::SAMPLE_BUFFER_SIZE)] = std::isnan(right) ? 0 : (short)right;
     }
