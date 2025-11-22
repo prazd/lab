@@ -143,8 +143,17 @@ void CH1::sweep_step(Memory &mem, bool init) {
     mem.write_unsafe(constants::NR13_ADDRESS, new_val & 0xff);
     mem.write_unsafe(constants::NR14_ADDRESS,
                      (mem.read_unsafe(constants::NR14_ADDRESS) & 0xf8) | ((new_val >> 8) & 0x7));
-    // todo: maybe second overflow check
     update_pitch(mem, constants::NR13_ADDRESS, constants::NR14_ADDRESS);
+
+    // Second check
+    if (shift != 0) {
+        delta = shadow_frequency >> shift;
+        if (!((nr10 >> 3) & 1)) new_val = shadow_frequency + delta;
+        else new_val = shadow_frequency - delta;
+        if (new_val > 2047){
+            disable(mem);
+        }
+    }
 }
 
 void APU::frame_seq_tick(Memory& mem) {
@@ -195,6 +204,7 @@ void APU::frame_seq_handler(Memory& mem, unsigned char step) {
                     ch1.envelope_volume = std::clamp((mem.read_unsafe(constants::NR12_ADDRESS) >> 3) & 1 ?
                                                      (char)(ch1.envelope_volume + 1) : (char)(ch1.envelope_volume - 1), (char)0, (char)15);
                 ch1.envelope_timer = (mem.read_unsafe(constants::NR12_ADDRESS) & 0x7);
+                if (!ch1.envelope_timer) ch1.envelope_timer = 8;
             }
 
             --ch2.envelope_timer;
@@ -204,6 +214,7 @@ void APU::frame_seq_handler(Memory& mem, unsigned char step) {
                                                      (char)(ch2.envelope_volume + 1) : (char)(ch2.envelope_volume - 1), (char)0, (char)15);
                 }
                 ch2.envelope_timer = (mem.read_unsafe(constants::NR22_ADDRESS) & 0x7);
+                if (!ch2.envelope_timer) ch2.envelope_timer = 8;
             }
 
             --ch4.envelope_timer;
@@ -315,6 +326,7 @@ void APU::tick(Memory& mem) {
         ch1.init(mem);
         ch1.active = true;
         mem.ch1_trigger = false;
+        mem.ch1_update_timer = false;
         // sweep overflow check
         ch1.sweep_step(mem, true);
     }
@@ -327,6 +339,7 @@ void APU::tick(Memory& mem) {
         ch2.init(mem);
         ch2.active = true;
         mem.ch2_trigger = false;
+        mem.ch2_update_timer = false;
     }
 
     if (!mem.read_unsafe(constants::NR22_ADDRESS)) ch2.disable(mem);
@@ -335,15 +348,21 @@ void APU::tick(Memory& mem) {
         ch3.init(mem);
         ch3.active = true;
         mem.ch3_trigger = false;
+        mem.ch3_update_timer = false;
     }
 
     if (mem.ch4_trigger) {
         ch4.init(mem);
         ch4.active = true;
         mem.ch4_trigger = false;
+        mem.ch4_update_timer = false;
     }
 
     if (ch1.active) {
+        if (mem.ch1_update_timer) {
+            ch1.length_counter = 64 - (mem.read_unsafe(constants::NR11_ADDRESS) & 0x3f);
+            mem.ch1_update_timer = false;
+        }
         if (!(--ch1.freq_timer)) {
             ch1.phase = (ch1.phase + 1) % 8;
             ch1.freq_timer = ch1.freq_timer_period;
@@ -352,6 +371,10 @@ void APU::tick(Memory& mem) {
     }
 
     if (ch2.active) {
+        if (mem.ch2_update_timer) {
+            ch2.length_counter = 64 - (mem.read_unsafe(constants::NR21_ADDRESS) & 0x3f);
+            mem.ch2_update_timer = false;
+        }
         if (!(--ch2.freq_timer)) {
             ch2.phase = (ch2.phase + 1) % 8;
             ch2.freq_timer = ch2.freq_timer_period;
@@ -360,6 +383,10 @@ void APU::tick(Memory& mem) {
     }
 
     if (ch3.active) {
+        if (mem.ch3_update_timer) {
+            ch3.length_counter = 256 - mem.read_unsafe(constants::NR31_ADDRESS);
+            mem.ch3_update_timer = false;
+        }
         if (!((mem.read_unsafe(constants::NR30_ADDRESS) >> 7) & 1)){
             ch3.disable(mem);
         } else if (!(--ch3.freq_timer)) {
@@ -380,6 +407,10 @@ void APU::tick(Memory& mem) {
     }
 
     if (ch4.active) {
+        if (mem.ch4_update_timer) {
+            ch4.length_counter = 64 - (mem.read_unsafe(constants::NR41_ADDRESS) & 0x3f);
+            mem.ch4_update_timer = false;
+        }
         if (!(--ch4.freq_timer)) {
             auto next_bit = (ch4.lsfr & 1) ^ ((ch4.lsfr >> 1) & 1);
             ch4.lsfr >>= 1;
@@ -397,13 +428,12 @@ void APU::tick(Memory& mem) {
         }
     }
 
-
-    accum += 44100;
+    accum += 44'100;
     if (accum >= 4194304) {
         accum-=4194304;
         auto sample = next_sample_2ch(mem);
-        auto left = (highpass<true>((sample.first)) * 32767.f);
-        auto right = (highpass<false>((sample.second)) * 32767.f);
+        auto left = (highpass<true>(sample.first) * 32767.f);
+        auto right = (highpass<false>(sample.second) * 32767.f);
         buffer[std::exchange(current_buffer_i, (current_buffer_i + 1) % constants::SAMPLE_BUFFER_SIZE)] = std::isnan(left) ? 0 : (short)left;
         buffer[std::exchange(current_buffer_i, (current_buffer_i + 1) % constants::SAMPLE_BUFFER_SIZE)] = std::isnan(right) ? 0 : (short)right;
     }

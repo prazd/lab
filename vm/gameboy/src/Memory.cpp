@@ -286,11 +286,20 @@ void Memory::update_channels_triggers(unsigned short address, unsigned char valu
     if (address == constants::NR14_ADDRESS)
         ch1_trigger = (((value >> 7) & 1));
     else if (address == constants::NR24_ADDRESS)
-    ch2_trigger = (((value >> 7) & 1));
+        ch2_trigger = (((value >> 7) & 1));
     else if (address == constants::NR34_ADDRESS)
-    ch3_trigger = ((value >> 7) & 1);
+        ch3_trigger = ((value >> 7) & 1);
     else if (address == constants::NR44_ADDRESS)
-    ch4_trigger = ((value >> 7) & 1);
+        ch4_trigger = ((value >> 7) & 1);
+    // timers
+    else if (address == constants::NR11_ADDRESS)
+        ch1_update_timer = true;
+    else if (address == constants::NR21_ADDRESS)
+        ch2_update_timer = true;
+    else if (address == constants::NR31_ADDRESS)
+        ch3_update_timer = true;
+    else if (address == constants::NR41_ADDRESS)
+        ch4_update_timer = true;
 }
 
 void Memory::dma_tick() {

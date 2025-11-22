@@ -322,7 +322,7 @@ struct BgTileMapWindow: public DebugWindow<256, 256, width, height>{
             scx = scx_value;
         unsigned char scy_value = mem.read_unsafe(constants::SCY_ADDRESS);
         if (scy_value)
-            scy = scx_value;
+            scy = scy_value;
 
         int x = x_begin;
         int y = y_begin;
@@ -333,10 +333,11 @@ struct BgTileMapWindow: public DebugWindow<256, 256, width, height>{
             for (auto&& row: colors){
                 for (auto el: row) {
                     DW::buffer[y][x++] = (
-                            (((y == scy || y == (scy + 144) % 256) &&
-                                    (scx >= 95 ? (x >= scx || x <= (scx + 160) % 256) : (x >= scx && x <= (scx + 160) % 256))) ||
-                                    (scx == x || x == (scx + 160) % 256) && (scy < 112 ? (y >= scy && y <= (scy + 144) % 256) : (y >= scy || y <= (scy + 144) % 256)))
-                                    ) ? RED : Pixel::get_pixel_color(el);
+                            // up + down lines
+                            ((y == scy || y == (scy + 144) % 256) && (scx >= 95 ? (x >= scx || x <= (scx + 160) % 256) : (x >= scx && x <= (scx + 160) % 256))) ||
+                            // left + right lines
+                            (scx == x || x == (scx + 160) % 256) && (scy < 112 ? (y >= scy && y <= (scy + 144) % 256) : (y >= scy || y <= (scy + 144) % 256))
+                ) ? RED : Pixel::get_pixel_color(el);
                 }
                 ++y;
                 prev_x = std::exchange(x, current_x);
