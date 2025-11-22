@@ -74,21 +74,21 @@ void CH4::init(const Memory& mem) {
 }
 
 void CH1::disable(Memory& mem) {
-    mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xE);
+    mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xFE);
     envelope_volume = 0;
     active = false;
     dac_out = 0.f;
 }
 
 void CH2::disable(Memory& mem) {
-    mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xD);
+    mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xFD);
     envelope_volume = 0;
     active = false;
     dac_out = 0.f;
 }
 
 void CH3::disable(Memory &mem) {
-    mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xB);
+    mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xFB);
     length_enabled = false;
     length_counter = 0;
     dac_out = 0.f;
@@ -96,7 +96,7 @@ void CH3::disable(Memory &mem) {
 }
 
 void CH4::disable(Memory &mem) {
-    mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0x7);
+    mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xF7);
     length_enabled = false;
     envelope_volume = 0;
     active = false;
@@ -104,12 +104,13 @@ void CH4::disable(Memory &mem) {
 }
 
 void CH1::disable_check(Memory& mem) {
-    if ((length_counter == 0 && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)) disable(mem);
+    if ((length_counter == 0 && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1) && active) disable(mem);
 }
 
 void CH2::disable_check(Memory& mem) {
-    if ((length_counter == 0 && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)
-    || !((mem.read_unsafe(constants::NR22_ADDRESS) >> 4) & 0xf))  disable(mem);
+//    if ( ((length_counter == 0 && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)
+//    || !((mem.read_unsafe(constants::NR22_ADDRESS) >> 4) & 0xf) && active) && active)  disable(mem);
+    if ((length_counter == 0 && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1) && active) disable(mem);
 }
 
 void CH3::disable_check(Memory &mem) {
@@ -320,9 +321,8 @@ void APU::tick(Memory& mem) {
     static unsigned char prev_frame_seq_step = 0;
     static bool skip_sample = false;
 
-
     if (mem.ch1_trigger
-         && (mem.read_unsafe(constants::NR12_ADDRESS) & 0xf8) != 0) {
+         && (mem.read_unsafe(constants::NR12_ADDRESS) & 0xf8) != 0 && mem.read_unsafe(constants::NR52_ADDRESS)) {
         ch1.init(mem);
         ch1.active = true;
         mem.ch1_trigger = false;
@@ -331,7 +331,7 @@ void APU::tick(Memory& mem) {
         ch1.sweep_step(mem, true);
     }
 
-    if (!mem.read_unsafe(constants::NR12_ADDRESS)) ch1.disable(mem);
+    if (!mem.read_unsafe(constants::NR12_ADDRESS) && ch1.active) ch1.disable(mem);
 
     if (mem.ch2_trigger
         && (mem.read_unsafe(constants::NR22_ADDRESS) & 0xf8) != 0) {
@@ -342,7 +342,7 @@ void APU::tick(Memory& mem) {
         mem.ch2_update_timer = false;
     }
 
-    if (!mem.read_unsafe(constants::NR22_ADDRESS)) ch2.disable(mem);
+    if (!mem.read_unsafe(constants::NR22_ADDRESS) && ch2.active) ch2.disable(mem);
 
     if (mem.ch3_trigger) {
         ch3.init(mem);

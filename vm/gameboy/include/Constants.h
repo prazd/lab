@@ -96,6 +96,7 @@ namespace constants {
     constexpr size_t NR13_ADDRESS = 0xFF13;
     constexpr size_t NR14_ADDRESS = 0xFF14;
 
+    constexpr size_t NR20_ADDRESS = 0xFF15; // unused
     constexpr size_t NR21_ADDRESS = 0xFF16;
     constexpr size_t NR22_ADDRESS = 0xFF17;
     constexpr size_t NR23_ADDRESS = 0xFF18;
@@ -107,6 +108,7 @@ namespace constants {
     constexpr size_t NR33_ADDRESS = 0xFF1D;
     constexpr size_t NR34_ADDRESS = 0xFF1E;
 
+    constexpr size_t NR40_ADDRESS = 0xFF1f; // unused
     constexpr size_t NR41_ADDRESS = 0xFF20;
     constexpr size_t NR42_ADDRESS = 0xFF21;
     constexpr size_t NR43_ADDRESS = 0xFF22;
@@ -115,6 +117,18 @@ namespace constants {
     constexpr size_t NR50_ADDRESS = 0xFF24;
     constexpr size_t NR51_ADDRESS = 0xFF25;
     constexpr size_t NR52_ADDRESS = 0xFF26;
+    constexpr size_t NR53_ADDRESS = 0xFF27;
+
+    //unused
+    constexpr size_t NR54_ADDRESS = 0xFF28;
+    constexpr size_t NR55_ADDRESS = 0xFF29;
+    constexpr size_t NR56_ADDRESS = 0xFF2A;
+    constexpr size_t NR57_ADDRESS = 0xFF2B;
+    constexpr size_t NR58_ADDRESS = 0xFF2C;
+    constexpr size_t NR59_ADDRESS = 0xFF2D;
+    constexpr size_t NR60_ADDRESS = 0xFF2E;
+    constexpr size_t NR61_ADDRESS = 0xFF2F;
+
     constexpr size_t CH3_WAVES_BASE = 0xFF30;
 
     constexpr int SAMPLE_BUFFER_SIZE = 2048;

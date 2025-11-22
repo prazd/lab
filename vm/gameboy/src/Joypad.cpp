@@ -9,10 +9,10 @@ void Joypad::update_state(Memory& mem) {
         mem.write_unsafe(constants::JOYPAD, 0xff);
         return;
     }
-    auto pressed= current_pressed_values(is_direction_mode);
-    res |= pressed.first;
+    auto [pressed_res, interrupt] = current_pressed_values(is_direction_mode);
+    res |= pressed_res;
     mem.write_unsafe(constants::JOYPAD, res);
-    if (pressed.second) mem.write_unsafe(constants::IF_ADDRESS, mem.read_unsafe(constants::IF_ADDRESS) | (1 << 4));
+    if (interrupt) mem.write_unsafe(constants::IF_ADDRESS, mem.read_unsafe(constants::IF_ADDRESS) | (1 << 4));
 }
 
 std::pair<unsigned char, bool> Joypad::current_pressed_values(bool is_direction) {

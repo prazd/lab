@@ -187,6 +187,14 @@ void Memory::write(unsigned short index, unsigned char value) {
 
     update_channels_triggers(index, value);
 
+    if (index == constants::NR52_ADDRESS && !((value >> 7) & 1) && (map[constants::NR52_ADDRESS] >> 7) & 1)
+        apu_power_off();
+
+    if (std::any_of(std::begin(apu_regs), std::end(apu_regs),
+                    [index](auto& el){return el == index && el != constants::NR52_ADDRESS;}) &&
+                    !((map[constants::NR52_ADDRESS] >> 7) & 1))
+        return;
+
     if (is_ram_avaliable(index)){
         map[index] = value;
     }
@@ -216,13 +224,23 @@ unsigned char Memory::read(unsigned short index) const {
     }
 
     if (is_ram_avaliable(index)){
+        for (int i = 0; auto el : apu_regs){
+            if (el == index){
+                if (index == constants::NR52_ADDRESS)
+                    return (map[index] | apu_regs_masks[i]) & 0xf0;
+                return map[index] | apu_regs_masks[i];
+            }
+            ++i;
+        }
         return map[index];
     }
 
     return dummy_reg;
 }
 
-
+void Memory::apu_power_off() {
+    for (auto index: apu_regs) {if (index == constants::NR52_ADDRESS) continue; map[index] = 0; }
+}
 
 void Memory::write_unsafe(unsigned short index, unsigned char value) {
     if (index <= constants::ROM_BANK_01_END){

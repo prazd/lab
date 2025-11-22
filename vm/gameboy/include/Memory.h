@@ -65,12 +65,94 @@ struct Memory {
     bool ch4_update_timer = false;
     size_t ppu_internal_t_cycle = 0;
     unsigned short div_internal_sync = 0;
+
+    unsigned short apu_regs[32] = {
+        constants::NR10_ADDRESS,
+        constants::NR11_ADDRESS,
+        constants::NR12_ADDRESS,
+        constants::NR13_ADDRESS,
+        constants::NR14_ADDRESS,
+
+        constants::NR20_ADDRESS,
+        constants::NR21_ADDRESS,
+        constants::NR22_ADDRESS,
+        constants::NR23_ADDRESS,
+        constants::NR24_ADDRESS,
+
+        constants::NR30_ADDRESS,
+        constants::NR31_ADDRESS,
+        constants::NR32_ADDRESS,
+        constants::NR33_ADDRESS,
+        constants::NR34_ADDRESS,
+
+        constants::NR40_ADDRESS,
+        constants::NR41_ADDRESS,
+        constants::NR42_ADDRESS,
+        constants::NR43_ADDRESS,
+        constants::NR44_ADDRESS,
+
+        constants::NR50_ADDRESS,
+        constants::NR51_ADDRESS,
+        constants::NR52_ADDRESS,
+        constants::NR53_ADDRESS,
+        constants::NR54_ADDRESS,
+        constants::NR55_ADDRESS,
+        constants::NR56_ADDRESS,
+        constants::NR57_ADDRESS,
+        constants::NR58_ADDRESS,
+        constants::NR59_ADDRESS,
+        constants::NR60_ADDRESS,
+        constants::NR61_ADDRESS,
+    };
+
+    unsigned short apu_regs_masks[32] = {
+            0x80,
+            0x3f,
+            0x00,
+            0xff,
+            0xbf,
+
+            0xff,
+            0x3f,
+            0x00,
+            0xff,
+            0xbf,
+
+            0x7f,
+            0xff,
+            0x9f,
+            0xff,
+            0xbf,
+
+            0xff,
+            0xff,
+            0x00,
+            0x00,
+            0xbf,
+
+            0x00,
+            0x00,
+            0x70,
+
+            0xff,
+            0xff,
+            0xff,
+            0xff,
+            0xff,
+            0xff,
+            0xff,
+            0xff,
+            0xff,
+    };
+
 #if DEBUG_MODE
     bool custom_ch1_active = true;
     bool custom_ch2_active = true;
     bool custom_ch3_active = true;
     bool custom_ch4_active = true;
 #endif
+
+    void apu_power_off();
 
     enum BankingMode {
         Simple,
