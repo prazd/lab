@@ -6,7 +6,7 @@ struct Channel {
     float prev_dac_out{};
     unsigned short freq_timer{};
     unsigned short freq_timer_period{};
-    unsigned char length_counter{};
+    unsigned short length_counter{};
     unsigned char phase{};
     bool active{};
 };
@@ -20,7 +20,6 @@ struct SquareWaveChannel: Channel {
     unsigned char duty{};
     void update_duty(const Memory& mem, unsigned short);
     void update_pitch(const Memory& mem, unsigned short l_addr, unsigned short h_addr);
-
 };
 
 struct CH1: SquareWaveChannel {
@@ -37,7 +36,6 @@ struct CH2: SquareWaveChannel {
 };
 
 struct CH3: Channel {
-    bool length_enabled{};
     float dac_out{};
     unsigned short freq{};
     unsigned char wave{};
@@ -51,7 +49,6 @@ struct CH4: Channel {
     unsigned char dividers[8]{
       8,16,32,48,64, 80, 96, 112
     };
-    bool length_enabled{};
     unsigned char envelope_volume{};
     unsigned short envelope_timer{};
     bool lsfr_width{};

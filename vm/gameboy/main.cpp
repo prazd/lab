@@ -92,6 +92,7 @@ struct GameBoyVM{
     void main_loop_async(auto& cpu_r) {
         int current_t_cycle = 0;
         bool prev_lcdc_on = mem.map[constants::LCDC_ADDRESS] & 0x80;
+        bool prev_apu_on = mem.map[constants::NR52_ADDRESS] & 0x80;
         int lcdc_on_count = 0;
         bool lcdc_init_finished = true;
         int prev_t_cycle = 0;
@@ -141,9 +142,15 @@ struct GameBoyVM{
                     ppu.reset(mem);
                 }
 #if APU_ON
-                apu.frame_seq_tick(mem);
+            if ((mem.map[constants::NR52_ADDRESS] & 0x80)) {
+                if (!prev_apu_on){
+                    apu.frame_sequencer_step = 0;
+                }
                 apu.tick(mem);
-#endif                 
+            }
+            apu.frame_seq_tick(mem);
+            prev_apu_on = mem.map[constants::NR52_ADDRESS] & 0x80;
+#endif
 
                 if (!cpu.halted && mem.dma_active) mem.dma_tick();
         }
@@ -323,9 +330,9 @@ struct GameBoyVM{
         
 #if APU_ON        
         InitAudioDevice();
+
         // sample rate: 44100, sample size: 16bit-short, channels: 2
         AudioStream stream = LoadAudioStream(44'100, 16, 2);
-        SetAudioStreamBufferSizeDefault(constants::SAMPLE_BUFFER_SIZE);
         PlayAudioStream(stream);
 #endif        
 
@@ -462,8 +469,10 @@ struct GameBoyVM{
               }
               if (IsKeyPressed(KEY_M))
                   current_tile_view_mode = (current_tile_view_mode + 1) % ViewModesCount;
+#if APU_ON
               if (IsKeyPressed(KEY_A))
                   current_apu_view_mode = (current_apu_view_mode + 1) % ApuViewModesCount;
+#endif
               if (IsKeyPressed(KEY_ZERO))
                   restart();
               if (IsKeyPressed(KEY_X)){
@@ -478,9 +487,9 @@ struct GameBoyVM{
             if (IsAudioStreamProcessed(stream)) {
                 short tmp[constants::SAMPLE_BUFFER_SIZE]{};
                 std::copy(std::begin(apu.buffer), std::end(apu.buffer), tmp);
-                UpdateAudioStream(stream, tmp, 750);
+                UpdateAudioStream(stream, tmp, 1024);
             }
-#endif            
+#endif
         }
     }
 };
@@ -543,6 +552,10 @@ struct GameBoyVM{
 
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m2_win_en_toggle.gb
 
+// APU
+// /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/01-registers.gb
+// /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/02-len ctr.gb
+
 // Failed:
 //  - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_irq_blocking.gb - failed
@@ -566,18 +579,15 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/PokemonBlueVersion.gb - MBC3
 
 
-// Next bug - /Users/prazd/Desktop/dev/ZeldaEn.gb (crocodile)
-
-// TODO:
-// - bootrom optional
 // - mealybug-tearoom-tests:
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_bgp_change.gb
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_bgp_change_sprites.gb
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_lcdc_bg_en_change.gb
+
 int main() {
-//      /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/04-sweep.gb
+//    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/04-sweep.gb
 //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/05-sweep details.gb"
-        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/02-len ctr.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
