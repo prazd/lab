@@ -304,16 +304,19 @@ unsigned char Memory::read_unsafe(unsigned short index) const {
 }
 
 void Memory::update_channels_triggers(unsigned short address, unsigned char value) {
-    if (address == constants::NR14_ADDRESS)
+    if (address == constants::NR14_ADDRESS){
         ch1_trigger = (((value >> 7) & 1));
-    else if (address == constants::NR24_ADDRESS)
+        ch1_enable_length_trigger = (((value >> 6) & 1)) && !((map[address] >> 6) & 1);
+    } else if (address == constants::NR24_ADDRESS) {
         ch2_trigger = (((value >> 7) & 1));
-    else if (address == constants::NR34_ADDRESS)
+        ch2_enable_length_trigger = (((value >> 6) & 1)) && !((map[address] >> 6) & 1);
+    } else if (address == constants::NR34_ADDRESS) {
         ch3_trigger = ((value >> 7) & 1);
-    else if (address == constants::NR44_ADDRESS)
+        ch3_enable_length_trigger = (((value >> 6) & 1)) && !((map[address] >> 6) & 1);
+    } else if (address == constants::NR44_ADDRESS) {
         ch4_trigger = ((value >> 7) & 1);
-    // timers
-    else if (address == constants::NR11_ADDRESS)
+        ch4_enable_length_trigger = (((value >> 6) & 1)) && !((map[address] >> 6) & 1);
+    } else if (address == constants::NR11_ADDRESS)
         ch1_update_timer = true;
     else if (address == constants::NR21_ADDRESS)
         ch2_update_timer = true;

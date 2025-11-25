@@ -57,12 +57,16 @@ struct Memory {
     bool ppu_oam_usage = false;
     bool ch1_trigger = false;
     bool ch1_update_timer = false;
+    bool ch1_enable_length_trigger = false;
     bool ch2_trigger = false;
     bool ch2_update_timer = false;
+    bool ch2_enable_length_trigger = false;
     bool ch3_trigger = false;
     bool ch3_update_timer = false;
+    bool ch3_enable_length_trigger = false;
     bool ch4_trigger = false;
     bool ch4_update_timer = false;
+    bool ch4_enable_length_trigger = false;
     size_t ppu_internal_t_cycle = 0;
     unsigned short div_internal_sync = 0;
 

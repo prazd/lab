@@ -26,8 +26,13 @@ void CH1::init(Memory& mem) {
     update_duty(mem, constants::NR11_ADDRESS);
     update_pitch(mem, constants::NR13_ADDRESS, constants::NR14_ADDRESS);
     phase = 0;
-    if (!length_counter)
+    if (!length_counter){
         length_counter = 64;
+        if (extra_clock){
+            --length_counter;
+        }
+    }
+    if (extra_clock) extra_clock = false;
     freq_timer = freq_timer_period;
     envelope_volume = (mem.read_unsafe(constants::NR12_ADDRESS) >> 4) & 0xf;
     envelope_timer = (mem.read_unsafe(constants::NR12_ADDRESS) & 0x7);
@@ -39,8 +44,13 @@ void CH2::init(const Memory& mem) {
     update_duty(mem, constants::NR21_ADDRESS);
     update_pitch(mem, constants::NR23_ADDRESS, constants::NR24_ADDRESS);
     phase = 0;
-    if (!length_counter)
+    if (!length_counter && !freezed){
         length_counter = 64;
+        if (extra_clock){
+            --length_counter;
+            extra_clock = false;
+        }
+    }
     freq_timer = freq_timer_period;
     envelope_volume = (mem.read_unsafe(constants::NR22_ADDRESS) >> 4) & 0xf;
     envelope_timer = (mem.read_unsafe(constants::NR22_ADDRESS) & 0x7);
@@ -52,13 +62,24 @@ void CH3::init(Memory& mem) {
     nibble = 0;
     wave = 0;
     freq = ((mem.read_unsafe(constants::NR34_ADDRESS) & 0x7) << 8) | (mem.read_unsafe(constants::NR33_ADDRESS));
-    if (!length_counter) length_counter = 256;
+    if (!length_counter){
+        length_counter = 256;
+        if (extra_clock){
+            --length_counter;
+            extra_clock = false;
+        }
+    }
     freq_timer = (2048 - freq) * 2;
 }
 
 void CH4::init(const Memory& mem) {
-    if (!length_counter)
+    if (!length_counter){
         length_counter = 64;
+        if (extra_clock){
+            --length_counter;
+            extra_clock = false;
+        }
+    }
     envelope_volume = (mem.read_unsafe(constants::NR42_ADDRESS) >> 4) & 0xf;
     envelope_timer = (mem.read_unsafe(constants::NR42_ADDRESS) & 0x7);
     if (!envelope_timer) envelope_timer = 8;
@@ -98,7 +119,12 @@ void CH4::disable(Memory &mem) {
 }
 
 void CH1::disable_check(Memory& mem) {
-    if (length_counter == 0 && active) disable(mem);
+    if (length_counter == 0 && active) {
+        if (!freezed) {
+            freezed = true;
+        }
+        disable(mem);
+    }
 }
 
 void CH2::disable_check(Memory& mem) {
@@ -159,33 +185,33 @@ void APU::frame_seq_tick(Memory& mem) {
 void APU::frame_seq_handler(Memory& mem, unsigned char step) {
     switch (step) {
         case 0: {
-            if ((mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)  --ch1.length_counter;
-            if ((mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)  --ch2.length_counter;
-            if ((mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)  --ch3.length_counter;
-            if ((mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)  --ch4.length_counter;
+            if (ch1.length_counter && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)  --ch1.length_counter;
+            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)  --ch2.length_counter;
+            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)  --ch3.length_counter;
+            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)  --ch4.length_counter;
             break;
         }
         case 2: {
-            if ((mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)   --ch1.length_counter;
+            if (ch1.length_counter &&  (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)  --ch1.length_counter;
             if (!(--ch1.sweep_timer)) ch1.sweep_step(mem, false);
-            if ((mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)   --ch2.length_counter;
-            if ((mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)   --ch3.length_counter;
-            if ((mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)   --ch4.length_counter;
+            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)   --ch2.length_counter;
+            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)   --ch3.length_counter;
+            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)   --ch4.length_counter;
             break;
         }
         case 4: {
-            if ((mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)   --ch1.length_counter;
-            if ((mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)   --ch2.length_counter;
-            if ((mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)   --ch3.length_counter;
-            if ((mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)   --ch4.length_counter;
+            if (ch1.length_counter && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)   --ch1.length_counter;
+            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)   --ch2.length_counter;
+            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)   --ch3.length_counter;
+            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)   --ch4.length_counter;
             break;
         }
         case 6: {
-            if ((mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)   --ch1.length_counter;
+            if (ch1.length_counter && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)   --ch1.length_counter;
             if (!(--ch1.sweep_timer)) ch1.sweep_step(mem, false);
-            if ((mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)   --ch2.length_counter;
-            if ((mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)   --ch3.length_counter;
-            if ((mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)   --ch4.length_counter;
+            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)   --ch2.length_counter;
+            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)   --ch3.length_counter;
+            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)   --ch4.length_counter;
             break;
         }
         case 7: {
@@ -311,15 +337,50 @@ void APU::tick(Memory& mem) {
     static unsigned char prev_frame_seq_step = 0;
     static bool skip_sample = false;
 
+    if (mem.ch1_enable_length_trigger) {
+        if (!ch1.length_first_enabled && (!ch1.freezed && !mem.ch1_trigger)) {
+         if (frame_sequencer_step & 1){if (ch1.length_counter)   --ch1.length_counter;if(ch1.active && !ch1.length_counter) ch1.disable(mem);}
+            ch1.length_first_enabled = true;
+        } else if (mem.ch1_trigger) {
+            ch1.extra_clock = true;
+        }
+        mem.ch1_enable_length_trigger = false;
+    } else if (mem.ch2_enable_length_trigger) {
+        if (!ch2.length_first_enabled) {
+            if (frame_sequencer_step & 1){if (ch2.length_counter) --ch2.length_counter;if(ch2.active && !ch2.length_counter) ch2.disable(mem);}
+            ch2.length_first_enabled = true;
+        } else if (mem.ch2_trigger) {
+            ch2.extra_clock = true;
+        }
+        mem.ch2_enable_length_trigger = false;
+    } else if (mem.ch3_enable_length_trigger) {
+        if (!ch3.length_first_enabled) {
+            if (frame_sequencer_step & 1){if (ch3.length_counter) --ch3.length_counter;if(ch3.active && !ch3.length_counter) ch3.disable(mem);}
+            ch3.length_first_enabled = true;
+        } else if (mem.ch3_trigger) {
+            ch3.extra_clock = true;
+        }
+        mem.ch3_enable_length_trigger = false;
+    } else if (mem.ch3_enable_length_trigger) {
+        if (!ch4.length_first_enabled) {
+            if (frame_sequencer_step & 1){if (ch4.length_counter) --ch4.length_counter;if(ch4.active && !ch4.length_counter)  ch4.disable(mem);}
+            ch4.length_first_enabled = true;
+        } else if (mem.ch4_trigger) {
+            ch4.extra_clock = true;
+        }
+        mem.ch4_enable_length_trigger = false;
+    }
+
     if (!(mem.read_unsafe(constants::NR12_ADDRESS) & 0xf8) && ch1.active) ch1.disable(mem);
     if (!(mem.read_unsafe(constants::NR22_ADDRESS) & 0xf8) && ch2.active) ch2.disable(mem);
     if (!((mem.read_unsafe(constants::NR30_ADDRESS) >> 7) & 1) && ch3.active) ch3.disable(mem);
     if (!(mem.read_unsafe(constants::NR42_ADDRESS) & 0xf8) && ch4.active) ch4.disable(mem);
 
-
     if (mem.ch1_trigger
          && (mem.read_unsafe(constants::NR12_ADDRESS) & 0xf8) != 0 && mem.read_unsafe(constants::NR52_ADDRESS)) {
         mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) | 1);
+        ch1.length_first_enabled = false;
+        if (ch1.freezed) {ch1.freezed = false;}
         ch1.init(mem);
         ch1.active = true;
         mem.ch1_trigger = false;
@@ -329,6 +390,7 @@ void APU::tick(Memory& mem) {
 
     if (mem.ch2_trigger
         && (mem.read_unsafe(constants::NR22_ADDRESS) & 0xf8) != 0) {
+        ch2.length_first_enabled = false;
         mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) | (1 << 1));
         ch2.init(mem);
         ch2.active = true;
@@ -337,6 +399,7 @@ void APU::tick(Memory& mem) {
 
     if (mem.ch3_trigger) {
         ch3.init(mem);
+        ch3.length_first_enabled = false;
         mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) | (1 << 2));
         ch3.active = true;
         mem.ch3_trigger = false;
@@ -344,11 +407,11 @@ void APU::tick(Memory& mem) {
 
     if (mem.ch4_trigger) {
         ch4.init(mem);
+        ch4.length_first_enabled = false;
         mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) | (1 << 3));
         ch4.active = true;
         mem.ch4_trigger = false;
     }
-
 
     if (mem.ch1_update_timer) {
         ch1.length_counter = 64 - (mem.read_unsafe(constants::NR11_ADDRESS) & 0x3f);
