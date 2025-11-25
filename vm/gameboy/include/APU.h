@@ -5,7 +5,6 @@
 struct Channel {
     bool freezed{};
     bool extra_clock{};
-    bool length_first_enabled{};
     bool enable_length{};
     float prev_dac_out{};
     unsigned short freq_timer{};
