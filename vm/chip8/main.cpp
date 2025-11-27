@@ -1,12 +1,14 @@
 #include <iostream>
 #include <array>
 #include "raylib.h"
+#include "rlgl.h"
 #include <fstream>
 #include <filesystem>
 #include <random>
 
 #define DEBUG 0
 #define BUFFER_LOGS 0
+#define OUTLINE_MODE 0
 
 // Quircks
 constexpr bool LEGACY_SHIFT = true;
@@ -28,6 +30,10 @@ constexpr size_t SCHIP_WIDTH = 128;
 
 constexpr size_t DISPLAY_HEIGHT = 64;
 constexpr size_t DISPLAY_WIDTH = 128;
+
+constexpr Color BG_COLOR = BLACK;
+constexpr Color FG_COLOR = GREEN;
+
 
 
 template <std::integral T, T begin, T end>
@@ -613,6 +619,11 @@ int main(int argc, char* argv[]) {
     Image img = GenImageColor(DISPLAY_WIDTH, DISPLAY_HEIGHT, BLACK);
     Texture2D target = LoadTextureFromImage(img);
     UnloadImage(img);
+    RenderTexture2D base = LoadRenderTexture(WIDTH, HEIGHT);
+
+#if OUTLINE_MODE    
+    RenderTexture2D outlines = LoadRenderTexture(WIDTH, HEIGHT);
+#endif
     
     std::array<std::array<Color, DISPLAY_WIDTH>, DISPLAY_HEIGHT> display_buffer;
 
@@ -629,10 +640,44 @@ int main(int argc, char* argv[]) {
     auto draw = [&]() {
         for (size_t i = 0, ei = vm.height(); i < ei; ++i) {
             for (size_t j = 0, ej = vm.width(); j < ej; ++j) {
-                display_buffer[i][j] = display[i].test(j) ? GREEN : BLACK;
+                display_buffer[i][j] = display[i].test(j) ? FG_COLOR : BG_COLOR;
             }
        }
-       UpdateTexture(target, display_buffer.data());
+    UpdateTexture(target, display_buffer.data());
+
+#if OUTLINE_MODE       
+       BeginTextureMode(outlines);
+            ClearBackground(BLANK);
+            float x = 0.f;
+            float y = 0.f;
+            float x_step = WIDTH/vm.width();
+            float y_step = HEIGHT/vm.height();
+            Color c = BG_COLOR;
+            rlBegin(RL_LINES);
+            rlColor4ub(c.r, c.g, c.b, c.a);
+                for (size_t i = 0, ei = vm.height(); i < ei; ++i) {
+                   for (size_t j = 0, ej = vm.width(); j < ej; ++j) {
+                      rlVertex2f(x, y);
+                      rlVertex2f(x + x_step, y);
+                      rlVertex2f(x, y);
+                      rlVertex2f(x, y + y_step);
+                      x+=x_step;
+                    }
+                    x = 0.f;
+                    y += y_step;
+
+             }
+            rlEnd();
+       EndTextureMode();
+#endif       
+       
+       BeginTextureMode(base);
+            ClearBackground(BLANK);
+            DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, DISPLAY_WIDTH * (WIDTH/vm.width()), DISPLAY_HEIGHT * (HEIGHT/vm.height())}, {0, 0}, 0.0f, WHITE);
+#if OUTLINE_MODE            
+            DrawTextureRec(outlines.texture, {0, 0, (float)outlines.texture.width, -(float)outlines.texture.height}, {0, 0}, WHITE);
+#endif            
+       EndTextureMode();
     };
 
     double cpu_accumulator = 0.0;
@@ -650,7 +695,7 @@ int main(int argc, char* argv[]) {
         draw();
         BeginDrawing();
             ClearBackground(RAYWHITE);
-            DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{0, 0, DISPLAY_WIDTH * (WIDTH/vm.width()), DISPLAY_HEIGHT * (HEIGHT/vm.height())}, {0, 0}, 0.0f, WHITE);
+            DrawTextureRec(base.texture, {0, 0, (float)base.texture.width, -(float)base.texture.height}, {0, 0}, WHITE);
             DrawFPS(1000, 10);
         EndDrawing();
     }
