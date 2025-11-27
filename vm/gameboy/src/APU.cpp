@@ -101,13 +101,13 @@ void CH2::disable(Memory& mem) {
     dac_out = 0.f;
 }
 
-void CH3::disable(Memory &mem) {
+void CH3::disable(Memory& mem) {
     mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xFB);
     active = false;
     dac_out = 0.f;
 }
 
-void CH4::disable(Memory &mem) {
+void CH4::disable(Memory& mem) {
     mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xF7);
     envelope_volume = 0;
     active = false;
@@ -130,53 +130,54 @@ void CH2::disable_check(Memory& mem) {
     }
 }
 
-void CH3::disable_check(Memory &mem) {
+void CH3::disable_check(Memory& mem) {
     if (length_counter == 0) {
         if (!freezed) freezed = true;
         disable(mem);
     }
 }
 
-void CH4::disable_check(Memory &mem) {
+void CH4::disable_check(Memory& mem) {
     if (length_counter == 0){
         if (!freezed) freezed = true;
         disable(mem);
     }
 }
 
-void CH1::sweep_step(Memory &mem, bool init) {
+void CH1::sweep_step(Memory& mem, bool init) {
     auto nr10 = mem.read_unsafe(constants::NR10_ADDRESS);
+    if (nr10 == 0) {return;}
     sweep_timer = ((nr10 >> 4) & 0x7);
+    if (sweep_timer == 0) sweep_timer = 8;
     unsigned char shift = nr10 & 0x7;
-    if (shift == 0 && sweep_timer == 0) return;
-    if (sweep_timer == 0) sweep_timer = 8; // todo: debug (should be 8)
-    if (shift == 0 && init) {
-        unsigned char l = mem.read_unsafe(constants::NR13_ADDRESS);
-        unsigned char h = (mem.read_unsafe(constants::NR14_ADDRESS) & 0x7);
-        shadow_frequency =  ((h << 8) | l);
-        return;
-    }
-    auto delta = shadow_frequency >> shift;
-    unsigned new_val{};
-    if (!((nr10 >> 3) & 1)) new_val = shadow_frequency + delta;
-    else new_val = shadow_frequency - delta;
-    if (new_val > 2047){
-        disable(mem);
-    }
-    shadow_frequency = new_val;
-    mem.write_unsafe(constants::NR13_ADDRESS, new_val & 0xff);
-    mem.write_unsafe(constants::NR14_ADDRESS,
-                     (mem.read_unsafe(constants::NR14_ADDRESS) & 0xf8) | ((new_val >> 8) & 0x7));
-    update_pitch(mem, constants::NR13_ADDRESS, constants::NR14_ADDRESS);
-
-    // Second check
-    if (shift != 0) {
-        delta = shadow_frequency >> shift;
+//    if (init) {
+    if (shift == 0 && ((nr10 >> 4) & 0x7) == 0) sweep_trigger_disabled = true;
+//    }
+    if (((shift > 0 && init) || !init) && !sweep_trigger_disabled) {
+        auto delta = shadow_frequency >> shift;
+        unsigned new_val{};
         if (!((nr10 >> 3) & 1)) new_val = shadow_frequency + delta;
         else new_val = shadow_frequency - delta;
         if (new_val > 2047){
             disable(mem);
-        }
+        } else if (new_val < 2047){
+//                if (shift != 0) { // TODO: debug
+                    shadow_frequency = new_val;
+                    mem.write_unsafe(constants::NR13_ADDRESS, new_val & 0xff);
+                    mem.write_unsafe(constants::NR14_ADDRESS,
+                                     (mem.read_unsafe(constants::NR14_ADDRESS) & 0xf8) | ((new_val >> 8) & 0x7));
+                    update_pitch(mem, constants::NR13_ADDRESS, constants::NR14_ADDRESS);
+                    // Second check
+                    if (((nr10 >> 4) & 0x7) != 0){
+                        delta = shadow_frequency >> shift;
+                        if (!((nr10 >> 3) & 1)) new_val = shadow_frequency + delta;
+                        else new_val = shadow_frequency - delta;
+                        if (new_val > 2047){
+                            delayed_off = true;
+                    }
+             }
+          }
+//       }
     }
 }
 
@@ -207,10 +208,18 @@ void APU::frame_seq_handler(Memory& mem, unsigned char step) {
         }
         case 2: {
             if (ch1.length_counter &&  (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)  --ch1.length_counter;
-            if (!(--ch1.sweep_timer)) ch1.sweep_step(mem, false);
+            if (ch1.sweep_timer) --ch1.sweep_timer;
             if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)   --ch2.length_counter;
             if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)   --ch3.length_counter;
             if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)   --ch4.length_counter;
+            if (!ch1.sweep_timer) {
+                if (ch1.delayed_off){
+                    ch1.disable(mem);
+                    ch1.delayed_off = false;
+                } else {
+                    if (!ch1.sweep_unit_freeze) ch1.sweep_step(mem, false);
+                }
+            }
             ch1.disable_check(mem);
             ch2.disable_check(mem);
             ch3.disable_check(mem);
@@ -244,10 +253,18 @@ void APU::frame_seq_handler(Memory& mem, unsigned char step) {
         }
         case 6: {
             if (ch1.length_counter && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)   --ch1.length_counter;
-            if (!(--ch1.sweep_timer)) ch1.sweep_step(mem, false);
+            if (ch1.sweep_timer) --ch1.sweep_timer;
             if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)   --ch2.length_counter;
             if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)   --ch3.length_counter;
             if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)   --ch4.length_counter;
+            if (!ch1.sweep_timer) {
+                if (ch1.delayed_off) {
+                    ch1.disable(mem);
+                    ch1.delayed_off = false;
+                } else {
+                    if (!ch1.sweep_unit_freeze) ch1.sweep_step(mem, false);
+                }
+            }
             ch1.disable_check(mem);
             ch2.disable_check(mem);
             ch3.disable_check(mem);
@@ -307,7 +324,7 @@ float highpass(float x) {
     return res;
 }
 
-std::pair<float, float> APU::next_sample_2ch(Memory &mem) {
+std::pair<float, float> APU::next_sample_2ch(Memory& mem) {
     auto nr51 = mem.read_unsafe(constants::NR51_ADDRESS);
     auto mix_left = 0.f;
     auto mix_right = 0.f;
@@ -399,7 +416,9 @@ void APU::tick(Memory& mem) {
         if (ch1.freezed) {ch1.freezed = false;}
         ch1.init(mem);
         ch1.active = true;
+        ch1.sweep_unit_freeze = false;
         // sweep overflow check
+        ch1.sweep_trigger_disabled = false;
         ch1.sweep_step(mem, true);
         mem.ch1_trigger = false;
     }
