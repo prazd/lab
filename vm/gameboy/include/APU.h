@@ -29,6 +29,7 @@ struct CH1: SquareWaveChannel {
     bool sweep_unit_freeze = true;
     bool delayed_off = false;
     bool sweep_trigger_disabled = false;
+    bool fast_off = false;
     void init(Memory&);
     void sweep_step(Memory& mem, bool);
     void disable_check(Memory& mem);

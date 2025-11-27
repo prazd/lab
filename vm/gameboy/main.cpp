@@ -556,6 +556,7 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/01-registers.gb
 // /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/02-len ctr.gb
 // /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/03-trigger.gb
+// /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/04-sweep.gb +-
 
 // Failed:
 //  - failed
@@ -588,7 +589,7 @@ struct GameBoyVM{
 int main() {
 //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/04-sweep.gb
 //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/05-sweep details.gb"
-        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/04-sweep.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/03-trigger.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

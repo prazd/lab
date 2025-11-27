@@ -150,9 +150,10 @@ void CH1::sweep_step(Memory& mem, bool init) {
     sweep_timer = ((nr10 >> 4) & 0x7);
     if (sweep_timer == 0) sweep_timer = 8;
     unsigned char shift = nr10 & 0x7;
-//    if (init) {
     if (shift == 0 && ((nr10 >> 4) & 0x7) == 0) sweep_trigger_disabled = true;
-//    }
+    if (shift == 0 && init && ((nr10 >> 4) & 0x7) > 0) fast_off = true;
+    if (shift > 0 && init && ((nr10 >> 4) & 0x7) == 0) fast_off = true;
+
     if (((shift > 0 && init) || !init) && !sweep_trigger_disabled) {
         auto delta = shadow_frequency >> shift;
         unsigned new_val{};
@@ -161,23 +162,21 @@ void CH1::sweep_step(Memory& mem, bool init) {
         if (new_val > 2047){
             disable(mem);
         } else if (new_val < 2047){
-//                if (shift != 0) { // TODO: debug
+                if (shift != 0 && ((nr10 >> 4) & 0x7) != 0) {
                     shadow_frequency = new_val;
                     mem.write_unsafe(constants::NR13_ADDRESS, new_val & 0xff);
                     mem.write_unsafe(constants::NR14_ADDRESS,
                                      (mem.read_unsafe(constants::NR14_ADDRESS) & 0xf8) | ((new_val >> 8) & 0x7));
                     update_pitch(mem, constants::NR13_ADDRESS, constants::NR14_ADDRESS);
-                    // Second check
-                    if (((nr10 >> 4) & 0x7) != 0){
-                        delta = shadow_frequency >> shift;
-                        if (!((nr10 >> 3) & 1)) new_val = shadow_frequency + delta;
-                        else new_val = shadow_frequency - delta;
-                        if (new_val > 2047){
-                            delayed_off = true;
+                    delta = shadow_frequency >> shift;
+                    if (!((nr10 >> 3) & 1)) new_val = shadow_frequency + delta;
+                    else new_val = shadow_frequency - delta;
+                    if (new_val > 2047) {
+                        if (fast_off) {disable(mem);fast_off = false;} // TODO: check
+                        else delayed_off = true;
                     }
-             }
           }
-//       }
+       }
     }
 }
 
@@ -415,6 +414,7 @@ void APU::tick(Memory& mem) {
             ch1.extra_clock = true;
         if (ch1.freezed) {ch1.freezed = false;}
         ch1.init(mem);
+        ch1.fast_off = false;
         ch1.active = true;
         ch1.sweep_unit_freeze = false;
         // sweep overflow check

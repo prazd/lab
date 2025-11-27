@@ -57,7 +57,6 @@ struct Memory {
     bool ppu_oam_usage = false;
     bool ch1_trigger = false;
     bool ch1_update_timer = false;
-    bool ch1_sweep_shift_trigger = false;
     bool ch1_enable_length_trigger = false;
     bool ch2_trigger = false;
     bool ch2_update_timer = false;
