@@ -17,6 +17,7 @@ struct Channel {
 struct SquareWaveChannel: Channel {
     float dac_out{};
     unsigned shadow_frequency{};
+
     unsigned short envelope_timer{};
     char envelope_volume{};
     unsigned short sweep_timer{};
@@ -43,6 +44,7 @@ struct CH2: SquareWaveChannel {
 };
 
 struct CH3: Channel {
+    unsigned char delay = 2;
     float dac_out{};
     unsigned short freq{};
     unsigned char wave{};

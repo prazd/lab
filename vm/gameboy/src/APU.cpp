@@ -55,8 +55,6 @@ void CH2::init(const Memory& mem) {
 
 
 void CH3::init(Memory& mem) {
-    nibble = 0;
-    wave = 0;
     freq = ((mem.read_unsafe(constants::NR34_ADDRESS) & 0x7) << 8) | (mem.read_unsafe(constants::NR33_ADDRESS));
     if (!length_counter){
         length_counter = 256;
@@ -105,6 +103,7 @@ void CH3::disable(Memory& mem) {
     mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xFB);
     active = false;
     dac_out = 0.f;
+    mem.ch3_read_enable = false;
 }
 
 void CH4::disable(Memory& mem) {
@@ -498,9 +497,12 @@ void APU::tick(Memory& mem) {
         }
     }
 
-
+    // TODO: debug
     if (ch3.active) {
-    if (!(--ch3.freq_timer)) {
+        if (ch3.freq_timer) --ch3.freq_timer;
+        if (ch3.delay) --ch3.delay;
+        mem.ch3_read_enable = ch3.delay;
+         if (!ch3.freq_timer) {
             unsigned char val = mem.read_unsafe(constants::CH3_WAVES_BASE + ch3.wave);
             unsigned char current_val = ch3.nibble == 0 ? (val >> 4) & 0xf : val & 0xf;
             switch ((mem.read_unsafe(constants::NR32_ADDRESS) >> 5) & 0x3) {
@@ -510,9 +512,12 @@ void APU::tick(Memory& mem) {
                 case 0b11: {current_val>>=2; break;}
             }
             ch3.dac_out = ((float)current_val);
-            if (ch3.nibble == 1) {ch3.nibble = 0; ch3.wave = (ch3.wave + 1) % 16;}
+            if (ch3.nibble == 1) {ch3.nibble = 0; ch3.wave = (ch3.wave + 1) % 16; mem.ch3_sample_index = ch3.wave;}
             else if (ch3.nibble == 0) {ch3.nibble = 1;}
-            ch3.freq = ((mem.read_unsafe(constants::NR34_ADDRESS) & 0x7) << 8) | (mem.read_unsafe(constants::NR33_ADDRESS));
+            mem.ch3_read_enable = true;
+            ch3.delay = 2;
+            ch3.freq = ((mem.read_unsafe(constants::NR34_ADDRESS) & 0x7) << 8) |
+                    (mem.read_unsafe(constants::NR33_ADDRESS));
             ch3.freq_timer = (2048 - ch3.freq) * 2;
         }
     }

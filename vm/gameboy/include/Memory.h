@@ -64,11 +64,14 @@ struct Memory {
     bool ch3_trigger = false;
     bool ch3_update_timer = false;
     bool ch3_enable_length_trigger = false;
+    unsigned char ch3_sample_index = 0;
+    bool ch3_read_enable = false;
     bool ch4_trigger = false;
     bool ch4_update_timer = false;
     bool ch4_enable_length_trigger = false;
     size_t ppu_internal_t_cycle = 0;
     unsigned short div_internal_sync = 0;
+
 
     unsigned short apu_regs[32] = {
         constants::NR10_ADDRESS,

@@ -199,7 +199,7 @@ void Memory::write(unsigned short index, unsigned char value) {
         value &= 0xf0;
         value |= map[constants::NR52_ADDRESS] & 0xf;
     }
-    
+
     if (is_ram_avaliable(index)){
         map[index] = value;
     }
@@ -228,6 +228,13 @@ unsigned char Memory::read(unsigned short index) const {
         return external_ram_enabled ? external_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_external_ram_n * 8192)] : dummy_reg;
     }
 
+    if (index >= constants::CH3_WAVES_BASE && index <= constants::CH3_WAVES_BASE + 16){
+        if (ch3_read_enable)
+            index = constants::CH3_WAVES_BASE + ch3_sample_index;
+        else
+            return dummy_reg;
+    }
+
     if (is_ram_avaliable(index)){
         for (int i = 0; auto el : apu_regs){
             if (el == index){
@@ -242,7 +249,11 @@ unsigned char Memory::read(unsigned short index) const {
 }
 
 void Memory::apu_power_off() {
-    for (auto index: apu_regs) {if (index == constants::NR52_ADDRESS) continue; map[index] = 0; }
+    for (auto index: apu_regs) {
+        if (index == constants::NR52_ADDRESS)
+            continue;
+        map[index] = 0;
+    }
 }
 
 void Memory::write_unsafe(unsigned short index, unsigned char value) {

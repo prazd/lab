@@ -152,7 +152,7 @@ struct GameBoyVM{
             prev_apu_on = mem.map[constants::NR52_ADDRESS] & 0x80;
 #endif
 
-                if (!cpu.halted && mem.dma_active) mem.dma_tick();
+            if (!cpu.halted && mem.dma_active) mem.dma_tick();
         }
     }
 
@@ -557,6 +557,8 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/02-len ctr.gb
 // /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/03-trigger.gb
 // /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/04-sweep.gb +-
+// /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/06-overflow on trigger.gb
+// /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/07-len sweep period sync.gb
 
 // Failed:
 //  - failed
@@ -587,9 +589,14 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m3_lcdc_bg_en_change.gb
 
 int main() {
-//    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/04-sweep.gb
-//    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/05-sweep details.gb"
-        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/03-trigger.gb");
+        //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/05-sweep details.gb
+        //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/08-len ctr during power.gb - debug
+        //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/09-wave read while on.gb - debug
+        //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/10-wave trigger while on.gb
+        //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/11-regs after power.gb
+        //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/12-wave write while on.gb
+
+        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/08-len ctr during power.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
