@@ -5,8 +5,6 @@
 struct Channel {
     bool freezed{};
     bool extra_clock{};
-    bool enable_length{};
-    float prev_dac_out{};
     unsigned short freq_timer{};
     unsigned short freq_timer_period{};
     unsigned short length_counter{};
@@ -15,7 +13,7 @@ struct Channel {
 };
 
 struct SquareWaveChannel: Channel {
-    float dac_out{};
+    unsigned dac_out{};
     unsigned shadow_frequency{};
 
     unsigned short envelope_timer{};
@@ -45,7 +43,7 @@ struct CH2: SquareWaveChannel {
 
 struct CH3: Channel {
     unsigned char delay = 2;
-    float dac_out{};
+    unsigned dac_out{};
     unsigned short freq{};
     unsigned char wave{};
     unsigned char nibble{};
@@ -63,7 +61,7 @@ struct CH4: Channel {
     bool lsfr_width{};
     unsigned freq_timer{};
     unsigned freq_period{};
-    float dac_out{};
+    unsigned dac_out{};
     unsigned short lsfr{};
     void update_length_timer(const Memory& mem);
     void init(const Memory&);
@@ -76,6 +74,7 @@ struct APU {
     CH2 ch2;
     CH3 ch3;
     CH4 ch4;
+    unsigned short count_sample = 0;
     unsigned accum{};
     int current_buffer_i {};
     short buffer[constants::SAMPLE_BUFFER_SIZE]{};

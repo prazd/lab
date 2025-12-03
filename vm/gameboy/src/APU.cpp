@@ -89,20 +89,20 @@ void CH1::disable(Memory& mem) {
     mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xFE);
     envelope_volume = 0;
     active = false;
-    dac_out = 0.f;
+    dac_out = 0;
 }
 
 void CH2::disable(Memory& mem) {
     mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xFD);
     envelope_volume = 0;
     active = false;
-    dac_out = 0.f;
+    dac_out = 0;
 }
 
 void CH3::disable(Memory& mem) {
     mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) & 0xFB);
     active = false;
-    dac_out = 0.f;
+    dac_out = 0;
     mem.ch3_read_enable = false;
 }
 
@@ -339,35 +339,35 @@ std::pair<float, float> APU::next_sample_2ch(Memory& mem) {
     if (ch1.active){
 #if DEBUG_MODE
         if (mem.custom_ch1_active){
-            mix_left += ch1_left_active ? ch1.dac_out/15.f : 0;
-            mix_right += ch1_right_active ? ch1.dac_out/15.f : 0;
+            mix_left += ch1_left_active ? (float)(ch1.dac_out)/15.f : 0;
+            mix_right += ch1_right_active ? (float)(ch1.dac_out)/15.f : 0;
         }
 #else
-        mix_left += ch1_left_active ? ch1.dac_out/15.f : 0;
-        mix_right += ch1_right_active ? ch1.dac_out/15.f : 0;
+        mix_left += ch1_left_active ? (float)(ch1.dac_out)/15.f : 0;
+        mix_right += ch1_right_active ? (float)(ch1.dac_out)/15.f : 0;
 #endif
     }
     if (ch2.active){
 #if DEBUG_MODE
         if (mem.custom_ch2_active){
-            mix_left += ch2_left_active ? ch2.dac_out/15.f : 0;
-            mix_right += ch2_right_active ?  ch2.dac_out/15.f : 0;
+            mix_left += ch2_left_active ? (float)(ch2.dac_out)/15.f : 0;
+            mix_right += ch2_right_active ? (float)(ch2.dac_out)/15.f : 0;
         }
 #else
-        mix_left += ch2_left_active ? ch2.dac_out/15.f : 0;
-        mix_right += ch2_right_active ? ch2.dac_out/15.f : 0;
+        mix_left += ch2_left_active ? (float)(ch2.dac_out)/15.f : 0;
+        mix_right += ch2_right_active ? (float)(ch2.dac_out)/15.f : 0;
 #endif
     }
 
     if (ch3.active){
 #if DEBUG_MODE
         if (mem.custom_ch3_active){
-            mix_left += ch3_left_active ? (ch3.dac_out/15.f)/2 : 0;
-            mix_right += ch3_right_active ? (ch3.dac_out/15.f)/2: 0;
+            mix_left += ch3_left_active ? (float)(ch3.dac_out)/15.f/2  : 0;
+            mix_right += ch3_right_active ? (float)(ch3.dac_out)/15.f/2 : 0;
         }
 #else
-        mix_left += ch3_left_active ?   (ch3.dac_out/15.f)/2 : 0;
-        mix_right += ch3_right_active ?  (ch3.dac_out/15.f)/2 : 0;
+        mix_left += ch3_left_active ? (float)(ch3.dac_out)/15.f/2  : 0;
+        mix_right += ch3_right_active ? (float)(ch3.dac_out)/15.f/2 : 0;
 #endif
     }
 
@@ -375,17 +375,18 @@ std::pair<float, float> APU::next_sample_2ch(Memory& mem) {
     if (ch4.active){
 #if DEBUG_MODE
         if (mem.custom_ch4_active){
-            mix_left += ch4_left_active ? ch4.dac_out/15.f/2 : 0;
-            mix_right += ch4_right_active ? ch4.dac_out/15.f/2 : 0;
+            mix_left += ch4_left_active ? (float)(ch4.dac_out)/15.f/2 : 0;
+            mix_right += ch4_right_active ? (float)(ch4.dac_out)/15.f/2 : 0;
         }
 #else
-        mix_left += ch4_left_active ?  ch4.dac_out/15.f/2 : 0;
-        mix_right += ch4_right_active ? ch4.dac_out/15.f/2 : 0;
+        mix_left += ch4_left_active ? (float)(ch4.dac_out)/15.f/2 : 0;
+            mix_right += ch4_right_active ? (float)(ch4.dac_out)/15.f/2: 0;
 #endif
     }
+
     mix_left  = std::clamp(mix_left , -1.f, 1.f);
     mix_right = std::clamp(mix_right, -1.f, 1.f);
-    return {mix_left, mix_right};
+    return {mix_left/4.f, mix_right/4.f};
 }
 
 void APU::tick(Memory& mem) {
@@ -511,7 +512,7 @@ void APU::tick(Memory& mem) {
                 case 0b10: {current_val>>=1; break;}
                 case 0b11: {current_val>>=2; break;}
             }
-            ch3.dac_out = ((float)current_val);
+            ch3.dac_out = current_val;
             if (ch3.nibble == 1) {ch3.nibble = 0; ch3.wave = (ch3.wave + 1) % 16; mem.ch3_sample_index = ch3.wave;}
             else if (ch3.nibble == 0) {ch3.nibble = 1;}
             mem.ch3_read_enable = true;
@@ -535,7 +536,7 @@ void APU::tick(Memory& mem) {
                 ch4.lsfr &= ~(1 << 14);
                 ch4.lsfr |= (next_bit << 14);
             }
-            ch4.dac_out = (float)((!(ch4.lsfr & 1)) * ch4.envelope_volume);
+            ch4.dac_out = (!(ch4.lsfr & 1)) * ch4.envelope_volume;
             ch4.freq_timer = ch4.freq_period;
         }
     }
@@ -548,5 +549,6 @@ void APU::tick(Memory& mem) {
         auto right = (highpass<false>(sample.second) * 32767.f);
         buffer[std::exchange(current_buffer_i, (current_buffer_i + 1) % constants::SAMPLE_BUFFER_SIZE)] = std::isnan(left) ? 0 : (short)left;
         buffer[std::exchange(current_buffer_i, (current_buffer_i + 1) % constants::SAMPLE_BUFFER_SIZE)] = std::isnan(right) ? 0 : (short)right;
+        ++count_sample;
     }
 }

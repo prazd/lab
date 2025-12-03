@@ -228,7 +228,7 @@ unsigned char Memory::read(unsigned short index) const {
         return external_ram_enabled ? external_ram[(index - constants::EXTERNAL_RAM_BEGIN) + (current_external_ram_n * 8192)] : dummy_reg;
     }
 
-    if (index >= constants::CH3_WAVES_BASE && index <= constants::CH3_WAVES_BASE + 16){
+    if (index >= constants::CH3_WAVES_BASE && index <= constants::CH3_WAVES_BASE + 15){
         if (ch3_read_enable)
             index = constants::CH3_WAVES_BASE + ch3_sample_index;
         else

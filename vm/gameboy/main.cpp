@@ -11,6 +11,7 @@
 #include "Joypad.h"
 #include "APU.h"
 #include "Debug.h"
+#include <SDL.h>
 
 struct GameBoyVM{
     CPU cpu;
@@ -89,7 +90,7 @@ struct GameBoyVM{
         std::copy(mem.cartridge_backup.begin(), mem.cartridge_backup.end(), mem.rom.begin());
     }
 
-    void main_loop_async(auto& cpu_r) {
+    void main_loop_async(auto& cpu_r, SDL_AudioDeviceID& dev) {
         int current_t_cycle = 0;
         bool prev_lcdc_on = mem.map[constants::LCDC_ADDRESS] & 0x80;
         bool prev_apu_on = mem.map[constants::NR52_ADDRESS] & 0x80;
@@ -150,8 +151,11 @@ struct GameBoyVM{
             }
             apu.frame_seq_tick(mem);
             prev_apu_on = mem.map[constants::NR52_ADDRESS] & 0x80;
+            if (apu.count_sample == 128){
+                SDL_QueueAudio(dev, apu.buffer, 512);
+                apu.count_sample = 0;
+            }
 #endif
-
             if (!cpu.halted && mem.dma_active) mem.dma_tick();
         }
     }
@@ -305,7 +309,7 @@ struct GameBoyVM{
         }
         save_file.close();
     }
-    
+
     void run() {
         InitWindow(constants::WIDTH, constants::HEIGHT, "GameBoy");
         SetTargetFPS(60); // 59.7275 FPS
@@ -327,14 +331,24 @@ struct GameBoyVM{
             }
         }
         UpdateTexture(target, display_buffer.data());
-        
-#if APU_ON        
-        InitAudioDevice();
 
-        // sample rate: 44100, sample size: 16bit-short, channels: 2
-        AudioStream stream = LoadAudioStream(44'100, 16, 2);
-        PlayAudioStream(stream);
-#endif        
+#if APU_ON
+        SDL_Init(SDL_INIT_AUDIO);
+        SDL_AudioSpec want {};
+        want.freq = 44100;
+        want.format = AUDIO_S16LSB;
+        want.channels = 2;
+        want.samples = 512;
+
+        SDL_AudioDeviceID dev = SDL_OpenAudioDevice(nullptr, 0, &want, nullptr, 0);
+
+        if (!dev) {
+            std::cerr << "Audio device error: " << SDL_GetError() << "\n";
+            std::abort();
+        }
+
+        SDL_PauseAudioDevice(dev, 0);
+#endif
 
 #if DEBUG_MODE
         // tile view modes
@@ -399,7 +413,7 @@ struct GameBoyVM{
 #if DEBUG_MODE
 //                auto begin = std::chrono::steady_clock::now();
                 for (int i = 0; i < current_speed; ++i)
-                    main_loop_async(cpu_r);
+                    main_loop_async(cpu_r, dev);
 
 //                auto end = std::chrono::steady_clock::now();
 //                std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms\n";
@@ -483,14 +497,9 @@ struct GameBoyVM{
 #endif
                 DrawFPS(700, 10);
             EndDrawing();
-#if APU_ON
-            if (IsAudioStreamProcessed(stream)) {
-                short tmp[constants::SAMPLE_BUFFER_SIZE]{};
-                std::copy(std::begin(apu.buffer), std::end(apu.buffer), tmp);
-                UpdateAudioStream(stream, tmp, 1024);
-            }
-#endif
         }
+        SDL_CloseAudioDevice(dev);
+        SDL_Quit();
     }
 };
 
@@ -596,7 +605,7 @@ int main() {
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/11-regs after power.gb
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/12-wave write while on.gb
 
-        GameBoyVM vm("/Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/08-len ctr during power.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
