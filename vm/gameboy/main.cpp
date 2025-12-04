@@ -90,11 +90,12 @@ struct GameBoyVM{
         std::copy(mem.cartridge_backup.begin(), mem.cartridge_backup.end(), mem.rom.begin());
     }
 
-    void main_loop_async(auto& cpu_r, SDL_AudioDeviceID& dev) {
+
+    void main_loop_async(auto& cpu_r, SDL_AudioDeviceID* dev) {
         int current_t_cycle = 0;
         bool prev_lcdc_on = mem.map[constants::LCDC_ADDRESS] & 0x80;
         bool prev_apu_on = mem.map[constants::NR52_ADDRESS] & 0x80;
-        int lcdc_on_count = 0;
+        unsigned lcdc_on_count = 0;
         bool lcdc_init_finished = true;
         int prev_t_cycle = 0;
 
@@ -105,25 +106,7 @@ struct GameBoyVM{
                 prev_t_cycle = ppu.internal_t_cycles;
                 joypad.update_state(mem);
                 cpu.timer.tick(mem);
-                if (mem.map[constants::LCDC_ADDRESS] & 0x80) {
-                    mem.map[constants::STAT_ADDRESS] |= 0x80;
-                    if (!prev_lcdc_on) {
-                        lcdc_init_finished = false;
-                        lcdc_on_count = 12;
-                        prev_lcdc_on = true;
-                        ppu.lyc_ly_compare(mem);
-                    } else {
-                       if (!lcdc_init_finished && lcdc_on_count-- == 0) {
-                           lcdc_init_finished = true;
-                           ppu.reset(mem);
-                           ppu.set_start_mode();
-                           mem.ppu_oam_usage = true;
-                       }
-                       if (lcdc_init_finished){
-                             ppu.tick(mem);
-                       }
-                    }
-                }
+                ppu.tick(mem);
 #if DEBUG_MODE
             if (cpu_running) cpu_r.resume();
 #else
@@ -138,8 +121,8 @@ struct GameBoyVM{
                     cpu.pc = 0x100;
                 }
 #endif
-                if (!(mem.map[constants::LCDC_ADDRESS] & 0x80) && prev_lcdc_on) {
-                    prev_lcdc_on = false;
+                if ((mem.map[constants::LCDC_ADDRESS] & 0x80) && !prev_lcdc_on) {
+                    prev_lcdc_on = true;
                     ppu.reset(mem);
                 }
 #if APU_ON
@@ -152,7 +135,7 @@ struct GameBoyVM{
             apu.frame_seq_tick(mem);
             prev_apu_on = mem.map[constants::NR52_ADDRESS] & 0x80;
             if (apu.count_sample == 128){
-                SDL_QueueAudio(dev, apu.buffer, 512);
+                SDL_QueueAudio(*dev, apu.buffer, 512);
                 apu.count_sample = 0;
             }
 #endif
@@ -406,19 +389,23 @@ struct GameBoyVM{
 
         unsigned char current_fps_state = std::size(fps_states) - 1;
         unsigned char current_speed = 1;
+        unsigned current_freq[] = {44100, 44100 * 2, 44100 * 3};
 #endif
 
         auto cpu_r = cpu.instruction_async_loop(mem);
         while(!WindowShouldClose()){
 #if DEBUG_MODE
-//                auto begin = std::chrono::steady_clock::now();
                 for (int i = 0; i < current_speed; ++i)
-                    main_loop_async(cpu_r, dev);
+#if APU_ON
+                    main_loop_async(cpu_r, &dev);
+#else
+                    main_loop_async(cpu_r, nullptr);
+#endif
 
 //                auto end = std::chrono::steady_clock::now();
 //                std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms\n";
 
-                UpdateTexture(target, ppu.read_buffer());
+                UpdateTexture(target, ppu.read_buffer(mem));
 
                 if (print_pixels) {pp.update(mem, 0, 0);}
                 if (print_tiles)  {tp.update(mem, 0, print_pixels ? 50 : 0);}
@@ -444,7 +431,15 @@ struct GameBoyVM{
 #endif
                 EndTextureMode();
 #else
-            main_loop_async(cpu_r);
+
+
+
+#if APU_ON
+            main_loop_async(cpu_r, dev);
+#else
+            main_loop_async(cpu_r, nullptr);
+#endif
+
             UpdateTexture(target, ppu.read_buffer());
 #endif
 
@@ -492,14 +487,17 @@ struct GameBoyVM{
               if (IsKeyPressed(KEY_X)){
                   // todo: debug
                   current_speed = std::max(1, ((current_speed + 1) % 4));
+
               }
 
 #endif
                 DrawFPS(700, 10);
             EndDrawing();
         }
+#if APU_ON
         SDL_CloseAudioDevice(dev);
         SDL_Quit();
+#endif
     }
 };
 
@@ -552,7 +550,6 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_0_timing.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode3_timing.gb
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb
 // /Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb
 // /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
@@ -571,6 +568,7 @@ struct GameBoyVM{
 
 // Failed:
 //  - failed
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_irq_blocking.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/lcdon_write_timing-GS.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/hblank_ly_scx_timing-GS.gb - failed
@@ -604,7 +602,7 @@ int main() {
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/10-wave trigger while on.gb
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/11-regs after power.gb
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/12-wave write while on.gb
-
+        // /Users/prazd/Desktop/dev/gb-square-test/square_test.gb
         GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';

@@ -184,7 +184,7 @@ std::optional<Sprite> PPU::sprite_on_x(Memory& mem)  {
 }
 
 void PPU::draw(Memory& mem)  {
-    buffer[current_line][current_pixel_x++] = pixel_mixing(mem).color;
+    display[(current_line * constants::DISPLAY_WIDTH) + current_pixel_x++] = pixel_mixing(mem).color;
 }
 
 void PPU::tick(Memory& mem)  {
@@ -444,20 +444,10 @@ void PPU::tick(Memory& mem)  {
 }
 
 
-auto PPU::read_buffer() const -> const Color(&)[144][160] {
-    return buffer;
+auto PPU::read_buffer(const Memory& mem) const -> const Color* {
+    return  (mem.read_unsafe(constants::LCDC_ADDRESS) & 0x80) ? display.data() : display_empty.data();
 }
 
-void PPU::print_buffer() const {
-    std::cout << "\n=======================================\n";
-    for (auto&& row: buffer){
-        for (auto& el: row) {
-            std::cout << Pixel::get_color_id(el);
-        }
-        std::cout << '\n';
-    }
-    std::cout << "\n=======================================\n";
-}
 
 bool PPU::is_windows_fetching_ready(Memory& mem) {
     return
@@ -467,17 +457,8 @@ bool PPU::is_windows_fetching_ready(Memory& mem) {
            current_pixel_x >= ((int)(mem.read_unsafe(constants::WX_ADDRESS) - 7));
 }
 
-unsigned short PPU::get_sprite_fetcher_tile_address() const {
-    return sprite_fetcher.tile_address;
-}
-
-unsigned short PPU::get_bg_fetcher_tile_address() const {
-    return pixel_fetcher.tile_address;
-}
-
 void PPU::reset(Memory& mem) {
     lyc_ly_compare(mem);
-//    current_mode = PPU::OAM;
     last_t_cycles = 0;
     internal_t_cycles = 0;
     oam_start = true;
@@ -499,10 +480,6 @@ void PPU::reset(Memory& mem) {
     set_ppu_reg(constants::LY_ADDRESS, current_line, mem);
     mem.ppu_internal_t_cycle = internal_t_cycles;
     set_ppu_mode(mem);
-}
-
-void PPU::set_start_mode() {
-    current_mode = OAM;
 }
 
 void PPU::lyc_ly_compare(Memory& mem) {

@@ -680,7 +680,6 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
                 }
             }
         }
-        prev_pc = pc;
         unsigned char arg0 = tread(mem, pc);
         unsigned char arg1 = tread(mem, pc + 1);
         unsigned char arg2 = tread(mem, pc + 2);

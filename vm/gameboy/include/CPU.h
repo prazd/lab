@@ -13,10 +13,7 @@ struct CPU {
     unsigned char flags_pos[4] = {7,6,5,4};
     unsigned char regs[8]{};
     unsigned char rst_vec[8]{0x00,0x08,0x10,0x18,0x20,0x28,0x30,0x38};
-    unsigned char ir{};
-    unsigned char ie{};
     unsigned short pc{};
-    unsigned short prev_pc{};
     unsigned short sp{};
     bool ime = false;
     bool halted = false;
@@ -184,7 +181,6 @@ struct CPU {
     unsigned short inc_getpair(unsigned char i);
 
     unsigned char read45(unsigned char i);
-    unsigned char to_pair45(unsigned char i);
     unsigned char read34(unsigned char i);
     unsigned char read345(unsigned char i);
     unsigned char read012(unsigned char i);
@@ -212,7 +208,6 @@ struct CPU {
     unsigned char fetch(Memory& mem);
     Instruction decode(unsigned char ins);
     Instruction0xCB decode_0xCB(unsigned char ins);
-    int execute(unsigned char i, Instruction itype, Memory& mem);
     Resumable instruction_async_loop(Memory& mem);
     void print_regs() const;
 

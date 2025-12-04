@@ -43,7 +43,7 @@ struct CH2: SquareWaveChannel {
 
 struct CH3: Channel {
     unsigned char delay = 2;
-    unsigned dac_out{};
+    unsigned char dac_out{};
     unsigned short freq{};
     unsigned char wave{};
     unsigned char nibble{};
@@ -63,7 +63,6 @@ struct CH4: Channel {
     unsigned freq_period{};
     unsigned dac_out{};
     unsigned short lsfr{};
-    void update_length_timer(const Memory& mem);
     void init(const Memory&);
     void disable_check(Memory& mem);
     void disable(Memory& mem);

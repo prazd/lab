@@ -212,6 +212,7 @@ struct APUChansActive: public DebugWindow<0, 0, width, height>{
         };
         BeginTextureMode(DW::target_renderer);
             ClearBackground(BLANK);
+#if DEBUG_MODE
             if (CheckCollisionPointRec(GetMousePosition(), {DW::rec.x, DW::rec.y, 100, 50}) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
                 mem.custom_ch1_active = !mem.custom_ch1_active;
 
@@ -228,7 +229,7 @@ struct APUChansActive: public DebugWindow<0, 0, width, height>{
             draw_channel_button(ch2rec, "CH2", mem.custom_ch2_active ? GREEN : RED);
             draw_channel_button(ch3rec, "CH3", mem.custom_ch3_active ? GREEN : RED);
             draw_channel_button(ch4rec, "CH4", mem.custom_ch4_active ? GREEN : RED);
-
+#endif
         EndTextureMode();
     }
     void handle() {

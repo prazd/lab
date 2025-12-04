@@ -7,6 +7,7 @@
 #include <queue>
 #include <optional>
 #include "Resumable.h"
+#include <array>
 
 constexpr size_t NEXT_T_CYCLE_VAL = 2;
 
@@ -343,8 +344,12 @@ struct PPU {
         Drawing = 0b11     // Pixel Transfer
     };
     Mode current_mode = OAM;
-
-    Color buffer[144][160]{};
+    static constexpr std::array<Color, 144 * 160> display_empty = []{
+        std::array<Color, 144 * 160> res{};
+        res.fill(WHITE);
+        return res;
+    }();
+    static inline std::array<Color, 144 * 160> display{};
 
     size_t last_t_cycles = 0;
     Sprite current_sprite{};
@@ -375,7 +380,6 @@ struct PPU {
     int current_v_blank_t_cycle_count = {};
     bool sprite_render = false;
     int line_0_gap = 0;
-    bool oam_interrupt = false;
     bool init_oam_interrupt = false;
 
     PixelFetcher pixel_fetcher;
@@ -395,14 +399,10 @@ struct PPU {
     void set_sprite_palette(Memory& mem, Pixel&);
 public:
     void tick(Memory& mem);
-    void set_start_mode();
     void lyc_ly_compare(Memory& mem);
     void reset(Memory&);
-    unsigned short get_bg_fetcher_tile_address() const;
-    unsigned short get_sprite_fetcher_tile_address() const;
-    auto  read_buffer() const -> const Color(&)[144][160];
+    auto  read_buffer(const Memory& mem) const -> const Color*;
     Mode get_current_mode() const;
-    void print_buffer() const;
 #if DEBUG_MODE
     static inline bool sprite_change_color = false;
     static inline bool bg_change_color1 = false;
