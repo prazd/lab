@@ -21,53 +21,78 @@ struct Sprite {
     auto operator<=>(const Sprite&) const = default;
 };
 
-template <typename T, size_t sz>
+template <typename T, size_t n>
 class SimpleDeque {
-    std::array<T, sz> queue{};
-    size_t current = 0;
+    alignas(T) unsigned char arr[sizeof(T) * n]{};
+    size_t sz = 0;
 public:
+    using value_type = T;
+    using reference = T&;
+    using pointer = T*;
+    using difference = std::ptrdiff_t;
+    using const_reference = const T&;
+    using size_type = size_t;
+
     void push_back(const T& p) {
-        queue[current++] = p;
+        new (arr + (sz * sizeof(T))) T(p);
+        ++sz;
     }
+
+    template <typename ... U>
+    void emplace_back(U&&... args) {
+        new (arr + sz * sizeof(T))  T(std::forward<U>(args)...);
+        ++sz;
+    }
+
     void push_front(const T& p) {
-        auto tmp = queue[0];
-        for (int i = 1; i <= current; ++i){
-            queue[i] = std::exchange(tmp, queue[i]);
-        }
-        queue[0] = p;
-        ++current;
+        push_back(p);
+        auto t_ptr = std::launder(reinterpret_cast<T*>(arr));
+        for (int i = sz-1; i != 0; --i)
+            std::swap(t_ptr[i], t_ptr[i-1]);
     }
+
     auto pop_front() {
-        auto tmp = queue[0];
-        for (int i = 1; i < sz; ++i){
-            queue[i-1] = queue[i];
-        }
-        --current;
-        return tmp;
+        auto t_ptr = std::launder(reinterpret_cast<T*>(arr));
+        for (int i = 1; i < sz; ++i)
+            std::swap(t_ptr[i-1], t_ptr[i]);
+        return pop_back();
     }
 
     auto pop_back() {
-        return queue[--current];
+        auto t_ptr = std::launder(reinterpret_cast<T*>(arr + (sz-1) * sizeof(T)));
+        auto tmp = *t_ptr;
+        t_ptr->~T();
+        --sz;
+        return tmp;
     }
 
     size_t size() const {
-        return current;
+        return sz;
     }
 
-    auto& front() {
-        return queue[0];
+    const_reference front() const {
+        return  *(std::launder(reinterpret_cast<const T*>(arr)));
     }
+
     bool empty() const {
-        return !current;
+        return !sz;
     }
-    auto& back() {
-        return queue[current-1];
+
+    const_reference back() const {
+        return (std::launder(reinterpret_cast<const T*>(arr)))[sz - 1];
     }
+
     auto begin() {
-        return queue.begin();
+        return std::launder(reinterpret_cast<T*>(arr));
     }
+
     auto end() {
-        return queue.begin() + current;
+        return std::launder((reinterpret_cast<T*>(arr))) + sz;
+    }
+
+    ~SimpleDeque(){
+        for (int i = 0; i < sz; ++i)
+            (std::launder((reinterpret_cast<T*>(arr))) + i)->~T();
     }
 };
 
@@ -369,7 +394,7 @@ struct PPU {
 
     unsigned short current_oam_obj = 0;
 
-    std::priority_queue<std::pair<Sprite, int>, std::vector<std::pair<Sprite, int>>, decltype([](auto& a, auto& b){
+    std::priority_queue<std::pair<Sprite, int>, SimpleDeque<std::pair<Sprite, int>, 10>, decltype([](auto& a, auto& b){
         return !(a.first.x_pos < b.first.x_pos || (a.first.x_pos == b.first.x_pos && a.second < b.second));
     })> sprite_buffer;
 

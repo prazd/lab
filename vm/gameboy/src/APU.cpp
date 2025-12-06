@@ -517,8 +517,6 @@ void APU::tick(Memory& mem) {
             else if (ch3.nibble == 0) {ch3.nibble = 1;}
             mem.ch3_read_enable = true;
             ch3.delay = 2;
-            ch3.freq = ((mem.read_unsafe(constants::NR34_ADDRESS) & 0x7) << 8) |
-                    (mem.read_unsafe(constants::NR33_ADDRESS));
             ch3.freq_timer = (2048 - ch3.freq) * 2;
         }
     }
