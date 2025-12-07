@@ -3,8 +3,15 @@
 #include <array>
 #include <iostream>
 #include "Memory.h"
+#include "CPU.h"
+#include "Joypad.h"
 #include "PPU.h"
 #include "rlgl.h"
+#include <iomanip>
+
+#if CHEATS_ON
+#include "Cheats.h"
+#endif
 
 using Tile8x8 = std::array<std::array<int, 8>, 8>;
 using Tile8x16 = std::array<std::array<int, 8>, 16>;
@@ -609,6 +616,113 @@ struct JoypadWindow: public DebugWindow<pwidth, pheight, width, height> {
            " Right: " << ((current.first) & 1)  << "\n";
         DW::header = ss.str();
         DW::draw_text(24.f);
+    }
+};
+
+template <size_t width, size_t height>
+class CheatsWin : public DebugWindow<0, 0, width, height> {
+    using DW = DebugWindow<0, 0,width,height>;
+    bool typing = false;
+
+    std::string user_input_syms;
+    Rectangle input_rec;
+    Rectangle output_rec;
+    Rectangle search_button;
+    Rectangle clean_button;
+    Rectangle freeze_button;
+    std::vector<unsigned short> search_buffer{};
+
+public:
+    CheatsWin(float x, float y): DW(x, y),
+                                 user_input_syms{' '},
+                                 input_rec({x,y, width/2, height/12}),
+                                 output_rec({x,y+height/12, width/2, height/12}),
+                                 search_button{x+width/2,y, 50, height/12},
+                                 clean_button{x+width/2 + 50,y, 50, height/12},
+                                 freeze_button{x+width/2 + 100,y, 50, height/12}
+    {}
+    void handle(Memory& mem) {
+        typing = (CheckCollisionPointRec(GetMousePosition(), input_rec));
+        if (typing){
+            auto key = GetKeyPressed();
+            if (key) {
+                if (key == KEY_BACKSPACE){
+                    if(user_input_syms.size()>1) {
+                        user_input_syms.back() = ' ';
+                        user_input_syms.pop_back();
+                    }
+                }
+            }
+            auto sym = GetCharPressed();
+            if (sym) {
+                user_input_syms.push_back(sym);
+            }
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), search_button) && IsMouseButtonPressed(0)){
+            auto val = (unsigned char)std::atoi(user_input_syms.c_str());
+            if (search_buffer.empty()){
+                for (int i = 0; i < std::size(mem.map); ++i){
+                    if (mem.read_unsafe(i) == val){
+                        search_buffer.push_back(i);
+                    }
+                }
+            } else {
+                search_buffer.erase(std::remove_if(search_buffer.begin(), search_buffer.end(), [&mem, val](auto cur){
+                    return (mem.read_unsafe(cur) != val);
+                }), search_buffer.end());
+            }
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), clean_button) && IsMouseButtonPressed(0)){
+            search_buffer.clear();
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), freeze_button) && IsMouseButtonPressed(0)){
+            for (auto el: search_buffer)
+                CheatCore::freeze_index(el);
+        }
+
+        std::stringstream input_ss;
+        std::stringstream result_ss;
+        std::stringstream search_addresses_ss;
+        std::stringstream frozen_addresses_ss;
+        search_addresses_ss << "Found:\n";
+        for (int max = 10; auto el: search_buffer) {
+            search_addresses_ss << std::hex << std::setw(4) << std::setfill('0') << (unsigned)el << "  " << (unsigned)mem.read_unsafe(el) << '\n';
+            if (!(--max)) break;
+        }
+        frozen_addresses_ss << "Frozen:\n";
+        for (int max = 10; auto el: CheatCore::frozen_indexes) {
+            frozen_addresses_ss << std::hex << std::setw(4) << std::setfill('0') << (unsigned)el << "  " << (unsigned)mem.read_unsafe(el) << '\n';
+            if (!(--max)) break;
+        }
+        result_ss << "Result:" << search_buffer.size() << '\n';
+        input_ss << user_input_syms.data();
+
+        DrawRectangle(search_button.x, search_button.y, search_button.width, search_button.height, (CheckCollisionPointRec(GetMousePosition(), search_button) && IsMouseButtonPressed(0)) ? GREEN : WHITE);
+        DrawRectangleLinesEx(search_button,1.f, GREEN);
+        DrawText("search", search_button.x, search_button.y, 12.f, BLACK);
+
+        DrawRectangle(clean_button.x, clean_button.y, clean_button.width, clean_button.height, (CheckCollisionPointRec(GetMousePosition(), clean_button) && IsMouseButtonPressed(0)) ? GREEN : WHITE);
+        DrawRectangleLinesEx(clean_button,1.f, BLACK);
+        DrawText("clean", clean_button.x, clean_button.y, 12.f, BLACK);
+
+        DrawRectangle(freeze_button.x, freeze_button.y, freeze_button.width, freeze_button.height, (CheckCollisionPointRec(GetMousePosition(), freeze_button) && IsMouseButtonPressed(0)) ? BLUE : WHITE);
+        DrawRectangleLinesEx(freeze_button,1.f, BLUE);
+        DrawText("freeze", freeze_button.x, freeze_button.y, 12.f, BLACK);
+
+        DrawRectangleLinesEx(input_rec,1.f, BLACK);
+
+        input_ss << ((typing) ? " |" : " ");
+        auto i_str = input_ss.str();
+        DrawText(i_str.c_str(), input_rec.x, input_rec.y, 20.f, BLACK);
+        auto res_str = result_ss.str();
+        DrawText(res_str.c_str(), output_rec.x, output_rec.y, 20.f, BLACK);
+        auto search_addr = search_addresses_ss.str();
+        DrawText(search_addr.c_str(), output_rec.x, output_rec.y + 20, 20.f, BLACK);
+        auto frozen_addr = frozen_addresses_ss.str();
+        DrawText(frozen_addr.c_str(), output_rec.x + width/2, output_rec.y + 20, 20.f, BLACK);
     }
 };
 

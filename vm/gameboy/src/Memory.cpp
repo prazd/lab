@@ -1,5 +1,9 @@
 #include "Memory.h"
 #include <ctime>
+#if CHEATS_ON
+#include "Cheats.h"
+#endif
+
 bool Memory::lcd_enabled() const {
     return map[constants::LCDC_ADDRESS] & 0x80;
 }
@@ -199,6 +203,11 @@ void Memory::write(unsigned short index, unsigned char value) {
         value &= 0xf0;
         value |= map[constants::NR52_ADDRESS] & 0xf;
     }
+
+#if CHEATS_ON
+    if (CheatCore::is_frozen(index))
+        return;
+#endif
 
     if (is_ram_avaliable(index)){
         map[index] = value;

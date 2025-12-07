@@ -13,6 +13,10 @@
 #include "Debug.h"
 #include <SDL.h>
 
+#if CHEATS_ON
+#include "Cheats.h"
+#endif
+
 struct GameBoyVM{
     CPU cpu;
     Memory mem;
@@ -338,6 +342,9 @@ struct GameBoyVM{
         TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
         HexViewer<500,500> hv(810,0);
         BgTileMapWindow<500,500> bgtm(810,0);
+#if CHEATS_ON
+        CheatsWin<500,500> cheats(810,0);
+#endif
 
         SpriteWindowText<0,0,600,200> swt(10, 750);
         SpriteWindow<80, 64, 300, 400> sw(820, 517);
@@ -366,6 +373,9 @@ struct GameBoyVM{
             TileWindow,
             BgTileMapWindow,
             HexViewer,
+#if CHEATS_ON
+            Cheats,
+#endif
             ViewModesCount
         };
         unsigned char current_tile_view_mode = 0;
@@ -374,6 +384,9 @@ struct GameBoyVM{
                 case TileWindow:       {tw.handle(mem); break;}
                 case BgTileMapWindow:  {bgtm.handle(mem, ppu.last_scx, ppu.last_scy); break;}
                 case HexViewer:        {hv.handle(mem); break;}
+#if CHEATS_ON
+                case Cheats:           {cheats.handle(mem); break;}
+#endif
             }
         };
 
@@ -459,39 +472,45 @@ struct GameBoyVM{
 #endif
 // PRINT PIXELS
 #if DEBUG_MODE
-              if (IsKeyPressed(KEY_T))
-                  print_tiles = !print_tiles;
-              if (IsKeyPressed(KEY_P))
-                  print_pixels = !print_pixels;
-              if (IsKeyPressed(KEY_S))
-                  cpu_running = !cpu_running;
-              if (IsKeyPressed(KEY_ONE))
-                  ppu.bg_change_color1 = !ppu.bg_change_color1;
-              if (IsKeyPressed(KEY_TWO))
-                  ppu.bg_change_color2 = !ppu.bg_change_color2;
-              if (IsKeyPressed(KEY_THREE))
-                  ppu.bg_change_color3 = !ppu.bg_change_color3;
-              if (IsKeyPressed(KEY_FOUR))
-                  ppu.bg_change_color4 = !ppu.bg_change_color4;
-              if (IsKeyPressed(KEY_FIVE))
-                  ppu.sprite_change_color = !ppu.sprite_change_color;
-              if (IsKeyPressed(KEY_F)) {
-                  current_fps_state = ((current_fps_state + 1) % std::size(fps_states));
-                  SetTargetFPS(fps_states[current_fps_state]);
-              }
-              if (IsKeyPressed(KEY_M))
+            if (IsKeyPressed(KEY_M))
                   current_tile_view_mode = (current_tile_view_mode + 1) % ViewModesCount;
+
+            if (CheckCollisionPointRec(GetMousePosition(), {0,0,constants::LCD_WIDTH,constants::LCD_HEIGHT})) {
+                if (IsKeyPressed(KEY_ONE))
+                    ppu.bg_change_color1 = !ppu.bg_change_color1;
+                if (IsKeyPressed(KEY_TWO))
+                    ppu.bg_change_color2 = !ppu.bg_change_color2;
+                if (IsKeyPressed(KEY_THREE))
+                    ppu.bg_change_color3 = !ppu.bg_change_color3;
+                if (IsKeyPressed(KEY_FOUR))
+                    ppu.bg_change_color4 = !ppu.bg_change_color4;
+                if (IsKeyPressed(KEY_FIVE))
+                    ppu.sprite_change_color = !ppu.sprite_change_color;
+
+                if (IsKeyPressed(KEY_F)) {
+                    current_fps_state = ((current_fps_state + 1) % std::size(fps_states));
+                    SetTargetFPS(fps_states[current_fps_state]);
+                }
+                if (IsKeyPressed(KEY_T))
+                    print_tiles = !print_tiles;
+                if (IsKeyPressed(KEY_P))
+                    print_pixels = !print_pixels;
+                if (IsKeyPressed(KEY_S))
+                    cpu_running = !cpu_running;
+
+                if (IsKeyPressed(KEY_ZERO))
+                    restart();
+                if (IsKeyPressed(KEY_X)){
+                    // todo: debug
+                    current_speed = std::max(1, ((current_speed + 1) % 4));
+
+                }
+            }
+
 #if APU_ON
               if (IsKeyPressed(KEY_A))
                   current_apu_view_mode = (current_apu_view_mode + 1) % ApuViewModesCount;
 #endif
-              if (IsKeyPressed(KEY_ZERO))
-                  restart();
-              if (IsKeyPressed(KEY_X)){
-                  // todo: debug
-                  current_speed = std::max(1, ((current_speed + 1) % 4));
-
-              }
 
 #endif
                 DrawFPS(700, 10);
@@ -606,7 +625,7 @@ int main() {
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/11-regs after power.gb
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/12-wave write while on.gb
         // /Users/prazd/Desktop/dev/gb-square-test/square_test.gb
-        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
