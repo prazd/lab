@@ -336,14 +336,15 @@ struct GameBoyVM{
 #if DEBUG_MODE
         // tile view modes
         TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
+        HexViewer<500,500> hv(810,0);
         BgTileMapWindow<500,500> bgtm(810,0);
 
-        PPURegistersText<0,0,200,150> ppurt(1320, 0);
-
-        SpriteWindow<80, 32, 300, 200> sw(820, 517);
-        RegWindow<0,0,300,465> rw(1150, 517);
         SpriteWindowText<0,0,600,200> swt(10, 750);
-        JoypadWindow<0,0,300,250> jw(820, 730);
+        SpriteWindow<80, 64, 300, 400> sw(820, 517);
+
+        PPURegistersText<0,0,200,150> ppurt(1320, 0);
+        RegWindow<0,0,300,465> rw(1150, 517);
+//        JoypadWindow<0,0,300,250> jw(820, 730);
 
 #if APU_ON
         APURegistersText<0,0,200,150> apurt(1320, 150);
@@ -364,6 +365,7 @@ struct GameBoyVM{
         enum TileViewMode{
             TileWindow,
             BgTileMapWindow,
+            HexViewer,
             ViewModesCount
         };
         unsigned char current_tile_view_mode = 0;
@@ -371,6 +373,7 @@ struct GameBoyVM{
             switch (current_tile_view_mode) {
                 case TileWindow:       {tw.handle(mem); break;}
                 case BgTileMapWindow:  {bgtm.handle(mem, ppu.last_scx, ppu.last_scy); break;}
+                case HexViewer:        {hv.handle(mem); break;}
             }
         };
 
@@ -422,7 +425,7 @@ struct GameBoyVM{
                     sw.handle(mem);
                     rw.handle(mem, cpu);
                     swt.handle(sw);
-                    jw.handle(mem, joypad);
+//                    jw.handle(mem, joypad);
                     ppurt.handle(mem, ppu.last_scx, ppu.last_scy);
                     if (print_pixels) pp.handle(GREEN, 0, 0);
                     if (print_tiles)  tp.handle(RED, 0, print_pixels ? 50 : 0);

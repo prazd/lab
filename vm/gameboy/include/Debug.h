@@ -6,14 +6,16 @@
 #include "PPU.h"
 #include "rlgl.h"
 
-using Tile = std::array<std::array<int, 8>, 8>;
+using Tile8x8 = std::array<std::array<int, 8>, 8>;
+using Tile8x16 = std::array<std::array<int, 8>, 16>;
 
 struct DebugTools {
-    static Tile get_sprite_tile(const Memory& mem, const Sprite& sprite) {
+    static Tile8x8 get_sprite_tile8x8(const Memory& mem, const Sprite& sprite) {
         auto lcdc_mode = (mem.read_unsafe(constants::LCDC_ADDRESS) >> 2) & 1;
-        return get_tile_by_address(mem, ((lcdc_mode ? sprite.index_tile & 0xfe : sprite.index_tile) * 16) + constants::VRAM_BEGIN);
+        return get_tile8x8_by_address(mem, ((lcdc_mode ? sprite.index_tile & 0xfe : sprite.index_tile) * 16) + constants::VRAM_BEGIN);
     }
-    static Tile get_tile_by_address(const Memory& mem, unsigned short address){
+
+    static Tile8x8 get_tile8x8_by_address(const Memory& mem, unsigned short address){
         std::array<unsigned char, 16> arr{};
         for (int i = 0; i < 16; ++i){
             arr[i] = mem.read_unsafe(address + i);
@@ -22,6 +24,30 @@ struct DebugTools {
         std::array<int, 8> tmp{};
         size_t current{};
         for (size_t i = 0; i < 16; i+=2){
+            auto l = arr[i];
+            auto h = arr[i+1];
+            for (int j = 0; j < 8; ++j) {
+                auto lc = (l >> (7 - j)) & 1;
+                auto hc = (h >> (7 - j)) & 1;
+                tmp[j] = (hc << 1 | lc);
+            }
+            colors[current++] = tmp;
+        }
+        return colors;
+    };
+
+    static Tile8x16 get_sprite_tile16(const Memory& mem, const Sprite& sprite) {
+        auto lcdc_mode = (mem.read_unsafe(constants::LCDC_ADDRESS) >> 2) & 1;
+        return get_tile_by_address16(mem, ((lcdc_mode ? sprite.index_tile & 0xfe : sprite.index_tile) * 16) + constants::VRAM_BEGIN);
+    }
+
+    static Tile8x16 get_tile_by_address16(const Memory& mem, unsigned short address){
+        std::array<unsigned char, 32> arr{};
+        std::copy(mem.map + address, mem.map + address + 32, arr.begin());
+        std::array<std::array<int, 8>, 16> colors{};
+        std::array<int, 8> tmp{};
+        size_t current{};
+        for (size_t i = 0; i < 32; i+=2){
             auto l = arr[i];
             auto h = arr[i+1];
             for (int j = 0; j < 8; ++j) {
@@ -53,9 +79,9 @@ struct DebugTools {
         y_begin+=10.f;
         DrawText(str.c_str(), x_begin, y_begin, 30.f, BLACK);
         y_begin += 30.f;
-        std::vector<Tile> vec{};
+        std::vector<Tile8x8 > vec{};
         for (int i = 0; i < n_tiles; ++i)
-            vec.push_back(get_tile_by_address(mem, begin_address + (16 * i)));
+            vec.push_back(get_tile8x8_by_address(mem, begin_address + (16 * i)));
 
         float xstep = (rec.width/20)/8;
         float ystep = (rec.height/20)/8;
@@ -92,6 +118,7 @@ struct DebugWindow {
     Texture2D target;
     RenderTexture2D target_renderer;
     Buffer buffer{};
+    bool m_pressed = false;
     std::string header;
     DebugWindow(float x, float y):
             rec({x, y, width, height}), target_renderer(LoadRenderTexture(width, height)){
@@ -104,7 +131,12 @@ struct DebugWindow {
     }
     void move_check() {
         if (CheckCollisionPointRec(GetMousePosition(), rec)){
-            if (IsMouseButtonDown(0)) {
+            if (IsMouseButtonPressed(0)) {
+                m_pressed = true;
+            } else if (IsMouseButtonReleased(0)) {
+                m_pressed = false;
+            }
+            if (IsMouseButtonDown(0) && m_pressed) {
                 rec.x = GetMousePosition().x - (width/2);
                 rec.y = GetMousePosition().y - (height/2);
             }
@@ -241,7 +273,7 @@ template <size_t pwidth, size_t pheight, size_t width, size_t height, size_t n_t
 struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
     using DW = DebugWindow<pwidth, pheight,width,height>;
     unsigned short base_address{};
-    std::array<Tile, n_tiles> tiles;
+    std::array<Tile8x8, n_tiles> tiles;
     TileWindow(float x, float y, unsigned short base_address):
             DebugWindow<pwidth, pheight,width,height>(x, y),
             base_address(base_address){
@@ -255,7 +287,7 @@ struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
         DW::header = ss.str();
 
         for (int i = 0; i < n_tiles; ++i)
-            tiles[i] = DebugTools::get_tile_by_address(mem, base_address + (16 * i));
+            tiles[i] = DebugTools::get_tile8x8_by_address(mem, base_address + (16 * i));
 
         int x = x_begin;
         int y = y_begin;
@@ -295,10 +327,54 @@ struct TileWindow: public DebugWindow<pwidth, pheight, width, height>{
 };
 
 template <size_t width, size_t height>
+struct HexViewer: public DebugWindow<0, 0, width, height> {
+    using DW = DebugWindow<0, 0,width,height>;
+    unsigned short base = 0x00;
+    enum Speed {
+        Low,
+        Med,
+        High,
+        SpeedCount
+    } current_speed = Low;
+    static constexpr int speed_vals[] = {16, 128, 512};
+    HexViewer(float x, float y): DW(x, y){}
+    void handle(const Memory& mem){
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec)){
+            auto mouse_wheel_move = GetMouseWheelMove();
+            if (mouse_wheel_move > 0)
+                base += speed_vals[current_speed];
+            else if (mouse_wheel_move < 0)
+                base -= speed_vals[current_speed];
+
+            if (IsKeyPressed(KEY_EQUAL))
+                current_speed = static_cast<Speed>((current_speed + 1) % SpeedCount);
+        }
+        std::stringstream ss_addr;
+        ss_addr << '\n';
+        char ascii_buffer[16]{};
+        unsigned short current = base;
+        for (int i = 0; i < 28; ++i){
+            ss_addr << ' ' << std::hex << std::setw(4) << std::setfill('0') << (unsigned)current << "  ";
+            for (int j = 0; j < 16; ++j) {
+                auto val = mem.read_unsafe(current + j);
+                ascii_buffer[j] = (val >= 32 && val <= 127  ? (char)val : '.');
+                ss_addr  << std::setw( 2) <<  std::setfill('0') << (unsigned)val << ' ';
+            }
+            current += 16;
+            ss_addr << "   ";
+            for (auto el: ascii_buffer)  ss_addr << el;
+            ss_addr << '\n';
+        }
+        DW::header = ss_addr.str();
+        DW::draw_text(15.f);
+    }
+};
+
+template <size_t width, size_t height>
 struct BgTileMapWindow: public DebugWindow<256, 256, width, height>{
     using DW = DebugWindow<256, 256,width,height>;
     unsigned short base_address = constants::BG_TILE_MAP1;
-    std::array<Tile, 1024> tiles;
+    std::array<Tile8x8, 1024> tiles;
     BgTileMapWindow(float x, float y): DW(x, y){}
     void update_tiles(const Memory& mem, unsigned char scx, unsigned char scy){
         std::stringstream ss;
@@ -313,7 +389,7 @@ struct BgTileMapWindow: public DebugWindow<256, 256, width, height>{
         size_t count = 0;
         for (int i = 0; i < 32; ++i)
             for (int j = 0; j < 32; ++j)
-                 tiles[count++] = DebugTools::get_tile_by_address(mem,  tile_base == 0x8000 ?
+                 tiles[count++] = DebugTools::get_tile8x8_by_address(mem,  tile_base == 0x8000 ?
                  tile_base + (mem.read_unsafe((base_address + (j + 32 * i))) * 16):
                  tile_base + ((char)mem.read_unsafe((base_address + (j + 32 * i))) * 16));
 
@@ -363,7 +439,8 @@ template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct SpriteWindow: public DebugWindow<pwidth, pheight, width, height>{
     using DW = DebugWindow<pwidth, pheight,width,height>;
     std::array<Sprite, 40> sprites;
-    std::array<Tile, 40> tiles;
+    std::array<Tile8x8, 40> tiles8x8;
+    std::array<Tile8x16, 40> tiles8x16;
     SpriteWindow(float x, float y):
             DebugWindow<pwidth, pheight,width,height>(x, y){
     }
@@ -387,29 +464,38 @@ struct SpriteWindow: public DebugWindow<pwidth, pheight, width, height>{
                     });
         }
 
-        for (int i = 0; i < 40; ++i) tiles[i] = DebugTools::get_sprite_tile(mem, sprites[i]);
+        auto update_buffer = [x_begin, y_begin](auto& mem, auto& sprites, auto& buffer, auto& tiles, auto get_sprite_func){
+            for (int i = 0; i < 40; ++i)
+                tiles[i] = get_sprite_func(mem, sprites[i]);
 
-        int x = x_begin;
-        int y = y_begin;
-        int current_x = x;
-        int current_y = y;
-        auto prev_x = x;
-        for (auto& colors: tiles) {
-            for (auto&& row: colors){
-                for (auto el: row) {
-                    DW::buffer[y][x++] = Pixel::get_pixel_color(el);
+                int x = x_begin;
+                int y = y_begin;
+                int current_x = x;
+                int current_y = y;
+                auto prev_x = x;
+                for (auto& colors: tiles) {
+                    for (auto&& row: colors){
+                        for (auto el: row) {
+                            buffer[y][x++] = Pixel::get_pixel_color(el);
+                        }
+                        ++y;
+                        prev_x = std::exchange(x, current_x);
+                    }
+                    if ((prev_x + 1 >= pwidth)){
+                        y = current_y = y;
+                        x = current_x = x_begin;
+                    } else {
+                        y = current_y;
+                        x = current_x = prev_x;
+                    }
                 }
-                ++y;
-                prev_x = std::exchange(x, current_x);
-            }
-            if ((prev_x + 1 >= pwidth)){
-                y = current_y = y;
-                x = current_x = x_begin;
-            } else {
-                y = current_y;
-                x = current_x = prev_x;
-            }
-        }
+        };
+
+        if ((mem.read_unsafe(constants::LCDC_ADDRESS) >> 2) & 1)
+            update_buffer(mem, sprites, DW::buffer, tiles8x16, DebugTools::get_sprite_tile16);
+        else
+            update_buffer(mem, sprites, DW::buffer, tiles8x8, DebugTools::get_sprite_tile8x8);
+
         DW::update();
     }
 

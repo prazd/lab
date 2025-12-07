@@ -324,9 +324,16 @@ void PPU::tick(Memory& mem)  {
                 if (sprite_fetcher.next_t_cycle == 0) {
                     sprite_fetcher.fetch(mem, current_pixel_x, current_sprite);
                     if (sprite_fetcher.finished) {
-                        pixel_fetcher.paused = false;
                         sprite_render = false;
                         sprite_fetcher.finished = false;
+                        if (!sprite_buffer.empty()) {
+                            auto current = sprite_buffer.top();
+                            if (current.first.x_pos - 8 > current_pixel_x) {
+                                pixel_fetcher.paused = false;
+                            }
+                        } else {
+                            pixel_fetcher.paused = false;
+                        }
                     }
                 }
             }
