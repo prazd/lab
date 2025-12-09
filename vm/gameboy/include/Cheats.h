@@ -2,6 +2,7 @@
 #define MAIN_CPP_CHEATS_H
 #include <vector>
 struct CheatCore{
+   static inline std::vector<unsigned short> indexes;
    static inline std::vector<unsigned short> frozen_indexes;
    static void freeze_index(unsigned short index);
    static void unfreeze_index(unsigned short index);

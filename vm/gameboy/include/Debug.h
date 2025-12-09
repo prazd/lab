@@ -625,12 +625,27 @@ class CheatsWin : public DebugWindow<0, 0, width, height> {
     bool typing = false;
 
     std::string user_input_syms;
+
+    Rectangle input_value_rec;
     Rectangle input_rec;
     Rectangle output_rec;
     Rectangle search_button;
     Rectangle clean_button;
-    Rectangle freeze_button;
+    Rectangle add_inspect_button;
+    Rectangle clear_inspect_button;
+
+    Rectangle update_button;
+
     std::vector<unsigned short> search_buffer{};
+
+    enum Mode {
+        Search,
+        Update,
+        ModeCount
+    } mode = Search;
+
+    unsigned short selected_address = 0;
+    size_t update_base = 0;
 
 public:
     CheatsWin(float x, float y): DW(x, y),
@@ -639,9 +654,102 @@ public:
                                  output_rec({x,y+height/12, width/2, height/12}),
                                  search_button{x+width/2,y, 50, height/12},
                                  clean_button{x+width/2 + 50,y, 50, height/12},
-                                 freeze_button{x+width/2 + 100,y, 50, height/12}
+                                 add_inspect_button{x+width/2 + 100,y, 50, height/12},
+                                 clear_inspect_button{x+width/2 + 150,y, 50, height/12},
+                                 input_value_rec{x,y+40, width/4, height/12},
+                                 update_button{x+width/4,y+40, 30, 30}
     {}
-    void handle(Memory& mem) {
+    void check_switch_mode() {
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec)) {
+            if (IsKeyPressed(KEY_C)) mode = static_cast<Mode>((mode + 1) % ModeCount);
+        }
+    }
+    void handle_update_mode(Memory& mem) {
+        typing = (CheckCollisionPointRec(GetMousePosition(), input_value_rec));
+        if (typing){
+            auto key = GetKeyPressed();
+            if (key) {
+                if (key == KEY_BACKSPACE){
+                    if(user_input_syms.size()>1) {
+                        user_input_syms.back() = ' ';
+                        user_input_syms.pop_back();
+                    }
+                }
+            }
+            auto sym = GetCharPressed();
+            if (sym) {
+                user_input_syms.push_back(sym);
+            }
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), update_button) && IsMouseButtonPressed(0)){
+            unsigned val = std::atoi(user_input_syms.c_str());
+            if (val <= 0xff){
+                mem.write_unsafe(selected_address, val);
+            } else if (val <= 0xffff) {
+                mem.write_unsafe(selected_address, val & 0xff);
+                mem.write_unsafe(selected_address + 1, (val >> 8) & 0xff);
+            } else {
+                mem.write_unsafe(selected_address, val & 0xff);
+                mem.write_unsafe(selected_address + 1, (val >> 8) & 0xff);
+                mem.write_unsafe(selected_address + 2, (val >> 16) & 0xff);
+                mem.write_unsafe(selected_address + 3, (val >> 24) & 0xff);
+            }
+        }
+
+        auto draw_button = [](Rectangle rec, Color c, const char* text){
+            DrawRectangle(rec.x, rec.y, rec.width, rec.height, (CheckCollisionPointRec(GetMousePosition(), rec) && IsMouseButtonPressed(0)) ? c : WHITE);
+            DrawRectangleLinesEx(rec,1.f, c);
+            DrawText(text, rec.x, rec.y, 12.f, BLACK);
+        };
+
+        std::stringstream frozen_addresses_ss;
+        unsigned count = 0;
+        for (int max = 10; auto el: CheatCore::indexes) {
+            frozen_addresses_ss << std::hex << std::setw(4) << std::setfill('0') << (unsigned)el << "  " << (unsigned)mem.read_unsafe(el) << '\n';
+            if (!(--max)) break;
+            ++count;
+        }
+        for (int i = 0; i < count; ++i){
+            bool frozen = CheatCore::is_frozen(CheatCore::indexes[update_base + i]);
+            Rectangle freeze_button_rec = {input_rec.x + 120, input_rec.y + 90 + (i * 25), 20, 20};
+            draw_button(freeze_button_rec, frozen ? RED : GREEN, frozen ? "OFF" : "ON");
+            Rectangle update_button_rec = {input_rec.x + 140, input_rec.y + 90 + (i * 25), 40, 20};
+            draw_button(update_button_rec, GREEN, "select");
+
+            if (CheckCollisionPointRec(GetMousePosition(), freeze_button_rec) && IsMouseButtonPressed(0)){
+                if (!frozen){
+                    CheatCore::freeze_index(CheatCore::indexes[update_base + i]);
+                } else {
+                    CheatCore::unfreeze_index(CheatCore::indexes[update_base + i]);
+                }
+            }
+
+            if (CheckCollisionPointRec(GetMousePosition(), update_button_rec) && IsMouseButtonPressed(0)){
+                selected_address = CheatCore::indexes[update_base + i];
+            }
+        }
+
+        std::stringstream input_ss;
+        input_ss << user_input_syms.data();
+        input_ss << ((typing) ? " |" : " ");
+
+        auto i_str = input_ss.str();
+        DrawText(i_str.c_str(), input_value_rec.x, input_value_rec.y, 20.f, BLACK);
+
+        std::stringstream ss;
+        ss << "Selected address:\n";
+        ss << std::hex << std::setw(4) << std::setfill('0') << selected_address;
+        auto s_str = ss.str();
+        DrawText(s_str.c_str(), input_rec.x, input_rec.y, 20.f, BLACK);
+        auto indexes = frozen_addresses_ss.str();
+        DrawText(indexes.c_str(), input_rec.x, input_rec.y + 90, 20.f, BLACK);
+        DrawRectangleLinesEx(input_value_rec,1.f, BLACK);
+        draw_button(update_button, GREEN, "update");
+        check_switch_mode();
+    }
+
+    void handle_search_mode(Memory& mem) {
         typing = (CheckCollisionPointRec(GetMousePosition(), input_rec));
         if (typing){
             auto key = GetKeyPressed();
@@ -678,9 +786,14 @@ public:
             search_buffer.clear();
         }
 
-        if (CheckCollisionPointRec(GetMousePosition(), freeze_button) && IsMouseButtonPressed(0)){
-            for (auto el: search_buffer)
-                CheatCore::freeze_index(el);
+        if (CheckCollisionPointRec(GetMousePosition(), add_inspect_button) && IsMouseButtonPressed(0)){
+            for (auto el: search_buffer){
+                CheatCore::indexes.push_back(el);
+            }
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), clear_inspect_button) && IsMouseButtonPressed(0)){
+            CheatCore::indexes.clear();
         }
 
         std::stringstream input_ss;
@@ -692,27 +805,29 @@ public:
             search_addresses_ss << std::hex << std::setw(4) << std::setfill('0') << (unsigned)el << "  " << (unsigned)mem.read_unsafe(el) << '\n';
             if (!(--max)) break;
         }
-        frozen_addresses_ss << "Frozen:\n";
-        for (int max = 10; auto el: CheatCore::frozen_indexes) {
+
+        frozen_addresses_ss << "Inspect:\n";
+        for (int max = 10; auto el: CheatCore::indexes) {
             frozen_addresses_ss << std::hex << std::setw(4) << std::setfill('0') << (unsigned)el << "  " << (unsigned)mem.read_unsafe(el) << '\n';
             if (!(--max)) break;
         }
+
         result_ss << "Result:" << search_buffer.size() << '\n';
         input_ss << user_input_syms.data();
 
-        DrawRectangle(search_button.x, search_button.y, search_button.width, search_button.height, (CheckCollisionPointRec(GetMousePosition(), search_button) && IsMouseButtonPressed(0)) ? GREEN : WHITE);
-        DrawRectangleLinesEx(search_button,1.f, GREEN);
-        DrawText("search", search_button.x, search_button.y, 12.f, BLACK);
+        auto draw_button = [](Rectangle rec, Color c, const char* text){
+            DrawRectangle(rec.x, rec.y, rec.width, rec.height, (CheckCollisionPointRec(GetMousePosition(), rec) && IsMouseButtonPressed(0)) ? c : WHITE);
+            DrawRectangleLinesEx(rec,1.f, c);
+            DrawText(text, rec.x, rec.y, 12.f, BLACK);
+        };
 
-        DrawRectangle(clean_button.x, clean_button.y, clean_button.width, clean_button.height, (CheckCollisionPointRec(GetMousePosition(), clean_button) && IsMouseButtonPressed(0)) ? GREEN : WHITE);
-        DrawRectangleLinesEx(clean_button,1.f, BLACK);
-        DrawText("clean", clean_button.x, clean_button.y, 12.f, BLACK);
-
-        DrawRectangle(freeze_button.x, freeze_button.y, freeze_button.width, freeze_button.height, (CheckCollisionPointRec(GetMousePosition(), freeze_button) && IsMouseButtonPressed(0)) ? BLUE : WHITE);
-        DrawRectangleLinesEx(freeze_button,1.f, BLUE);
-        DrawText("freeze", freeze_button.x, freeze_button.y, 12.f, BLACK);
+        draw_button(search_button, GREEN, "search");
+        draw_button(clean_button, GREEN, "clean");
+        draw_button(add_inspect_button, BLUE, "add");
+        draw_button(clear_inspect_button, RED, "delete");
 
         DrawRectangleLinesEx(input_rec,1.f, BLACK);
+
 
         input_ss << ((typing) ? " |" : " ");
         auto i_str = input_ss.str();
@@ -721,8 +836,15 @@ public:
         DrawText(res_str.c_str(), output_rec.x, output_rec.y, 20.f, BLACK);
         auto search_addr = search_addresses_ss.str();
         DrawText(search_addr.c_str(), output_rec.x, output_rec.y + 20, 20.f, BLACK);
-        auto frozen_addr = frozen_addresses_ss.str();
-        DrawText(frozen_addr.c_str(), output_rec.x + width/2, output_rec.y + 20, 20.f, BLACK);
+        auto indexes = frozen_addresses_ss.str();
+        DrawText(indexes.c_str(), output_rec.x + width/2, output_rec.y + 20, 20.f, BLACK);
+        check_switch_mode();
+    }
+    void handle(Memory& mem) {
+        switch (mode) {
+            case Search: {handle_search_mode(mem);break;}
+            case Update: {handle_update_mode(mem);break;}
+        }
     }
 };
 
