@@ -633,10 +633,12 @@ class CheatsWin : public DebugWindow<0, 0, width, height> {
     Rectangle clean_button;
     Rectangle add_inspect_button;
     Rectangle clear_inspect_button;
+    Rectangle was_updated_button;
+    Rectangle was_not_updated_button;
 
     Rectangle update_button;
 
-    std::vector<unsigned short> search_buffer{};
+    std::vector<std::pair<unsigned short, unsigned char>> search_buffer{};
 
     enum Mode {
         Search,
@@ -644,6 +646,7 @@ class CheatsWin : public DebugWindow<0, 0, width, height> {
         ModeCount
     } mode = Search;
 
+    unsigned short external_ram_base = 0;
     unsigned short selected_address = 0;
     size_t update_base = 0;
 
@@ -657,7 +660,9 @@ public:
                                  add_inspect_button{x+width/2 + 100,y, 50, height/12},
                                  clear_inspect_button{x+width/2 + 150,y, 50, height/12},
                                  input_value_rec{x,y+40, width/4, height/12},
-                                 update_button{x+width/4,y+40, 30, 30}
+                                 update_button{x+width/4,y+40, 30, 30},
+                                 was_updated_button{x+width/2,y+40, 30, 30},
+                                 was_not_updated_button{x+width/2 + 30,y+40, 30, 30}
     {}
     void check_switch_mode() {
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec)) {
@@ -769,16 +774,48 @@ public:
 
         if (CheckCollisionPointRec(GetMousePosition(), search_button) && IsMouseButtonPressed(0)){
             auto val = (unsigned char)std::atoi(user_input_syms.c_str());
-            if (search_buffer.empty()){
-                for (int i = 0; i < std::size(mem.map); ++i){
-                    if (mem.read_unsafe(i) == val){
-                        search_buffer.push_back(i);
+                if (search_buffer.empty()){
+                    for (int i = constants::WRAM1_BEGIN + 1; i < 0xffff; ++i){
+                        if (mem.read_unsafe(i) == val){
+                            search_buffer.push_back({i, val});
+                        }
                     }
+                } else {
+                    search_buffer.erase(std::remove_if(search_buffer.begin(), search_buffer.end(), [&mem, val](auto cur){
+                        return (mem.read_unsafe(cur.first) != val);
+                    }), search_buffer.end());
+                }
+        }
+
+
+
+        if (CheckCollisionPointRec(GetMousePosition(), was_updated_button) && IsMouseButtonPressed(0)){
+            if (search_buffer.empty()){
+                for (int i = constants::WRAM1_BEGIN + 1; i < 0xffff; ++i){
+                    search_buffer.push_back({i, mem.read_unsafe(i)});
                 }
             } else {
-                search_buffer.erase(std::remove_if(search_buffer.begin(), search_buffer.end(), [&mem, val](auto cur){
-                    return (mem.read_unsafe(cur) != val);
+                search_buffer.erase(std::remove_if(search_buffer.begin(), search_buffer.end(), [&mem](auto cur){
+                    return (mem.read_unsafe(cur.first) == cur.second);
                 }), search_buffer.end());
+                for (auto& [el, value]: search_buffer)
+                    value = mem.read_unsafe(el);
+            }
+        }
+
+
+        if (CheckCollisionPointRec(GetMousePosition(), was_not_updated_button) && IsMouseButtonPressed(0)){
+            if (search_buffer.empty()){
+                for (int i = constants::WRAM1_BEGIN + 1; i < 0xffff; ++i){
+                    search_buffer.push_back({i, mem.read_unsafe(i)});
+                }
+            } else {
+                search_buffer.erase(std::remove_if(search_buffer.begin(), search_buffer.end(), [&mem](auto cur){
+                    return (mem.read_unsafe(cur.first) != cur.second);
+                }), search_buffer.end());
+                for (auto& [el, value]: search_buffer)
+                    value = mem.read_unsafe(el);
+
             }
         }
 
@@ -787,8 +824,8 @@ public:
         }
 
         if (CheckCollisionPointRec(GetMousePosition(), add_inspect_button) && IsMouseButtonPressed(0)){
-            for (auto el: search_buffer){
-                CheatCore::indexes.push_back(el);
+            for (auto [index,value]: search_buffer){
+                CheatCore::indexes.push_back(index);
             }
         }
 
@@ -801,7 +838,7 @@ public:
         std::stringstream search_addresses_ss;
         std::stringstream frozen_addresses_ss;
         search_addresses_ss << "Found:\n";
-        for (int max = 10; auto el: search_buffer) {
+        for (int max = 10; auto [el, val]: search_buffer) {
             search_addresses_ss << std::hex << std::setw(4) << std::setfill('0') << (unsigned)el << "  " << (unsigned)mem.read_unsafe(el) << '\n';
             if (!(--max)) break;
         }
@@ -812,7 +849,7 @@ public:
             if (!(--max)) break;
         }
 
-        result_ss << "Result:" << search_buffer.size() << '\n';
+        result_ss << "Result:" << search_buffer.size() <<  '\n';
         input_ss << user_input_syms.data();
 
         auto draw_button = [](Rectangle rec, Color c, const char* text){
@@ -825,9 +862,10 @@ public:
         draw_button(clean_button, GREEN, "clean");
         draw_button(add_inspect_button, BLUE, "add");
         draw_button(clear_inspect_button, RED, "delete");
+        draw_button(was_updated_button, GREEN, "updated");
+        draw_button(was_not_updated_button, GREEN, "same");
 
         DrawRectangleLinesEx(input_rec,1.f, BLACK);
-
 
         input_ss << ((typing) ? " |" : " ");
         auto i_str = input_ss.str();

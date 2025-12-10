@@ -1,8 +1,4 @@
 #include "Resumable.h"
-
-using coro_handle = std::coroutine_handle<Resumable::promise_type>;
-
-using coro_handle = std::coroutine_handle<Resumable::promise_type>;
 Resumable Resumable::promise_type::get_return_object() { return coro_handle::from_promise(*this);}
 std::suspend_always Resumable::promise_type::initial_suspend() noexcept { return std::suspend_always(); }
 std::suspend_always Resumable::promise_type::final_suspend() noexcept { return std::suspend_always(); }
