@@ -378,6 +378,108 @@ struct HexViewer: public DebugWindow<0, 0, width, height> {
 };
 
 template <size_t width, size_t height>
+struct InstructionViewer: public DebugWindow<0, 0, width, height> {
+    using DW = DebugWindow<0, 0,width,height>;
+    unsigned short base_pc = 0x100;
+    std::string user_input_syms;
+    bool typing = false;
+    Rectangle input_rec;
+    Rectangle button_search;
+    std::deque<unsigned char> prev_instruction_sz{};
+    InstructionViewer(float x, float y): DW(x, y),
+    input_rec({x,y, width/2, height/12}),
+    button_search{x + width/2,y, 40, 40}{}
+    void handle(Memory& mem, CPU& cpu){
+        typing = (CheckCollisionPointRec(GetMousePosition(), input_rec));
+        if (typing){
+            auto key = GetKeyPressed();
+            if (key) {
+                if (key == KEY_BACKSPACE){
+                    if(!user_input_syms.empty()) {
+                        user_input_syms.back() = ' ';
+                        user_input_syms.pop_back();
+                    }
+                }
+            }
+            auto sym = GetCharPressed();
+            if (sym) {
+                user_input_syms.push_back(sym);
+            }
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), button_search) && IsMouseButtonPressed(0)){
+            unsigned val = std::atoi(user_input_syms.c_str());
+            bool stop = false;
+            auto current_pc = base_pc;
+            for (int i = base_pc; i < constants::ROM_BANK_01_END; ++i){
+                auto decoded = CPU::decode(mem.read_unsafe(current_pc));
+                auto arg1 = mem.read_unsafe(current_pc + 1);
+                auto arg2 = mem.read_unsafe(current_pc + 2);
+                switch (decoded) {
+                    case CPU::LD_0b11111010:
+                    case CPU::LD_0b11101010:
+                    case CPU::LD_0b00xx0001:
+                    case CPU::LD_0b00001000:
+                        {
+                            if ((arg1 | (arg2 << 8)) == val) {
+                                stop = true;
+                            }
+                            break;
+                        }
+                    case CPU::LDH_0b11110000:
+                    case CPU::LDH_0b11100000:
+                    {
+                        if ((0xff00 | (arg1 & 0xff)) == val) {
+                            stop = true;
+                        }
+                        break;
+                    }
+                }
+                if (stop){base_pc = current_pc; break;}
+                current_pc += cpu.instruction_sz(decoded);
+            }
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec)){
+            auto mouse_wheel_move = GetMouseWheelMove();
+            if (mouse_wheel_move > 0){
+                auto sz = cpu.instruction_sz(CPU::decode(mem.read_unsafe(base_pc)));
+                prev_instruction_sz.push_back(sz);
+                base_pc+=sz;
+
+            } else if (mouse_wheel_move < 0) {
+                if (!prev_instruction_sz.empty()) {
+                    base_pc-=prev_instruction_sz.back();
+                    prev_instruction_sz.pop_back();
+                }
+            }
+        }
+        std::stringstream ss;
+        std::stringstream input_ss;
+
+        auto current_pc = base_pc;
+        for (int i = 0; i < 25; ++i){
+            ss << std::hex << std::setw(4) << std::setfill('0') << (unsigned)current_pc << "  ";
+            auto decoded = CPU::decode(mem.read_unsafe(current_pc));
+            auto current_ins_str = cpu.instr_to_str(mem,decoded,current_pc);
+            ss << current_ins_str << " ";
+            current_pc += cpu.instruction_sz(decoded);
+            ss << '\n';
+        }
+        input_ss << user_input_syms;
+        input_ss << (typing ? " |" : "");
+        auto input_str = input_ss.str();
+        DrawRectangleLinesEx(input_rec,1.f, BLACK);
+        DrawRectangle(button_search.x, button_search.y, button_search.width, button_search.height, (CheckCollisionPointRec(GetMousePosition(), button_search) && IsMouseButtonPressed(0)) ? GREEN : WHITE);
+        DrawRectangleLinesEx(button_search,1.f, GREEN);
+        DrawText("search", button_search.x, button_search.y, 12.f, BLACK);
+        auto str = ss.str();
+        DrawText(str.c_str(), input_rec.x, input_rec.y + 40, 15.f, BLACK);
+        DrawText(input_str.c_str(), input_rec.x, input_rec.y, 20.f, BLACK);
+    }
+};
+
+template <size_t width, size_t height>
 struct BgTileMapWindow: public DebugWindow<256, 256, width, height>{
     using DW = DebugWindow<256, 256,width,height>;
     unsigned short base_address = constants::BG_TILE_MAP1;
@@ -646,7 +748,6 @@ class CheatsWin : public DebugWindow<0, 0, width, height> {
         ModeCount
     } mode = Search;
 
-    unsigned short external_ram_base = 0;
     unsigned short selected_address = 0;
     size_t update_base = 0;
 

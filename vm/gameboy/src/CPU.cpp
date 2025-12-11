@@ -122,6 +122,20 @@ void CPU::dec_reg(unsigned char i, Memory& mem)  {
     update_regs(i, mem, result);
 }
 
+std::string_view read_regs_str(unsigned char i)  {
+    switch(i){
+        case 0b000: {return "B";}
+        case 0b001: {return "C";}
+        case 0b010: {return "D";}
+        case 0b011: {return "E";}
+        case 0b100: {return "H";}
+        case 0b101: {return "L";}
+        case 0b110: {return "HL";}
+        case 0b111: {return "A";}
+    }
+    throw std::invalid_argument("Unknown register");
+}
+
 unsigned char CPU::read_regs(unsigned char i, Memory& mem)  {
     switch(i){
         case 0b000: {return regs[B];}
@@ -134,6 +148,21 @@ unsigned char CPU::read_regs(unsigned char i, Memory& mem)  {
         case 0b111: {return regs[A];}
     }
     throw std::invalid_argument("Unknown register");
+}
+
+static std::string update_regs_to_str(unsigned char i, unsigned value) {
+    std::stringstream ss;
+    switch(i){
+        case 0b000: {ss << "B," << value;break;}
+        case 0b001: {ss << "C," << value;break;}
+        case 0b010: {ss << "D," << value;break;}
+        case 0b011: {ss << "E," << value;break;}
+        case 0b100: {ss << "H," << value;break;}
+        case 0b101: {ss << "L," << value;break;}
+        case 0b110: {ss << "HL," <<value;break;}
+        case 0b111: {ss << "A," << value;break;}
+    }
+    return ss.str();
 }
 
 void CPU::update_regs(unsigned char i, Memory& mem, unsigned char value)  {
@@ -163,7 +192,7 @@ unsigned char CPU::fetch(Memory& mem)   {
     return tread(mem,pc);
 }
 
-CPU::Instruction CPU::decode(unsigned char ins)  {
+CPU::Instruction CPU::decode(unsigned char ins) {
     switch (ins) {
         case 0b00110110: return LD_0b00110110;
         case 0b00001010: return LD_0b00001010;
@@ -331,6 +360,15 @@ void CPU::increment_pair(CPU::Register l, CPU::Register h)  {
     regs[l] = pair & 0xff;
 }
 
+std::string_view update_pair_ld_str(unsigned char pair) {
+    switch(pair & 0b11) {
+        case 0b00: {return "BC"; break;}
+        case 0b01: {return "DE"; break;}
+        case 0b10: {return "HL"; break;}
+        case 0b11: {return "SP"; break;}
+    }
+}
+
 void CPU::update_pair_ld(unsigned char l, unsigned char h, unsigned char pair)  {
     switch(pair & 0b11) {
         case 0b00: {regs[C] = l; regs[B] = h; break;}
@@ -353,17 +391,35 @@ void CPU::update_pair_pop(unsigned char l, unsigned char h, unsigned char pair) 
     }
 }
 
+
+std::string_view stack_get_pair_str(unsigned char i) {
+    switch(i) {
+        case 0b00: {return   "CB";}
+        case 0b01: {return   "DE";}
+        case 0b10: {return   "HL";}
+        default:   {return   "AF";}
+    }
+}
+
 // todo: check for pop and inc
 unsigned short CPU::stack_getpair(unsigned char i)  {
     switch(i) {
         case 0b00: {return  (regs[C] | (regs[B] << 8));}
         case 0b01: {return  (regs[E] | (regs[D] << 8));}
         case 0b10: {return  (regs[L] | (regs[H] << 8));}
-        case 0b11: {return (regs[F] | regs[A] << 8);}
+        case 0b11: {return  (regs[F] | (regs[A] << 8));}
     }
     throw std::invalid_argument("Unknown register");
 }
 
+std::string_view inc_getpair_str(unsigned char i){
+    switch(i) {
+        case 0b00: {return  "CB";}
+        case 0b01: {return  "DE";}
+        case 0b10: {return  "HL";}
+        default: {return  "SP";}
+    }
+}
 unsigned short CPU::inc_getpair(unsigned char i) {
     switch(i) {
         case 0b00: {return  (regs[C] | (regs[B] << 8));}
@@ -522,10 +578,126 @@ void CPU::fetch_IE_value(Memory& mem) {
     ie_status[4] = joypad_interrupt_enabled =  ((if_value >> 4) & 1);
 }
 
-void CPU::push_stack(unsigned char l, unsigned char h, Memory& mem) {
-    sp-=2;
-    twrite(mem, sp, l);
-    twrite(mem,sp + 1, h);
+std::string_view CPU::str_value_by_ins(Instruction ins) {
+    switch(ins) {
+        case LD_0b01xxxyyy:
+        case LD_0b00xxx110:
+        case LD_0b01xxx110:
+        case LD_0b01110xxx:
+        case LD_0b00110110:
+        case LD_0b00001010:
+        case LD_0b00011010:
+        case LD_0b00000010:
+        case LD_0b00010010:
+        case LD_0b11111010:
+        case LD_0b11101010:
+        case LD_0b00111010:
+        case LD_0b00110010:
+        case LD_0b00101010:
+        case LD_0b00100010:
+        case LD_0b00xx0001:
+        case LD_0b00001000:
+        case LD_0b11111001:
+        case LD_0b11111000:
+            return "LD";
+        case LDH_0b11110010:
+        case LDH_0b11100010:
+        case LDH_0b11110000:
+        case LDH_0b11100000:
+            return "LDH";
+        case PUSH_0b11xx0101:
+            return "PUSH";
+        case POP_0b11xx0001:
+            return "POP";
+        case ADD_0b10000xxx:
+        case ADD_0b10000110:
+        case ADD_0b11000110:
+        case ADD_0b00xx1001:
+        case ADD_0b11101000:
+            return "ADD";
+        case ADC_0b10001xxx:
+        case ADC_0b10001110:
+        case ADC_0b11001110:
+            return "ADC";
+        case SUB_0b10010xxx:
+        case SUB_0b10010110:
+        case SUB_0b11010110:
+            return "SUB";
+        case SBC_0b10011xxx:
+        case SBC_0b10011110:
+        case SBC_0b11011110:
+            return "SBC";
+        case CP_0b10111xxx:
+        case CP_0b10111110:
+        case CP_0b11111110:
+            return "CP";
+        case INC_0b00xxx100:
+        case INC_0b00110100:
+        case INC_0b00xx0011:
+            return "INC";
+        case DEC_0b00xxx101:
+        case DEC_0b00110101:
+            return "DEC";
+        case AND_0b10100xxx:
+        case AND_0b10100110:
+        case AND_0b11100110:
+            return "AND";
+        case OR_0b10110xxx:
+        case OR_0b10110110:
+        case OR_0b11110110:
+            return "OR";
+        case XOR_0b10101xxx:
+        case XOR_0b10101110:
+        case XOR_0b11101110:
+            return "XOR";
+        case CCF_0b00111111:
+            return "CCF";
+        case SCF_0b00110111:
+            return "SCF";
+        case DAA_0b00100111:
+            return "DAA";
+        case CPL_0b00101111:
+            return "CPL";
+        case DEC_0b00xx1011:
+            return "DEC";
+        case RLCA_0b00000111:
+            return "RLCA";
+        case RRCA_0b00001111:
+            return "RRCA";
+        case RLA_0b00010111:
+            return "RLA";
+        case RRA_0b00011111:
+            return "RRA";
+        case _0xCB:
+            return "CB";
+            // Control flow + HALT - 0 (update pc in instruction logic)
+        case JP_0b11000011:
+        case JP_0b11101001:
+        case JP_0b110xx010:
+        case JR_0b00011000:
+        case JR_0b001xx000:
+            return "JP";
+        case CALL_0b11001101:
+        case CALL_0b110xx100:
+            return "CALL";
+        case RET_0b11001001:
+        case RET_0b110xx000:
+            return "RET";
+        case RETI_0b11011001:
+            return "RETI";
+        case RST_0b11xxx111:
+            return "RST";
+        case HALT:
+            return "HALT";
+        case STOP:
+            return "STOP";
+        case DI_0b11110011:
+            return "DI";
+        case EI_0b11111011:
+            return "EI";
+        case NOP_0b00000000:
+            return "NOP";
+    }
 }
 
 unsigned char CPU::tread(Memory& mem, unsigned short index) {
@@ -625,6 +797,8 @@ int CPU::pc_inc_by_ins(CPU::Instruction ins, unsigned char value) {
         case NOP_0b00000000:      {return 1;}
     }
 }
+
+
 
 Resumable CPU::instruction_async_loop(Memory& mem) {
 #if 1
@@ -1572,4 +1746,205 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
 void CPU::update_interrupts_status(Memory& mem) {
     fetch_IE_value(mem);
     fetch_IF_value(mem);
+}
+
+std::string CPU::instr_to_str(Memory& mem, Instruction ins, unsigned short pc) {
+    auto i = mem.read_unsafe(pc);
+    auto itype = decode(i);
+    std::stringstream ss;
+    ss << std::hex << CPU::str_value_by_ins(itype) << ' ';
+    unsigned arg1 = mem.read_unsafe(pc + 1);
+    unsigned arg2 = mem.read_unsafe(pc + 2);
+    switch (itype) {
+        case LD_0b01xxxyyy:  {ss << read_regs_str(read345(i)) << ","  << read_regs_str(read012(i)); break;}
+        case LD_0b01xxx110:  {ss << read_regs_str(read345(i)) << ", HL"; break;}
+        case LD_0b00xxx110:  {ss << update_regs_to_str(read345(i), arg1);break;}
+        case LD_0b01110xxx:  {ss << "HL," << read_regs_str(read012(i));break;}
+        case LD_0b00110110:  {ss << "HL," <<  arg1; break;}
+        case LD_0b00001010:  {ss << "A, BC"; break;}
+        case LD_0b00011010:  {ss << "A, DE"; break;}
+        case LD_0b00000010:  {ss << "BC, A"; break;}
+        case LD_0b00010010:  {ss << "DE, A"; break;}
+        case LD_0b11111010:  {ss << "A," << "0x" << (arg1 | (arg2 << 8)); break;}
+        case LD_0b11101010:  {ss << "0x" << (arg1 | (arg2 << 8)) << ", A"; break;}
+        case LDH_0b11110010: {ss << "A, 0xff00 | C";  break;}
+        case LDH_0b11100010: {ss << "[0xff00 | C], A";break;}
+        case LDH_0b11110000: {ss << "A, " << "0x" << (0xff00 | arg1); break;}
+        case LDH_0b11100000: {ss << "0x" << (0xff00 | arg1) << ", A"; break;}
+        case LD_0b00111010:  {ss << "A, HL + dec(L,H)"; break;}
+        case LD_0b00110010:  {ss << "HL, A + dec(L, H)";break;}
+        case LD_0b00101010:  {ss << "A, HL + inc(L,H)"; break;}
+        case LD_0b00100010:  {ss << "HL, A + inc(L,H)"; break;}
+        case LD_0b00xx0001:  {ss << update_pair_ld_str(read45(i)) << ", 0x" << (arg1 | (arg2 << 8));break;}
+        case LD_0b00001000:  {ss << "[SP], 0x" << (arg1 | (arg2 << 8)); break;}
+        case LD_0b11111001:  {ss << "SP, HL"; break;}
+        case PUSH_0b11xx0101:{ss << stack_get_pair_str(read45(i));break;}
+        case POP_0b11xx0001: {ss << stack_get_pair_str(read45(i));break;}
+        case LD_0b11111000:  {ss << "HL, " << arg1 << "+SP";break;}
+        case ADD_0b10000xxx: {ss << "A," << read_regs_str(read012(i));break;}
+        case ADD_0b10000110: {ss << "A, [HL]"; break;}
+        case ADD_0b11000110: {ss << "A, " << arg1; break;}
+        case ADC_0b10001xxx: {ss << "A, " << read_regs_str(read012(i)) << ", Cf"; break;}
+        case ADC_0b10001110: {ss << "A, HL, Cf"; break;}
+        case ADC_0b11001110: {ss << "A, " << arg1 << ", Cf"; break;}
+        case SUB_0b10010xxx: {ss << "A, " << read_regs_str(read012(i)); break;}
+        case SUB_0b10010110: {ss << "A, HL"; break;}
+        case SUB_0b11010110: {ss << "A, " << arg1; break;}
+        case SBC_0b10011xxx: {ss << "A, " << read_regs_str(read012(i)) << "+Cf"; break;}
+        case SBC_0b10011110: {ss << "A, HL+Cf"; break;}
+        case SBC_0b11011110: {ss << "A, " << arg1 << "+Cf"; break;}
+        case CP_0b10111xxx:  {ss << "A, " << read_regs_str(read012(i));break; }
+        case CP_0b10111110:  {ss << "A, HL"; break; }
+        case CP_0b11111110:  {ss << "A, " << arg1; break;}
+        case INC_0b00xxx100: {ss << read_regs_str(read345(i)); break;}
+        case INC_0b00110100: {ss << "HL"; break;}
+        case DEC_0b00xxx101: {ss << read_regs_str(read345(i)); break;}
+        case DEC_0b00110101: {ss << "HL"; break;}
+        case AND_0b10100xxx: {ss << "A, " << read_regs_str(read012(i)); break;}
+        case AND_0b10100110: {ss << "A, HL"; break;}
+        case AND_0b11100110: {ss << "A, " << arg1; break; }
+        case OR_0b10110xxx:  {ss << "A, " << read_regs_str(read012(i)); break;}
+        case OR_0b10110110:  {ss << "A, HL"; break;}
+        case OR_0b11110110:  {ss << "A, " << arg1; break;}
+        case XOR_0b10101xxx: {ss << "A, " << read_regs_str(read012(i)); break;}
+        case XOR_0b10101110: {ss << "A, HL"; break; }
+        case XOR_0b11101110: {ss << "A, " << arg1; break; }
+        case CCF_0b00111111: {break;}
+        case SCF_0b00110111: {break;}
+        case DAA_0b00100111: {break;}
+        case CPL_0b00101111: {break;}
+        case INC_0b00xx0011: {ss << inc_getpair_str(read45(i)); break;}
+        case DEC_0b00xx1011: {ss << inc_getpair_str(read45(i)); break;}
+        case ADD_0b00xx1001: {ss << "HL, " <<  inc_getpair_str(read45(i));break;}
+        case ADD_0b11101000: {ss << "SP, " << arg1; break;}
+        case RLCA_0b00000111: {break;}
+        case RRCA_0b00001111: {break;}
+        case RLA_0b00010111:  {break;}
+        case RRA_0b00011111:  {break;}
+        case _0xCB: {
+            auto pc_next = arg1;
+            auto ins = decode_0xCB(pc_next);
+            switch (ins) {
+                case RLC_0xCB_0b00000xxx:  {ss << "(RLC) " << read_regs_str(read012(pc_next)); break;}
+                case RRC_0xCB_0b00001xxx:  {ss << "(RRC) " << read_regs_str(read012(pc_next)); break;}
+                case RL_0xCB_0b00010xxx:   {ss << "(RL) " << read_regs_str(read012(pc_next));  break;}
+                case RR_0xCB_0b00011xxx:   {ss << "(RR) " << read_regs_str(read012(pc_next));  break;}
+                case SLA_0xCB_0b00100xxx:  {ss << "(SLA) " << read_regs_str(read012(pc_next));  break;}
+                case SRA_0xCB_0b00101xxx:  {ss << "(SRA) " << read_regs_str(read012(pc_next));  break;}
+                case SWAP_0xCB_0b00110xxx: {ss << "(SWAP) "<< read_regs_str(read012(pc_next)); break;}
+                case SRL_0xCB_0b00111xxx:  {ss << "(SRL) " << read_regs_str(read012(pc_next));  break;}
+                case BIT_0xCB_0b01xxxxxx:  {ss << "(BIT) " << read_regs_str(read012(pc_next));  break;}
+                case RES_0xCB_0b10xxxxxx:  {ss << "(RES) " << read_regs_str(read012(pc_next));  break;}
+                case SET_0xCB_0b11xxxxxx:  {ss << "(SET)  "<< read_regs_str(read012(pc_next));  break;}
+            }
+            break;
+        }
+        // Control flow
+        case JP_0b11000011: { ss << "0x" << ((arg2 << 8) | arg1); break; }
+        case JP_0b11101001: { ss << "HL"; break; }
+        case JP_0b110xx010: { ss << "zc " << "0x" << ((arg2 << 8) | arg1); break; }
+        case JR_0b00011000: { ss << (2 + (char) (arg1)); break; }
+        case JR_0b001xx000: { ss << "zc " << (2 + (char) (arg1)); break; }
+        case CALL_0b11001101: { ss << "0x" << ((arg2 << 8) | arg1); break; }
+        case CALL_0b110xx100: { ss <<"zc " << "0x" << ((arg2 << 8) | arg1); break; }
+        case RET_0b11001001: { break; }
+        case RET_0b110xx000: { ss << "zc"; break;}
+        case RETI_0b11011001: { break; }
+        case RST_0b11xxx111: { break; }
+        case HALT: { break;}
+        case STOP: { break; }
+        case DI_0b11110011: { break; }
+        case EI_0b11111011: { break; }
+        case NOP_0b00000000: { break; }
+    }
+    return ss.str();
+}
+
+int CPU::instruction_sz(CPU::Instruction ins) {
+    switch(ins) {
+        case LD_0b01xxxyyy:       {return 1;}
+        case LD_0b00xxx110:       {return 2;}
+        case LD_0b01xxx110:       {return 1;}
+        case LD_0b01110xxx:       {return 1;}
+        case LD_0b00110110:       {return 2;}
+        case LD_0b00001010:       {return 1;}
+        case LD_0b00011010:       {return 1;}
+        case LD_0b00000010:       {return 1;}
+        case LD_0b00010010:       {return 1;}
+        case LD_0b11111010:       {return 3;}
+        case LD_0b11101010:       {return 3;}
+        case LDH_0b11110010:      {return 1;}
+        case LDH_0b11100010:      {return 1;}
+        case LDH_0b11110000:      {return 2;}
+        case LDH_0b11100000:      {return 2;}
+        case LD_0b00111010:       {return 1;}
+        case LD_0b00110010:       {return 1;}
+        case LD_0b00101010:       {return 1;}
+        case LD_0b00100010:       {return 1;}
+        case LD_0b00xx0001:       {return 3;}
+        case LD_0b00001000:       {return 3;}
+        case LD_0b11111001:       {return 1;}
+        case PUSH_0b11xx0101:     {return 1;}
+        case POP_0b11xx0001:      {return 1;}
+        case LD_0b11111000:       {return 2;}
+        case ADD_0b10000xxx:      {return 1;}
+        case ADD_0b10000110:      {return 1;}
+        case ADD_0b11000110:      {return 2;}
+        case ADC_0b10001xxx:      {return 1;}
+        case ADC_0b10001110:      {return 1;}
+        case ADC_0b11001110:      {return 2;}
+        case SUB_0b10010xxx:      {return 1;}
+        case SUB_0b10010110:      {return 1;}
+        case SUB_0b11010110:      {return 2;}
+        case SBC_0b10011xxx:      {return 1;}
+        case SBC_0b10011110:      {return 1;}
+        case SBC_0b11011110:      {return 2;}
+        case CP_0b10111xxx:       {return 1;}
+        case CP_0b10111110:       {return 1;}
+        case CP_0b11111110:       {return 2;}
+        case INC_0b00xxx100:      {return 1;}
+        case INC_0b00110100:      {return 1;}
+        case DEC_0b00xxx101:      {return 1;}
+        case DEC_0b00110101:      {return 1;}
+        case AND_0b10100xxx:      {return 1;}
+        case AND_0b10100110:      {return 1;}
+        case AND_0b11100110:      {return 2;}
+        case OR_0b10110xxx:       {return 1;}
+        case OR_0b10110110:       {return 1;}
+        case OR_0b11110110:       {return 2;}
+        case XOR_0b10101xxx:      {return 1;}
+        case XOR_0b10101110:      {return 1;}
+        case XOR_0b11101110:      {return 2;}
+        case CCF_0b00111111:      {return 1;}
+        case SCF_0b00110111:      {return 1;}
+        case DAA_0b00100111:      {return 1;}
+        case CPL_0b00101111:      {return 1;}
+        case INC_0b00xx0011:      {return 1;}
+        case DEC_0b00xx1011:      {return 1;}
+        case ADD_0b00xx1001:      {return 1;}
+        case ADD_0b11101000:      {return 2;}
+        case RLCA_0b00000111:     {return 1;}
+        case RRCA_0b00001111:     {return 1;}
+        case RLA_0b00010111:      {return 1;}
+        case RRA_0b00011111:      {return 1;}
+        case _0xCB:               {return 2;}
+
+        case JP_0b11000011:       {return 3;}
+        case JP_0b11101001:       {return 1;}
+        case JP_0b110xx010:       {return 3;}
+        case JR_0b00011000:       {return 2;}
+        case JR_0b001xx000:       {return 2;}
+        case CALL_0b11001101:     {return 3;}
+        case CALL_0b110xx100:     {return 3;}
+        case RET_0b11001001:      {return 1;}
+        case RET_0b110xx000:      {return 1;}
+        case RETI_0b11011001:     {return 1;}
+        case RST_0b11xxx111:      {return 1;}
+        case HALT:                {return 1;}
+
+        case STOP:                {return 2;}
+        case DI_0b11110011:       {return 1;}
+        case EI_0b11111011:       {return 1;}
+        case NOP_0b00000000:      {return 1;}
+    }
 }

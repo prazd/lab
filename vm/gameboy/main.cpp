@@ -341,6 +341,7 @@ struct GameBoyVM{
         // tile view modes
         TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
         HexViewer<500,500> hv(810,0);
+        InstructionViewer<500,500> iv(810,0);
         BgTileMapWindow<500,500> bgtm(810,0);
 #if CHEATS_ON
         CheatsWin<500,500> cheats(810,0);
@@ -373,6 +374,7 @@ struct GameBoyVM{
             TileWindow,
             BgTileMapWindow,
             HexViewer,
+            InstructionViewer,
 #if CHEATS_ON
             Cheats,
 #endif
@@ -381,9 +383,10 @@ struct GameBoyVM{
         unsigned char current_tile_view_mode = 0;
         auto tile_view_mode_handle = [&]{
             switch (current_tile_view_mode) {
-                case TileWindow:       {tw.handle(mem); break;}
-                case BgTileMapWindow:  {bgtm.handle(mem, ppu.last_scx, ppu.last_scy); break;}
-                case HexViewer:        {hv.handle(mem); break;}
+                case TileWindow:        {tw.handle(mem); break;}
+                case BgTileMapWindow:   {bgtm.handle(mem, ppu.last_scx, ppu.last_scy); break;}
+                case HexViewer:         {hv.handle(mem); break;}
+                case InstructionViewer: {iv.handle(mem,cpu);break;}
 #if CHEATS_ON
                 case Cheats:           {cheats.handle(mem); break;}
 #endif
@@ -625,7 +628,7 @@ int main() {
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/11-regs after power.gb
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/12-wave write while on.gb
         // /Users/prazd/Desktop/dev/gb-square-test/square_test.gb
-        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();

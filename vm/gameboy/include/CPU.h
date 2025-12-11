@@ -165,9 +165,11 @@ struct CPU {
     int t_cycle_by_ins(Instruction ins, unsigned char value = 0);
     int t_cycle_by_ins_0xCB(Instruction0xCB ins, unsigned char value = 0);
 
-    int pc_inc_by_ins(Instruction ins, unsigned char value = 0);
+    static int pc_inc_by_ins(Instruction ins, unsigned char value = 0);
+    static int instruction_sz(Instruction ins);
+    static std::string_view str_value_by_ins(Instruction ins);
+    std::string instr_to_str(Memory& mem, Instruction ins, unsigned short pc);
 
-    void push_stack(unsigned char l, unsigned char h, Memory& mem);
 
     void set_flag(Flag f, bool val);
     unsigned char get_flag(Flag f) const;
@@ -206,8 +208,8 @@ struct CPU {
     bool get_cc_flag(unsigned char val);
 
     unsigned char fetch(Memory& mem);
-    Instruction decode(unsigned char ins);
-    Instruction0xCB decode_0xCB(unsigned char ins);
+    static Instruction decode(unsigned char ins);
+    static Instruction0xCB decode_0xCB(unsigned char ins);
     Resumable instruction_async_loop(Memory& mem);
     void print_regs() const;
 
