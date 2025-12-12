@@ -266,8 +266,13 @@ void Memory::apu_power_off() {
 }
 
 void Memory::write_unsafe(unsigned short index, unsigned char value) {
-    if (index <= constants::ROM_BANK_01_END){
-        handle_mbc(index, value);
+    if (index >= constants::ROM_BANK_00_BEGIN && index <= constants::ROM_BANK_00_END){
+        rom[(current_rom_bank0 * constants::BANK_ROM_SZ) + index] = value;
+        return;
+    }
+
+    if (index >= constants::ROM_BANK_01_BEGIN && index <= constants::ROM_BANK_01_END) {
+        rom[(current_rom_bank1 * constants::BANK_ROM_SZ) + (index - constants::ROM_BANK_01_BEGIN)] = value;
         return;
     }
 

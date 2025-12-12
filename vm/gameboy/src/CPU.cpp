@@ -674,9 +674,10 @@ std::string_view CPU::str_value_by_ins(Instruction ins) {
         case JP_0b11000011:
         case JP_0b11101001:
         case JP_0b110xx010:
+            return "JP";
         case JR_0b00011000:
         case JR_0b001xx000:
-            return "JP";
+            return "JR";
         case CALL_0b11001101:
         case CALL_0b110xx100:
             return "CALL";
@@ -1843,8 +1844,8 @@ std::string CPU::instr_to_str(Memory& mem, Instruction ins, unsigned short pc) {
         case JP_0b11000011: { ss << "0x" << ((arg2 << 8) | arg1); break; }
         case JP_0b11101001: { ss << "HL"; break; }
         case JP_0b110xx010: { ss << "zc " << "0x" << ((arg2 << 8) | arg1); break; }
-        case JR_0b00011000: { ss << (2 + (char) (arg1)); break; }
-        case JR_0b001xx000: { ss << "zc " << (2 + (char) (arg1)); break; }
+        case JR_0b00011000: { ss << (unsigned)((unsigned char)(2 + (char)(arg1))); break; }
+        case JR_0b001xx000: { ss << "zc " << (unsigned)((unsigned char)(2 + (char)(arg1))); break; }
         case CALL_0b11001101: { ss << "0x" << ((arg2 << 8) | arg1); break; }
         case CALL_0b110xx100: { ss <<"zc " << "0x" << ((arg2 << 8) | arg1); break; }
         case RET_0b11001001: { break; }

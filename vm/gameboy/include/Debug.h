@@ -163,6 +163,20 @@ struct DebugWindow {
     void draw_render_texture() {
         DrawTexturePro(target_renderer.texture, {0, 0, (float)target_renderer.texture.width, -(float)target_renderer.texture.height}, Rectangle{rec.x, rec.y, width, height}, {0, 0}, 0.0f, WHITE);
     }
+
+    static void draw_button(Rectangle rec, Color c, const char* text) {
+        DrawRectangle(rec.x, rec.y, rec.width, rec.height,
+                      (CheckCollisionPointRec(GetMousePosition(), rec) && IsMouseButtonPressed(0)) ? c : WHITE);
+        DrawRectangleLinesEx(rec, 1.f, c);
+        DrawText(text, rec.x, rec.y, 12.f, BLACK);
+    }
+
+    static void add_circle(auto& ctr,auto value, size_t sz){
+        if (ctr.size() == sz){
+            ctr.pop_front();
+        }
+        ctr.push_back(value);
+    }
 };
 
 template <size_t pwidth, size_t pheight, size_t width, size_t height>
@@ -384,11 +398,14 @@ struct InstructionViewer: public DebugWindow<0, 0, width, height> {
     std::string user_input_syms;
     bool typing = false;
     Rectangle input_rec;
-    Rectangle button_search;
+    Rectangle button_arg;
+    Rectangle button_addr;
     std::deque<unsigned char> prev_instruction_sz{};
     InstructionViewer(float x, float y): DW(x, y),
     input_rec({x,y, width/2, height/12}),
-    button_search{x + width/2,y, 40, 40}{}
+    button_arg{x + width/2,y, 40, 40},
+    button_addr{x + width/2 + 40,y, 40, 40}
+    {}
     void handle(Memory& mem, CPU& cpu){
         typing = (CheckCollisionPointRec(GetMousePosition(), input_rec));
         if (typing){
@@ -407,7 +424,8 @@ struct InstructionViewer: public DebugWindow<0, 0, width, height> {
             }
         }
 
-        if (CheckCollisionPointRec(GetMousePosition(), button_search) && IsMouseButtonPressed(0)){
+        if (CheckCollisionPointRec(GetMousePosition(), button_arg) && IsMouseButtonPressed(0)){
+            std::deque<unsigned char> tmp{};
             unsigned val = std::atoi(user_input_syms.c_str());
             bool stop = false;
             auto current_pc = base_pc;
@@ -435,8 +453,30 @@ struct InstructionViewer: public DebugWindow<0, 0, width, height> {
                         break;
                     }
                 }
-                if (stop){base_pc = current_pc; break;}
-                current_pc += cpu.instruction_sz(decoded);
+                if (stop){
+                    prev_instruction_sz = std::move(tmp);
+                    base_pc = current_pc;
+                    break;
+                }
+                // todo: check
+                auto sz = cpu.instruction_sz(decoded);
+                DW::add_circle(tmp, sz, 15);
+                current_pc += sz;
+            }
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), button_addr) && IsMouseButtonPressed(0)){
+            unsigned val = std::atoi(user_input_syms.c_str());
+            auto current_pc = 0;
+
+            for (int i = 0; i < constants::ROM_BANK_01_END; ++i){
+                    auto sz = cpu.instruction_sz(CPU::decode(mem.read_unsafe(current_pc)));
+                    prev_instruction_sz.push_back(sz);
+                    current_pc+=sz;
+                    if (current_pc >= val) {
+                        base_pc = current_pc;
+                        break;
+                    }
             }
         }
 
@@ -454,27 +494,38 @@ struct InstructionViewer: public DebugWindow<0, 0, width, height> {
                 }
             }
         }
+
         std::stringstream ss;
         std::stringstream input_ss;
 
         auto current_pc = base_pc;
         for (int i = 0; i < 25; ++i){
             ss << std::hex << std::setw(4) << std::setfill('0') << (unsigned)current_pc << "  ";
+            Rectangle button_rec = {input_rec.x, input_rec.y + 40 + (i * 18), 20, 15};
+            DW::draw_button(button_rec, GREEN, "nop");
+            if (CheckCollisionPointRec(GetMousePosition(), button_rec) && IsMouseButtonPressed(0)){
+                auto decoded = CPU::decode(mem.read_unsafe(current_pc));
+                auto sz = cpu.instruction_sz(decoded);
+                for (int j = 0; j < sz; ++j) mem.write_unsafe(current_pc + j, 0x00);
+            }
             auto decoded = CPU::decode(mem.read_unsafe(current_pc));
             auto current_ins_str = cpu.instr_to_str(mem,decoded,current_pc);
             ss << current_ins_str << " ";
             current_pc += cpu.instruction_sz(decoded);
-            ss << '\n';
+            ss << "\n";
         }
         input_ss << user_input_syms;
         input_ss << (typing ? " |" : "");
         auto input_str = input_ss.str();
         DrawRectangleLinesEx(input_rec,1.f, BLACK);
-        DrawRectangle(button_search.x, button_search.y, button_search.width, button_search.height, (CheckCollisionPointRec(GetMousePosition(), button_search) && IsMouseButtonPressed(0)) ? GREEN : WHITE);
-        DrawRectangleLinesEx(button_search,1.f, GREEN);
-        DrawText("search", button_search.x, button_search.y, 12.f, BLACK);
+
+
+        DW::draw_button(button_arg, GREEN, "arg");
+        DW::draw_button(button_addr, GREEN, "addr");
+
+
         auto str = ss.str();
-        DrawText(str.c_str(), input_rec.x, input_rec.y + 40, 15.f, BLACK);
+        DrawText(str.c_str(), input_rec.x + 30, input_rec.y + 40, 16.f, BLACK);
         DrawText(input_str.c_str(), input_rec.x, input_rec.y, 20.f, BLACK);
     }
 };
@@ -802,13 +853,6 @@ public:
                 mem.write_unsafe(selected_address + 3, (val >> 24) & 0xff);
             }
         }
-
-        auto draw_button = [](Rectangle rec, Color c, const char* text){
-            DrawRectangle(rec.x, rec.y, rec.width, rec.height, (CheckCollisionPointRec(GetMousePosition(), rec) && IsMouseButtonPressed(0)) ? c : WHITE);
-            DrawRectangleLinesEx(rec,1.f, c);
-            DrawText(text, rec.x, rec.y, 12.f, BLACK);
-        };
-
         std::stringstream frozen_addresses_ss;
         unsigned count = 0;
         for (int max = 10; auto el: CheatCore::indexes) {
@@ -819,9 +863,9 @@ public:
         for (int i = 0; i < count; ++i){
             bool frozen = CheatCore::is_frozen(CheatCore::indexes[update_base + i]);
             Rectangle freeze_button_rec = {input_rec.x + 120, input_rec.y + 90 + (i * 25), 20, 20};
-            draw_button(freeze_button_rec, frozen ? RED : GREEN, frozen ? "OFF" : "ON");
+            DW::draw_button(freeze_button_rec, frozen ? RED : GREEN, frozen ? "OFF" : "ON");
             Rectangle update_button_rec = {input_rec.x + 140, input_rec.y + 90 + (i * 25), 40, 20};
-            draw_button(update_button_rec, GREEN, "select");
+            DW::draw_button(update_button_rec, GREEN, "select");
 
             if (CheckCollisionPointRec(GetMousePosition(), freeze_button_rec) && IsMouseButtonPressed(0)){
                 if (!frozen){
@@ -851,7 +895,7 @@ public:
         auto indexes = frozen_addresses_ss.str();
         DrawText(indexes.c_str(), input_rec.x, input_rec.y + 90, 20.f, BLACK);
         DrawRectangleLinesEx(input_value_rec,1.f, BLACK);
-        draw_button(update_button, GREEN, "update");
+        DW::draw_button(update_button, GREEN, "update");
         check_switch_mode();
     }
 
@@ -887,7 +931,6 @@ public:
                     }), search_buffer.end());
                 }
         }
-
 
 
         if (CheckCollisionPointRec(GetMousePosition(), was_updated_button) && IsMouseButtonPressed(0)){
@@ -953,18 +996,13 @@ public:
         result_ss << "Result:" << search_buffer.size() <<  '\n';
         input_ss << user_input_syms.data();
 
-        auto draw_button = [](Rectangle rec, Color c, const char* text){
-            DrawRectangle(rec.x, rec.y, rec.width, rec.height, (CheckCollisionPointRec(GetMousePosition(), rec) && IsMouseButtonPressed(0)) ? c : WHITE);
-            DrawRectangleLinesEx(rec,1.f, c);
-            DrawText(text, rec.x, rec.y, 12.f, BLACK);
-        };
 
-        draw_button(search_button, GREEN, "search");
-        draw_button(clean_button, GREEN, "clean");
-        draw_button(add_inspect_button, BLUE, "add");
-        draw_button(clear_inspect_button, RED, "delete");
-        draw_button(was_updated_button, GREEN, "updated");
-        draw_button(was_not_updated_button, GREEN, "same");
+        DW::draw_button(search_button, GREEN, "search");
+        DW::draw_button(clean_button, GREEN, "clean");
+        DW::draw_button(add_inspect_button, BLUE, "add");
+        DW::draw_button(clear_inspect_button, RED, "delete");
+        DW::draw_button(was_updated_button, GREEN, "updated");
+        DW::draw_button(was_not_updated_button, GREEN, "same");
 
         DrawRectangleLinesEx(input_rec,1.f, BLACK);
 
