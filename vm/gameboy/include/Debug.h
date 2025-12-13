@@ -12,6 +12,7 @@
 #if CHEATS_ON
 #include "Cheats.h"
 #endif
+#include <charconv>
 
 using Tile8x8 = std::array<std::array<int, 8>, 8>;
 using Tile8x16 = std::array<std::array<int, 8>, 16>;
@@ -426,50 +427,50 @@ struct InstructionViewer: public DebugWindow<0, 0, width, height> {
 
         if (CheckCollisionPointRec(GetMousePosition(), button_arg) && IsMouseButtonPressed(0)){
             std::deque<unsigned char> tmp{};
-            unsigned val = std::atoi(user_input_syms.c_str());
-            bool stop = false;
-            auto current_pc = base_pc;
-            for (int i = base_pc; i < constants::ROM_BANK_01_END; ++i){
-                auto decoded = CPU::decode(mem.read_unsafe(current_pc));
-                auto arg1 = mem.read_unsafe(current_pc + 1);
-                auto arg2 = mem.read_unsafe(current_pc + 2);
-                switch (decoded) {
-                    case CPU::LD_0b11111010:
-                    case CPU::LD_0b11101010:
-                    case CPU::LD_0b00xx0001:
-                    case CPU::LD_0b00001000:
-                        {
-                            if ((arg1 | (arg2 << 8)) == val) {
+            unsigned val{};
+            if (std::from_chars(user_input_syms.data(), user_input_syms.data() + user_input_syms.size(), val, 16).ec == std::errc{}) {
+                bool stop = false;
+                auto current_pc = base_pc;
+                for (int i = base_pc; i < constants::ROM_BANK_01_END; ++i) {
+                    auto decoded = CPU::decode(mem.read_unsafe(current_pc));
+                    auto arg1 = mem.read_unsafe(current_pc + 1);
+                    auto arg2 = mem.read_unsafe(current_pc + 2);
+                    switch (decoded) {
+                        case CPU::LD_0b11111010:
+                        case CPU::LD_0b11101010:
+                        case CPU::LD_0b00xx0001:
+                        case CPU::LD_0b00001000: {
+                            if ((arg1 | (arg2 << 8)) == val && base_pc != current_pc) {
                                 stop = true;
                             }
                             break;
                         }
-                    case CPU::LDH_0b11110000:
-                    case CPU::LDH_0b11100000:
-                    {
-                        if ((0xff00 | (arg1 & 0xff)) == val) {
-                            stop = true;
+                        case CPU::LDH_0b11110000:
+                        case CPU::LDH_0b11100000: {
+                            if ((0xff00 | (arg1 & 0xff)) == val && base_pc != current_pc) {
+                                stop = true;
+                            }
+                            break;
                         }
+                    }
+                    if (stop) {
+                        prev_instruction_sz = std::move(tmp);
+                        base_pc = current_pc;
                         break;
                     }
+                    // todo: check
+                    auto sz = cpu.instruction_sz(decoded);
+                    DW::add_circle(tmp, sz, 15);
+                    current_pc += sz;
                 }
-                if (stop){
-                    prev_instruction_sz = std::move(tmp);
-                    base_pc = current_pc;
-                    break;
-                }
-                // todo: check
-                auto sz = cpu.instruction_sz(decoded);
-                DW::add_circle(tmp, sz, 15);
-                current_pc += sz;
             }
         }
 
         if (CheckCollisionPointRec(GetMousePosition(), button_addr) && IsMouseButtonPressed(0)){
-            unsigned val = std::atoi(user_input_syms.c_str());
-            auto current_pc = 0;
-
-            for (int i = 0; i < constants::ROM_BANK_01_END; ++i){
+            unsigned val{};
+            if (std::from_chars(user_input_syms.data(), user_input_syms.data() + user_input_syms.size(), val, 16).ec == std::errc{}) {
+                auto current_pc = 0;
+                for (int i = 0; i < constants::ROM_BANK_01_END; ++i){
                     auto sz = cpu.instruction_sz(CPU::decode(mem.read_unsafe(current_pc)));
                     prev_instruction_sz.push_back(sz);
                     current_pc+=sz;
@@ -477,6 +478,7 @@ struct InstructionViewer: public DebugWindow<0, 0, width, height> {
                         base_pc = current_pc;
                         break;
                     }
+                }
             }
         }
 
@@ -840,18 +842,21 @@ public:
         }
 
         if (CheckCollisionPointRec(GetMousePosition(), update_button) && IsMouseButtonPressed(0)){
-            unsigned val = std::atoi(user_input_syms.c_str());
-            if (val <= 0xff){
-                mem.write_unsafe(selected_address, val);
-            } else if (val <= 0xffff) {
-                mem.write_unsafe(selected_address, val & 0xff);
-                mem.write_unsafe(selected_address + 1, (val >> 8) & 0xff);
-            } else {
-                mem.write_unsafe(selected_address, val & 0xff);
-                mem.write_unsafe(selected_address + 1, (val >> 8) & 0xff);
-                mem.write_unsafe(selected_address + 2, (val >> 16) & 0xff);
-                mem.write_unsafe(selected_address + 3, (val >> 24) & 0xff);
+            unsigned val{};
+            if (std::from_chars(user_input_syms.data(), user_input_syms.data() + user_input_syms.size(), val, 16).ec == std::errc{}) {
+                if (val <= 0xff){
+                    mem.write_unsafe(selected_address, val);
+                } else if (val <= 0xffff) {
+                    mem.write_unsafe(selected_address, val & 0xff);
+                    mem.write_unsafe(selected_address + 1, (val >> 8) & 0xff);
+                } else {
+                    mem.write_unsafe(selected_address, val & 0xff);
+                    mem.write_unsafe(selected_address + 1, (val >> 8) & 0xff);
+                    mem.write_unsafe(selected_address + 2, (val >> 16) & 0xff);
+                    mem.write_unsafe(selected_address + 3, (val >> 24) & 0xff);
+                }
             }
+
         }
         std::stringstream frozen_addresses_ss;
         unsigned count = 0;
@@ -918,11 +923,12 @@ public:
         }
 
         if (CheckCollisionPointRec(GetMousePosition(), search_button) && IsMouseButtonPressed(0)){
-            auto val = (unsigned char)std::atoi(user_input_syms.c_str());
+            unsigned char val{};
+            if (std::from_chars(user_input_syms.data(), user_input_syms.data() + user_input_syms.size(), val, 16).ec == std::errc{}) {
                 if (search_buffer.empty()){
                     for (int i = constants::WRAM1_BEGIN + 1; i < 0xffff; ++i){
                         if (mem.read_unsafe(i) == val){
-                            search_buffer.push_back({i, val});
+                            search_buffer.emplace_back(i, val);
                         }
                     }
                 } else {
@@ -930,13 +936,14 @@ public:
                         return (mem.read_unsafe(cur.first) != val);
                     }), search_buffer.end());
                 }
+            }
         }
 
 
         if (CheckCollisionPointRec(GetMousePosition(), was_updated_button) && IsMouseButtonPressed(0)){
             if (search_buffer.empty()){
                 for (int i = constants::WRAM1_BEGIN + 1; i < 0xffff; ++i){
-                    search_buffer.push_back({i, mem.read_unsafe(i)});
+                    search_buffer.emplace_back(i, mem.read_unsafe(i));
                 }
             } else {
                 search_buffer.erase(std::remove_if(search_buffer.begin(), search_buffer.end(), [&mem](auto cur){
@@ -951,7 +958,7 @@ public:
         if (CheckCollisionPointRec(GetMousePosition(), was_not_updated_button) && IsMouseButtonPressed(0)){
             if (search_buffer.empty()){
                 for (int i = constants::WRAM1_BEGIN + 1; i < 0xffff; ++i){
-                    search_buffer.push_back({i, mem.read_unsafe(i)});
+                    search_buffer.emplace_back(i, mem.read_unsafe(i));
                 }
             } else {
                 search_buffer.erase(std::remove_if(search_buffer.begin(), search_buffer.end(), [&mem](auto cur){

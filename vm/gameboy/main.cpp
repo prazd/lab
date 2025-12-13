@@ -106,11 +106,19 @@ struct GameBoyVM{
         // Finish full frame (can be delay if display off)
         // current_t_cycle++ < constants::T_CYCLES_PER_FRAME
         // TODO: debug
-        while(!(prev_t_cycle == constants::T_CYCLES_PER_FRAME - 1 && ppu.internal_t_cycles == 0)) {
+        while(((mem.map[constants::LCDC_ADDRESS] & 0x80) ?
+                 !(prev_t_cycle == constants::T_CYCLES_PER_FRAME - 1 && ppu.internal_t_cycles == 0) :
+                 (current_t_cycle++ != constants::T_CYCLES_PER_FRAME))){
                 prev_t_cycle = ppu.internal_t_cycles;
                 joypad.update_state(mem);
                 cpu.timer.tick(mem);
-                ppu.tick(mem);
+                if ((mem.map[constants::LCDC_ADDRESS] & 0x80) && !prev_lcdc_on) {
+                    current_t_cycle = 0;
+                    ppu.reset(mem);
+                }
+                if (mem.map[constants::LCDC_ADDRESS] & 0x80) {
+                    ppu.tick(mem);
+                }
 #if DEBUG_MODE
             if (cpu_running) cpu_r.resume();
 #else
@@ -125,10 +133,6 @@ struct GameBoyVM{
                     cpu.pc = 0x100;
                 }
 #endif
-                if ((mem.map[constants::LCDC_ADDRESS] & 0x80) && !prev_lcdc_on) {
-                    prev_lcdc_on = true;
-                    ppu.reset(mem);
-                }
 #if APU_ON
             if ((mem.map[constants::NR52_ADDRESS] & 0x80)) {
                 if (!prev_apu_on){
@@ -143,6 +147,10 @@ struct GameBoyVM{
                 apu.count_sample = 0;
             }
 #endif
+            if(prev_lcdc_on && !(mem.map[constants::LCDC_ADDRESS] & 0x80)){
+                current_t_cycle = prev_t_cycle;
+            }
+            prev_lcdc_on = mem.map[constants::LCDC_ADDRESS] & 0x80;
             if (!cpu.halted && mem.dma_active) mem.dma_tick();
         }
     }
@@ -570,16 +578,10 @@ struct GameBoyVM{
 
 // PPU
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/manual-only/sprite_priority.gb
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_1_2_timing-GS.gb
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_0_timing.gb
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing.gb
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode3_timing.gb
 // /Users/prazd/Desktop/dev/dmg-acid2/build/dmg-acid2.gb
-// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb
 // /Users/prazd/Desktop/dev/scribbltests/lycscx/lycscx.gb
 // /Users/prazd/Desktop/dev/scribbltests/fairylake/fairylake.gb +-
 // /Users/prazd/Desktop/dev/scribbltests/scxly/scxly.gb
-
 // /Users/prazd/Desktop/dev/mealybug-tearoom-tests/m2_win_en_toggle.gb
 
 // APU
@@ -591,7 +593,12 @@ struct GameBoyVM{
 // /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/07-len sweep period sync.gb
 
 // Failed:
-//  - failed
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_1_2_timing-GS.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_0_timing.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode0_timing.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/intr_2_mode3_timing.gb
+// /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/vblank_stat_intr-GS.gb
+
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_lyc_onoff.gb
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/stat_irq_blocking.gb - failed
 // /Users/prazd/Desktop/dev/mts-20211031-2031-86d1acf/acceptance/ppu/lcdon_write_timing-GS.gb - failed
@@ -627,7 +634,7 @@ int main() {
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/11-regs after power.gb
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/12-wave write while on.gb
         // /Users/prazd/Desktop/dev/gb-square-test/square_test.gb
-        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
