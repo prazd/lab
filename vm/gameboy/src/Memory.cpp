@@ -329,18 +329,24 @@ unsigned char Memory::read_unsafe(unsigned short index) const {
 }
 
 void Memory::update_channels_triggers(unsigned short address, unsigned char value) {
-    if (address == constants::NR14_ADDRESS){
-        ch1_trigger = (((value >> 7) & 1));
-        ch1_enable_length_trigger = (((value >> 6) & 1)) && !((map[address] >> 6) & 1);
+    if (address == constants::NR14_ADDRESS) {
+        ch1_trigger = value & 0x80;
+        ch1_nr14_update = true;
+        ch1_enable_length_trigger = ((value & 0x40)) && !(map[address] & 0x40);
+    } else if (address == constants::NR13_ADDRESS) {
+        ch1_nr13_update = true;
+    }else if (address == constants::NR23_ADDRESS) {
+        ch2_nr23_update = true;
     } else if (address == constants::NR24_ADDRESS) {
-        ch2_trigger = (((value >> 7) & 1));
-        ch2_enable_length_trigger = (((value >> 6) & 1)) && !((map[address] >> 6) & 1);
+        ch2_trigger = value & 0x80;
+        ch2_nr24_update = true;
+        ch2_enable_length_trigger = ((value & 0x40)) && !(map[address] & 0x40);
     } else if (address == constants::NR34_ADDRESS) {
-        ch3_trigger = ((value >> 7) & 1);
-        ch3_enable_length_trigger = (((value >> 6) & 1)) && !((map[address] >> 6) & 1);
+        ch3_trigger = value & 0x80;
+        ch3_enable_length_trigger = ((value & 0x40)) && !(map[address] & 0x40);
     } else if (address == constants::NR44_ADDRESS) {
-        ch4_trigger = ((value >> 7) & 1);
-        ch4_enable_length_trigger = (((value >> 6) & 1)) && !((map[address] >> 6) & 1);
+        ch4_trigger = value & 0x80;
+        ch4_enable_length_trigger = ((value & 0x40)) && !(map[address] & 0x40);
     } else if (address == constants::NR11_ADDRESS)
         ch1_update_timer = true;
     else if (address == constants::NR21_ADDRESS)

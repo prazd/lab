@@ -58,7 +58,11 @@ struct Memory {
     bool ch1_trigger = false;
     bool ch1_update_timer = false;
     bool ch1_enable_length_trigger = false;
+    bool ch1_nr13_update = false;
+    bool ch1_nr14_update = false;
     bool ch2_trigger = false;
+    bool ch2_nr23_update = false;
+    bool ch2_nr24_update = false;
     bool ch2_update_timer = false;
     bool ch2_enable_length_trigger = false;
     bool ch3_trigger = false;

@@ -187,10 +187,10 @@ void APU::frame_seq_tick(Memory& mem) {
 void APU::frame_seq_handler(Memory& mem, unsigned char step) {
     switch (step) {
         case 0: {
-            if (ch1.length_counter && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)  --ch1.length_counter;
-            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)  --ch2.length_counter;
-            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)  --ch3.length_counter;
-            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)  --ch4.length_counter;
+            if (ch1.length_counter && (mem.read_unsafe(constants::NR14_ADDRESS) & 0x40))  --ch1.length_counter;
+            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) & 0x40))  --ch2.length_counter;
+            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) & 0x40))  --ch3.length_counter;
+            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) & 0x40))  --ch4.length_counter;
             ch1.disable_check(mem);
             ch2.disable_check(mem);
             ch3.disable_check(mem);
@@ -205,11 +205,11 @@ void APU::frame_seq_handler(Memory& mem, unsigned char step) {
             break;
         }
         case 2: {
-            if (ch1.length_counter &&  (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)  --ch1.length_counter;
+            if (ch1.length_counter && (mem.read_unsafe(constants::NR14_ADDRESS) & 0x40))  --ch1.length_counter;
             if (ch1.sweep_timer) --ch1.sweep_timer;
-            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)   --ch2.length_counter;
-            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)   --ch3.length_counter;
-            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)   --ch4.length_counter;
+            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) & 0x40))  --ch2.length_counter;
+            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) & 0x40))  --ch3.length_counter;
+            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) & 0x40))  --ch4.length_counter;
             if (!ch1.sweep_timer) {
                 if (ch1.delayed_off){
                     ch1.disable(mem);
@@ -232,10 +232,10 @@ void APU::frame_seq_handler(Memory& mem, unsigned char step) {
             break;
         }
         case 4: {
-            if (ch1.length_counter && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)   --ch1.length_counter;
-            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)   --ch2.length_counter;
-            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)   --ch3.length_counter;
-            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)   --ch4.length_counter;
+            if (ch1.length_counter && (mem.read_unsafe(constants::NR14_ADDRESS) & 0x40))   --ch1.length_counter;
+            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) & 0x40))   --ch2.length_counter;
+            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) & 0x40))   --ch3.length_counter;
+            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) & 0x40))   --ch4.length_counter;
             ch1.disable_check(mem);
             ch2.disable_check(mem);
             ch3.disable_check(mem);
@@ -250,11 +250,11 @@ void APU::frame_seq_handler(Memory& mem, unsigned char step) {
             break;
         }
         case 6: {
-            if (ch1.length_counter && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)   --ch1.length_counter;
+            if (ch1.length_counter && (mem.read_unsafe(constants::NR14_ADDRESS) & 0x40))   --ch1.length_counter;
             if (ch1.sweep_timer) --ch1.sweep_timer;
-            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)   --ch2.length_counter;
-            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)   --ch3.length_counter;
-            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)   --ch4.length_counter;
+            if (ch2.length_counter && (mem.read_unsafe(constants::NR24_ADDRESS) & 0x40))   --ch2.length_counter;
+            if (ch3.length_counter && (mem.read_unsafe(constants::NR34_ADDRESS) & 0x40))   --ch3.length_counter;
+            if (ch4.length_counter && (mem.read_unsafe(constants::NR44_ADDRESS) & 0x40))   --ch4.length_counter;
             if (!ch1.sweep_timer) {
                 if (ch1.delayed_off) {
                     ch1.disable(mem);
@@ -408,9 +408,16 @@ void APU::tick(Memory& mem) {
         mem.ch4_enable_length_trigger = false;
     }
 
+    if (!mem.ch1_trigger && (mem.ch1_nr14_update || mem.ch1_nr13_update)) {
+        ch1.update_pitch(mem, constants::NR13_ADDRESS, constants::NR14_ADDRESS);
+        mem.ch1_nr13_update = false;
+        mem.ch1_nr14_update = false;
+    }
+
+
     if (mem.ch1_trigger) {
         mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) | 1);
-        if (ch1.freezed && (mem.read_unsafe(constants::NR14_ADDRESS) >> 6) & 1)
+        if (ch1.freezed && (mem.read_unsafe(constants::NR14_ADDRESS) & 0x40))
             ch1.extra_clock = true;
         if (ch1.freezed) {ch1.freezed = false;}
         ch1.init(mem);
@@ -423,9 +430,19 @@ void APU::tick(Memory& mem) {
         mem.ch1_trigger = false;
     }
 
+    if (!(mem.read_unsafe(constants::NR12_ADDRESS) & 0xf8)) {
+        ch1.disable(mem);
+    }
+
+    if (!mem.ch2_trigger && (mem.ch2_nr24_update || mem.ch2_nr23_update)) {
+        ch2.update_pitch(mem, constants::NR23_ADDRESS, constants::NR24_ADDRESS);
+        mem.ch2_nr23_update = false;
+        mem.ch2_nr24_update = false;
+    }
+
     if (mem.ch2_trigger) {
         mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) | (1 << 1));
-        if (ch2.freezed && (mem.read_unsafe(constants::NR24_ADDRESS) >> 6) & 1)
+        if (ch2.freezed && (mem.read_unsafe(constants::NR24_ADDRESS) & 0x40))
             ch2.extra_clock = true;
         if (ch2.freezed) {ch2.freezed = false;}
         ch2.init(mem);
@@ -435,7 +452,7 @@ void APU::tick(Memory& mem) {
 
     if (mem.ch3_trigger) {
         mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) | (1 << 2));
-        if (ch3.freezed && (mem.read_unsafe(constants::NR34_ADDRESS) >> 6) & 1)
+        if (ch3.freezed && (mem.read_unsafe(constants::NR34_ADDRESS) & 0x40))
             ch3.extra_clock = true;
         if (ch3.freezed) {ch3.freezed = false;}
         ch3.init(mem);
@@ -444,7 +461,7 @@ void APU::tick(Memory& mem) {
     }
 
     if (mem.ch4_trigger) {
-        if (ch4.freezed && (mem.read_unsafe(constants::NR44_ADDRESS) >> 6) & 1)
+        if (ch4.freezed && (mem.read_unsafe(constants::NR44_ADDRESS) & 0x40))
             ch4.extra_clock = true;
         if (ch4.freezed) {ch4.freezed = false;}
         mem.write_unsafe(constants::NR52_ADDRESS, mem.read_unsafe(constants::NR52_ADDRESS) | (1 << 3));
@@ -477,7 +494,7 @@ void APU::tick(Memory& mem) {
         ch1.disable(mem);
     if (!(mem.read_unsafe(constants::NR22_ADDRESS) & 0xf8) && ch2.active && !ch2.freezed)
         ch2.disable(mem);
-    if (!((mem.read_unsafe(constants::NR30_ADDRESS) >> 7) & 1) && ch3.active && !ch3.freezed)
+    if (!((mem.read_unsafe(constants::NR30_ADDRESS)) & 0x80) && ch3.active && !ch3.freezed)
         ch3.disable(mem);
     if (!(mem.read_unsafe(constants::NR42_ADDRESS) & 0xf8) && ch4.active && !ch4.freezed)
         ch4.disable(mem);

@@ -492,7 +492,7 @@ void PPU::reset(Memory& mem) {
 void PPU::lyc_ly_compare(Memory& mem) {
     auto lyc = mem.read_unsafe(constants::LYC_ADDRESS);
     unsigned char stat = mem.read_unsafe(constants::STAT_ADDRESS);
-    if(current_line == lyc) {
+    if((current_line == lyc) || (current_line == 153 && lyc == 0)) {
         if (!((stat >> 2) & 1)) {
             mem.write_unsafe(constants::STAT_ADDRESS, stat | (1 << 2));
             if (stat & (1 << 6)){
