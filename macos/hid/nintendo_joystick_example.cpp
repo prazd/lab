@@ -4,6 +4,7 @@
 #include <IOKit/hid/IOHIDKeys.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <vector>
+#include <iomanip>
 #include <thread>
 
 // g++ -framework IOKit -framework CoreFoundation -framework Foundation -std=c++2b
@@ -34,12 +35,12 @@ namespace NintendoJoystick {
         static void update_buttons_and_run_callback(){
             pressed.clear();
             if (report_buffer[2] == 0x0)  pressed.push_back(DPadUp);
-            if (report_buffer[2] == 0x2)  pressed.push_back(DPadRight);
-            if (report_buffer[2] == 0x4)  pressed.push_back(DPadDown);
-            if (report_buffer[2] == 0x6)  pressed.push_back(DPadLeft);
+            if (report_buffer[2] == 0x2)   pressed.push_back(DPadRight);
+            if (report_buffer[2] == 0x4)   pressed.push_back(DPadDown);
+            if (report_buffer[2] == 0x6)   pressed.push_back(DPadLeft);
 
-            if (report_buffer[0] == 0x2)  pressed.push_back(B);
-            if (report_buffer[0] == 0x4)  pressed.push_back(A);
+            if (report_buffer[0] & 0x2)  pressed.push_back(B);
+            if (report_buffer[0] & 0x4)  pressed.push_back(A);
             if (report_buffer[2] == 0x8f) pressed.push_back(Select);
             if (report_buffer[1] == 0x10) pressed.push_back(Start);
             callback(pressed);
