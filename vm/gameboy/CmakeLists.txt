@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 #set(SANITIZER_FLAGS "-fsanitize=address -fsanitize=undefined")
 #set(SANITIZER_FLAGS "-fsanitize=undefined -fsanitize=thread")
-set(OPTIMIZE_FLAGS  "-O2")
+set(OPTIMIZE_FLAGS  "-O2 -march=native -flto=thin -fno-rtti")
 
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OPTIMIZE_FLAGS}")
 # set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OPTIMIZE_FLAGS}")
@@ -37,4 +37,7 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(
         ${PROJECT_NAME} PRIVATE raylib
         SDL2::SDL2
+        "$<LINK_LIBRARY:FRAMEWORK,IOKit>"
+        "$<LINK_LIBRARY:FRAMEWORK,CoreFoundation>"
+        "$<LINK_LIBRARY:FRAMEWORK,Foundation>"
 )

@@ -8,14 +8,12 @@
 #include "PPU.h"
 #include "rlgl.h"
 #include <iomanip>
-
-#if CHEATS_ON
 #include "Cheats.h"
-#endif
 #include <charconv>
 
 using Tile8x8 = std::array<std::array<int, 8>, 8>;
 using Tile8x16 = std::array<std::array<int, 8>, 16>;
+
 
 struct DebugTools {
     static Tile8x8 get_sprite_tile8x8(const Memory& mem, const Sprite& sprite) {
@@ -1031,6 +1029,29 @@ public:
         }
     }
 };
+
+
+#if DEBUG_MODE
+size_t ALLOCS_COUNT = 0;
+void* operator new(size_t sz){
+    ++ALLOCS_COUNT;
+    return malloc(sz);
+}
+
+template <size_t pwidth, size_t pheight, size_t width, size_t height>
+struct GeneralInfo: public DebugWindow<pwidth, pheight, width, height> {
+    using DW = DebugWindow<pwidth, pheight,width,height>;
+    GeneralInfo(float x, float y): DW(x, y){}
+    void handle(const Memory& mem){
+        std::stringstream ss;
+        ss << std::hex << " Allocs: " << std::dec << ALLOCS_COUNT << '\n';
+        DW::header = ss.str();
+        DW::draw_text(24.f);
+    }
+};
+#endif
+
+
 
 void print_segment(unsigned short address, auto n, const Memory& mem) {
     std::cout << "\n=============================\n";

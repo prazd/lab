@@ -6,7 +6,8 @@
 #define BOOTROM_INIT 0
 #define DEBUG_BOOTROM 0
 #define APU_ON 1
-#define CHEATS_ON 1
+#define CHEATS_ON 0
+#define CONTROLLER 1
 
 namespace constants {
     constexpr size_t DEBUG_WIDTH = 1500;

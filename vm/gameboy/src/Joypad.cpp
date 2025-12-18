@@ -21,12 +21,21 @@ std::pair<unsigned char, bool> Joypad::current_pressed_values(bool is_direction)
     unsigned char result = 0xf;
     bool interrupt = false;
     for (int i = begin; i < end; ++i){
+#if CONTROLLER
+        if (device.is_pressed(gamepad_keys[i])){
+            result &= ~(1 << key_shifts[i]);
+        } else {
+            bool current = result & (1 << key_shifts[i]);
+            if (!current) interrupt = true;
+        }
+#else
         if (IsKeyDown(keyboard_keys[i])){
             result &= ~(1 << key_shifts[i]);
         } else {
             bool current = result & (1 << key_shifts[i]);
             if (!current) interrupt = true;
         }
+#endif
     }
     return {result, interrupt};
 }

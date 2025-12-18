@@ -17,6 +17,7 @@
 #include "Cheats.h"
 #endif
 
+
 struct GameBoyVM{
     CPU cpu;
     Memory mem;
@@ -345,6 +346,10 @@ struct GameBoyVM{
         SDL_PauseAudioDevice(dev, 0);
 #endif
 
+#if CONTROLLER
+    joypad.device.init();
+#endif
+
 #if DEBUG_MODE
         // tile view modes
         TileWindow<160,144,500,500,300> tw(810,0, 0x8000);
@@ -357,6 +362,8 @@ struct GameBoyVM{
 
         SpriteWindowText<0,0,600,200> swt(10, 750);
         SpriteWindow<80, 64, 300, 400> sw(820, 517);
+
+        GeneralInfo<0,0,100,100> gi(610, 750);
 
         PPURegistersText<0,0,200,150> ppurt(1320, 0);
         RegWindow<0,0,300,465> rw(1150, 517);
@@ -373,7 +380,7 @@ struct GameBoyVM{
         int current_apu_view_mode = 0;
         auto apu_view_mode_handle = [&]{
             switch (current_apu_view_mode) {
-                case ApuRegs: {apurt.handle(mem); break;}
+                case ApuRegs:  {apurt.handle(mem); break;}
                 case ApuChans: {apuc.handle(); break;}
             }
         };
@@ -449,6 +456,7 @@ struct GameBoyVM{
                     sw.handle(mem);
                     rw.handle(mem, cpu);
                     swt.handle(sw);
+                    gi.handle(mem);
 //                    jw.handle(mem, joypad);
                     ppurt.handle(mem, ppu.last_scx, ppu.last_scy);
                     if (print_pixels) pp.handle(GREEN, 0, 0);
@@ -460,9 +468,8 @@ struct GameBoyVM{
 #else
 
 
-
 #if APU_ON
-            main_loop_async(cpu_r, dev);
+            main_loop_async(cpu_r, &dev);
 #else
             main_loop_async(cpu_r, nullptr);
 #endif
@@ -524,12 +531,19 @@ struct GameBoyVM{
 #endif
 
 #endif
+
+#if CONTROLLER
+        joypad.device.step(0.001);
+#endif
                 DrawFPS(700, 10);
             EndDrawing();
         }
 #if APU_ON
         SDL_CloseAudioDevice(dev);
         SDL_Quit();
+#endif
+#if CONTROLLER
+      joypad.device.release();
 #endif
     }
 };
@@ -634,7 +648,7 @@ int main() {
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/11-regs after power.gb
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/12-wave write while on.gb
         // /Users/prazd/Desktop/dev/gb-square-test/square_test.gb
-        GameBoyVM vm("/Users/prazd/Desktop/dev/ZeldaEn.gb");
+        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
         vm.run();
