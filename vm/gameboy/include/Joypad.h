@@ -42,10 +42,22 @@ namespace NintendoJoystick {
             if (report_buffer[0] & 0x4)  pressed.push_back(B);
             if (report_buffer[2] == 0x8f) pressed.push_back(Select);
             if (report_buffer[1] == 0x10) pressed.push_back(Start);
+
+            if (!(report_buffer[3] == 0x80 && report_buffer[4] == 0x80)){
+                if (report_buffer[3] <= 0x40 && report_buffer[4] <= 0xf0)
+                    pressed.push_back(DPadLeft);
+                if (report_buffer[3] >= 0xc0 && report_buffer[4] <= 0xf0)
+                    pressed.push_back(DPadRight);
+                if (report_buffer[3] && report_buffer[4] >= 0xc0)
+                    pressed.push_back(DPadDown);
+                if (report_buffer[3] && report_buffer[4] <= 0x40)
+                    pressed.push_back(DPadUp);
+            }
         }
 
         static void device_matching_callback(void* context, IOReturn result, void* sender, IOHIDDeviceRef device) {
             if (result != kIOReturnSuccess) return;
+            auto product = (CFStringRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductKey));
             auto open_res = IOHIDDeviceOpen(device, kIOHIDOptionsTypeNone);
             if (open_res != kIOReturnSuccess) {
                 std::abort();

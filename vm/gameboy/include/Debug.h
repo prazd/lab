@@ -1042,15 +1042,16 @@ template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct GeneralInfo: public DebugWindow<pwidth, pheight, width, height> {
     using DW = DebugWindow<pwidth, pheight,width,height>;
     GeneralInfo(float x, float y): DW(x, y){}
-    void handle(const Memory& mem){
+    void handle(const Memory& mem, unsigned long long internal_frame_ms, unsigned long long main_loop_frame_ms){
         std::stringstream ss;
-        ss << std::hex << " Allocs: " << std::dec << ALLOCS_COUNT << '\n';
+        ss << std::hex << " Allocs: " << std::dec << ALLOCS_COUNT << '\n'
+        << std::hex << " Frame ms: " << std::dec << internal_frame_ms << '\n'
+        << std::hex << " Main loop ms: " << std::dec << main_loop_frame_ms << '\n';
         DW::header = ss.str();
         DW::draw_text(24.f);
     }
 };
 #endif
-
 
 
 void print_segment(unsigned short address, auto n, const Memory& mem) {

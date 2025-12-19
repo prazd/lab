@@ -12,11 +12,10 @@
 #include "APU.h"
 #include "Debug.h"
 #include <SDL.h>
-
+#include <chrono>
 #if CHEATS_ON
 #include "Cheats.h"
 #endif
-
 
 struct GameBoyVM{
     CPU cpu;
@@ -429,12 +428,14 @@ struct GameBoyVM{
         auto cpu_r = cpu.instruction_async_loop(mem);
         while(!WindowShouldClose()){
 #if DEBUG_MODE
+                auto begin = std::chrono::steady_clock::now();
                 for (int i = 0; i < current_speed; ++i)
 #if APU_ON
                     main_loop_async(cpu_r, &dev);
 #else
                     main_loop_async(cpu_r, nullptr);
 #endif
+                auto main_loop_end = std::chrono::steady_clock::now();
 
 //                auto end = std::chrono::steady_clock::now();
 //                std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms\n";
@@ -456,7 +457,9 @@ struct GameBoyVM{
                     sw.handle(mem);
                     rw.handle(mem, cpu);
                     swt.handle(sw);
-                    gi.handle(mem);
+                    gi.handle(mem,
+                      std::chrono::duration_cast<std::chrono::milliseconds>(main_loop_end-begin).count(),
+                      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-begin).count());
 //                    jw.handle(mem, joypad);
                     ppurt.handle(mem, ppu.last_scx, ppu.last_scy);
                     if (print_pixels) pp.handle(GREEN, 0, 0);
