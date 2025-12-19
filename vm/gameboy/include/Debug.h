@@ -10,6 +10,8 @@
 #include <iomanip>
 #include "Cheats.h"
 #include <charconv>
+#include <execinfo.h>
+#include <thread>
 
 using Tile8x8 = std::array<std::array<int, 8>, 8>;
 using Tile8x16 = std::array<std::array<int, 8>, 16>;
@@ -1032,8 +1034,61 @@ public:
 
 
 #if DEBUG_MODE
-size_t ALLOCS_COUNT = 0;
+// TODO: refactor
+template <typename T, size_t n>
+struct SimpleAtomicBuffer {
+    std::array<T, n> buffer{};
+    size_t sz = 0;
+    std::atomic_flag af = ATOMIC_FLAG_INIT;
+    void lock(){
+        while(af.test_and_set(std::memory_order_acquire)){
+            static constexpr int max_spins = 1000;
+            for (int spins = 0; spins < max_spins; ++spins) {
+                if (!af.test_and_set(std::memory_order_acquire)) {
+                    return;
+                }
+            }
+            std::this_thread::yield();
+        }
+    }
+    void unlock(){
+        af.clear(std::memory_order_release);
+    }
+    void push(const T& value) {
+        lock();
+        buffer[sz] = value;
+        sz = (sz + 1) % n;
+        unlock();
+    }
+    void read(auto& arr) {
+        lock();
+        std::copy(std::begin(buffer), std::end(buffer), std::begin(arr));
+        unlock();
+    }
+};
+
+SimpleAtomicBuffer<std::array<char, 256>, 8> sab;
+std::atomic<size_t> ALLOCS_COUNT = 0;
+
+static void add_callstack_operator_new_str(const char* str) {
+    std::array<char, 256> tmp;
+    for (int i = 0; i < 256; ++i){
+        tmp[i] = *str++;
+        if (!(*str)) break;
+    }
+    sab.push(tmp);
+}
+
+static void update_callstack() {
+    void* callstack[2];
+    int frames = backtrace(callstack, 2);
+    char** strs = backtrace_symbols(callstack, frames);
+    add_callstack_operator_new_str(strs[frames > 1 ? 1 : 0]);
+    free(strs);
+}
+
 void* operator new(size_t sz){
+    update_callstack();
     ++ALLOCS_COUNT;
     return malloc(sz);
 }
@@ -1043,12 +1098,16 @@ struct GeneralInfo: public DebugWindow<pwidth, pheight, width, height> {
     using DW = DebugWindow<pwidth, pheight,width,height>;
     GeneralInfo(float x, float y): DW(x, y){}
     void handle(const Memory& mem, unsigned long long internal_frame_ms, unsigned long long main_loop_frame_ms){
+        static std::array<std::array<char, 256>, 8> new_call_info{};
+        sab.read(new_call_info);
         std::stringstream ss;
         ss << std::hex << " Allocs: " << std::dec << ALLOCS_COUNT << '\n'
         << std::hex << " Frame ms: " << std::dec << internal_frame_ms << '\n'
         << std::hex << " Main loop ms: " << std::dec << main_loop_frame_ms << '\n';
+        for (const auto& el: new_call_info)
+            ss << el.data() << '\n';
         DW::header = ss.str();
-        DW::draw_text(24.f);
+        DW::draw_text(12.f);
     }
 };
 #endif

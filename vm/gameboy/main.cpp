@@ -358,11 +358,11 @@ struct GameBoyVM{
 #if CHEATS_ON
         CheatsWin<500,500> cheats(810,0);
 #endif
-
+        // Text info view modes
         SpriteWindowText<0,0,600,200> swt(10, 750);
-        SpriteWindow<80, 64, 300, 400> sw(820, 517);
+        GeneralInfo<0,0,600,200> gi(10, 750);
 
-        GeneralInfo<0,0,100,100> gi(610, 750);
+        SpriteWindow<80, 64, 300, 400> sw(820, 517);
 
         PPURegistersText<0,0,200,150> ppurt(1320, 0);
         RegWindow<0,0,300,465> rw(1150, 517);
@@ -404,6 +404,18 @@ struct GameBoyVM{
 #if CHEATS_ON
                 case Cheats:           {cheats.handle(mem); break;}
 #endif
+            }
+        };
+        enum TextInfoViewMode {
+            SpriteWindowText,
+            GeneralInfo,
+            TextInfoViewModesCount
+        } current_text_info_mode = SpriteWindowText;
+
+        auto text_info_view_mode_handle = [&]<typename ... T>(const Memory& mem, T&&... args) {
+            switch (current_text_info_mode) {
+                case SpriteWindowText: {swt.handle(sw); break;}
+                default:               {gi.handle(mem, std::forward<T>(args)...); break;}
             }
         };
 
@@ -453,14 +465,13 @@ struct GameBoyVM{
                     DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height},
                                Rectangle{0, 0, constants::LCD_WIDTH, constants::LCD_HEIGHT}, {0, 0}, 0.0f, WHITE);
                     tile_view_mode_handle();
-
                     sw.handle(mem);
                     rw.handle(mem, cpu);
-                    swt.handle(sw);
-                    gi.handle(mem,
-                      std::chrono::duration_cast<std::chrono::milliseconds>(main_loop_end-begin).count(),
-                      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-begin).count());
+                    text_info_view_mode_handle(mem,std::chrono::duration_cast<std::chrono::milliseconds>(main_loop_end-begin).count(),
+                                               std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-begin).count());
 //                    jw.handle(mem, joypad);
+
+
                     ppurt.handle(mem, ppu.last_scx, ppu.last_scy);
                     if (print_pixels) pp.handle(GREEN, 0, 0);
                     if (print_tiles)  tp.handle(RED, 0, print_pixels ? 50 : 0);
@@ -495,6 +506,9 @@ struct GameBoyVM{
 #if DEBUG_MODE
             if (IsKeyPressed(KEY_M))
                   current_tile_view_mode = (current_tile_view_mode + 1) % ViewModesCount;
+
+            if (IsKeyPressed(KEY_N))
+                  current_text_info_mode = static_cast<TextInfoViewMode>((current_text_info_mode + 1) % TextInfoViewModesCount);
 
             if (CheckCollisionPointRec(GetMousePosition(), {0,0,constants::LCD_WIDTH,constants::LCD_HEIGHT})) {
                 if (IsKeyPressed(KEY_ONE))
