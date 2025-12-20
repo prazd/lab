@@ -12,6 +12,7 @@
 #include <charconv>
 #include <execinfo.h>
 #include <thread>
+#include <dlfcn.h>
 
 using Tile8x8 = std::array<std::array<int, 8>, 8>;
 using Tile8x16 = std::array<std::array<int, 8>, 16>;
@@ -1034,7 +1035,6 @@ public:
 
 
 #if DEBUG_MODE
-// TODO: refactor
 template <typename T, size_t n>
 struct SimpleAtomicBuffer {
     std::array<T, n> buffer{};
@@ -1056,6 +1056,11 @@ struct SimpleAtomicBuffer {
     }
     void push(const T& value) {
         lock();
+        if (sz == n) {
+            (*buffer.begin()) = {};
+            for (int i = 0; i < sz-2;++i) std::swap(buffer[i], buffer[i+1]);
+            --sz;
+        }
         buffer[sz] = value;
         sz = (sz + 1) % n;
         unlock();
@@ -1067,24 +1072,14 @@ struct SimpleAtomicBuffer {
     }
 };
 
-SimpleAtomicBuffer<std::array<char, 256>, 8> sab;
+std::unordered_map<void*, int> calls_count{};
+SimpleAtomicBuffer<void*, 8> sab;
 std::atomic<size_t> ALLOCS_COUNT = 0;
-
-static void add_callstack_operator_new_str(const char* str) {
-    std::array<char, 256> tmp;
-    for (int i = 0; i < 256; ++i){
-        tmp[i] = *str++;
-        if (!(*str)) break;
-    }
-    sab.push(tmp);
-}
 
 static void update_callstack() {
     void* callstack[2];
     int frames = backtrace(callstack, 2);
-    char** strs = backtrace_symbols(callstack, frames);
-    add_callstack_operator_new_str(strs[frames > 1 ? 1 : 0]);
-    free(strs);
+    sab.push(callstack[1]);
 }
 
 void* operator new(size_t sz){
@@ -1098,14 +1093,28 @@ struct GeneralInfo: public DebugWindow<pwidth, pheight, width, height> {
     using DW = DebugWindow<pwidth, pheight,width,height>;
     GeneralInfo(float x, float y): DW(x, y){}
     void handle(const Memory& mem, unsigned long long internal_frame_ms, unsigned long long main_loop_frame_ms){
-        static std::array<std::array<char, 256>, 8> new_call_info{};
+        static std::array<void*, 8> new_call_info{};
+        static std::vector<std::pair<void*, size_t>> sorted_addr{};
         sab.read(new_call_info);
+        for (auto el: new_call_info) ++calls_count[el];
+        sorted_addr.clear();
+        for (const auto& [k,v]: calls_count)
+            sorted_addr.emplace_back(k, v);
+        std::sort(sorted_addr.begin(), sorted_addr.end(), [](auto& a, auto& b){return a.second > b.second;});
+
         std::stringstream ss;
         ss << std::hex << " Allocs: " << std::dec << ALLOCS_COUNT << '\n'
         << std::hex << " Frame ms: " << std::dec << internal_frame_ms << '\n'
         << std::hex << " Main loop ms: " << std::dec << main_loop_frame_ms << '\n';
-        for (const auto& el: new_call_info)
-            ss << el.data() << '\n';
+
+        Dl_info dlinfo;
+        size_t top_count = 0;
+        for (const auto& [addr, count]: sorted_addr){
+            if (dladdr(addr, &dlinfo)){
+                ss << count << " " << dlinfo.dli_fname << '\n';
+            }
+            if (top_count++ == 8) break;
+        }
         DW::header = ss.str();
         DW::draw_text(12.f);
     }

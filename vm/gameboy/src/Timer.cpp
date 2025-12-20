@@ -61,12 +61,6 @@ void Timer::tick(Memory& mem) {
     mem.map[constants::DIV_REGISTER] = ((div_internal >> 8) & 0xff);
     mem.div_internal_sync = div_internal;
 
-//    std::cout << "\n----------------\n";
-//    std::cout << "Div:" << div_internal << '\n';
-//    std::cout << " mem.map[constants::TIMA_REGISTER]:" <<  (unsigned)mem.map[constants::TIMA_REGISTER] << '\n';
-//    std::cout << "Prev bit:" << (unsigned)prev_bit << '\n';
-//    std::cout << "Cur bit:" << (unsigned)cur_bit << '\n';
-
     if (tima_overflow && overflow_counter == 0) {
         if (mem.tima_written)
             tima_overflow = false;
