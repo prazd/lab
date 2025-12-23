@@ -361,6 +361,7 @@ struct GameBoyVM{
         // Text info view modes
         SpriteWindowText<0,0,600,200> swt(10, 750);
         GeneralInfo<0,0,600,200> gi(10, 750);
+        TimeStep<600,200, 10> tstep(10, 750);
 
         SpriteWindow<80, 64, 300, 400> sw(820, 517);
 
@@ -409,13 +410,15 @@ struct GameBoyVM{
         enum TextInfoViewMode {
             SpriteWindowText,
             GeneralInfo,
+            TimeStepMode,
             TextInfoViewModesCount
         } current_text_info_mode = SpriteWindowText;
 
         auto text_info_view_mode_handle = [&]<typename ... T>(const Memory& mem, T&&... args) {
             switch (current_text_info_mode) {
-                case SpriteWindowText: {swt.handle(sw); break;}
-                default:               {gi.handle(mem, std::forward<T>(args)...); break;}
+                case SpriteWindowText:          {swt.handle(sw); break;}
+                case GeneralInfo:               {gi.handle(mem, std::forward<T>(args)...); break;}
+                default:                        {tstep.handle(mem, *this); break;}
             }
         };
 
@@ -456,6 +459,7 @@ struct GameBoyVM{
 
                 if (print_pixels) {pp.update(mem, 0, 0);}
                 if (print_tiles)  {tp.update(mem, 0, print_pixels ? 50 : 0);}
+                if (current_text_info_mode == TimeStepMode){tstep.update(*this);}
 #if APU_ON
                 if (current_apu_view_mode == ApuChans) apuc.update(mem);
 #endif

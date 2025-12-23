@@ -374,7 +374,7 @@ struct PPU {
         res.fill(WHITE);
         return res;
     }();
-    static inline std::array<Color, 144 * 160> display{};
+    std::array<Color, 144 * 160> display{};
 
     size_t last_t_cycles = 0;
     Sprite current_sprite{};

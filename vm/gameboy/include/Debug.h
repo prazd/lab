@@ -687,6 +687,102 @@ struct SpriteWindowText: public DebugWindow<pwidth, pheight, width, height>{
     }
 };
 
+template <size_t width, size_t height, int n, size_t snapshot_s = 2>
+struct TimeStep: public DebugWindow<0, 0, width, height>{
+    static constexpr size_t frame_height = 50;
+    static constexpr size_t frame_width = 50;
+    struct State {
+        CPU cpu;
+        Memory mem;
+        PPU ppu;
+        APU apu;
+    };
+    std::array<State, n> states{};
+    std::array<Texture2D, n> view_textures{};
+    Texture2D selected_state{};
+
+    int current_index = 0;
+    int use_index = 0;
+    decltype(std::chrono::steady_clock::now()) begin{};
+    bool running = false;
+    Rectangle use_button_rec;
+    Rectangle running_button_rec;
+    Rectangle frame_rec;
+
+    using DW = DebugWindow<0, 0, width,height>;
+    TimeStep(float x, float y):
+            DebugWindow<0, 0,width,height>(x, y),
+            begin(std::chrono::steady_clock::now()),
+            use_button_rec({x, y + 60, 30, 30}),
+            running_button_rec({x, y + 90, 30, 30}),
+            frame_rec({x + frame_width, y, frame_width, frame_height})
+    {
+            Image img(GenImageColor(constants::DISPLAY_WIDTH, constants::DISPLAY_HEIGHT, WHITE));
+            for (int i = 0; i < n; ++i) view_textures[i] =  LoadTextureFromImage(img);
+            selected_state = LoadTextureFromImage(img);
+            UnloadImage(img);
+    }
+    void update(auto& current){
+        if (!running) return;
+        if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - begin).count() >= snapshot_s) {
+            begin = std::chrono::steady_clock::now();
+            auto prev = current_index;
+            // TODO: fix empty frame 
+            if (current_index == n-1)  {
+                for (int i = 0; i < n-1; ++i) std::swap(states[i], states[i+1]);
+            } else {
+                ++current_index;
+            }
+            states[prev].cpu = current.cpu;
+            states[prev].mem = current.mem;
+            states[prev].ppu = current.ppu;
+#if APU_ON
+            states[current_index].apu = current.apu;
+#endif
+            for (int i = 0; i <= prev; ++i) {
+                UpdateTexture(view_textures[i], states[i].ppu.read_buffer(states[i].mem));
+            }
+            UpdateTexture(selected_state, states[use_index].ppu.read_buffer(states[use_index].mem));
+        }
+    }
+    void handle(const Memory& mem, auto& current){
+        if (CheckCollisionPointRec(GetMousePosition(), use_button_rec) && IsMouseButtonPressed(0)) {
+            current_index = use_index;
+            current.cpu = states[current_index].cpu;
+            current.mem = states[current_index].mem;
+            current.ppu = states[current_index].ppu;
+
+// TODO: Test with APU
+#if APU_ON
+            current.apu = states[current_index].apu;
+#endif
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), running_button_rec) && IsMouseButtonPressed(0))
+            running = !running;
+
+        std::stringstream state_text;
+        state_text << "Current index:" << current_index << '\n';
+        auto state_text_str = state_text.str();
+
+        for (int i = 0; i < n; ++i){
+            if (i <= current_index) {
+                DrawTexturePro(view_textures[i], {0, 0, (float)view_textures[i].width, (float)view_textures[i].height}, Rectangle{frame_rec.x + i * (frame_width + 2), frame_rec.y, 40, 40}, {0, 0}, 0.0f, WHITE);
+            }
+            if (CheckCollisionPointRec(GetMousePosition(), {frame_rec.x + i * (frame_width + 2), frame_rec.y, frame_rec.width, frame_rec.height}) && IsMouseButtonPressed(0)){
+                use_index = i;
+                UpdateTexture(selected_state, states[i].ppu.read_buffer(states[i].mem));
+            }
+            DrawRectangleLinesEx({frame_rec.x + i * (frame_width + 2), frame_rec.y, frame_rec.width, frame_rec.height}, 1.f, i == current_index ?
+                                                                                                                             GREEN : (i == use_index ? BLUE : RED));
+        }
+        DrawTexturePro(selected_state, {0, 0, (float)view_textures[use_index].width, (float)view_textures[use_index].height}, Rectangle{DW::rec.x + 100, DW::rec.y + 50, 200, 180}, {0, 0}, 0.0f, WHITE);
+        DrawText(state_text_str.c_str(),  DW::rec.x, DW::rec.y, 10.f, BLACK);
+        DW::draw_button(use_button_rec, GREEN, "USE");
+        DW::draw_button(running_button_rec, running ? GREEN : RED, running ? "ON" : "OFF");
+    }
+};
+
 
 template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct RegWindow: public DebugWindow<pwidth, pheight, width, height> {
