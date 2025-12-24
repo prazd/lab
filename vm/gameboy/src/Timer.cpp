@@ -31,13 +31,6 @@ static inline int get_ticks_by_shift(int shift) {
 }
 
 void Timer::tick(Memory& mem) {
-    static unsigned char prev_bit = 0;
-    static unsigned char cur_bit = 0;
-    static bool tima_overflow = false;
-    static unsigned short prev_div = 0;
-    static unsigned char tac_prev = 0xf8;
-    static int overflow_counter = 0;
-    static size_t current_t_cycle = 0;
     auto shift = tima_shift(mem);
     if (mem.div_written) {
         mem.div_written = false;

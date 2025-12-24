@@ -73,6 +73,9 @@ struct APU {
     CH2 ch2;
     CH3 ch3;
     CH4 ch4;
+    unsigned t_cycle = 0;
+    unsigned char prev_frame_seq_step = 0;
+    bool skip_sample = false;
     unsigned short count_sample = 0;
     unsigned accum{};
     int current_buffer_i {};

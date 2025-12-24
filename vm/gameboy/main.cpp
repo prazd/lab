@@ -25,6 +25,7 @@ struct GameBoyVM{
     std::string_view ram_path;
     bool is_valid_logo = false;
 #if DEBUG_MODE
+    TimeStep<600,200, 10> tstep;
     bool cpu_running = true;
 #endif
 #if APU_ON
@@ -152,6 +153,10 @@ struct GameBoyVM{
             }
             prev_lcdc_on = mem.map[constants::LCDC_ADDRESS] & 0x80;
             if (!cpu.halted && mem.dma_active) mem.dma_tick();
+#if DEBUG_MODE
+            tstep.update(*this);
+            tstep.step(*this);
+#endif
         }
     }
 
@@ -310,6 +315,10 @@ struct GameBoyVM{
         SetTargetFPS(60); // 59.7275 FPS
         SetExitKey(0);
 
+#if DEBUG_MODE
+      tstep.reload(10, 750);
+#endif
+
         // texture init
 #if DEBUG_MODE
         RenderTexture2D base = LoadRenderTexture(constants::WIDTH, constants::HEIGHT);
@@ -361,8 +370,7 @@ struct GameBoyVM{
         // Text info view modes
         SpriteWindowText<0,0,600,200> swt(10, 750);
         GeneralInfo<0,0,600,200> gi(10, 750);
-        TimeStep<600,200, 10> tstep(10, 750);
-
+        FrameMs<0,0,100,100> fms(620, 750);
         SpriteWindow<80, 64, 300, 400> sw(820, 517);
 
         PPURegistersText<0,0,200,150> ppurt(1320, 0);
@@ -414,11 +422,11 @@ struct GameBoyVM{
             TextInfoViewModesCount
         } current_text_info_mode = SpriteWindowText;
 
-        auto text_info_view_mode_handle = [&]<typename ... T>(const Memory& mem, T&&... args) {
+        auto text_info_view_mode_handle = [&](const Memory& mem) {
             switch (current_text_info_mode) {
                 case SpriteWindowText:          {swt.handle(sw); break;}
-                case GeneralInfo:               {gi.handle(mem, std::forward<T>(args)...); break;}
-                default:                        {tstep.handle(mem, *this); break;}
+                case GeneralInfo:               {gi.handle(mem); break;}
+                default:                        {tstep.time_out_update(); tstep.handle(mem, *this); break;}
             }
         };
 
@@ -459,7 +467,6 @@ struct GameBoyVM{
 
                 if (print_pixels) {pp.update(mem, 0, 0);}
                 if (print_tiles)  {tp.update(mem, 0, print_pixels ? 50 : 0);}
-                if (current_text_info_mode == TimeStepMode){tstep.update(*this);}
 #if APU_ON
                 if (current_apu_view_mode == ApuChans) apuc.update(mem);
 #endif
@@ -471,10 +478,10 @@ struct GameBoyVM{
                     tile_view_mode_handle();
                     sw.handle(mem);
                     rw.handle(mem, cpu);
-                    text_info_view_mode_handle(mem,std::chrono::duration_cast<std::chrono::milliseconds>(main_loop_end-begin).count(),
-                                               std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-begin).count());
+                    fms.handle(mem,std::chrono::duration_cast<std::chrono::milliseconds>(main_loop_end-begin).count(),
+                            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-begin).count());
+                    text_info_view_mode_handle(mem);
 //                    jw.handle(mem, joypad);
-
 
                     ppurt.handle(mem, ppu.last_scx, ppu.last_scy);
                     if (print_pixels) pp.handle(GREEN, 0, 0);

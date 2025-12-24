@@ -206,15 +206,12 @@ void PPU::tick(Memory& mem)  {
         init_oam_interrupt = true;
     }
 
-    static size_t debug_t_cycles = 0;
 #if 0
     mem.write_unchecked(constants::LY_ADDRESS, 0x90);
     return;
 #endif
     ++internal_t_cycles;
     ++current_t_cycle_count;
-    static int same_sprites_count = 0;
-    static int sprite_stall = 0;
     mem.ppu_internal_t_cycle = current_t_cycle_count;
 
     ++last_t_cycles;

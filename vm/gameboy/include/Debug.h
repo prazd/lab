@@ -130,7 +130,16 @@ struct DebugWindow {
     bool m_pressed = false;
     std::string header;
     DebugWindow(float x, float y):
-            rec({x, y, width, height}), target_renderer(LoadRenderTexture(width, height)){
+            rec({x, y, width, height}),
+            target_renderer(LoadRenderTexture(width, height)){
+        Image img(GenImageColor(pwidth, pheight, WHITE));
+        target = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+    DebugWindow() = default;
+    void reload(float x, float y) {
+        rec = {x, y, width, height};
+        target_renderer = LoadRenderTexture(width, height);
         Image img(GenImageColor(pwidth, pheight, WHITE));
         target = LoadTextureFromImage(img);
         UnloadImage(img);
@@ -696,7 +705,9 @@ struct TimeStep: public DebugWindow<0, 0, width, height>{
         Memory mem;
         PPU ppu;
         APU apu;
+        Joypad joypad;
     };
+    bool is_time_out = false;
     std::array<State, n> states{};
     std::array<Texture2D, n> view_textures{};
     Texture2D selected_state{};
@@ -705,79 +716,113 @@ struct TimeStep: public DebugWindow<0, 0, width, height>{
     int use_index = 0;
     decltype(std::chrono::steady_clock::now()) begin{};
     bool running = false;
+    bool step_requested = false;
     Rectangle use_button_rec;
     Rectangle running_button_rec;
     Rectangle frame_rec;
 
     using DW = DebugWindow<0, 0, width,height>;
-    TimeStep(float x, float y):
-            DebugWindow<0, 0,width,height>(x, y),
-            begin(std::chrono::steady_clock::now()),
-            use_button_rec({x, y + 60, 30, 30}),
-            running_button_rec({x, y + 90, 30, 30}),
-            frame_rec({x + frame_width, y, frame_width, frame_height})
-    {
-            Image img(GenImageColor(constants::DISPLAY_WIDTH, constants::DISPLAY_HEIGHT, WHITE));
-            for (int i = 0; i < n; ++i) view_textures[i] =  LoadTextureFromImage(img);
-            selected_state = LoadTextureFromImage(img);
-            UnloadImage(img);
+    TimeStep(): DW() {}
+    void reload(float x, float y) {
+        DW::reload(x, y);
+        begin = std::chrono::steady_clock::now();
+        use_button_rec = {x, y + 60, 30, 30};
+        running_button_rec = {x, y + 90, 30, 30};
+        frame_rec = {x + frame_width, y, frame_width, frame_height};
+
+        Image img(GenImageColor(constants::DISPLAY_WIDTH, constants::DISPLAY_HEIGHT, WHITE));
+        for (int i = 0; i < n; ++i) view_textures[i] =  LoadTextureFromImage(img);
+        selected_state = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+    void time_out_update(){
+        if (!is_time_out && std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - begin).count() >= snapshot_s)
+            is_time_out = true;
     }
     void update(auto& current){
         if (!running) return;
-        if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - begin).count() >= snapshot_s) {
+        if (is_time_out && current.cpu.finished_instruction) {
             begin = std::chrono::steady_clock::now();
-            auto prev = current_index;
-            // TODO: fix empty frame 
-            if (current_index == n-1)  {
+            auto prev = std::min(current_index, n-1);
+
+            if (current_index == n){
                 for (int i = 0; i < n-1; ++i) std::swap(states[i], states[i+1]);
             } else {
                 ++current_index;
             }
-            states[prev].cpu = current.cpu;
-            states[prev].mem = current.mem;
-            states[prev].ppu = current.ppu;
+            states[prev].cpu =  current.cpu;
+            states[prev].mem =  current.mem;
+            states[prev].ppu =  current.ppu;
+            states[prev].joypad =  current.joypad;
 #if APU_ON
-            states[current_index].apu = current.apu;
+            states[prev].apu = current.apu;
 #endif
             for (int i = 0; i <= prev; ++i) {
                 UpdateTexture(view_textures[i], states[i].ppu.read_buffer(states[i].mem));
             }
             UpdateTexture(selected_state, states[use_index].ppu.read_buffer(states[use_index].mem));
+            is_time_out = false;
         }
     }
-    void handle(const Memory& mem, auto& current){
-        if (CheckCollisionPointRec(GetMousePosition(), use_button_rec) && IsMouseButtonPressed(0)) {
+    void step(auto& current) {
+        if (step_requested && current.cpu.finished_instruction){
             current_index = use_index;
             current.cpu = states[current_index].cpu;
             current.mem = states[current_index].mem;
             current.ppu = states[current_index].ppu;
+            current.joypad = states[current_index].joypad;
 
 // TODO: Test with APU
 #if APU_ON
             current.apu = states[current_index].apu;
 #endif
+            for (int i = current_index; i < n; ++i) {
+                states[i] = {};
+                UpdateTexture(view_textures[i], PPU::display_empty.data());
+            }
+            step_requested = false;
+        }
+    }
+    void handle(const Memory& mem, auto& current){
+        if ((CheckCollisionPointRec(GetMousePosition(), use_button_rec) && IsMouseButtonPressed(0))
+#if CONTROLLER
+    || (current.joypad.device.is_key_released(NintendoJoystick::R2)))
+#else
+        )
+#endif
+        {
+            step_requested = true;
         }
 
-        if (CheckCollisionPointRec(GetMousePosition(), running_button_rec) && IsMouseButtonPressed(0))
+        if ((CheckCollisionPointRec(GetMousePosition(), running_button_rec) && IsMouseButtonPressed(0))
+#if CONTROLLER
+            || (current.joypad.device.is_key_released(NintendoJoystick::L2)))
+#else
+        )
+#endif
             running = !running;
 
-        std::stringstream state_text;
-        state_text << "Current index:" << current_index << '\n';
-        auto state_text_str = state_text.str();
-
         for (int i = 0; i < n; ++i){
-            if (i <= current_index) {
+            if (i <= std::min(current_index, n-1)) {
                 DrawTexturePro(view_textures[i], {0, 0, (float)view_textures[i].width, (float)view_textures[i].height}, Rectangle{frame_rec.x + i * (frame_width + 2), frame_rec.y, 40, 40}, {0, 0}, 0.0f, WHITE);
             }
             if (CheckCollisionPointRec(GetMousePosition(), {frame_rec.x + i * (frame_width + 2), frame_rec.y, frame_rec.width, frame_rec.height}) && IsMouseButtonPressed(0)){
                 use_index = i;
                 UpdateTexture(selected_state, states[i].ppu.read_buffer(states[i].mem));
             }
-            DrawRectangleLinesEx({frame_rec.x + i * (frame_width + 2), frame_rec.y, frame_rec.width, frame_rec.height}, 1.f, i == current_index ?
+            DrawRectangleLinesEx({frame_rec.x + i * (frame_width + 2), frame_rec.y, frame_rec.width, frame_rec.height}, 1.f, i == std::min(current_index,n-1) ?
                                                                                                                              GREEN : (i == use_index ? BLUE : RED));
         }
+#if CONTROLLER
+        if (current.joypad.device.is_key_released(NintendoJoystick::L1)) {
+            use_index = (n + use_index - 1) % n;
+            UpdateTexture(selected_state, states[use_index].ppu.read_buffer(states[use_index].mem));
+        } else if (current.joypad.device.is_key_released(NintendoJoystick::R1)) {
+            use_index = (use_index + 1) % n;
+            UpdateTexture(selected_state, states[use_index].ppu.read_buffer(states[use_index].mem));
+        }
+#endif
         DrawTexturePro(selected_state, {0, 0, (float)view_textures[use_index].width, (float)view_textures[use_index].height}, Rectangle{DW::rec.x + 100, DW::rec.y + 50, 200, 180}, {0, 0}, 0.0f, WHITE);
-        DrawText(state_text_str.c_str(),  DW::rec.x, DW::rec.y, 10.f, BLACK);
         DW::draw_button(use_button_rec, GREEN, "USE");
         DW::draw_button(running_button_rec, running ? GREEN : RED, running ? "ON" : "OFF");
     }
@@ -1188,7 +1233,7 @@ template <size_t pwidth, size_t pheight, size_t width, size_t height>
 struct GeneralInfo: public DebugWindow<pwidth, pheight, width, height> {
     using DW = DebugWindow<pwidth, pheight,width,height>;
     GeneralInfo(float x, float y): DW(x, y){}
-    void handle(const Memory& mem, unsigned long long internal_frame_ms, unsigned long long main_loop_frame_ms){
+    void handle(const Memory& mem){
         static std::array<void*, 8> new_call_info{};
         static std::vector<std::pair<void*, size_t>> sorted_addr{};
         sab.read(new_call_info);
@@ -1197,12 +1242,8 @@ struct GeneralInfo: public DebugWindow<pwidth, pheight, width, height> {
         for (const auto& [k,v]: calls_count)
             sorted_addr.emplace_back(k, v);
         std::sort(sorted_addr.begin(), sorted_addr.end(), [](auto& a, auto& b){return a.second > b.second;});
-
         std::stringstream ss;
-        ss << std::hex << " Allocs: " << std::dec << ALLOCS_COUNT << '\n'
-        << std::hex << " Frame ms: " << std::dec << internal_frame_ms << '\n'
-        << std::hex << " Main loop ms: " << std::dec << main_loop_frame_ms << '\n';
-
+        ss << std::hex << " Allocs: " << std::dec << ALLOCS_COUNT << '\n';
         Dl_info dlinfo;
         size_t top_count = 0;
         for (const auto& [addr, count]: sorted_addr){
@@ -1211,6 +1252,19 @@ struct GeneralInfo: public DebugWindow<pwidth, pheight, width, height> {
             }
             if (top_count++ == 8) break;
         }
+        DW::header = ss.str();
+        DW::draw_text(12.f);
+    }
+};
+
+template <size_t pwidth, size_t pheight, size_t width, size_t height>
+struct FrameMs: public DebugWindow<pwidth, pheight, width, height> {
+    using DW = DebugWindow<pwidth, pheight,width,height>;
+    FrameMs(float x, float y): DW(x, y){}
+    void handle(const Memory& mem, unsigned long long internal_frame_ms, unsigned long long main_loop_frame_ms){
+        std::stringstream ss;
+        ss << std::hex << "   \nFrame ms: " << std::dec << internal_frame_ms << '\n'
+           << std::hex << " Main loop ms: " << std::dec << main_loop_frame_ms << '\n';
         DW::header = ss.str();
         DW::draw_text(12.f);
     }

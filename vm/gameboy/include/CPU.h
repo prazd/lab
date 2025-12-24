@@ -140,6 +140,10 @@ struct CPU {
     bool timer_interrupt_req = false;
     bool serial_interrupt_req = false;
     bool joypad_interrupt_req = false;
+
+#if DEBUG_MODE
+    bool finished_instruction = false;
+#endif
     void fetch_IF_value(Memory& mem);
 
     void update_interrupts_status(Memory& mem);

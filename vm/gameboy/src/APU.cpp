@@ -390,10 +390,6 @@ std::pair<float, float> APU::next_sample_2ch(Memory& mem) {
 }
 
 void APU::tick(Memory& mem) {
-    static unsigned t_cycle = 0;
-    static unsigned char prev_frame_seq_step = 0;
-    static bool skip_sample = false;
-
     if (mem.ch1_enable_length_trigger) {
          if (frame_sequencer_step & 1){if (ch1.length_counter) {--ch1.length_counter; ch1.disable_check(mem);}}
         mem.ch1_enable_length_trigger = false;

@@ -2,7 +2,6 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
-#define DEBUG 0
 
 unsigned char CPU::read345(unsigned char i)  {
     return (0x7 & (i >> 3));
@@ -301,9 +300,6 @@ CPU::Instruction CPU::decode(unsigned char ins) {
         if ((ins & 0xf) == 0b1011) return DEC_0b00xx1011;
         if ((ins & 0xf) == 0b1001) return ADD_0b00xx1001;
     }
-#if DEBUG
-    std::cout << "Unknown opcode: " << ins << '\n';
-#endif
     return NOP_0b00000000;
 }
 
@@ -323,9 +319,6 @@ CPU::Instruction0xCB CPU::decode_0xCB(unsigned char ins) {
         case 0b00110: return SWAP_0xCB_0b00110xxx;
         case 0b00111: return SRL_0xCB_0b00111xxx;
     }
-#if DEBUG
-    std::cout << "Unknown opcode: " << ins << '\n';
-#endif
     throw std::exception();
 }
 
@@ -800,37 +793,11 @@ int CPU::pc_inc_by_ins(CPU::Instruction ins, unsigned char value) {
 }
 
 
-
 Resumable CPU::instruction_async_loop(Memory& mem) {
-#if 1
-    auto print_hex = [&](auto val){
-        auto num_bytes = sizeof(val);
-        std::stringstream ss("");
-        ss << std::hex << std::setw(num_bytes * 2) << std::setfill('0') << (unsigned)val;
-        return ss;
-    };
-//                std::cout  << instruction_str[itype] << " ";
-    if (!halted) {
-        std::cout <<
-
-                  "A:" << print_hex(regs[CPU::A]).str() << " " <<
-                  "F:" <<  print_hex(regs[CPU::F]).str() << " " <<
-                  "B:" <<  print_hex(regs[CPU::B]).str() << " " <<
-                  "C:" <<  print_hex(regs[CPU::C]).str() << " " <<
-                  "D:" <<  print_hex(regs[CPU::D]).str() << " " <<
-                  "E:" <<  print_hex(regs[CPU::E]).str() << " " <<
-                  "H:" <<  print_hex(regs[CPU::H]).str() << " " <<
-                  "L:" <<  print_hex(regs[CPU::L]).str() << " " <<
-                  "SP:" <<  print_hex(sp).str() << " " <<
-                  "PC:" <<  print_hex(pc).str() << " " <<
-                  "PCMEM:" <<  print_hex(mem.read(pc)).str() << "," <<
-                  print_hex(mem.read(pc + 1)).str() << "," <<
-                  print_hex(mem.read(pc + 2)).str() << "," <<
-                  print_hex(mem.read(pc + 3)).str() << '\n';
-        std::cout << std::dec;
-    }
-#endif
     while (true) {
+#if DEBUG_MODE
+        finished_instruction = false;
+#endif
         if (halted) {
             auto ie_value = mem.read(constants::IE_ADDRESS);
             auto if_value = mem.read(constants::IF_ADDRESS);
@@ -907,33 +874,6 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
                 continue;
             }
         }
-#if DEBUG
-    //    std::cout << "HL value:" << HL_data() << '\n';
-    //    std::cout << "Memory value by HL_address:" << (unsigned)mem.read(HL_data()) << '\n';
-    //    auto print_range = [&](int n){
-    //        while(n--) std::cout << "map[" << pc + n << "] :" << (unsigned)mem.read(pc + n) << '\n';
-    //    };
-
-    //    std::cout << "\n==============================\n";
-
-    //    std::cout << std::hex << "REG[A]" << (unsigned)regs[A] << '\n';
-    //    std::cout <<"REG[B]: " << (unsigned)regs[B] << '\n';
-    //    std::cout <<"REG[C]: " << (unsigned)regs[C] << '\n';
-    //    std::cout <<"REG[D]: " << (unsigned)regs[D] << '\n';
-    //    std::cout <<"REG[E]: " << (unsigned)regs[E] << '\n';
-    //    std::cout <<"REG[F]: " << (unsigned)regs[F] << '\n';
-    //    std::cout << "Zero:" << (unsigned)get_flag(Zf) << '\n';
-    //    std::cout << "Negative: " << (unsigned)get_flag(Nf) << '\n';
-    //    std::cout << "HalfCarry: " << (unsigned)get_flag(Hf) << '\n';
-    //    std::cout << "Carry: " << (unsigned)get_flag(Cf) << '\n';
-    //    std::cout << "PC: " << pc << '\n';
-    //    std::cout << "SP: " << sp << '\n';
-    //    std::cout << "MEM:\n";
-    //    print_range(3);
-    //    std::cout << std::dec;
-    //    std::cout << "\n==============================\n";
-
-#endif
         // maybe use std::scope (c++23)
         struct defer {
             CPU &cpuref;
@@ -1228,9 +1168,6 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
             }
             case OR_0b10110xxx: {
                 or_reg_A(read_regs(read012(i), mem));
-#if DEBUG
-                std::cout << "OR C, Zf: " << (unsigned)get_flag(Zf) << " BC: " << (short)getpair(0) << '\n';
-#endif
                 break;
             }
             case OR_0b10110110: {
@@ -1739,7 +1676,9 @@ Resumable CPU::instruction_async_loop(Memory& mem) {
 
 //                if (cpu.ime) {
 #endif
-
+#if DEBUG_MODE
+        finished_instruction = true;
+#endif
         WAIT(1)
     }
 }

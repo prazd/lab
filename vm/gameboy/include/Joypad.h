@@ -18,6 +18,10 @@ namespace NintendoJoystick {
         A, B,
         Start,
         Select,
+
+        L1, R1,
+        L2, R2,
+
         Unknown
     };
 
@@ -29,10 +33,18 @@ namespace NintendoJoystick {
         static constexpr int usage_game_pad = kHIDUsage_GD_GamePad;
         static inline __IOHIDManager* manager = nullptr;
         static inline unsigned char report_buffer[8]{};
-        static inline PressedBuffer pressed = PressedBuffer(8);
+        static inline PressedBuffer pressed = PressedBuffer(12);
+        static inline PressedBuffer prev_pressed =    PressedBuffer(12);
+        static inline PressedBuffer keys_released_events = PressedBuffer(12);
 
         static void update_buttons(){
+            prev_pressed = pressed;
             pressed.clear();
+            if (report_buffer[0] == 0x10)  pressed.push_back(L1);
+            if (report_buffer[0] == 0x20)  pressed.push_back(R1);
+            if (report_buffer[0] == 0x40)  pressed.push_back(L2);
+            if (report_buffer[0] == 0x80)  pressed.push_back(R2);
+
             if (report_buffer[2] == 0x0)  pressed.push_back(DPadUp);
             if (report_buffer[2] == 0x2)  pressed.push_back(DPadRight);
             if (report_buffer[2] == 0x4)  pressed.push_back(DPadDown);
@@ -52,6 +64,14 @@ namespace NintendoJoystick {
                     pressed.push_back(DPadDown);
                 if (report_buffer[3] && report_buffer[4] <= 0x40)
                     pressed.push_back(DPadUp);
+            }
+
+            if (prev_pressed.size() > pressed.size()) {
+                for(size_t i = 0, e = prev_pressed.size(); i != e; ++i){
+                    if (!std::any_of(pressed.begin(), pressed.end(),[&](auto el){ return el == prev_pressed[i];})){
+                        keys_released_events.push_back(prev_pressed[i]);
+                    }
+                }
             }
         }
 
@@ -134,6 +154,13 @@ namespace NintendoJoystick {
 
         static bool is_pressed(Buttons b) {
             return std::any_of(pressed.begin(), pressed.end(), [b](auto el){return b == el;});
+        }
+
+        static bool is_key_released(Buttons b) {
+            auto res = std::any_of(keys_released_events.begin(), keys_released_events.end(), [b](auto& el){return el == b;});
+            if (!res) return false;
+            keys_released_events.erase(std::remove(keys_released_events.begin(), keys_released_events.end(), b), keys_released_events.end());
+            return true;
         }
     };
 }
