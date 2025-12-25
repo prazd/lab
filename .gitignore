@@ -8,3 +8,5 @@ main
 lua-5.4.7
 cmake-build-debug
 null
+*.metallib
+*.air
