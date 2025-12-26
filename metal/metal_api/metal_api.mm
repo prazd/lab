@@ -39,6 +39,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
 @implementation MetalContextWrapper
 - (void)draw {
+@autoreleasepool {
     if (new_frame_ready.exchange(false)) {
         [self.ctx->fb replaceRegion:MTLRegionMake2D(0,0,self.ctx->buffer_w,self.ctx->buffer_h)
                     mipmapLevel:0
@@ -63,6 +64,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
     [cb presentDrawable:drawable];
     [cb commit];
+    }
 }
 - (void)windowWillClose:(NSNotification*)notification {
     if (self.ctx->displayLink) {
