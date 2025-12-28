@@ -10,7 +10,7 @@
 
 // g++ -framework IOKit -framework CoreFoundation -framework Foundation -std=c++2b
 namespace NintendoJoystick {
-    enum Buttons {
+    enum Button {
         DPadRight,
         DPadLeft,
         DPadUp,
@@ -26,7 +26,22 @@ namespace NintendoJoystick {
         Unknown
     };
 
-    template <typename Callback, typename PressedBuffer = std::vector<Buttons>>
+    struct KeyPressed {
+        unsigned short state{};
+        void set(Button b) {
+            state |= (1 << static_cast<int>(b));
+        }
+
+        void off(Button b) {
+            state &= ~(1 << static_cast<int>(b));
+        }
+
+        bool get(Button b) {
+            return (state >> static_cast<int>(b)) & 1;
+        }
+    };
+
+    template <typename Callback, typename PressedBuffer = std::vector<Button>>
     class HIDDevice {
         static constexpr int vendor_id = 8406;
         static constexpr int product_id = 42784;
@@ -37,9 +52,10 @@ namespace NintendoJoystick {
         static inline Callback callback;
         static inline PressedBuffer pressed =         PressedBuffer(12);
         static inline PressedBuffer prev_pressed =    PressedBuffer(12);
-        static inline PressedBuffer keys_released_event = PressedBuffer(12);
+        static inline KeyPressed kp;
+        
 
-        static void update_buttons_and_run_callback(){
+        static void update_Button_and_run_callback(){
             prev_pressed = pressed;
             pressed.clear();
             if (report_buffer[0] == 0x10)  pressed.push_back(L1);
@@ -75,7 +91,7 @@ namespace NintendoJoystick {
             if (prev_pressed.size() > pressed.size()) {
                 for(size_t i = 0, e = prev_pressed.size(); i != e; ++i){
                     if (!std::any_of(pressed.begin(), pressed.end(),[&](auto el){ return el == prev_pressed[i];})){
-                        keys_released_event.push_back(prev_pressed[i]);
+                        kp.set(prev_pressed[i]);
                     }
                 }
             }
@@ -106,7 +122,7 @@ namespace NintendoJoystick {
         static void input_report_callback(void* context, IOReturn result, void* sender, IOHIDReportType type,
                                 unsigned reportID, unsigned char* report, CFIndex reportLength) {
             if (result != kIOReturnSuccess || reportLength == 0) return;
-            update_buttons_and_run_callback();
+            update_Button_and_run_callback();
         }
 
         static CFArrayRef create_matching_array() {
@@ -168,10 +184,9 @@ namespace NintendoJoystick {
             IOHIDManagerClose(manager, kIOHIDOptionsTypeNone);
             CFRelease(manager);
         }
-        static bool is_key_released(Buttons b) {
-            auto res = std::any_of(keys_released_event.begin(), keys_released_event.end(), [b](auto& el){return el == b;});
-            if (!res) return false;
-            keys_released_event.erase(std::remove(keys_released_event.begin(), keys_released_event.end(), b), keys_released_event.end());
+        static bool is_key_released(Button b) {
+            if (!kp.get(b)) return false;
+            kp.off(b);
             return true;
         }
     };
@@ -192,10 +207,10 @@ void example() {
                     case Select:   {std::cout << "Select ";  break;}
                     case Start:    {std::cout << "Start ";   break;}
 
-                    case L1:   {std::cout << "L1 ";  break;}
-                    case L2:    {std::cout << "L2 ";   break;}
-                    case R1:   {std::cout << "R1 ";  break;}
-                    case R2:    {std::cout << "R2 ";   break;}
+                    case L1:       {std::cout << "L1 ";  break;}
+                    case L2:       {std::cout << "L2 ";   break;}
+                    case R1:       {std::cout << "R1 ";  break;}
+                    case R2:       {std::cout << "R2 ";   break;}
                     default:       {std::cout << "Unknown "; break;}
                 }
             }
@@ -205,8 +220,10 @@ void example() {
     HIDDevice<decltype(callback)>::init();
     for(;;){
         HIDDevice<decltype(callback)>::step(0.01);
-        if (HIDDevice<decltype(callback)>::is_key_released(L1))
-                std::cout << "L1 down\n";
+        if (HIDDevice<decltype(callback)>::is_key_released(L1)){
+            std::cout << "L1 down\n";
+
+        }
     }
     HIDDevice<decltype(callback)>::release();
 }
