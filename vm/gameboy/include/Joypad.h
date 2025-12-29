@@ -9,7 +9,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 namespace NintendoJoystick {
-    enum Buttons {
+    enum Button {
         DPadRight,
         DPadLeft,
         DPadUp,
@@ -25,7 +25,22 @@ namespace NintendoJoystick {
         Unknown
     };
 
-    template <typename PressedBuffer = std::vector<Buttons>>
+    struct KeyPressed {
+        unsigned short state{};
+        void set(Button b) {
+            state |= (1 << static_cast<int>(b));
+        }
+
+        void off(Button b) {
+            state &= ~(1 << static_cast<int>(b));
+        }
+
+        bool get(Button b) const {
+            return (state >> static_cast<int>(b)) & 1;
+        }
+    };
+
+    template <typename PressedBuffer = std::vector<Button>>
     class HIDDevice {
         static constexpr int vendor_id = 8406;
         static constexpr int product_id = 42784;
@@ -34,8 +49,8 @@ namespace NintendoJoystick {
         static inline __IOHIDManager* manager = nullptr;
         static inline unsigned char report_buffer[8]{};
         static inline PressedBuffer pressed = PressedBuffer(12);
-        static inline PressedBuffer prev_pressed =    PressedBuffer(12);
-        static inline PressedBuffer keys_released_events = PressedBuffer(12);
+        static inline PressedBuffer prev_pressed = PressedBuffer(12);
+        static inline KeyPressed kp;
 
         static void update_buttons(){
             prev_pressed = pressed;
@@ -69,7 +84,7 @@ namespace NintendoJoystick {
             if (prev_pressed.size() > pressed.size()) {
                 for(size_t i = 0, e = prev_pressed.size(); i != e; ++i){
                     if (!std::any_of(pressed.begin(), pressed.end(),[&](auto el){ return el == prev_pressed[i];})){
-                        keys_released_events.push_back(prev_pressed[i]);
+                        kp.set(prev_pressed[i]);
                     }
                 }
             }
@@ -152,14 +167,13 @@ namespace NintendoJoystick {
             CFRelease(manager);
         }
 
-        static bool is_pressed(Buttons b) {
+        static bool is_pressed(Button b) {
             return std::any_of(pressed.begin(), pressed.end(), [b](auto el){return b == el;});
         }
 
-        static bool is_key_released(Buttons b) {
-            auto res = std::any_of(keys_released_events.begin(), keys_released_events.end(), [b](auto& el){return el == b;});
-            if (!res) return false;
-            keys_released_events.erase(std::remove(keys_released_events.begin(), keys_released_events.end(), b), keys_released_events.end());
+        static bool is_key_released(Button b) {
+            if (!kp.get(b)) return false;
+            kp.off(b);
             return true;
         }
     };
@@ -193,7 +207,7 @@ struct Joypad {
 
 #if CONTROLLER
     NintendoJoystick::HIDDevice<> device;
-    NintendoJoystick::Buttons gamepad_keys[8]{
+    NintendoJoystick::Button gamepad_keys[8]{
             NintendoJoystick::DPadRight,
             NintendoJoystick::DPadLeft,
             NintendoJoystick::DPadUp,

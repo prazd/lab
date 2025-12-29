@@ -16,6 +16,9 @@
 #if CHEATS_ON
 #include "Cheats.h"
 #endif
+#include "MetalAPI.h"
+
+std::atomic<bool> new_frame_ready{false};
 
 struct GameBoyVM{
     CPU cpu;
@@ -310,6 +313,73 @@ struct GameBoyVM{
         save_file.close();
     }
 
+    void metal_run() {
+#if APU_ON
+        SDL_Init(SDL_INIT_AUDIO);
+        SDL_AudioSpec want {};
+        want.freq = 44100;
+        want.format = AUDIO_S16LSB;
+        want.channels = 2;
+        want.samples = 512;
+
+        auto dev = SDL_OpenAudioDevice(nullptr, 0, &want, nullptr, 0);
+
+        if (!dev) {
+            std::cerr << "Audio device error: " << SDL_GetError() << "\n";
+            std::abort();
+        }
+
+        SDL_PauseAudioDevice(dev, 0);
+#endif
+        auto ctx = metal_create_window_and_renderer(constants::DISPLAY_WIDTH, constants::DISPLAY_HEIGHT, constants::LCD_WIDTH, constants::LCD_HEIGHT);
+        auto framebuffer = metal_get_framebuffer(ctx);
+#if CONTROLLER
+        joypad.device.init();
+#endif
+
+        auto cpu_r = cpu.instruction_async_loop(mem);
+        decltype(std::chrono::steady_clock::now()) begin;
+        std::thread main_loop([&]{
+            while(true) {
+                // TODO: debug
+                begin = std::chrono::steady_clock::now();
+#if APU_ON
+                main_loop_async(cpu_r, &dev);
+#else
+                main_loop_async(cpu_r, nullptr);
+#endif
+
+                auto display = ppu.read_buffer(mem);
+                for (int i = 0; i < constants::DISPLAY_HEIGHT; ++i){
+                    for (int j = 0; j < constants::DISPLAY_WIDTH; ++j) {
+                        auto n = (i * constants::DISPLAY_WIDTH) + j;
+                        auto& pixel = framebuffer[(((constants::DISPLAY_HEIGHT-1)-i)*constants::DISPLAY_WIDTH) + j];
+                        auto& current_color = display[n];
+
+                        *((unsigned char*)&pixel) = current_color.b;
+                        *(((unsigned char*)&pixel) + 1) = current_color.g;
+                        *(((unsigned char*)&pixel) + 2) = current_color.r;
+                        *(((unsigned char*)&pixel) + 3) = current_color.a;
+                    }
+                }
+#if CONTROLLER
+                joypad.device.step(0.001);
+#endif
+                new_frame_ready.store(true);
+                auto frame_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-begin).count();
+                std::this_thread::sleep_for(std::chrono::milliseconds(16-frame_ms));
+            }
+        });
+        metal_start_main_loop(ctx);
+        main_loop.join();
+#if CONTROLLER
+        joypad.device.release();
+#endif
+#if APU_ON
+        SDL_CloseAudioDevice(dev);
+        SDL_Quit();
+#endif
+    }
     void run() {
         InitWindow(constants::WIDTH, constants::HEIGHT, "GameBoy");
         SetTargetFPS(60); // 59.7275 FPS
@@ -675,9 +745,14 @@ int main() {
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/10-wave trigger while on.gb
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/11-regs after power.gb
         //    /Users/prazd/Desktop/dev/gb-test-roms/dmg_sound/rom_singles/12-wave write while on.gb
-        // /Users/prazd/Desktop/dev/gb-square-test/square_test.gb
-        GameBoyVM vm("/Users/prazd/Desktop/dev/SuperMarioLand.gb");
+        //    /Users/prazd/Desktop/dev/gb-square-test/square_test.gb
+
+        GameBoyVM vm("/Users/prazd/Desktop/dev/PrehistorikMan.gb");
         std::cout << "\nRAM sz:" << vm.get_ram_size(vm.mem.rom) << '\n';
         std::cout << "\nROM sz:" << vm.get_rom_size(vm.mem.rom) << '\n';
+#if METAL
+        vm.metal_run();
+#else
         vm.run();
+#endif
 }

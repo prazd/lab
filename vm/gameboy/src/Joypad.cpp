@@ -1,5 +1,4 @@
 #include "Joypad.h"
-#include "raylib.h"
 
 void Joypad::update_state(Memory& mem) {
     unsigned char res = mem.read_unsafe(constants::JOYPAD);
