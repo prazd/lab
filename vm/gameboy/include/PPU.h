@@ -369,12 +369,18 @@ struct PPU {
         Drawing = 0b11     // Pixel Transfer
     };
     Mode current_mode = OAM;
+
     static constexpr std::array<Color, 144 * 160> display_empty = []{
         std::array<Color, 144 * 160> res{};
         res.fill(WHITE);
         return res;
     }();
-    std::array<Color, 144 * 160> display{};
+    std::array<Color, 144 * 160> internal_display{};
+    std::array<Color, 144 * 160> display = []()consteval{
+        std::array<Color, 144 * 160> res{};
+        res.fill(WHITE);
+        return res;
+    }();
 
     size_t last_t_cycles = 0;
     Sprite current_sprite{};
@@ -406,6 +412,7 @@ struct PPU {
     bool sprite_render = false;
     int line_0_gap = 0;
     bool init_oam_interrupt = false;
+    bool frame_ready = true;
 
     PixelFetcher pixel_fetcher;
     SpriteFetcher sprite_fetcher;

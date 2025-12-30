@@ -184,7 +184,7 @@ std::optional<Sprite> PPU::sprite_on_x(Memory& mem)  {
 }
 
 void PPU::draw(Memory& mem)  {
-    display[(current_line * constants::DISPLAY_WIDTH) + current_pixel_x++] = pixel_mixing(mem).color;
+    internal_display[(current_line * constants::DISPLAY_WIDTH) + current_pixel_x++] = pixel_mixing(mem).color;
 }
 
 void PPU::tick(Memory& mem)  {
@@ -431,9 +431,10 @@ void PPU::tick(Memory& mem)  {
                 std::cout << "internal_t_cycles:" << internal_t_cycles << '\n';
 #endif
 #if DEBUG_ASSERTS_PPU
-                assert(internal_t_cycles == 70'224);
+                assert(internal_t_cycles == constants::FRAME_T);
 #endif
-
+                std::copy(internal_display.begin(), internal_display.end(), display.begin());
+                frame_ready = true;
                 internal_t_cycles = 0;
                 set_ppu_reg(constants::LY_ADDRESS, current_line, mem);
                 current_pixel_x = 0;
@@ -449,7 +450,7 @@ void PPU::tick(Memory& mem)  {
 
 
 auto PPU::read_buffer(const Memory& mem) const -> const Color* {
-    return  (mem.read_unsafe(constants::LCDC_ADDRESS) & 0x80) ? display.data() : display_empty.data();
+    return (mem.read_unsafe(constants::LCDC_ADDRESS) & 0x80) ? display.data() : display_empty.data();
 }
 
 

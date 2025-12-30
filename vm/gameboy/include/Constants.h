@@ -2,13 +2,13 @@
 #define GAMEBOY_CONSTANTS_H
 #include <iostream>
 
-#define METAL 0
+#define METAL 1
 #define DEBUG_MODE 1
 #define BOOTROM_INIT 0
 #define DEBUG_BOOTROM 0
 #define APU_ON 1
 #define CHEATS_ON 0
-#define CONTROLLER 0
+#define CONTROLLER 1
 
 namespace constants {
     constexpr size_t DEBUG_WIDTH = 1500;
@@ -23,6 +23,7 @@ namespace constants {
     constexpr size_t DISPLAY_HEIGHT = 144;
     constexpr size_t DISPLAY_WIDTH = 160;
     constexpr double CPU_FREQUENCY = 4194304.0;
+    constexpr size_t FRAME_T = 70'224;
     constexpr double CPU_CYCLE_TIME = 1/CPU_FREQUENCY;
 
     constexpr size_t DMA = 0xFF46;

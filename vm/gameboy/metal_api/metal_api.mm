@@ -52,7 +52,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
     MTLRenderPassDescriptor *rp = [MTLRenderPassDescriptor renderPassDescriptor];
     rp.colorAttachments[0].texture = drawable.texture;
-    rp.colorAttachments[0].loadAction = MTLLoadActionDontCare;  // как мы обсуждали раньше
+    rp.colorAttachments[0].loadAction = MTLLoadActionDontCare;
     rp.colorAttachments[0].storeAction = MTLStoreActionStore;
 
     id <MTLCommandBuffer> cb = [self.ctx->queue commandBuffer];
