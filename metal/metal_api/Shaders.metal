@@ -16,8 +16,8 @@ vertex VertexOut vertex_main(uint vertexID [[vertex_id]]) {
 }
 
 fragment float4 fragment_main(VertexOut in [[stage_in]],
-                              texture2d<uint> tex [[texture(0)]]) {
-    uint4 c = tex.read(uint2(in.texCoord.x*tex.get_width(),
-                             in.texCoord.y*tex.get_height()));
-    return float4(c.z/255.0, c.y/255.0, c.x/255.0, 1.0); // BGRA -> RGB
+                              texture2d<float> tex [[texture(0)]])
+{
+    return tex.read(uint2(in.texCoord.x * tex.get_width(),
+                          in.texCoord.y * tex.get_height()));
 }
