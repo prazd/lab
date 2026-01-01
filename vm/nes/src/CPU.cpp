@@ -1,10 +1,11 @@
 #include "CPU.hpp"
+#include <iostream>
 
-bool CPU::ProcessorStatusReg::read_p(Flag flag) {
+bool CPU::StatusReg::get(Flag flag) {
     return (reg >> flag) & 1;
 }
 
-void CPU::ProcessorStatusReg::set_p(Flag flag, bool value) {
+void CPU::StatusReg::set(Flag flag, bool value) {
     if (value)
         reg |= (1 << flag);
     else 
@@ -53,7 +54,7 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xCD: {return {Absolute, CMP,         3, 4};}
         case 0xDD: {return {AbsoluteX, CMP,        3, 4};} // 5 if page crossed
         case 0xD9: {return {AbsoluteY, CMP,        3, 4};} // 5 if page crossed
-        case 0xC1: {return {IndexedIndirectX, CMP, 2, 6};} 
+        case 0xC1: {return {IndexedIndirectX, CMP, 2, 6};}
         case 0xD1: {return {IndexedIndirectY, CMP, 2, 5};} // 6 if page crossed
 
         case 0xE0: {return {Immediate, CPX, 2, 2};}
@@ -198,10 +199,61 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
     return {};
 }
 
-void CPU::execute(Instruction i){
-    switch(i) {
-        case ADC:{break;}
-        case AND:{break;}
+
+CPU::AddressingResult CPU::get_arg(const Memory& mem, AddressingMode am, bool cross_check) {
+    auto arg1 = mem.read(pc + 1);
+    auto arg2 = mem.read(pc + 2);
+    unsigned short args_as_addr = ((arg1) | arg2 << 8);
+    switch(am){
+        case ZeroPageX: return {mem.read((arg1 + x) % 256), false};
+        case ZeroPageY: return {mem.read((arg1 + y) % 256), false};
+        case AbsoluteX: {
+            unsigned short addr = args_as_addr + x;
+            return {mem.read(addr), cross_check && ((args_as_addr & 0xff00) != (addr & 0xff00))};
+        }
+        case AbsoluteY:{
+            unsigned short addr = args_as_addr + y;
+            return {mem.read(addr), cross_check && ((args_as_addr & 0xff00) != (addr & 0xff00))};
+        }
+        case IndexedIndirectX: return
+                    {mem.read(
+                    mem.read((arg1 + x) % 256) + mem.read((arg1 + x + 1) % 256)
+                * 256), false};
+        case IndexedIndirectY: {
+            unsigned char l =  mem.read(arg1);
+            unsigned char h =  mem.read((arg1 + 1) % 256);
+            unsigned short addr = (l | (h << 8));
+            unsigned short res_addr = addr + y;
+            return {mem.read(res_addr), cross_check && ((addr & 0xff00) != ((res_addr & 0xff00)))};
+        }
+        case Immediate: return {arg1, false};
+        case ZeroPage: return {mem.read(arg1), false};
+        case Absolute: return {mem.read(args_as_addr), false};
+        case Accumulator: return {a, false};
+    }
+    throw std::exception();
+}
+
+void CPU::execute(Memory& mem, DecodedInstruction di){
+    switch(di.i) {
+        case ADC: {
+            auto arg = get_arg(mem, di.addr_mode, true);
+            unsigned short res = arg.value + sr.get(StatusReg::C);
+            sr.set(StatusReg::C, res > 0xff);
+            sr.set(StatusReg::Z, (res & 0xff) == 0);
+            sr.set(StatusReg::V, (res ^ a) & (res ^ arg.value) & 0x80);
+            sr.set(StatusReg::N, res & 0x80);
+            a = res & 0xff;
+            pc += di.bytes;
+            break;
+        }
+        case AND:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            a &= arg.value;
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            break;
+        }
         case ASL:{break;}
         case BCC:{break;}
         case BCS:{break;}

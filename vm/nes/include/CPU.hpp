@@ -1,10 +1,12 @@
+#include "Memory.hpp"
+
 // https://www.nesdev.org/NESDoc.pdf (page 12-13)
 struct CPU {
     // SPR
     unsigned short pc{}; 
     unsigned char sp{};
 
-    struct ProcessorStatusReg {
+    struct StatusReg {
         // | N | V |   | B | D | I | Z | C |
         // | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
         unsigned char reg{};
@@ -17,9 +19,9 @@ struct CPU {
             V = 6,
             N = 7
         };
-        bool read_p(Flag);
-        void set_p(Flag flag, bool value);
-} p;
+        bool get(Flag);
+        void set(Flag flag, bool value);
+    } sr;
                        
     // GPR
     unsigned char a{};
@@ -46,6 +48,13 @@ struct CPU {
         IndirectIndexed,
     };
 
+    struct AddressingResult {
+        unsigned char value{};
+        bool page_crossed{};
+    };
+
+    AddressingResult get_arg(const Memory& mem, AddressingMode am, bool cross_check);
+
     enum Instruction: unsigned char {
         ADC, AND, ASL,BCC, BCS,	BEQ, BIT, BMI, BNE,	BPL, BRK, BVC, BVS,	CLC,
         CLD, CLI, CLV,CMP, CPX,	CPY, DEC, DEX, DEY,	EOR, INC, INX, INY,	JMP,
@@ -61,5 +70,5 @@ struct CPU {
     };
 
     DecodedInstruction decode(unsigned char v);
-    void execute(Instruction i);
+    void execute(Memory& mem, DecodedInstruction di);
 };

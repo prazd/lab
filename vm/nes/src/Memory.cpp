@@ -1,0 +1,9 @@
+#include "Memory.hpp"
+
+void Memory::write(unsigned short addr, unsigned char value) {
+    map[addr] = value;
+}
+
+unsigned char Memory::read(unsigned short addr) const{
+    return map[addr];
+}
