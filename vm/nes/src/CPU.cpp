@@ -200,23 +200,23 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
 }
 
 
-CPU::AddressingResult CPU::get_arg(const Memory& mem, AddressingMode am, bool cross_check) {
+CPU::AddressingResult CPU::get_arg(Memory& mem, AddressingMode am, bool cross_check) {
     auto arg1 = mem.read(pc + 1);
     auto arg2 = mem.read(pc + 2);
     unsigned short args_as_addr = ((arg1) | arg2 << 8);
     switch(am){
-        case ZeroPageX: return {mem.read((arg1 + x) % 256), false};
-        case ZeroPageY: return {mem.read((arg1 + y) % 256), false};
+        case ZeroPageX: return {mem.read_addr((arg1 + x) % 256), false};
+        case ZeroPageY: return {mem.read_addr((arg1 + y) % 256), false};
         case AbsoluteX: {
             unsigned short addr = args_as_addr + x;
-            return {mem.read(addr), cross_check && ((args_as_addr & 0xff00) != (addr & 0xff00))};
+            return {mem.read_addr(addr), cross_check && (arg2 != ((addr >> 8) & 0xff))};
         }
         case AbsoluteY:{
             unsigned short addr = args_as_addr + y;
-            return {mem.read(addr), cross_check && ((args_as_addr & 0xff00) != (addr & 0xff00))};
+            return {mem.read_addr(addr), cross_check && (arg2 != ((addr >> 8) & 0xff))};
         }
         case IndexedIndirectX: return
-                    {mem.read(
+                    {mem.read_addr(
                     mem.read((arg1 + x) % 256) + mem.read((arg1 + x + 1) % 256)
                 * 256), false};
         case IndexedIndirectY: {
@@ -224,12 +224,13 @@ CPU::AddressingResult CPU::get_arg(const Memory& mem, AddressingMode am, bool cr
             unsigned char h =  mem.read((arg1 + 1) % 256);
             unsigned short addr = (l | (h << 8));
             unsigned short res_addr = addr + y;
-            return {mem.read(res_addr), cross_check && ((addr & 0xff00) != ((res_addr & 0xff00)))};
+            return {mem.read_addr(res_addr), cross_check && (h != ((res_addr >> 8) & 0xff))};
         }
-        case Immediate: return {arg1, false};
-        case ZeroPage: return {mem.read(arg1), false};
-        case Absolute: return {mem.read(args_as_addr), false};
-        case Accumulator: return {a, false};
+        case Immediate: return {mem.read_addr(pc + 1), false};
+        case ZeroPage: return {mem.read_addr(arg1), false};
+        case Absolute: return {mem.read_addr(args_as_addr), false};
+        case Relative: return {mem.read_addr(pc + 1), false};
+        case Accumulator: return {&a, false};
     }
     throw std::exception();
 }
@@ -238,10 +239,11 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
     switch(di.i) {
         case ADC: {
             auto arg = get_arg(mem, di.addr_mode, true);
-            unsigned short res = arg.value + sr.get(StatusReg::C);
+            unsigned char val = *arg.value;
+            unsigned short res = val + sr.get(StatusReg::C);
             sr.set(StatusReg::C, res > 0xff);
             sr.set(StatusReg::Z, (res & 0xff) == 0);
-            sr.set(StatusReg::V, (res ^ a) & (res ^ arg.value) & 0x80);
+            sr.set(StatusReg::V, (res ^ a) & (res ^ val) & 0x80);
             sr.set(StatusReg::N, res & 0x80);
             a = res & 0xff;
             pc += di.bytes;
@@ -249,37 +251,193 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
         }
         case AND:{
             auto arg = get_arg(mem, di.addr_mode, true);
-            a &= arg.value;
+            unsigned char val = *arg.value;
+            a &= val;
             sr.set(StatusReg::Z, a == 0);
             sr.set(StatusReg::N, a & 0x80);
+            pc += di.bytes;
             break;
         }
-        case ASL:{break;}
-        case BCC:{break;}
-        case BCS:{break;}
-        case BEQ:{break;}
-        case BIT:{break;}
-        case BMI:{break;}
-        case BNE:{break;}
-        case BPL:{break;}
-        case BRK:{break;}
-        case BVC:{break;}
-        case BVS:{break;}
-        case CLC:{break;}
-        case CLD:{break;}
-        case CLI:{break;}
-        case CLV:{break;}
-        case CMP:{break;}
-        case CPX:{break;}
-        case CPY:{break;}
-        case DEC:{break;}
-        case DEX:{break;}
-        case DEY:{break;}
-        case EOR:{break;} 
-        case INC:{break;} 
-        case INX:{break;} 
-        case INY:{break;}
-        case JMP:{break;}
+        case ASL:{
+            auto arg = get_arg(mem, di.addr_mode, false);
+            unsigned char val = *arg.value;
+            unsigned char res = val << 1;
+            sr.set(StatusReg::C, val & 0x80);
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, res & 0x80);
+            *arg.value = res & 0xff;
+            pc += di.bytes;
+            break;
+        }
+        case BCC:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            pc += di.bytes;
+            if (!sr.get(StatusReg::C)) pc += (char)(*arg.value);
+            break;
+        }
+        case BCS:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            pc += di.bytes;
+            if (sr.get(StatusReg::C)) pc += (char)(*arg.value);
+            break;
+        }
+        case BEQ:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            pc += di.bytes;
+            if (sr.get(StatusReg::Z)) pc += (char)(*arg.value);
+            break;
+        }
+        case BMI: {
+            auto arg = get_arg(mem, di.addr_mode, true);
+            pc += di.bytes;
+            if (sr.get(StatusReg::N)) pc += (char)(*arg.value);
+            break;
+        }
+        case BNE:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            pc += di.bytes;
+            if (!sr.get(StatusReg::Z)) pc += (char)(*arg.value);
+            break;
+        }
+        case BPL:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            pc += di.bytes;
+            if (!sr.get(StatusReg::N)) pc += (char)(*arg.value);
+            break;
+        }
+        case BVC:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            pc += di.bytes;
+            if (!sr.get(StatusReg::V)) pc += (char)(*arg.value);
+            break;
+        }
+        case BVS:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            pc += di.bytes;
+            if (sr.get(StatusReg::V)) pc += (char)(*arg.value);
+            break;
+        }
+
+        case BIT:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            unsigned char val = *arg.value;
+            unsigned char res = a & val;
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::V, val & 0x40);
+            sr.set(StatusReg::N, val & 0x80);
+            pc += di.bytes;
+            break;
+        }
+
+        case BRK:{/*TODO*/ break;}
+
+        case CLC:{sr.set(StatusReg::C, 0); pc+=1; break;}
+        case CLD:{sr.set(StatusReg::D, 0); pc+=1; break;}
+        case CLI:{sr.set(StatusReg::I, 0); pc+=1; break;}
+        case CLV:{sr.set(StatusReg::V, 0); pc+=1; break;}
+        case CMP:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            unsigned char val = *arg.value;
+            unsigned char res = a - val;
+            sr.set(StatusReg::C, a >= val);
+            sr.set(StatusReg::Z, a == val);
+            sr.set(StatusReg::N, res & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case CPX:{
+            auto arg = get_arg(mem, di.addr_mode, false);
+            unsigned char val = *arg.value;
+            unsigned char res = x - val;
+            sr.set(StatusReg::C, x >= val);
+            sr.set(StatusReg::Z, x == val);
+            sr.set(StatusReg::N, res & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case CPY:{
+            auto arg = get_arg(mem, di.addr_mode, false);
+            unsigned char val = *arg.value;
+            unsigned char res = y - val;
+            sr.set(StatusReg::C, y >= val);
+            sr.set(StatusReg::Z, y == val);
+            sr.set(StatusReg::N, res & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case DEC:{
+            auto arg = get_arg(mem, di.addr_mode, false);
+            unsigned char val = *arg.value;
+            unsigned char res = val - 1;
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, res & 0x80);
+            *arg.value = res;
+            pc += di.bytes;
+            break;
+        }
+        case DEX:{
+            unsigned char res = x - 1;
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, res & 0x80);
+            x = res;
+            pc += di.bytes;
+            break;
+        }
+        case DEY:{
+            unsigned char res = y - 1;
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, res & 0x80);
+            y = res;
+            pc += di.bytes;
+            break;
+        }
+        case EOR:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            unsigned char val = *arg.value;
+            unsigned char res = a ^ val;
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, res & 0x80);
+            a = res;
+            pc += di.bytes;
+            break;
+        }
+        case INC:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            unsigned char val = *arg.value;
+            unsigned char res = val + 1;
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, res & 0x80);
+            *arg.value = res;
+            pc += di.bytes;
+            break;
+        }
+        case INX:{
+            unsigned char res = x + 1;
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, res & 0x80);
+            x = res;
+            pc += di.bytes;
+            break;
+        }
+        case INY:{
+            unsigned char res = y + 1;
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, res & 0x80);
+            y = res;
+            pc += di.bytes;
+            break;
+        }
+        case JMP:{
+            if (di.addr_mode == Absolute){
+                pc = (mem.read(pc + 1) | (mem.read(pc + 2) << 8));
+            } else { // Indirect
+                unsigned short arg_addr = (mem.read(pc + 1) | (mem.read(pc + 2) << 8));
+                unsigned char l = mem.read(arg_addr);
+                unsigned char h = mem.read((arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
+                pc = l | (h << 8);
+            }
+            break;
+        }
         case JSR:{break;} 
         case LDA:{break;} 
         case LDX:{break;} 

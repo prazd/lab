@@ -49,11 +49,11 @@ struct CPU {
     };
 
     struct AddressingResult {
-        unsigned char value{};
+        unsigned char* value{};
         bool page_crossed{};
     };
 
-    AddressingResult get_arg(const Memory& mem, AddressingMode am, bool cross_check);
+    AddressingResult get_arg(Memory& mem, AddressingMode am, bool cross_check);
 
     enum Instruction: unsigned char {
         ADC, AND, ASL,BCC, BCS,	BEQ, BIT, BMI, BNE,	BPL, BRK, BVC, BVS,	CLC,

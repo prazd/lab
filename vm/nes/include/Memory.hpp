@@ -6,6 +6,7 @@
 
 struct Memory {
     unsigned char map[0x10000];
+    unsigned char* read_addr(unsigned short addr);
     unsigned char read(unsigned short addr) const;
     void write(unsigned short addr, unsigned char value);
 };
