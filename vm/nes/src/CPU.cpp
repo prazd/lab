@@ -12,6 +12,16 @@ void CPU::StatusReg::set(Flag flag, bool value) {
         reg &= ~(1 << flag);
 }
 
+unsigned char CPU::StatusReg::get_status() const {
+    return reg | (3 << 4);
+}
+
+void CPU::StatusReg::set_status(unsigned char v) {
+    reg = v;
+    reg &= (~(1 << 4));
+    reg |= (1 << 5);
+}
+
 // https://www.nesdev.org/wiki/Instruction_reference
 CPU::DecodedInstruction CPU::decode(unsigned char i) {
     switch(i){
@@ -438,33 +448,197 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             }
             break;
         }
-        case JSR:{break;} 
-        case LDA:{break;} 
-        case LDX:{break;} 
-        case LDY:{break;}
-        case LSR:{break;}
-        case NOP:{break;}
-        case ORA:{break;}
-        case PHA:{break;}
-        case PHP:{break;}
-        case PLA:{break;}
-        case PLP:{break;}
-        case ROL:{break;}
-        case ROR:{break;}
-        case RTI:{break;}
-        case RTS:{break;}
-        case SBC:{break;}
-        case SEC:{break;}
-        case SED:{break;}
-        case SEI:{break;}
-        case STA:{break;}
-        case STX:{break;}
-        case STY:{break;}
-        case TAX:{break;}
-        case TAY:{break;}
-        case TSX:{break;}
-        case TXA:{break;}
-        case TXS:{break;}
-        case TYA:{break;}
+        case JSR:{
+            // TODO: maybe check
+            auto arg = get_arg(mem, di.addr_mode, false);
+            auto value = *arg.value;
+            mem.write(0x100 + sp, ((pc + 2) >> 8) & 0xff); --sp;
+            mem.write(0x100 + sp, (pc + 2) & 0xff); --sp;
+            pc = value;
+            break;
+        }
+        case LDA:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            a = *arg.value;
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case LDX:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            x = *arg.value;
+            sr.set(StatusReg::Z, x == 0);
+            sr.set(StatusReg::N, x & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case LDY:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            y = *arg.value;
+            sr.set(StatusReg::Z, y == 0);
+            sr.set(StatusReg::N, y & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case LSR:{
+            auto arg = get_arg(mem, di.addr_mode, false);
+            unsigned char val = *arg.value;
+            unsigned char res = val >> 1;
+            sr.set(StatusReg::C, val & 0x1);
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, 0);
+            *arg.value = res;
+            pc += di.bytes;
+            break;
+        }
+        case NOP:{pc+=di.bytes; break;}
+        case ORA:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            unsigned char val = *arg.value;
+            unsigned char res = a | val;
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, res & 0x80);
+            a = res;
+            pc += di.bytes;
+            break;
+        }
+        case PHA:{
+            mem.write(0x100 + sp, a); --sp;
+            pc += di.bytes;
+            break;
+        }
+        case PHP:{
+            mem.write(0x100 + sp, sr.get_status()); --sp;
+            pc += di.bytes;
+            break;
+        }
+        case PLA:{
+            ++sp; a = mem.read(0x100 + sp);
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case PLP:{
+            ++sp;
+            // TODO: Interrupt disable flag The effect of changing this flag is delayed 1 instruction.
+            sr.set_status( mem.read(0x100 + sp));
+            pc += di.bytes;
+            break;
+        }
+        case ROL:{
+            auto arg = get_arg(mem, di.addr_mode, false);
+            unsigned char val = *arg.value;
+            bool prev_c = sr.get(StatusReg::C);
+            unsigned char res = (val << 1) | (prev_c << 7) ;
+            sr.set(StatusReg::C, val & 0x80);
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, res & 0x80);
+            *arg.value = res;
+            pc += di.bytes;
+            break;
+        }
+        case ROR:{
+            auto arg = get_arg(mem, di.addr_mode, false);
+            unsigned char val = *arg.value;
+            bool prev_c = sr.get(StatusReg::C);
+            unsigned char res = (val >> 1) | (prev_c << 7) ;
+            sr.set(StatusReg::C, val & 0x1);
+            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::N, res & 0x80);
+            *arg.value = res;
+            pc += di.bytes;
+            break;
+        }
+        case RTI:{
+            ++sp; sr.set_status( mem.read(0x100 + sp));
+            ++sp; unsigned char l = mem.read(0x100 + sp);
+            ++sp; unsigned char h = mem.read(0x100 + sp);
+            pc = l | (h << 8);
+            break;
+        }
+        case RTS:{
+            ++sp; unsigned char l = mem.read(0x100 + sp);
+            ++sp; unsigned char h = mem.read(0x100 + sp);
+            pc = l | (h << 8);
+            ++pc;
+            break;
+        }
+        case SBC:{
+            auto arg = get_arg(mem, di.addr_mode, true);
+            unsigned char val = *arg.value;
+            bool prev_c = sr.get(StatusReg::C);
+            int res = a - val - (!prev_c);
+            sr.set(StatusReg::C, res >= 0);
+            sr.set(StatusReg::Z, res == 0);
+            // TODO: check - (result ^ A) & (result ^ ~memory) & $80 in doc
+            sr.set(StatusReg::V, (res ^ a) & (res ^ val) & 0x80);
+            sr.set(StatusReg::N, res & 0x80);
+            a = res & 0xff;
+            pc += di.bytes;
+            break;
+        }
+        case SEC:{sr.set(StatusReg::C, true); pc+=di.bytes; break;}
+        case SED:{sr.set(StatusReg::D, true); pc+=di.bytes; break;}
+        case SEI:{sr.set(StatusReg::I, true); pc+=di.bytes; break;}
+        case STA:{
+            auto arg = get_arg(mem, di.addr_mode, false);
+            *arg.value = a;
+            pc += di.bytes;
+            break;
+        }
+        case STX:{
+            auto arg = get_arg(mem, di.addr_mode, false);
+            *arg.value = x;
+            pc += di.bytes;
+            break;
+        }
+        case STY:{
+            auto arg = get_arg(mem, di.addr_mode, false);
+            *arg.value = y;
+            pc += di.bytes;
+            break;
+        }
+        case TAX:{
+            x = a;
+            sr.set(StatusReg::Z, x == 0);
+            sr.set(StatusReg::N, x & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case TAY:{
+            y = a;
+            sr.set(StatusReg::Z, y == 0);
+            sr.set(StatusReg::N, y & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case TSX:{
+            x = sp;
+            sr.set(StatusReg::Z, x == 0);
+            sr.set(StatusReg::N, x & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case TXA:{
+            a = x;
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case TXS:{
+            sp = x;
+            pc += di.bytes;
+            break;
+        }
+        case TYA:{
+            a = y;
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            pc += di.bytes;
+            break;
+        }
     }
 }

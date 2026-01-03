@@ -4,7 +4,7 @@
 struct CPU {
     // SPR
     unsigned short pc{}; 
-    unsigned char sp{};
+    unsigned char sp = 0xFF;
 
     struct StatusReg {
         // | N | V |   | B | D | I | Z | C |
@@ -21,6 +21,8 @@ struct CPU {
         };
         bool get(Flag);
         void set(Flag flag, bool value);
+        unsigned char get_status() const;
+        void set_status(unsigned char v);
     } sr;
                        
     // GPR
