@@ -1,13 +1,28 @@
 #ifndef NES_PPU_H
 #define NES_PPU_H
 #include <array>
-
+#include "Memory.hpp"
 struct PPU {
+    // Current VRAM address (15 bits)
+    unsigned short v{};
+    // Temporary VRAM address (15 bits); can also be thought of as the address of the top left onscreen tile.
+    unsigned short t{};
+    // Fine X scroll (3 bits)
+    unsigned char x{};
+    // First or second write toggle (1 bit)
+    unsigned char w{};
+
+    unsigned short base_name_table_address{};
+    void read_ppuctrl(Memory& mem);
+
+
     struct RGB {
         unsigned char r{};
         unsigned char g{};
         unsigned char b{};
     };
+
+    std::array<std::array<RGB, 256>, 240> display{};
 
     std::array<RGB, 64> palette{
         RGB{0x75, 0x75,  0x75},

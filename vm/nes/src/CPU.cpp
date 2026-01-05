@@ -211,35 +211,35 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
 
 
 CPU::AddressingResult CPU::get_arg(Memory& mem, AddressingMode am, bool cross_check) {
-    auto arg1 = mem.read(pc + 1);
-    auto arg2 = mem.read(pc + 2);
+    auto arg1 = mem.cpu_read(pc + 1);
+    auto arg2 = mem.cpu_read(pc + 2);
     unsigned short args_as_addr = ((arg1) | arg2 << 8);
     switch(am){
-        case ZeroPageX: return {mem.read_addr((arg1 + x) % 256), false};
-        case ZeroPageY: return {mem.read_addr((arg1 + y) % 256), false};
+        case ZeroPageX: return {mem.cpu_read_addr((arg1 + x) % 256), false};
+        case ZeroPageY: return {mem.cpu_read_addr((arg1 + y) % 256), false};
         case AbsoluteX: {
             unsigned short addr = args_as_addr + x;
-            return {mem.read_addr(addr), cross_check && (arg2 != ((addr >> 8) & 0xff))};
+            return {mem.cpu_read_addr(addr), cross_check && (arg2 != ((addr >> 8) & 0xff))};
         }
         case AbsoluteY:{
             unsigned short addr = args_as_addr + y;
-            return {mem.read_addr(addr), cross_check && (arg2 != ((addr >> 8) & 0xff))};
+            return {mem.cpu_read_addr(addr), cross_check && (arg2 != ((addr >> 8) & 0xff))};
         }
         case IndexedIndirectX: return
-                    {mem.read_addr(
-                    mem.read((arg1 + x) % 256) + mem.read((arg1 + x + 1) % 256)
-                * 256), false};
+                    {mem.cpu_read_addr(
+                            mem.cpu_read((arg1 + x) % 256) + mem.cpu_read((arg1 + x + 1) % 256)
+                                                             * 256), false};
         case IndexedIndirectY: {
-            unsigned char l =  mem.read(arg1);
-            unsigned char h =  mem.read((arg1 + 1) % 256);
+            unsigned char l = mem.cpu_read(arg1);
+            unsigned char h = mem.cpu_read((arg1 + 1) % 256);
             unsigned short addr = (l | (h << 8));
             unsigned short res_addr = addr + y;
-            return {mem.read_addr(res_addr), cross_check && (h != ((res_addr >> 8) & 0xff))};
+            return {mem.cpu_read_addr(res_addr), cross_check && (h != ((res_addr >> 8) & 0xff))};
         }
-        case Immediate: return {mem.read_addr(pc + 1), false};
-        case ZeroPage: return {mem.read_addr(arg1), false};
-        case Absolute: return {mem.read_addr(args_as_addr), false};
-        case Relative: return {mem.read_addr(pc + 1), false};
+        case Immediate: return {mem.cpu_read_addr(pc + 1), false};
+        case ZeroPage: return {mem.cpu_read_addr(arg1), false};
+        case Absolute: return {mem.cpu_read_addr(args_as_addr), false};
+        case Relative: return {mem.cpu_read_addr(pc + 1), false};
         case Accumulator: return {&a, false};
     }
     throw std::exception();
@@ -439,11 +439,11 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
         }
         case JMP:{
             if (di.addr_mode == Absolute){
-                pc = (mem.read(pc + 1) | (mem.read(pc + 2) << 8));
+                pc = (mem.cpu_read(pc + 1) | (mem.cpu_read(pc + 2) << 8));
             } else { // Indirect
-                unsigned short arg_addr = (mem.read(pc + 1) | (mem.read(pc + 2) << 8));
-                unsigned char l = mem.read(arg_addr);
-                unsigned char h = mem.read((arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
+                unsigned short arg_addr = (mem.cpu_read(pc + 1) | (mem.cpu_read(pc + 2) << 8));
+                unsigned char l = mem.cpu_read(arg_addr);
+                unsigned char h = mem.cpu_read((arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
                 pc = l | (h << 8);
             }
             break;
@@ -452,8 +452,8 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             // TODO: maybe check
             auto arg = get_arg(mem, di.addr_mode, false);
             auto value = *arg.value;
-            mem.write(0x100 + sp, ((pc + 2) >> 8) & 0xff); --sp;
-            mem.write(0x100 + sp, (pc + 2) & 0xff); --sp;
+            mem.cpu_write(0x100 + sp, ((pc + 2) >> 8) & 0xff); --sp;
+            mem.cpu_write(0x100 + sp, (pc + 2) & 0xff); --sp;
             pc = value;
             break;
         }
@@ -504,17 +504,17 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case PHA:{
-            mem.write(0x100 + sp, a); --sp;
+            mem.cpu_write(0x100 + sp, a); --sp;
             pc += di.bytes;
             break;
         }
         case PHP:{
-            mem.write(0x100 + sp, sr.get_status()); --sp;
+            mem.cpu_write(0x100 + sp, sr.get_status()); --sp;
             pc += di.bytes;
             break;
         }
         case PLA:{
-            ++sp; a = mem.read(0x100 + sp);
+            ++sp; a = mem.cpu_read(0x100 + sp);
             sr.set(StatusReg::Z, a == 0);
             sr.set(StatusReg::N, a & 0x80);
             pc += di.bytes;
@@ -523,7 +523,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
         case PLP:{
             ++sp;
             // TODO: Interrupt disable flag The effect of changing this flag is delayed 1 instruction.
-            sr.set_status( mem.read(0x100 + sp));
+            sr.set_status(mem.cpu_read(0x100 + sp));
             pc += di.bytes;
             break;
         }
@@ -552,15 +552,15 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case RTI:{
-            ++sp; sr.set_status( mem.read(0x100 + sp));
-            ++sp; unsigned char l = mem.read(0x100 + sp);
-            ++sp; unsigned char h = mem.read(0x100 + sp);
+            ++sp; sr.set_status(mem.cpu_read(0x100 + sp));
+            ++sp; unsigned char l = mem.cpu_read(0x100 + sp);
+            ++sp; unsigned char h = mem.cpu_read(0x100 + sp);
             pc = l | (h << 8);
             break;
         }
         case RTS:{
-            ++sp; unsigned char l = mem.read(0x100 + sp);
-            ++sp; unsigned char h = mem.read(0x100 + sp);
+            ++sp; unsigned char l = mem.cpu_read(0x100 + sp);
+            ++sp; unsigned char h = mem.cpu_read(0x100 + sp);
             pc = l | (h << 8);
             ++pc;
             break;
