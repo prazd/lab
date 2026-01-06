@@ -1,6 +1,6 @@
 #include "CPU.hpp"
 #include <iostream>
-
+#include "Constants.h"
 bool CPU::StatusReg::get(Flag flag) {
     return (reg >> flag) & 1;
 }
@@ -214,6 +214,20 @@ CPU::AddressingResult CPU::get_arg(Memory& mem, AddressingMode am, bool cross_ch
     auto arg1 = mem.cpu_read(pc + 1);
     auto arg2 = mem.cpu_read(pc + 2);
     unsigned short args_as_addr = ((arg1) | arg2 << 8);
+
+    //  https://www.nesdev.org/wiki/NMI
+    if (mem.nmi_interrupt_flip_flop) {
+        mem.cpu_write(0x100 + sp, (pc >> 8) & 0xff); --sp;
+        mem.cpu_write(0x100 + sp, pc & 0xff); --sp;
+        sr.set(StatusReg::B, false);
+        sr.set(StatusReg::Unused, true);
+        mem.cpu_write(0x100 + sp, sr.reg); --sp;
+        sr.set(StatusReg::I, true);
+        pc = mem.cpu_read(constants::NMA_HANDLER) | (mem.cpu_read(constants::NMA_HANDLER + 1) << 8);
+        mem.nmi_interrupt_flip_flop = false;
+    }
+
+
     switch(am){
         case ZeroPageX: return {mem.cpu_read_addr((arg1 + x) % 256), false};
         case ZeroPageY: return {mem.cpu_read_addr((arg1 + y) % 256), false};

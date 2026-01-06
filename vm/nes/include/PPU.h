@@ -10,10 +10,63 @@ struct PPU {
     // Fine X scroll (3 bits)
     unsigned char x{};
     // First or second write toggle (1 bit)
-    unsigned char w{};
+    bool w{};
+
+    union PPUCTRL {
+        unsigned char reg;
+        struct {
+            unsigned char base_name_table_addr: 2;
+            unsigned char addr_inc:1;
+            unsigned char pattern_table_addr8x8:1;
+            unsigned char bg_pattern_table_addr:1;
+            unsigned char sprite_sz:1;
+            unsigned char master_slave_select:1;
+            unsigned char vblank_nmi_enable:1;
+        } fields;
+    } ppuctrl;
+
+    union PPUMASK{
+        unsigned char reg;
+        struct {
+            unsigned char greyscale: 1;
+            unsigned char show_bg_leftmost_8_pixels:1;
+            unsigned char show_sprite_leftmost_8_pixels:1;
+            unsigned char enable_background_rendering:1;
+            unsigned char enable_sprite_rendering:1;
+            unsigned char emphasize_red:1;
+            unsigned char emphasize_green:1;
+            unsigned char emphasize_blue:1;
+        } fields;
+    } ppumask;
+
+    union PPUSTATUS{
+        unsigned char reg;
+        struct {
+            unsigned char ppu_identifier: 5;
+            unsigned char sprite_overflow_flag:1;
+            unsigned char sprite_zero_hit_flag:1;
+            unsigned char vblank_flag:1;
+        } fields;
+    } ppustatus;
+
 
     unsigned short base_name_table_address{};
+    bool address_increment_on_read_ppudata = false; //    RAM address increment per CPU read/write of PPUDATA
+    unsigned short sprite_pattern_table_address8x8{};
+    enum SpriteMode {
+        m8x8,
+        m8x16
+    } sprite_mode = m8x8;
+    bool vblank_nmi_enable = false;
+
+    unsigned char x_scroll{};
+    unsigned char y_scroll{};
+
+// REGS
     void read_ppuctrl(Memory& mem);
+    void read_ppuscroll(Memory& mem);
+    void read_ppuaddr(Memory& mem);
+    void update_state(Memory& mem);
 
 
     struct RGB {

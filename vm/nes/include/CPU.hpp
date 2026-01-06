@@ -5,7 +5,6 @@ struct CPU {
     // SPR
     unsigned short pc{}; 
     unsigned char sp = 0xFF;
-
     struct StatusReg {
         // | N | V |   | B | D | I | Z | C |
         // | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
@@ -16,6 +15,7 @@ struct CPU {
             I = 2,
             D = 3,
             B = 4,
+            Unused = 5,
             V = 6,
             N = 7
         };

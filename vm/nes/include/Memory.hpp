@@ -30,14 +30,21 @@ struct Memory {
     unsigned char ppu_map[0x4000]{};
     unsigned char ppu_oam[0x100]{};
 
-    unsigned char ppuctrl{};
-    unsigned char ppumask{};
-    unsigned char ppustatus{};
-    unsigned char oamaddr{};
-    unsigned char oamdata{};
-    unsigned char ppuscroll{};
-    unsigned char ppuaddr{};
-    unsigned char ppudata{};
+    bool nmi_interrupt_flip_flop = false;
+
+    struct PPUREG {
+        unsigned char reg{};
+        bool was_written{};
+    };
+
+    PPUREG ppuctrl{};
+    PPUREG ppumask{};
+    PPUREG ppustatus{};
+    PPUREG oamaddr{};
+    PPUREG oamdata{};
+    PPUREG ppuscroll{};
+    PPUREG ppuaddr{};
+    PPUREG ppudata{};
 
     unsigned char dma_source_high_byte{};
 

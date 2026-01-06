@@ -3,30 +3,30 @@
 
 void Memory::cpu_write(unsigned short addr, unsigned char value) {
     cpu_adjust_if_mirror(addr);
-    if (addr == constants::PPUCTRL)   {ppuctrl =   value; return;}
-    if (addr == constants::PPUMASK)   {ppumask =   value; return;}
-    if (addr == constants::OAMADDR)   {oamaddr =   value; return;}
-    if (addr == constants::OAMDATA)   {oamdata =   value; return;}
-    if (addr == constants::PPUSCROLL) {ppuscroll = value; return;}
-    if (addr == constants::PPUADDR)   {ppuaddr =   value; return;}
-    if (addr == constants::PPUDATA)   {ppudata =   value; return;}
+    if (addr == constants::PPUCTRL)   {ppuctrl = {value, true}; return;}
+    if (addr == constants::PPUMASK)   {ppumask =   {value, true}; return;}
+    if (addr == constants::OAMADDR)   {oamaddr =   {value, true}; return;}
+    if (addr == constants::OAMDATA)   {oamdata  =   {value, true}; return;}
+    if (addr == constants::PPUSCROLL) {ppuscroll = {value, true}; return;}
+    if (addr == constants::PPUADDR)   {ppuaddr  =   {value, true}; return;}
+    if (addr == constants::PPUDATA)   {ppudata  =   {value, true}; return;}
     if (addr == constants::OAMDMA)    {dma_source_high_byte =   value; return;}
     cpu_map[addr] = value;
 }
 
 unsigned char Memory::cpu_read(unsigned short addr) const {
     cpu_adjust_if_mirror(addr);
-    if (addr == constants::PPUSTATUS) return ppustatus;
-    if (addr == constants::OAMDATA) return oamdata;
-    if (addr == constants::PPUDATA) return ppudata;
+    if (addr == constants::PPUSTATUS) return ppustatus.reg;
+    if (addr == constants::OAMDATA) return oamdata.reg;
+    if (addr == constants::PPUDATA) return ppudata.reg;
     return cpu_map[addr];
 }
 
 unsigned char* Memory::cpu_read_addr(unsigned short addr) {
     cpu_adjust_if_mirror(addr);
-    if (addr == constants::PPUSTATUS) return &ppustatus;
-    if (addr == constants::OAMDATA) return &oamdata;
-    if (addr == constants::PPUDATA) return &ppudata;
+    if (addr == constants::PPUSTATUS) return &ppustatus.reg;
+    if (addr == constants::OAMDATA) return &oamdata.reg;
+    if (addr == constants::PPUDATA) return &ppudata.reg;
     return cpu_map + addr;
 }
 
