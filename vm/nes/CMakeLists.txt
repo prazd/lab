@@ -11,8 +11,8 @@ include_directories(include)
 find_package(raylib REQUIRED HINTS ${RAYLIB_DIR})
 
 set(SOURCES
+    src/Bus.cpp
     src/PPU.cpp
-    src/Memory.cpp
     src/CPU.cpp
     main.cpp
 )

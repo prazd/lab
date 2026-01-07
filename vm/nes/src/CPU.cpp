@@ -1,6 +1,44 @@
-#include "CPU.hpp"
 #include <iostream>
-#include "Constants.h"
+#include "CPU.hpp"
+#include "Constants.hpp"
+
+void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
+    adjust_if_mirror(addr);
+    if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})){
+        bus.write(addr, value);
+        return;
+    }
+    map[addr] = value;
+}
+
+unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) const {
+    adjust_if_mirror(addr);
+    if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})){
+        return bus.read(addr);
+    }
+    return map[addr];
+}
+
+unsigned char* CPU::Memory::read_addr(Bus& bus, unsigned short addr) {
+    adjust_if_mirror(addr);
+    if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})){
+        return bus.read_ptr(addr);
+    }
+    return map + addr;
+}
+
+void CPU::Memory::adjust_if_mirror(unsigned short& addr) {
+    if (addr >= constants::RAM_MIRROR1_BEGIN && addr <= constants::RAM_MIRROR1_END)
+        addr-=constants::RAM_MIRROR1_BEGIN;
+    else if (addr >= constants::RAM_MIRROR2_BEGIN && addr <= constants::RAM_MIRROR2_END)
+        addr-=constants::RAM_MIRROR2_BEGIN;
+    else if (addr >= constants::RAM_MIRROR3_BEGIN && addr <= constants::RAM_MIRROR3_END)
+        addr-=constants::RAM_MIRROR3_BEGIN;
+    else if (addr >= constants::PPU_REGS_MIRROR_BEGIN && addr <= constants::PPU_REGS_MIRROR_END){
+        addr = constants::PPU_REGS_BEGIN + (addr % 8);
+    }
+}
+
 bool CPU::StatusReg::get(Flag flag) {
     return (reg >> flag) & 1;
 }
@@ -21,6 +59,7 @@ void CPU::StatusReg::set_status(unsigned char v) {
     reg &= (~(1 << 4));
     reg |= (1 << 5);
 }
+
 
 // https://www.nesdev.org/wiki/Instruction_reference
 CPU::DecodedInstruction CPU::decode(unsigned char i) {
@@ -210,59 +249,59 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
 }
 
 
-CPU::AddressingResult CPU::get_arg(Memory& mem, AddressingMode am, bool cross_check) {
-    auto arg1 = mem.cpu_read(pc + 1);
-    auto arg2 = mem.cpu_read(pc + 2);
+CPU::AddressingResult CPU::get_arg(Bus& bus, AddressingMode am, bool cross_check) {
+    auto arg1 = mem.read(bus,pc + 1);
+    auto arg2 = mem.read(bus,pc + 2);
     unsigned short args_as_addr = ((arg1) | arg2 << 8);
 
     //  https://www.nesdev.org/wiki/NMI
-    if (mem.nmi_interrupt_flip_flop) {
-        mem.cpu_write(0x100 + sp, (pc >> 8) & 0xff); --sp;
-        mem.cpu_write(0x100 + sp, pc & 0xff); --sp;
+    if (bus.nmi_interrupt_flip_flop) {
+        mem.write(bus,0x100 + sp, (pc >> 8) & 0xff); --sp;
+        mem.write(bus,0x100 + sp, pc & 0xff); --sp;
         sr.set(StatusReg::B, false);
         sr.set(StatusReg::Unused, true);
-        mem.cpu_write(0x100 + sp, sr.reg); --sp;
+        mem.write(bus,0x100 + sp, sr.reg); --sp;
         sr.set(StatusReg::I, true);
-        pc = mem.cpu_read(constants::NMA_HANDLER) | (mem.cpu_read(constants::NMA_HANDLER + 1) << 8);
-        mem.nmi_interrupt_flip_flop = false;
+        pc = mem.read(bus,constants::NMA_HANDLER) | (mem.read(bus,constants::NMA_HANDLER + 1) << 8);
+        bus.nmi_interrupt_flip_flop = false;
     }
 
 
     switch(am){
-        case ZeroPageX: return {mem.cpu_read_addr((arg1 + x) % 256), false};
-        case ZeroPageY: return {mem.cpu_read_addr((arg1 + y) % 256), false};
+        case ZeroPageX: return {mem.read_addr(bus,(arg1 + x) % 256), false};
+        case ZeroPageY: return {mem.read_addr(bus,(arg1 + y) % 256), false};
         case AbsoluteX: {
             unsigned short addr = args_as_addr + x;
-            return {mem.cpu_read_addr(addr), cross_check && (arg2 != ((addr >> 8) & 0xff))};
+            return {mem.read_addr(bus,addr), cross_check && (arg2 != ((addr >> 8) & 0xff))};
         }
         case AbsoluteY:{
             unsigned short addr = args_as_addr + y;
-            return {mem.cpu_read_addr(addr), cross_check && (arg2 != ((addr >> 8) & 0xff))};
+            return {mem.read_addr(bus,addr), cross_check && (arg2 != ((addr >> 8) & 0xff))};
         }
         case IndexedIndirectX: return
-                    {mem.cpu_read_addr(
-                            mem.cpu_read((arg1 + x) % 256) + mem.cpu_read((arg1 + x + 1) % 256)
+                    {mem.read_addr(bus,
+                            mem.read(bus,(arg1 + x) % 256) + mem.read(bus,(arg1 + x + 1) % 256)
                                                              * 256), false};
         case IndexedIndirectY: {
-            unsigned char l = mem.cpu_read(arg1);
-            unsigned char h = mem.cpu_read((arg1 + 1) % 256);
+            unsigned char l = mem.read(bus,arg1);
+            unsigned char h = mem.read(bus,(arg1 + 1) % 256);
             unsigned short addr = (l | (h << 8));
             unsigned short res_addr = addr + y;
-            return {mem.cpu_read_addr(res_addr), cross_check && (h != ((res_addr >> 8) & 0xff))};
+            return {mem.read_addr(bus,res_addr), cross_check && (h != ((res_addr >> 8) & 0xff))};
         }
-        case Immediate: return {mem.cpu_read_addr(pc + 1), false};
-        case ZeroPage: return {mem.cpu_read_addr(arg1), false};
-        case Absolute: return {mem.cpu_read_addr(args_as_addr), false};
-        case Relative: return {mem.cpu_read_addr(pc + 1), false};
+        case Immediate: return {mem.read_addr(bus,pc + 1), false};
+        case ZeroPage: return {mem.read_addr(bus,arg1), false};
+        case Absolute: return {mem.read_addr(bus,args_as_addr), false};
+        case Relative: return {mem.read_addr(bus,pc + 1), false};
         case Accumulator: return {&a, false};
     }
     throw std::exception();
 }
 
-void CPU::execute(Memory& mem, DecodedInstruction di){
+void CPU::execute(Bus& bus, DecodedInstruction di){
     switch(di.i) {
         case ADC: {
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             unsigned char val = *arg.value;
             unsigned short res = val + sr.get(StatusReg::C);
             sr.set(StatusReg::C, res > 0xff);
@@ -274,7 +313,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case AND:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             unsigned char val = *arg.value;
             a &= val;
             sr.set(StatusReg::Z, a == 0);
@@ -283,7 +322,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case ASL:{
-            auto arg = get_arg(mem, di.addr_mode, false);
+            auto arg = get_arg(bus, di.addr_mode, false);
             unsigned char val = *arg.value;
             unsigned char res = val << 1;
             sr.set(StatusReg::C, val & 0x80);
@@ -294,56 +333,56 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case BCC:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
             if (!sr.get(StatusReg::C)) pc += (char)(*arg.value);
             break;
         }
         case BCS:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
             if (sr.get(StatusReg::C)) pc += (char)(*arg.value);
             break;
         }
         case BEQ:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
             if (sr.get(StatusReg::Z)) pc += (char)(*arg.value);
             break;
         }
         case BMI: {
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
             if (sr.get(StatusReg::N)) pc += (char)(*arg.value);
             break;
         }
         case BNE:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
             if (!sr.get(StatusReg::Z)) pc += (char)(*arg.value);
             break;
         }
         case BPL:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
             if (!sr.get(StatusReg::N)) pc += (char)(*arg.value);
             break;
         }
         case BVC:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
             if (!sr.get(StatusReg::V)) pc += (char)(*arg.value);
             break;
         }
         case BVS:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
             if (sr.get(StatusReg::V)) pc += (char)(*arg.value);
             break;
         }
 
         case BIT:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             unsigned char val = *arg.value;
             unsigned char res = a & val;
             sr.set(StatusReg::Z, res == 0);
@@ -360,7 +399,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
         case CLI:{sr.set(StatusReg::I, 0); pc+=1; break;}
         case CLV:{sr.set(StatusReg::V, 0); pc+=1; break;}
         case CMP:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             unsigned char val = *arg.value;
             unsigned char res = a - val;
             sr.set(StatusReg::C, a >= val);
@@ -370,7 +409,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case CPX:{
-            auto arg = get_arg(mem, di.addr_mode, false);
+            auto arg = get_arg(bus, di.addr_mode, false);
             unsigned char val = *arg.value;
             unsigned char res = x - val;
             sr.set(StatusReg::C, x >= val);
@@ -380,7 +419,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case CPY:{
-            auto arg = get_arg(mem, di.addr_mode, false);
+            auto arg = get_arg(bus, di.addr_mode, false);
             unsigned char val = *arg.value;
             unsigned char res = y - val;
             sr.set(StatusReg::C, y >= val);
@@ -390,7 +429,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case DEC:{
-            auto arg = get_arg(mem, di.addr_mode, false);
+            auto arg = get_arg(bus, di.addr_mode, false);
             unsigned char val = *arg.value;
             unsigned char res = val - 1;
             sr.set(StatusReg::Z, res == 0);
@@ -416,7 +455,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case EOR:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             unsigned char val = *arg.value;
             unsigned char res = a ^ val;
             sr.set(StatusReg::Z, res == 0);
@@ -426,7 +465,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case INC:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             unsigned char val = *arg.value;
             unsigned char res = val + 1;
             sr.set(StatusReg::Z, res == 0);
@@ -453,26 +492,26 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
         }
         case JMP:{
             if (di.addr_mode == Absolute){
-                pc = (mem.cpu_read(pc + 1) | (mem.cpu_read(pc + 2) << 8));
+                pc = (mem.read(bus,pc + 1) | (mem.read(bus,pc + 2) << 8));
             } else { // Indirect
-                unsigned short arg_addr = (mem.cpu_read(pc + 1) | (mem.cpu_read(pc + 2) << 8));
-                unsigned char l = mem.cpu_read(arg_addr);
-                unsigned char h = mem.cpu_read((arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
+                unsigned short arg_addr = (mem.read(bus,pc + 1) | (mem.read(bus,pc + 2) << 8));
+                unsigned char l = mem.read(bus,arg_addr);
+                unsigned char h = mem.read(bus,(arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
                 pc = l | (h << 8);
             }
             break;
         }
         case JSR:{
             // TODO: maybe check
-            auto arg = get_arg(mem, di.addr_mode, false);
+            auto arg = get_arg(bus, di.addr_mode, false);
             auto value = *arg.value;
-            mem.cpu_write(0x100 + sp, ((pc + 2) >> 8) & 0xff); --sp;
-            mem.cpu_write(0x100 + sp, (pc + 2) & 0xff); --sp;
+            mem.write(bus,0x100 + sp, ((pc + 2) >> 8) & 0xff); --sp;
+            mem.write(bus,0x100 + sp, (pc + 2) & 0xff); --sp;
             pc = value;
             break;
         }
         case LDA:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             a = *arg.value;
             sr.set(StatusReg::Z, a == 0);
             sr.set(StatusReg::N, a & 0x80);
@@ -480,7 +519,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case LDX:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             x = *arg.value;
             sr.set(StatusReg::Z, x == 0);
             sr.set(StatusReg::N, x & 0x80);
@@ -488,7 +527,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case LDY:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             y = *arg.value;
             sr.set(StatusReg::Z, y == 0);
             sr.set(StatusReg::N, y & 0x80);
@@ -496,7 +535,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case LSR:{
-            auto arg = get_arg(mem, di.addr_mode, false);
+            auto arg = get_arg(bus, di.addr_mode, false);
             unsigned char val = *arg.value;
             unsigned char res = val >> 1;
             sr.set(StatusReg::C, val & 0x1);
@@ -508,7 +547,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
         }
         case NOP:{pc+=di.bytes; break;}
         case ORA:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             unsigned char val = *arg.value;
             unsigned char res = a | val;
             sr.set(StatusReg::Z, res == 0);
@@ -518,17 +557,17 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case PHA:{
-            mem.cpu_write(0x100 + sp, a); --sp;
+            mem.write(bus,0x100 + sp, a); --sp;
             pc += di.bytes;
             break;
         }
         case PHP:{
-            mem.cpu_write(0x100 + sp, sr.get_status()); --sp;
+            mem.write(bus,0x100 + sp, sr.get_status()); --sp;
             pc += di.bytes;
             break;
         }
         case PLA:{
-            ++sp; a = mem.cpu_read(0x100 + sp);
+            ++sp; a = mem.read(bus,0x100 + sp);
             sr.set(StatusReg::Z, a == 0);
             sr.set(StatusReg::N, a & 0x80);
             pc += di.bytes;
@@ -537,12 +576,12 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
         case PLP:{
             ++sp;
             // TODO: Interrupt disable flag The effect of changing this flag is delayed 1 instruction.
-            sr.set_status(mem.cpu_read(0x100 + sp));
+            sr.set_status(mem.read(bus,0x100 + sp));
             pc += di.bytes;
             break;
         }
         case ROL:{
-            auto arg = get_arg(mem, di.addr_mode, false);
+            auto arg = get_arg(bus, di.addr_mode, false);
             unsigned char val = *arg.value;
             bool prev_c = sr.get(StatusReg::C);
             unsigned char res = (val << 1) | (prev_c << 7) ;
@@ -554,7 +593,7 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case ROR:{
-            auto arg = get_arg(mem, di.addr_mode, false);
+            auto arg = get_arg(bus, di.addr_mode, false);
             unsigned char val = *arg.value;
             bool prev_c = sr.get(StatusReg::C);
             unsigned char res = (val >> 1) | (prev_c << 7) ;
@@ -566,21 +605,21 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
             break;
         }
         case RTI:{
-            ++sp; sr.set_status(mem.cpu_read(0x100 + sp));
-            ++sp; unsigned char l = mem.cpu_read(0x100 + sp);
-            ++sp; unsigned char h = mem.cpu_read(0x100 + sp);
+            ++sp; sr.set_status(mem.read(bus,0x100 + sp));
+            ++sp; unsigned char l = mem.read(bus,0x100 + sp);
+            ++sp; unsigned char h = mem.read(bus,0x100 + sp);
             pc = l | (h << 8);
             break;
         }
         case RTS:{
-            ++sp; unsigned char l = mem.cpu_read(0x100 + sp);
-            ++sp; unsigned char h = mem.cpu_read(0x100 + sp);
+            ++sp; unsigned char l = mem.read(bus,0x100 + sp);
+            ++sp; unsigned char h = mem.read(bus,0x100 + sp);
             pc = l | (h << 8);
             ++pc;
             break;
         }
         case SBC:{
-            auto arg = get_arg(mem, di.addr_mode, true);
+            auto arg = get_arg(bus, di.addr_mode, true);
             unsigned char val = *arg.value;
             bool prev_c = sr.get(StatusReg::C);
             int res = a - val - (!prev_c);
@@ -597,19 +636,19 @@ void CPU::execute(Memory& mem, DecodedInstruction di){
         case SED:{sr.set(StatusReg::D, true); pc+=di.bytes; break;}
         case SEI:{sr.set(StatusReg::I, true); pc+=di.bytes; break;}
         case STA:{
-            auto arg = get_arg(mem, di.addr_mode, false);
+            auto arg = get_arg(bus, di.addr_mode, false);
             *arg.value = a;
             pc += di.bytes;
             break;
         }
         case STX:{
-            auto arg = get_arg(mem, di.addr_mode, false);
+            auto arg = get_arg(bus, di.addr_mode, false);
             *arg.value = x;
             pc += di.bytes;
             break;
         }
         case STY:{
-            auto arg = get_arg(mem, di.addr_mode, false);
+            auto arg = get_arg(bus, di.addr_mode, false);
             *arg.value = y;
             pc += di.bytes;
             break;

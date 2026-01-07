@@ -1,6 +1,5 @@
-#ifndef NES_CONSTANTS_H
-#define NES_CONSTANTS_H
-#include <iostream>
+#ifndef NES_CONSTANTS_HPP
+#define NES_CONSTANTS_HPP
 namespace constants {
 // CPU map
     constexpr unsigned short RAM_BEGIN = 0x0000;
@@ -64,4 +63,4 @@ namespace constants {
     constexpr unsigned short PALETTES_MIRROR_BEGIN = 0x3F20;
     constexpr unsigned short PALETTES_MIRROR_END = 0x3FFF;
 }
-#endif //NES_CONSTANTS_H
+#endif //NES_CONSTANTS_HPP
