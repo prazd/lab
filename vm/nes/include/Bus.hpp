@@ -1,8 +1,11 @@
 #ifndef NES_BUS_HPP
 #define NES_BUS_HPP
 struct Bus {
+    unsigned char oam[0x100]{};
+    unsigned short dma_address{};
+    bool dma_active = false;
+    unsigned dma_index = 0;
     bool nmi_interrupt_flip_flop = false;
-    unsigned char dma_source_high_byte{};
 
     struct PPUREG {
         unsigned char reg{};
@@ -20,5 +23,6 @@ struct Bus {
     void write(unsigned short addr, unsigned char val);
     unsigned char read(unsigned short addr);
     unsigned char* read_ptr(unsigned short addr);
+    void dma_tick(unsigned char val);
 };
 #endif //NES_BUS_HPP

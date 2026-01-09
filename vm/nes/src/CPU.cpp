@@ -254,19 +254,6 @@ CPU::AddressingResult CPU::get_arg(Bus& bus, AddressingMode am, bool cross_check
     auto arg2 = mem.read(bus,pc + 2);
     unsigned short args_as_addr = ((arg1) | arg2 << 8);
 
-    //  https://www.nesdev.org/wiki/NMI
-    if (bus.nmi_interrupt_flip_flop) {
-        mem.write(bus,0x100 + sp, (pc >> 8) & 0xff); --sp;
-        mem.write(bus,0x100 + sp, pc & 0xff); --sp;
-        sr.set(StatusReg::B, false);
-        sr.set(StatusReg::Unused, true);
-        mem.write(bus,0x100 + sp, sr.reg); --sp;
-        sr.set(StatusReg::I, true);
-        pc = mem.read(bus,constants::NMA_HANDLER) | (mem.read(bus,constants::NMA_HANDLER + 1) << 8);
-        bus.nmi_interrupt_flip_flop = false;
-    }
-
-
     switch(am){
         case ZeroPageX: return {mem.read_addr(bus,(arg1 + x) % 256), false};
         case ZeroPageY: return {mem.read_addr(bus,(arg1 + y) % 256), false};
@@ -298,7 +285,41 @@ CPU::AddressingResult CPU::get_arg(Bus& bus, AddressingMode am, bool cross_check
     throw std::exception();
 }
 
+void CPU::handle_interrupt(Bus& bus, Interrupt i) {
+    mem.write(bus,0x100 + sp, (pc >> 8) & 0xff); --sp;
+    mem.write(bus,0x100 + sp, pc & 0xff); --sp;
+    sr.set(StatusReg::B, false);
+    sr.set(StatusReg::Unused, true);
+    mem.write(bus,0x100 + sp, sr.reg); --sp;
+    sr.set(StatusReg::I, true);
+    pc = mem.read(bus, interrupt_addresses[i]) | (mem.read(bus, interrupt_addresses[i] + 1) << 8);
+    interrupt_requests[i] = false;
+}
+
 void CPU::execute(Bus& bus, DecodedInstruction di){
+    if (bus.dma_active){
+        // Every cpu cycle
+        bus.dma_tick(mem.read(bus, bus.dma_address + bus.dma_index));
+        return;
+    }
+
+    if (bus.nmi_interrupt_flip_flop){
+        interrupt_requests[NMI] = true;
+        bus.nmi_interrupt_flip_flop = false;
+    }
+
+    if (!sr.get(StatusReg::I)){
+        // TODO:
+        // The NES has an interrupt latency of 7 cycles, which means it takes 7 CPU cycles to begin
+        // executing the interrupt handler
+        for (int i = 0; i < InterruptsCount; ++i){
+            if (interrupt_requests[i]){
+                handle_interrupt(bus, static_cast<Interrupt>(i));
+                break;
+            }
+        }
+    }
+
     switch(di.i) {
         case ADC: {
             auto arg = get_arg(bus, di.addr_mode, true);
@@ -392,7 +413,9 @@ void CPU::execute(Bus& bus, DecodedInstruction di){
             break;
         }
 
-        case BRK:{/*TODO*/ break;}
+        case BRK:{
+            if (!interrupt_requests[IRQ]) interrupt_requests[IRQ] = true;
+            break;}
 
         case CLC:{sr.set(StatusReg::C, 0); pc+=1; break;}
         case CLD:{sr.set(StatusReg::D, 0); pc+=1; break;}

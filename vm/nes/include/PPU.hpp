@@ -3,6 +3,9 @@
 #include <array>
 #include "Bus.hpp"
 
+// TODO: https://www.nesdev.org/wiki/Mirroring + Attributes
+
+
 struct PPU {
     struct Memory {
 // https://www.nesdev.org/wiki/PPU_memory_map
@@ -19,9 +22,15 @@ struct PPU {
 //  $3000-$3EFF	$0F00	Table Mirror $2000-$2EFF
 //  $3F00-$3F1F	$0020	Palette RAM indexes	Internal to PPU
 //  $3F20-$3FFF	$00E0	Mirrors of $3F00-$3F1F	Internal to PPU
-        unsigned char map[0x4000]{};
-        unsigned char oam[0x100]{};
 
+
+// Pattern table - Tiles (2BPP) (256 * 16(byte) = 4096)  The pattern tables store the least significant two bits of the 4-bit
+// number needed to identify the image or sprite palette entry used by that pixel
+
+// Nametable - 32x30 tiles numbers (0 - 255)
+// Attribute - Attribute tables hold the upper two bits of
+// the colours for the tiles
+        unsigned char map[0x4000]{};
         unsigned char read(unsigned short addr) const;
         void write(unsigned short addr, unsigned char value);
         static void adjust_if_mirror(unsigned short&);
@@ -201,6 +210,8 @@ struct PPU {
         RGB{0x00, 0x00, 0x00},
         RGB{0x00, 0x00, 0x00},
     };
+
+    //
 
 //  Pattern table
     template <typename = void>

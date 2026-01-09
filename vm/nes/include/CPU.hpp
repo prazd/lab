@@ -16,7 +16,6 @@ struct CPU {
 //    $4020–$FFFF   $BFE0   Unmapped. Available for cartridge use.
 //    • $6000–$7FFF $2000   Usually cartridge RAM, when present.
 //    • $8000–$FFFF $8000   Usually cartridge ROM and mapper registers.
-
         unsigned char map[0x10000]{};
 
         unsigned char* read_addr(Bus&, unsigned short addr);
@@ -33,6 +32,8 @@ struct CPU {
     inline static unsigned short read_mmio_addr[] = {
             constants::PPUSTATUS,  constants::OAMDATA,constants::PPUDATA,
     };
+
+
 
 
 // https://www.nesdev.org/NESDoc.pdf (page 12-13)
@@ -64,6 +65,17 @@ struct CPU {
     unsigned char x{};
     unsigned char y{};
 
+    enum Interrupt: unsigned char {
+        RESET, NMI, IRQ, InterruptsCount
+    };
+
+    // request RESET interrupt on start (https://www.nesdev.org/NESDoc.pdf - page 13)
+    bool interrupt_requests[3]{true,false,false};
+    unsigned short interrupt_addresses[3] = {
+            constants::RESET_INTERRUPT_HANDLER_L,
+            constants::NMI_INTERRUPT_HANDLER_L,
+            constants::IRQ_INTERRUPT_HANDLER_L,
+    };
 
 
     // https://www.nesdev.org/wiki/CPU_addressing_modes
@@ -109,4 +121,5 @@ struct CPU {
 
     DecodedInstruction decode(unsigned char v);
     void execute(Bus& mem, DecodedInstruction di);
+    void handle_interrupt(Bus&, Interrupt);
 };

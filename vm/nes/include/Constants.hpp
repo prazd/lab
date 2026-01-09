@@ -28,7 +28,9 @@ namespace constants {
     constexpr unsigned short PPUDATA = 0x2007;
     constexpr unsigned short OAMDMA = 0x4014;
 
-    constexpr unsigned short NMA_HANDLER = 0xFFFA;
+    constexpr unsigned short NMI_INTERRUPT_HANDLER_L = 0xFFFA;
+    constexpr unsigned short RESET_INTERRUPT_HANDLER_L = 0xFFFC;
+    constexpr unsigned short IRQ_INTERRUPT_HANDLER_L = 0xFFFE;
 
 // PPU map
     constexpr unsigned short PATTERN_TABLE0_BEGIN = 0x0000;
