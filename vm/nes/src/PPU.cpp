@@ -31,6 +31,9 @@ void PPU::read_ppuctrl(Bus& bus) {
     address_increment_on_read_ppudata = ppuctrl.addr_inc;
     sprite_pattern_table_address8x8 = ppuctrl.pattern_table_addr8x8 ? constants::PATTERN_TABLE0_BEGIN : constants::PATTERN_TABLE1_BEGIN;
     sprite_mode = ppuctrl.sprite_sz ?  m8x16 : m8x8;
+    bg_pattern_table_address = ppuctrl.bg_pattern_table_addr ? constants::PATTERN_TABLE0_BEGIN : constants::PATTERN_TABLE1_BEGIN;
+
+
     // TODO: check
     //    PPU master/slave select
     //    (0: read backdrop from EXT pins; 1: output color on EXT pins)
@@ -66,4 +69,65 @@ void PPU::update_state(Bus& bus) {
     if (bus.ppuaddr.was_written)    {read_ppuaddr(bus); bus.ppuaddr.was_written = false;}
     // TODO: finish
     if (bus.ppudata.was_written)    {v += ppuctrl.addr_inc ? 1 : 32; bus.ppudata.was_written = false;}
+}
+
+unsigned char PPU::tile_byte_from_addr(unsigned short addr) {
+//    DCBA98 76543210
+//    ---------------
+//    0HNNNN NNNNPyyy
+//    |||||| |||||+++- T: Fine Y offset, the row number within a tile
+//    |||||| ||||+---- P: Bit plane (0: less significant bit; 1: more significant bit)
+//    ||++++-++++----- N: Tile number from name table
+//    |+-------------- H: Half of pattern table (0: "left"; 1: "right")
+//    +--------------- 0: Pattern table is at $0000-$1FFF
+    unsigned char y_offset = addr & 0x7;
+    bool bit_plane = (addr >> 3) & 1;
+    unsigned char tile_number = (addr >> 4) & 0xff;
+    unsigned short base = (addr >> 12) & 1 ? constants::PATTERN_TABLE0_BEGIN : constants::PATTERN_TABLE1_BEGIN;
+
+    return mem.read(base + (tile_number * 16) + y_offset + (bit_plane ? 8 : 0));
+}
+
+unsigned short PPU::to_pattern_addr(unsigned char y, unsigned char tile_n, bool plane, bool h) {
+    return y | (plane << 3) | (tile_n << 4) | (h << 12);
+}
+
+void PPU::tick() {
+    if (current_cycle == 0) {++current_cycle; return;} // idle cycle
+
+    static unsigned char nt_byte = 0;
+    static unsigned char attrib_value = 0;
+    static unsigned char pattern_table_l = 0;
+    static unsigned char pattern_table_h = 0;
+
+    unsigned char x_tile_n = (v & 0x1f);
+    unsigned char y_tile_n = ((v >> 5) & 0x1f);
+
+    // 1-256 cycles
+    if (current_step % 2 == 0) {
+        switch (current_step) {
+            // fetch nametable byte
+           case NT:  { nt_byte = mem.read(base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;}
+           case AT:  {
+               auto val = mem.read(base_attrib_address + y_tile_n/4 + x_tile_n/4);
+               // TODO: check
+               //  3 3 2 2
+               //  3 3 2 2
+               //  1 1 0 0
+               //  1 1 0 0
+               auto shift_y = (y_tile_n/2) % 2;
+               auto shift_x = (x_tile_n/2) % 2;
+               attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
+               current_step = PTL;
+               break;}  // fetch attribute table byte
+           case PTL: {
+               pattern_table_l = tile_byte_from_addr(to_pattern_addr(y_tile_n % 8, nt_byte, false, ppuctrl.bg_pattern_table_addr));
+               current_step = PTH; break;}     // pattern table tile low
+           case PTH: {
+               pattern_table_h = tile_byte_from_addr(to_pattern_addr(y_tile_n % 8, nt_byte, true, ppuctrl.bg_pattern_table_addr));
+               current_step = NT;  break;}     // pattern table tile high
+        }
+    }
+
+    ++current_cycle;
 }

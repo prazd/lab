@@ -2,9 +2,9 @@
 #define NES_PPU_HPP
 #include <array>
 #include "Bus.hpp"
+#include "Constants.hpp"
 
 // TODO: https://www.nesdev.org/wiki/Mirroring + Attributes
-
 
 struct PPU {
     struct Memory {
@@ -23,7 +23,6 @@ struct PPU {
 //  $3F00-$3F1F	$0020	Palette RAM indexes	Internal to PPU
 //  $3F20-$3FFF	$00E0	Mirrors of $3F00-$3F1F	Internal to PPU
 
-
 // Pattern table - Tiles (2BPP) (256 * 16(byte) = 4096)  The pattern tables store the least significant two bits of the 4-bit
 // number needed to identify the image or sprite palette entry used by that pixel
 
@@ -37,13 +36,28 @@ struct PPU {
     } mem;
 
     // Current VRAM address (15 bits)
+    //  yyy NN YYYYY XXXXX
+    //  ||| || ||||| +++++-- coarse X (NT)
+    //  ||| || +++++-------- coarse Y (NT)
+    //  ||| ++--------------- nametable
+    //  +++------------------ fine Y
     unsigned short v{};
+
+
     // Temporary VRAM address (15 bits); can also be thought of as the address of the top left onscreen tile.
     unsigned short t{};
     // Fine X scroll (3 bits)
     unsigned char x{};
     // First or second write toggle (1 bit)
     bool w{};
+
+    unsigned current_cycle{};
+
+    enum FetchStep {
+        NT, AT, PTL, PTH
+    } current_step = NT;
+
+    void tick();
 
     struct Sprite {
         unsigned char coord{}; //  Stores the y-coordinate of the top left of the sprite minus 1
@@ -118,8 +132,12 @@ struct PPU {
 
 
     unsigned short base_name_table_address{};
-    bool address_increment_on_read_ppudata = false; //    RAM address increment per CPU read/write of PPUDATA
+    unsigned short bg_pattern_table_address{};
+    unsigned short base_attrib_address{};
     unsigned short sprite_pattern_table_address8x8{};
+
+    bool address_increment_on_read_ppudata = false; //    RAM address increment per CPU read/write of PPUDATA
+
     enum SpriteMode {
         m8x8,
         m8x16
@@ -224,5 +242,9 @@ struct PPU {
         }
         return res;
     }
+
+    unsigned char tile_byte_from_addr(unsigned short addr);
+    //    0HNNNN NNNNPyyy
+    unsigned short to_pattern_addr(unsigned char y, unsigned char tile_n, bool plane, bool h);
 };
 #endif //NES_PPU_HPP
