@@ -125,9 +125,18 @@ void PPU::tick() {
                current_step = PTH; break;}     // pattern table tile low
            case PTH: {
                pattern_table_h = tile_byte_from_addr(to_pattern_addr(y_tile_n % 8, nt_byte, true, ppuctrl.bg_pattern_table_addr));
+               shift_register_low |= pattern_table_l;
+               shift_register_high |= pattern_table_h;
                current_step = NT;  break;}     // pattern table tile high
         }
     }
+    // Get pixel
+    shift_register_high <<= 1;
+    shift_register_low <<= 1;
+
+//   TODO: maybe use register for attrib_value
+    unsigned char pixel_index =
+            mem.read(constants::IMAGE_PALETTE_BEGIN + (4 * attrib_value) + ((bool(shift_register_high & 0x8000) << 1) | bool(shift_register_low & 0x8000)));
 
     ++current_cycle;
 }

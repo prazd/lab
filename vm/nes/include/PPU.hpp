@@ -136,6 +136,9 @@ struct PPU {
     unsigned short base_attrib_address{};
     unsigned short sprite_pattern_table_address8x8{};
 
+    unsigned short shift_register_low{};
+    unsigned short shift_register_high{};
+
     bool address_increment_on_read_ppudata = false; //    RAM address increment per CPU read/write of PPUDATA
 
     enum SpriteMode {
@@ -228,8 +231,6 @@ struct PPU {
         RGB{0x00, 0x00, 0x00},
         RGB{0x00, 0x00, 0x00},
     };
-
-    //
 
 //  Pattern table
     template <typename = void>
