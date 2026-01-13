@@ -1,7 +1,15 @@
 #ifndef NES_CONSTANTS_HPP
 #define NES_CONSTANTS_HPP
+#define DEBUG_MODE 1
+
 namespace constants {
-// CPU map
+    constexpr float WIDTH = 600.f;
+    constexpr float HEIGHT = 600.f;
+
+    constexpr float DEBUG_WIDTH = 1600.f;
+    constexpr float DEBUG_HEIGHT = 1200.f;
+
+    // CPU map
     constexpr unsigned short RAM_BEGIN = 0x0000;
     constexpr unsigned short RAM_END = 0x07FF;
 

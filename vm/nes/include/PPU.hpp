@@ -3,8 +3,34 @@
 #include <array>
 #include "Bus.hpp"
 #include "Constants.hpp"
+#include "raylib.h"
+#include <tuple>
 
 // TODO: https://www.nesdev.org/wiki/Mirroring + Attributes
+
+inline bool operator==(const Color& lhs, const Color& rhs){
+    return std::tuple(rhs) == std::tuple(lhs);
+}
+
+inline Color color_by_id(unsigned char id) {
+    switch (id) {
+        case 0b01: return BLACK;
+        case 0b10: return GRAY;
+        case 0b11: return DARKGRAY;
+        default: return WHITE;
+    }
+}
+
+inline unsigned char id_by_color(Color c) {
+    if (c == BLACK){
+        return 0b01;
+    } else if (c == GRAY) {
+        return 0b10;
+    } else if (c == DARKGRAY){
+        return 0b11;
+    }
+    return 0b00;
+}
 
 struct PPU {
     struct Memory {
@@ -243,6 +269,8 @@ struct PPU {
         }
         return res;
     }
+
+
 
     unsigned char tile_byte_from_addr(unsigned short addr);
     //    0HNNNN NNNNPyyy

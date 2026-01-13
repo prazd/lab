@@ -3,9 +3,7 @@
 #include "raylib.h"
 #include "PPU.hpp"
 #include "CPU.hpp"
-
-constexpr size_t WIDTH = 400;
-constexpr size_t HEIGHT = 400;
+#include "Debug.h"
 
 struct Cartridge {
     std::vector<unsigned char> buffer{};
@@ -62,7 +60,7 @@ struct Cartridge {
     bool is_chr_nvram = false;
     unsigned chr_nvram_sz = 0;
 
-    void parse_header_info(){
+    void parse_header() {
         unsigned char nes_id = (buffer[Flag7] >> 2) & 0x3;
         nes_eof_begin = ((buffer[0] == 'N') && (buffer[1] == 'E') && (buffer[2] == 'S') && (buffer[3] == 0x1A));
 
@@ -100,11 +98,14 @@ struct Cartridge {
             }
         }
     }
-    Cartridge() = default;
-    Cartridge& operator=(std::vector<unsigned char>&& rhs){
-        buffer = std::move(rhs);
-        parse_header_info();
-        return *this;
+
+    Cartridge(std::string_view rom_path) {
+        auto sz = std::filesystem::file_size(rom_path);
+        buffer.resize(sz);
+        auto fs = std::ifstream(rom_path, std::ios::binary);
+        if (!fs.is_open()) std::abort();
+        fs.read(reinterpret_cast<char*>(buffer.data()),sz);
+        parse_header();
     }
 };
 
@@ -112,27 +113,45 @@ struct NESVM {
     Bus bus{};
     CPU cpu{};
     PPU ppu{};
-    Cartridge cartridge{};
-    NESVM(std::string_view rom_path){
-        auto sz = std::filesystem::file_size(rom_path);
-        auto fs = std::ifstream(rom_path, std::ios::binary);
-        if (!fs.is_open()) std::abort();
-        std::vector<unsigned char> tmp(sz);
-        fs.read(reinterpret_cast<char*>(tmp.data()),sz);
-        cartridge = std::move(tmp);
+    Cartridge cartridge;
+    NESVM(std::string_view rom_path): cartridge(rom_path){
         std::cout << "MapperNum:" << cartridge.mapper_num << '\n';
         std::cout << "CHR_SZ:" << cartridge.chr_rom_sz << '\n';
         std::cout << "PRG_SZ:" << cartridge.prg_rom_sz << '\n';
+        std::cout << "Trainer presents:" <<  cartridge.trainer_present << '\n';
+
+        // for test
+        size_t tiles_index_start = 4;
+        if (cartridge.trainer_present) tiles_index_start += 512;
+        tiles_index_start += 16384 * cartridge.prg_rom_sz;
+        std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 8192, ppu.mem.map);
     }
 };
 
 int main(){
     auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes");
-//    InitWindow(WIDTH, HEIGHT, "NES");
-//    while(!WindowShouldClose()){
-//        BeginDrawing();
-//            ClearBackground(WHITE);
-//        EndDrawing();
-//    }
-//    CloseWindow();
+#if DEBUG_MODE
+    InitWindow(constants::DEBUG_WIDTH, constants::DEBUG_HEIGHT, "NES");
+#else
+    InitWindow(constants::WIDTH, constants::HEIGHT, "NES");
+#endif
+
+#if DEBUG_MODE
+    DebugWindow<100,200,400,400> d;
+    DebugWindowWithTexture<400,500,400,400, 300,300> d2;
+#endif
+
+    while(!WindowShouldClose()){
+#if DEBUG_MODE
+        d.move();
+#endif
+        BeginDrawing();
+#if DEBUG_MODE
+            d.draw_win();
+            d2.handle();
+#endif
+            ClearBackground(WHITE);
+        EndDrawing();
+    }
+    CloseWindow();
 }
