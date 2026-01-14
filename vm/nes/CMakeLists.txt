@@ -4,6 +4,9 @@ project(NES)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+ set(SANITIZER_FLAGS "-fsanitize=address -fsanitize=undefined")
+# set(SANITIZER_FLAGS "-fsanitize=thread")
+
 set(RAYLIB_DIR "/usr/local/Cellar/raylib/") 
 
 include_directories(include)

@@ -121,7 +121,7 @@ struct NESVM {
         std::cout << "Trainer presents:" <<  cartridge.trainer_present << '\n';
 
         // for test
-        size_t tiles_index_start = 4;
+        size_t tiles_index_start = 16;
         if (cartridge.trainer_present) tiles_index_start += 512;
         tiles_index_start += 16384 * cartridge.prg_rom_sz;
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 8192, ppu.mem.map);
@@ -130,6 +130,19 @@ struct NESVM {
 
 int main(){
     auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes");
+
+    auto gen_tile = [&] (int offset){
+        std::array<unsigned char, 8> f{};
+        for (int i = 0; i < 8; ++i)
+            f[i] = *(nes.ppu.mem.map + i + 16 * offset);
+        std::array<unsigned char, 8> s{};
+        for (int i = 8; i < 16; ++i)
+            s[i-8] = *(nes.ppu.mem.map + i + 16 * offset);
+        return nes.ppu.pattern_table(f, s);
+    };
+
+    int current_offset = 0;
+
 #if DEBUG_MODE
     InitWindow(constants::DEBUG_WIDTH, constants::DEBUG_HEIGHT, "NES");
 #else
@@ -137,18 +150,42 @@ int main(){
 #endif
 
 #if DEBUG_MODE
-    DebugWindow<100,200,400,400> d;
-    DebugWindowWithTexture<400,500,400,400, 300,300> d2;
+//    DebugWindow<100,200,400,400> d;
+//    DebugWindowWithTexture<400,500,400,400, 300,300> d2;
+    TilesView<400,500,480,432,128,128> tw(128,128);
 #endif
 
+    bool paused = false;
+
+    size_t wait_count = 0;
+    SetTargetFPS(60);
     while(!WindowShouldClose()){
 #if DEBUG_MODE
-        d.move();
+//        d.move();
 #endif
+
+
+        if (IsKeyPressed(KEY_P)) paused = !paused;
         BeginDrawing();
 #if DEBUG_MODE
-            d.draw_win();
-            d2.handle();
+
+        float x_begin = 0;
+        float y_begin = 0;
+        auto pt_val = gen_tile(current_offset);
+        if (!paused) ++wait_count;
+        if (wait_count == 200) {++current_offset; wait_count = 0;}
+        for (auto&& row: pt_val){
+            for (auto el: row){
+                DrawRectangle(x_begin, y_begin, 10,10, color_by_id(el));
+                x_begin+=10;
+            }
+            x_begin = 0;
+            y_begin+=10;
+        }
+
+        tw.handle(nes.ppu);
+//            d.draw_win();
+//            d2.handle();
 #endif
             ClearBackground(WHITE);
         EndDrawing();
