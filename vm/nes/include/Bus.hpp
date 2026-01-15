@@ -1,5 +1,6 @@
 #ifndef NES_BUS_HPP
 #define NES_BUS_HPP
+#include "Controller.hpp"
 struct Bus {
     unsigned char oam[0x100]{};
     unsigned short dma_address{};
@@ -19,6 +20,7 @@ struct Bus {
     PPUREG ppuscroll{};
     PPUREG ppuaddr{};
     PPUREG ppudata{};
+    Controller c;
 
     void write(unsigned short addr, unsigned char val);
     unsigned char read(unsigned short addr);

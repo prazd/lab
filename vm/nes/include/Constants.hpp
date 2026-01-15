@@ -9,6 +9,9 @@ namespace constants {
     constexpr float DEBUG_WIDTH = 1600.f;
     constexpr float DEBUG_HEIGHT = 1200.f;
 
+    constexpr unsigned short CONTROLLER1 = 0x4016;
+    constexpr unsigned short CONTROLLER2 = 0x4017;
+
     // CPU map
     constexpr unsigned short RAM_BEGIN = 0x0000;
     constexpr unsigned short RAM_END = 0x07FF;

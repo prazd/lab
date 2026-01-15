@@ -10,12 +10,15 @@ void Bus::write(unsigned short addr, unsigned char value) {
     if (addr == constants::PPUADDR)   {ppuaddr   =   {value, true}; return;}
     if (addr == constants::PPUDATA)   {ppudata   =   {value, true}; return;}
     if (addr == constants::OAMDMA)    {dma_address = value * 256; dma_active = true; dma_index = 0;  return;}
+    if (addr == constants::CONTROLLER1) {if (value == 1) c.latch1 = true;}
+    if (addr == constants::CONTROLLER1) {if (value == 0) c.update_status1();}
 }
 
 unsigned char Bus::read(unsigned short addr) {
     if (addr == constants::PPUSTATUS) return ppustatus.reg;
     if (addr == constants::OAMDATA) return oamdata.reg;
     if (addr == constants::PPUDATA) return ppudata.reg;
+    if (addr == constants::CONTROLLER1) return c.read_status1();
     // dummy
     return 0xff;
 }
@@ -24,6 +27,7 @@ unsigned char* Bus::read_ptr(unsigned short addr) {
     if (addr == constants::PPUSTATUS) return &ppustatus.reg;
     if (addr == constants::OAMDATA) return &oamdata.reg;
     if (addr == constants::PPUDATA) return &ppudata.reg;
+    // TODO: check for controller
     // dummy
     return nullptr;
 }

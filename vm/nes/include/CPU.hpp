@@ -26,24 +26,22 @@ struct CPU {
 
     inline static unsigned short write_mmio_addr[] = {
             constants::PPUCTRL, constants::PPUMASK, constants::OAMADDR, constants::OAMDATA,
-            constants::PPUSCROLL, constants::PPUADDR, constants::PPUDATA, constants::OAMDMA
+            constants::PPUSCROLL, constants::PPUADDR, constants::PPUDATA, constants::OAMDMA,
+            constants::CONTROLLER1
     };
 
     inline static unsigned short read_mmio_addr[] = {
-            constants::PPUSTATUS,  constants::OAMDATA,constants::PPUDATA,
+            constants::PPUSTATUS,  constants::OAMDATA,constants::PPUDATA,constants::CONTROLLER1
     };
 
-
-
-
-// https://www.nesdev.org/NESDoc.pdf (page 12-13)
+    // https://www.nesdev.org/NESDoc.pdf (page 12-13)
     // SPR
-    unsigned short pc{}; 
-    unsigned char sp = 0xFF;
+    unsigned short pc = 0xFFFC;
+    unsigned char sp = 0xFD; // https://www.nesdev.org/wiki/CPU_power_up_state
     struct StatusReg {
         // | N | V |   | B | D | I | Z | C |
         // | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
-        unsigned char reg{};
+        unsigned char reg = 0b0000'0100; //
         enum Flag: unsigned char {
             C = 0,
             Z = 1,
