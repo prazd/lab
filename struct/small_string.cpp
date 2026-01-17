@@ -57,6 +57,11 @@ class SmallStringPmr {
     std::pmr::monotonic_buffer_resource mbr{buffer, sizeof(buffer), std::pmr::null_memory_resource()};
     std::pmr::string s;
 public:
+    SmallStringPmr(): s{&mbr}{}
+    SmallStringPmr& operator+=(const char* str){
+        s += str;
+        return *this;
+    }
     SmallStringPmr(const char* str): s{str, &mbr}{}
     SmallStringPmr& operator=(const char* str) {
         s = str;
@@ -71,7 +76,8 @@ public:
 };
 
 int main() {
-    SmallStringPmr<40> s1 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    SmallStringPmr<40> s1 = "aaaaaaaaaaaaaaa";
+    s1 += "bbbbbbbbbbbbb";
     SmallString<31> s2 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbb";
     std::cout << "S1:" << (void*)s1.data() << " " << s1.data() << '\n';
     std::cout << "S1 buffer addr:" << (void*)s1.buf() << '\n';
