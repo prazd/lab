@@ -123,13 +123,18 @@ struct NESVM {
         // for test
         size_t tiles_index_start = 16;
         if (cartridge.trainer_present) tiles_index_start += 512;
+        // TODO: update
+        std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 32768, cpu.mem.map + 0x8000);
         tiles_index_start += 16384 * cartridge.prg_rom_sz;
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 8192, ppu.mem.map);
+
+        // Init PC
+        cpu.pc = ((cpu.mem.read(bus, 0xFFFD) << 8) | cpu.mem.read(bus, 0xFFFC));
     }
 };
 
 int main(){
-    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes");
 
     auto gen_tile = [&] (int offset){
         std::array<unsigned char, 8> f{};
@@ -150,9 +155,8 @@ int main(){
 #endif
 
 #if DEBUG_MODE
-//    DebugWindow<100,200,400,400> d;
-//    DebugWindowWithTexture<400,500,400,400, 300,300> d2;
     TilesView<400,500,480,432,128,128> tw(128,128);
+    Disassembler<100,100,200,200> da{nes.cpu, nes.bus};
 #endif
 
     bool paused = false;
@@ -169,21 +173,23 @@ int main(){
         BeginDrawing();
 #if DEBUG_MODE
 
-        float x_begin = 0;
-        float y_begin = 0;
-        auto pt_val = gen_tile(current_offset);
-        if (!paused) ++wait_count;
-        if (wait_count == 200) {++current_offset; wait_count = 0;}
-        for (auto&& row: pt_val){
-            for (auto el: row){
-                DrawRectangle(x_begin, y_begin, 10,10, color_by_id(el));
-                x_begin+=10;
-            }
-            x_begin = 0;
-            y_begin+=10;
-        }
+//
+//        float x_begin = 0;
+//        float y_begin = 0;
+//        auto pt_val = gen_tile(current_offset);
+//        if (!paused) ++wait_count;
+//        if (wait_count == 200) {++current_offset; wait_count = 0;}
+//        for (auto&& row: pt_val){
+//            for (auto el: row){
+//                DrawRectangle(x_begin, y_begin, 10,10, color_by_id(el));
+//                x_begin+=10;
+//            }
+//            x_begin = 0;
+//            y_begin+=10;
+//        }
 
         tw.handle(nes.ppu);
+        da.handle(nes.cpu, nes.bus);
 //            d.draw_win();
 //            d2.handle();
 #endif

@@ -1,8 +1,8 @@
 #include "Constants.hpp"
 #include "Bus.hpp"
+#include "SmallString.h"
 
 struct CPU {
-
     struct Memory {
 // https://www.nesdev.org/wiki/CPU_memory_map
 //    $0000–$07FF	$0800	2 KB internal RAM
@@ -36,7 +36,7 @@ struct CPU {
 
     // https://www.nesdev.org/NESDoc.pdf (page 12-13)
     // SPR
-    unsigned short pc = 0xFFFC;
+    unsigned short pc{};
     unsigned char sp = 0xFD; // https://www.nesdev.org/wiki/CPU_power_up_state
     struct StatusReg {
         // | N | V |   | B | D | I | Z | C |
@@ -101,13 +101,21 @@ struct CPU {
         bool page_crossed{};
     };
 
-    AddressingResult get_arg(Bus& mem, AddressingMode am, bool cross_check);
+    AddressingResult get_arg(Bus& bus, AddressingMode am, bool cross_check);
+    std::string get_arg_str(Bus& bus, AddressingMode am);
 
     enum Instruction: unsigned char {
         ADC, AND, ASL,BCC, BCS,	BEQ, BIT, BMI, BNE,	BPL, BRK, BVC, BVS,	CLC,
         CLD, CLI, CLV,CMP, CPX,	CPY, DEC, DEX, DEY,	EOR, INC, INX, INY,	JMP,
         JSR, LDA, LDX,LDY, LSR,	NOP, ORA, PHA, PHP,	PLA, PLP, ROL, ROR,	RTI,
         RTS, SBC, SEC,SED, SEI,	STA, STX, STY, TAX,	TAY, TSX, TXA, TXS,	TYA,
+    };
+
+    static inline std::string_view instruction_str[56] = {
+        "ADC", "AND", "ASL","BCC", "BCS","BEQ", "BIT", "BMI", "BNE","BPL", "BRK", "BVC", "BVS",	"CLC",
+        "CLD", "CLI", "CLV","CMP", "CPX","CPY", "DEC", "DEX", "DEY","EOR", "INC", "INX", "INY",	"JMP",
+        "JSR", "LDA", "LDX","LDY", "LSR","NOP", "ORA", "PHA", "PHP","PLA", "PLP", "ROL", "ROR",	"RTI",
+        "RTS", "SBC", "SEC","SED", "SEI","STA", "STX", "STY", "TAX","TAY", "TSX", "TXA", "TXS",	"TYA",
     };
 
     struct DecodedInstruction {
@@ -120,4 +128,89 @@ struct CPU {
     DecodedInstruction decode(unsigned char v);
     void execute(Bus& mem, DecodedInstruction di);
     void handle_interrupt(Bus&, Interrupt);
+
+    template<size_t n>
+    void disassemble(Bus& bus, SmallString<n>& ss, unsigned short pc) {
+        auto di = decode(mem.read(bus, pc));
+        switch (di.i) {
+            case ADC:
+            case AND:
+            case ASL:
+            case BCC:
+            case BCS:
+            case BEQ:
+            case BMI:
+            case BNE:
+            case BPL:
+            case BVC:
+            case BVS:
+            case BIT:
+            case CMP:
+            case CPX:
+            case CPY:
+            case DEC:
+            case EOR:
+            case INC:
+            case JSR:
+            case LDA:
+            case LDX:
+            case LDY:
+            case LSR:
+            case ORA:
+            case SBC:
+                // TODO: check
+            case STA:
+            case STX:
+            case STY:
+            {
+                auto arg = get_arg_str(bus, di.addr_mode);
+                ss += instruction_str[di.i];
+                ss += ' ';
+                ss += arg;
+                break;
+            }
+
+            case BRK:
+            case CLC:
+            case CLD:
+            case CLI:
+            case CLV:
+            case DEX:
+            case DEY:
+            case INX:
+            case INY:
+            case NOP:
+            case PHA:
+            case PHP:
+            case PLA:
+            case PLP:
+            case ROL:
+            case ROR:
+            case RTI:
+            case RTS:
+            case SEC:
+            case SED:
+            case SEI:
+            case TAX:
+            case TAY:
+            case TSX:
+            case TXA:
+            case TXS:
+            case TYA:
+                {ss += instruction_str[di.i]; break;}
+
+            case JMP: {
+                ss += "JMP ";
+                if (di.addr_mode == Absolute) {
+                    ss += std::to_string(mem.read(bus, pc + 1) | (mem.read(bus, pc + 2) << 8));
+                } else { // Indirect
+                    unsigned short arg_addr = (mem.read(bus, pc + 1) | (mem.read(bus, pc + 2) << 8));
+                    unsigned char l = mem.read(bus, arg_addr);
+                    unsigned char h = mem.read(bus, (arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
+                    ss += std::to_string(l | (h << 8));
+                }
+                break;
+            }
+        }
+    }
 };

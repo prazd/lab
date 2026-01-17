@@ -1,7 +1,10 @@
 #ifndef NES_DEBUG_H
 #define NES_DEBUG_H
+#include <sstream>
 #include "raylib.h"
 #include "PPU.hpp"
+#include <iomanip>
+
 template <size_t x, size_t y, size_t w, size_t h>
 struct DebugWindow {
     Rectangle rec;
@@ -56,6 +59,14 @@ struct DebugWindowWithTexture : DebugWindow<x,y,w,h> {
     }
 };
 
+template<size_t x, size_t y, size_t w, size_t h>
+struct DebugWindowText: DebugWindow<x,y,w,h>{
+    using DW = DebugWindow<x,y,w,h>;
+    void draw(std::string_view str, float font_sz = 10.1f, Color color = BLACK) {
+        DrawText(str.data(), DW::rec.x, DW::rec.y, font_sz, color);
+        DW::draw_win();
+    }
+};
 
 template <size_t x, size_t y, size_t w, size_t h, size_t t_w, size_t t_h>
 struct TilesView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w/8), t_h + (t_h/8)> {
@@ -81,23 +92,24 @@ struct TilesView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w/8), t_h + (t_h/8
     tiles_h(tiles_h){}
 
     void handle(PPU& ppu){
+      if (CheckCollisionPointRec(GetMousePosition(), DW::rec)){
+          if (auto m = GetMouseWheelMove(); m != 0.f){
+              if (m > 0.f){
+                  base_index = (base_index + (t_w/8 * 16)) % 8192;
+              } else if (m < 0.f) {
+                  base_index = (base_index - (t_w/8 * 16) % 8192);
+                  if (base_index < 0) base_index = 8192+base_index;
+              }
+          }
 
-        if (auto m = GetMouseWheelMove(); m != 0.f){
-            if (m > 0.f){
-                base_index = (base_index + (t_w/8 * 16)) % 8192;
-            } else if (m < 0.f) {
-                base_index = (base_index - (t_w/8 * 16) % 8192);
-                if (base_index < 0) base_index = 8192+base_index;
-            }
-        }
-
-        if (IsKeyPressed(KEY_DOWN)){
-            base_index = (base_index + (t_w/8 * 16)) % 8192;
-        }
-        if (IsKeyPressed(KEY_UP))  {
-            base_index = (base_index - (t_w/8 * 16) % 8192);
-            if (base_index < 0) base_index = 8192+base_index;
-        }
+          if (IsKeyPressed(KEY_DOWN)){
+              base_index = (base_index + (t_w/8 * 16)) % 8192;
+          }
+          if (IsKeyPressed(KEY_UP))  {
+              base_index = (base_index - (t_w/8 * 16) % 8192);
+              if (base_index < 0) base_index = 8192+base_index;
+          }
+      }
 
         current_index = base_index;
         size_t current = 0;
@@ -122,6 +134,35 @@ struct TilesView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w/8), t_h + (t_h/8
         }
 
         DW::handle();
+    }
+};
+
+template<size_t x, size_t y, size_t w, size_t h>
+struct Disassembler: DebugWindowText<x, y, w, h> {
+    using DW = DebugWindowText<x, y, w, h>;
+    unsigned short base{};
+    unsigned short pc{};
+    std::stringstream ss;
+    Disassembler(CPU& cpu, Bus& bus): base(((cpu.mem.read(bus, 0xFFFD) << 8) | cpu.mem.read(bus, 0xFFFC))){
+        std::cout << "BASE:" << std::hex << base << '\n';
+        std::cout << std::dec;
+    }
+    // TODO: debug
+    void handle(CPU& cpu, Bus& bus) {
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_DOWN)){
+            base += cpu.decode(cpu.mem.read(bus, base)).bytes;
+        }
+        pc = base;
+        std::array<SmallString<40>, 10> instructions{};
+        for (int i = 0; i < 10; ++i){
+            cpu.disassemble(bus,instructions[i], pc);
+            ss << std::hex << pc << " " << instructions[i].data() << "\n";
+            pc += cpu.decode(cpu.mem.read(bus, pc)).bytes;
+        }
+        DW::move();
+        auto str = ss.str();
+        DW::draw(str.data(), 15.f);
+        ss.str("");
     }
 };
 

@@ -718,3 +718,30 @@ void CPU::execute(Bus& bus, DecodedInstruction di){
         }
     }
 }
+
+std::string CPU::get_arg_str(Bus& bus, AddressingMode am){
+    auto arg1 = mem.read(bus,pc + 1);
+    auto arg2 = mem.read(bus,pc + 2);
+    unsigned short args_as_addr = ((arg1) | arg2 << 8);
+
+    switch(am){
+        case ZeroPageX: return std::to_string((arg1 + x) % 256);
+        case ZeroPageY: return std::to_string((arg1 + y) % 256);
+        case AbsoluteX: return std::to_string(args_as_addr + x);
+        case AbsoluteY: return std::to_string(args_as_addr + y);
+        case IndexedIndirectX: return std::to_string(((arg1 + x) % 256) + mem.read(bus,(arg1 + x + 1) % 256)* 256);
+        case IndexedIndirectY: {
+            unsigned char l = mem.read(bus,arg1);
+            unsigned char h = mem.read(bus,(arg1 + 1) % 256);
+            unsigned short addr = (l | (h << 8));
+            unsigned short res_addr = addr + y;
+            return std::to_string(res_addr);
+        }
+        case Immediate: return std::to_string(mem.read(bus,pc + 1));
+        case ZeroPage: return std::to_string(mem.read(bus,arg1));
+        case Absolute: return std::to_string(mem.read(bus,args_as_addr));
+        case Relative: return std::to_string(mem.read(bus,pc + 1));
+        case Accumulator: return {"A ", false};
+    }
+    throw std::exception();
+}
