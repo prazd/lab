@@ -114,6 +114,7 @@ struct NESVM {
     CPU cpu{};
     PPU ppu{};
     Cartridge cartridge;
+
     NESVM(std::string_view rom_path): cartridge(rom_path){
         std::cout << "MapperNum:" << cartridge.mapper_num << '\n';
         std::cout << "CHR_SZ:" << cartridge.chr_rom_sz << '\n';
@@ -127,50 +128,52 @@ struct NESVM {
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 32768, cpu.mem.map + 0x8000);
         tiles_index_start += 16384 * cartridge.prg_rom_sz;
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 8192, ppu.mem.map);
-
-        // Init PC
-        cpu.pc = ((cpu.mem.read(bus, 0xFFFD) << 8) | cpu.mem.read(bus, 0xFFFC));
     }
-};
 
-int main(){
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes");
+    void frame_execute(){
+        for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
+            cpu.tick(bus);
+//            for (int j = 0; j < 3; ++j) ppu.tick();
+        }
+    }
 
-    auto gen_tile = [&] (int offset){
-        std::array<unsigned char, 8> f{};
-        for (int i = 0; i < 8; ++i)
-            f[i] = *(nes.ppu.mem.map + i + 16 * offset);
-        std::array<unsigned char, 8> s{};
-        for (int i = 8; i < 16; ++i)
-            s[i-8] = *(nes.ppu.mem.map + i + 16 * offset);
-        return nes.ppu.pattern_table(f, s);
-    };
+    void run(){
+        auto gen_tile = [&] (int offset){
+            std::array<unsigned char, 8> f{};
+            for (int i = 0; i < 8; ++i)
+                f[i] = *(ppu.mem.map + i + 16 * offset);
+            std::array<unsigned char, 8> s{};
+            for (int i = 8; i < 16; ++i)
+                s[i-8] = *(ppu.mem.map + i + 16 * offset);
+            return ppu.pattern_table(f, s);
+        };
 
-    int current_offset = 0;
+        int current_offset = 0;
 
 #if DEBUG_MODE
-    InitWindow(constants::DEBUG_WIDTH, constants::DEBUG_HEIGHT, "NES");
+        InitWindow(constants::DEBUG_WIDTH, constants::DEBUG_HEIGHT, "NES");
 #else
-    InitWindow(constants::WIDTH, constants::HEIGHT, "NES");
+        InitWindow(constants::WIDTH, constants::HEIGHT, "NES");
 #endif
 
 #if DEBUG_MODE
-    TilesView<400,500,480,432,128,128> tw(128,128);
-    Disassembler<100,100,200,200> da{nes.cpu, nes.bus};
+        TilesView<400,500,480,432,128,128> tw(128,128);
+        Disassembler<100,100,200,200> da{cpu, bus};
 #endif
 
-    bool paused = false;
+        bool paused = false;
 
-    size_t wait_count = 0;
-    SetTargetFPS(60);
-    while(!WindowShouldClose()){
+        size_t wait_count = 0;
+        SetTargetFPS(60);
+        while(!WindowShouldClose()){
+            frame_execute();
 #if DEBUG_MODE
 //        d.move();
 #endif
 
 
-        if (IsKeyPressed(KEY_P)) paused = !paused;
-        BeginDrawing();
+            if (IsKeyPressed(KEY_P)) paused = !paused;
+            BeginDrawing();
 #if DEBUG_MODE
 
 //
@@ -188,13 +191,19 @@ int main(){
 //            y_begin+=10;
 //        }
 
-        tw.handle(nes.ppu);
-        da.handle(nes.cpu, nes.bus);
+            tw.handle(ppu);
+            da.handle(cpu, bus);
 //            d.draw_win();
 //            d2.handle();
 #endif
             ClearBackground(WHITE);
-        EndDrawing();
+            EndDrawing();
+        }
+        CloseWindow();
     }
-    CloseWindow();
+};
+
+int main(){
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes");
+    nes.run();
 }

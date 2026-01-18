@@ -24,9 +24,12 @@ unsigned char Bus::read(unsigned short addr) {
 }
 
 unsigned char* Bus::read_ptr(unsigned short addr) {
+    // todo: maybe return dummy reg addr
+    if (addr == constants::PPUMASK) return &ppumask.reg;
     if (addr == constants::PPUSTATUS) return &ppustatus.reg;
     if (addr == constants::OAMDATA) return &oamdata.reg;
     if (addr == constants::PPUDATA) return &ppudata.reg;
+    if (addr == constants::PPUCTRL) return &ppuctrl.reg;
     // TODO: check for controller
     // dummy
     return nullptr;
@@ -35,8 +38,6 @@ unsigned char* Bus::read_ptr(unsigned short addr) {
 void Bus::dma_tick(unsigned char val) {
     if (dma_active){
         oam[dma_index++] = val;
-    }
-    if (dma_index == 256) {
-        dma_active = false;
+        dma_active = (dma_index != 256);
     }
 }

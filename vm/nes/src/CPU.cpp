@@ -292,32 +292,50 @@ void CPU::handle_interrupt(Bus& bus, Interrupt i) {
     sr.set(StatusReg::Unused, true);
     mem.write(bus,0x100 + sp, sr.reg); --sp;
     sr.set(StatusReg::I, true);
-    pc = mem.read(bus, interrupt_addresses[i]) | (mem.read(bus, interrupt_addresses[i] + 1) << 8);
+    pc = (mem.read(bus, interrupt_addresses[i]) | (mem.read(bus, interrupt_addresses[i] + 1) << 8));
     interrupt_requests[i] = false;
 }
 
-void CPU::execute(Bus& bus, DecodedInstruction di){
-    if (bus.dma_active){
-        // Every cpu cycle
-        bus.dma_tick(mem.read(bus, bus.dma_address + bus.dma_index));
-        return;
-    }
+void CPU::tick(Bus& bus){
+    if (!execute_in_progress) {
+        if (bus.dma_active){
+            // Every cpu cycle
+            bus.dma_tick(mem.read(bus, bus.dma_address + bus.dma_index));
+            return;
+        }
 
-    if (bus.nmi_interrupt_flip_flop){
-        interrupt_requests[NMI] = true;
-        bus.nmi_interrupt_flip_flop = false;
-    }
+        if (bus.nmi_interrupt_flip_flop){
+            interrupt_requests[NMI] = true;
+            bus.nmi_interrupt_flip_flop = false;
+        }
 
-    if (!sr.get(StatusReg::I)){
-        // TODO:
-        // The NES has an interrupt latency of 7 cycles, which means it takes 7 CPU cycles to begin
-        // executing the interrupt handler
-        for (int i = 0; i < InterruptsCount; ++i){
-            if (interrupt_requests[i]){
-                handle_interrupt(bus, static_cast<Interrupt>(i));
-                break;
+        if (!sr.get(StatusReg::I)){
+            // TODO:
+            // The NES has an interrupt latency of 7 cycles, which means it takes 7 CPU cycles to begin
+            // executing the interrupt handler
+            for (int i = 0; i < InterruptsCount; ++i){
+                if (interrupt_requests[i]){
+                    if (!interrupt_handling_in_progress) {
+                        interrupt_handling_cycle = 6;
+                        interrupt_handling_in_progress = true;
+                    } else if (!(--interrupt_handling_cycle)) {
+                        handle_interrupt(bus, static_cast<Interrupt>(i));
+                        interrupt_handling_in_progress = false;
+                    }
+                    break;
+                }
             }
         }
+
+        if (interrupt_handling_in_progress) return;
+
+        di = decode(mem.read(bus, pc));
+        execute_in_progress = true;
+    }
+
+    if (di.cycles){
+        --di.cycles;
+        return;
     }
 
     switch(di.i) {
@@ -717,6 +735,7 @@ void CPU::execute(Bus& bus, DecodedInstruction di){
             break;
         }
     }
+    execute_in_progress = false;
 }
 
 std::string CPU::get_arg_str(Bus& bus, AddressingMode am){

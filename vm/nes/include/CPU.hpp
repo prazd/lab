@@ -41,7 +41,7 @@ struct CPU {
     struct StatusReg {
         // | N | V |   | B | D | I | Z | C |
         // | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
-        unsigned char reg = 0b0000'0100; //
+        unsigned char reg = 0b0000'0000; //
         enum Flag: unsigned char {
             C = 0,
             Z = 1,
@@ -111,6 +111,7 @@ struct CPU {
         RTS, SBC, SEC,SED, SEI,	STA, STX, STY, TAX,	TAY, TSX, TXA, TXS,	TYA,
     };
 
+
     static inline std::string_view instruction_str[56] = {
         "ADC", "AND", "ASL","BCC", "BCS","BEQ", "BIT", "BMI", "BNE","BPL", "BRK", "BVC", "BVS",	"CLC",
         "CLD", "CLI", "CLV","CMP", "CPX","CPY", "DEC", "DEX", "DEY","EOR", "INC", "INX", "INY",	"JMP",
@@ -126,8 +127,12 @@ struct CPU {
     };
 
     DecodedInstruction decode(unsigned char v);
-    void execute(Bus& mem, DecodedInstruction di);
+    void tick(Bus& mem);
+    bool execute_in_progress = false;
+    bool interrupt_handling_in_progress = false;
+    int interrupt_handling_cycle = 0;
     void handle_interrupt(Bus&, Interrupt);
+    DecodedInstruction di{};
 
     template<size_t n>
     void disassemble(Bus& bus, SmallString<n>& ss, unsigned short pc) {

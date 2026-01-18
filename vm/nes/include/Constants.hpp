@@ -1,7 +1,7 @@
 #ifndef NES_CONSTANTS_HPP
 #define NES_CONSTANTS_HPP
+#include <iostream>
 #define DEBUG_MODE 1
-
 namespace constants {
     constexpr float WIDTH = 600.f;
     constexpr float HEIGHT = 600.f;
@@ -11,6 +11,9 @@ namespace constants {
 
     constexpr unsigned short CONTROLLER1 = 0x4016;
     constexpr unsigned short CONTROLLER2 = 0x4017;
+
+    constexpr size_t CPU_SPEED = 1790000;
+    constexpr size_t CPU_FRAME_CYCLES = CPU_SPEED/60;
 
     // CPU map
     constexpr unsigned short RAM_BEGIN = 0x0000;
