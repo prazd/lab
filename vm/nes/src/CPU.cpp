@@ -398,13 +398,15 @@ void CPU::tick(Bus& bus){
         case BNE:{
             auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (!sr.get(StatusReg::Z)) pc += (char)(*arg.value);
+            if (!sr.get(StatusReg::Z))
+                pc += (char)(*arg.value);
             break;
         }
         case BPL:{
             auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (!sr.get(StatusReg::N)) pc += (char)(*arg.value);
+            if (!sr.get(StatusReg::N))
+                pc += (char)(*arg.value);
             break;
         }
         case BVC:{

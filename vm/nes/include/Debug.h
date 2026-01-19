@@ -53,9 +53,10 @@ struct DebugWindowWithTexture : DebugWindow<x,y,w,h> {
 
     void handle() {
         DW::template move_recs<2>({&(DW::rec), &texture_rec});
-        DW::draw_win();
+
         UpdateTexture(target, buffer.data());
-        DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{texture_rec.x, texture_rec.y, w * 1.25f, h * 1.25f}, {0, 0}, 0.0f, WHITE);
+        DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{texture_rec.x, texture_rec.y, w, h}, {0, 0}, 0.0f, WHITE);
+        DW::draw_win();
     }
 };
 

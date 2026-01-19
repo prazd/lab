@@ -9,6 +9,9 @@ namespace constants {
     constexpr float DEBUG_WIDTH = 1600.f;
     constexpr float DEBUG_HEIGHT = 1200.f;
 
+    constexpr size_t DISPLAY_PIXELS_WIDTH = 256;
+    constexpr size_t DISPLAY_PIXELS_HEIGHT = 240;
+
     constexpr unsigned short CONTROLLER1 = 0x4016;
     constexpr unsigned short CONTROLLER2 = 0x4017;
 

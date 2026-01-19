@@ -2,6 +2,11 @@
 #define NES_BUS_HPP
 #include "Controller.hpp"
 struct Bus {
+    // TODO:    
+    enum Mapper{
+        MMC1 = 0x1
+    } current = MMC1;
+
     unsigned char oam[0x100]{};
     unsigned short dma_address{};
     bool dma_active = false;
@@ -26,5 +31,7 @@ struct Bus {
     unsigned char read(unsigned short addr);
     unsigned char* read_ptr(unsigned short addr);
     void dma_tick(unsigned char val);
+
+
 };
 #endif //NES_BUS_HPP

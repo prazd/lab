@@ -123,7 +123,8 @@ struct NESVM {
 
         // for test
         size_t tiles_index_start = 16;
-        if (cartridge.trainer_present) tiles_index_start += 512;
+        if (cartridge.trainer_present)
+            tiles_index_start += 512;
         // TODO: update
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 32768, cpu.mem.map + 0x8000);
         tiles_index_start += 16384 * cartridge.prg_rom_sz;
@@ -147,7 +148,6 @@ struct NESVM {
                 s[i-8] = *(ppu.mem.map + i + 16 * offset);
             return ppu.pattern_table(f, s);
         };
-
         int current_offset = 0;
 
 #if DEBUG_MODE
@@ -157,46 +157,33 @@ struct NESVM {
 #endif
 
 #if DEBUG_MODE
-        TilesView<400,500,480,432,128,128> tw(128,128);
-        Disassembler<100,100,200,200> da{cpu, bus};
+        TilesView<1110,0,480,432,128,128> tw(128,128);
+//        Disassembler<1200,432,200,200> da{cpu, bus};
 #endif
 
-        bool paused = false;
+        auto img = GenImageColor(constants::DISPLAY_PIXELS_WIDTH, constants::DISPLAY_PIXELS_HEIGHT, WHITE);
+        auto display_texture = LoadTextureFromImage(img);
+        UnloadImage(img);
 
-        size_t wait_count = 0;
+
+        bool paused = false;
         SetTargetFPS(60);
         while(!WindowShouldClose()){
             frame_execute();
 #if DEBUG_MODE
-//        d.move();
+
 #endif
-
-
             if (IsKeyPressed(KEY_P)) paused = !paused;
             BeginDrawing();
+            ClearBackground(WHITE);
 #if DEBUG_MODE
 
-//
-//        float x_begin = 0;
-//        float y_begin = 0;
-//        auto pt_val = gen_tile(current_offset);
-//        if (!paused) ++wait_count;
-//        if (wait_count == 200) {++current_offset; wait_count = 0;}
-//        for (auto&& row: pt_val){
-//            for (auto el: row){
-//                DrawRectangle(x_begin, y_begin, 10,10, color_by_id(el));
-//                x_begin+=10;
-//            }
-//            x_begin = 0;
-//            y_begin+=10;
-//        }
-
             tw.handle(ppu);
-            da.handle(cpu, bus);
-//            d.draw_win();
-//            d2.handle();
+//            da.handle(cpu, bus);
+            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, {0, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, {0, 0},0, WHITE);
+            DrawRectangleLinesEx({0, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, 1.f, BLACK);
 #endif
-            ClearBackground(WHITE);
+
             EndDrawing();
         }
         CloseWindow();
@@ -204,6 +191,6 @@ struct NESVM {
 };
 
 int main(){
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes");
     nes.run();
 }
