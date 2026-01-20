@@ -1,12 +1,12 @@
 #include "PPU.hpp"
 #include "Constants.hpp"
 
-void PPU::Memory::write(unsigned short addr, unsigned char value) {
+void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
     adjust_if_mirror(addr);
     map[addr] = value;
 }
 
-unsigned char PPU::Memory::read(unsigned short addr) const {
+unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {
     adjust_if_mirror(addr);
     return map[addr];
 }
@@ -71,7 +71,7 @@ void PPU::update_state(Bus& bus) {
     if (bus.ppudata.was_written)    {v += ppuctrl.addr_inc ? 1 : 32; bus.ppudata.was_written = false;}
 }
 
-unsigned char PPU::tile_byte_from_addr(unsigned short addr) {
+unsigned char PPU::tile_byte_from_addr(Bus& bus, unsigned short addr) {
 //    DCBA98 76543210
 //    ---------------
 //    0HNNNN NNNNPyyy
@@ -85,14 +85,14 @@ unsigned char PPU::tile_byte_from_addr(unsigned short addr) {
     unsigned char tile_number = (addr >> 4) & 0xff;
     unsigned short base = (addr >> 12) & 1 ? constants::PATTERN_TABLE0_BEGIN : constants::PATTERN_TABLE1_BEGIN;
 
-    return mem.read(base + (tile_number * 16) + y_offset + (bit_plane ? 8 : 0));
+    return mem.read(bus, base + (tile_number * 16) + y_offset + (bit_plane ? 8 : 0));
 }
 
 unsigned short PPU::to_pattern_addr(unsigned char y, unsigned char tile_n, bool plane, bool h) {
     return y | (plane << 3) | (tile_n << 4) | (h << 12);
 }
 
-void PPU::tick() {
+void PPU::tick(Bus& bus) {
     if (current_cycle == 0) {++current_cycle; return;} // idle cycle
 
     static unsigned char nt_byte = 0;
@@ -107,9 +107,9 @@ void PPU::tick() {
     if (current_step % 2 == 0) {
         switch (current_step) {
             // fetch nametable byte
-           case NT:  { nt_byte = mem.read(base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;}
+           case NT:  { nt_byte = mem.read(bus, base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;}
            case AT:  {
-               auto val = mem.read(base_attrib_address + y_tile_n/4 + x_tile_n/4);
+               auto val = mem.read(bus, base_attrib_address + y_tile_n/4 + x_tile_n/4);
                // TODO: check
                //  3 3 2 2
                //  3 3 2 2
@@ -121,10 +121,10 @@ void PPU::tick() {
                current_step = PTL;
                break;}  // fetch attribute table byte
            case PTL: {
-               pattern_table_l = tile_byte_from_addr(to_pattern_addr(y_tile_n % 8, nt_byte, false, ppuctrl.bg_pattern_table_addr));
+               pattern_table_l = tile_byte_from_addr(bus, to_pattern_addr(y_tile_n % 8, nt_byte, false, ppuctrl.bg_pattern_table_addr));
                current_step = PTH; break;}     // pattern table tile low
            case PTH: {
-               pattern_table_h = tile_byte_from_addr(to_pattern_addr(y_tile_n % 8, nt_byte, true, ppuctrl.bg_pattern_table_addr));
+               pattern_table_h = tile_byte_from_addr(bus, to_pattern_addr(y_tile_n % 8, nt_byte, true, ppuctrl.bg_pattern_table_addr));
                shift_register_low |= pattern_table_l;
                shift_register_high |= pattern_table_h;
                current_step = NT;  break;}     // pattern table tile high
@@ -136,7 +136,7 @@ void PPU::tick() {
 
 //   TODO: maybe use register for attrib_value
     unsigned char pixel_index =
-            mem.read(constants::IMAGE_PALETTE_BEGIN + (4 * attrib_value) + ((bool(shift_register_high & 0x8000) << 1) | bool(shift_register_low & 0x8000)));
+            mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (4 * attrib_value) + ((bool(shift_register_high & 0x8000) << 1) | bool(shift_register_low & 0x8000)));
 
     ++current_cycle;
 }

@@ -1,11 +1,9 @@
 #ifndef NES_BUS_HPP
 #define NES_BUS_HPP
 #include "Controller.hpp"
+#include "Mappers.h"
 struct Bus {
-    // TODO:    
-    enum Mapper{
-        MMC1 = 0x1
-    } current = MMC1;
+    Mapper mapper;
 
     unsigned char oam[0x100]{};
     unsigned short dma_address{};

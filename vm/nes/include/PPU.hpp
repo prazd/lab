@@ -56,8 +56,8 @@ struct PPU {
 // Attribute - Attribute tables hold the upper two bits of
 // the colours for the tiles
         unsigned char map[0x4000]{};
-        unsigned char read(unsigned short addr) const;
-        void write(unsigned short addr, unsigned char value);
+        unsigned char read(Bus& bus, unsigned short addr) const;
+        void write(Bus& bus, unsigned short addr, unsigned char value);
         static void adjust_if_mirror(unsigned short&);
     } mem;
 
@@ -83,7 +83,7 @@ struct PPU {
         NT, AT, PTL, PTH
     } current_step = NT;
 
-    void tick();
+    void tick(Bus&);
 
     struct Sprite {
         unsigned char coord{}; //  Stores the y-coordinate of the top left of the sprite minus 1
@@ -265,7 +265,7 @@ struct PPU {
 
 
 
-    unsigned char tile_byte_from_addr(unsigned short addr);
+    unsigned char tile_byte_from_addr(Bus& bus, unsigned short addr);
     //    0HNNNN NNNNPyyy
     unsigned short to_pattern_addr(unsigned char y, unsigned char tile_n, bool plane, bool h);
 };

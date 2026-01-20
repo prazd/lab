@@ -121,13 +121,18 @@ struct NESVM {
         std::cout << "PRG_SZ:" << cartridge.prg_rom_sz << '\n';
         std::cout << "Trainer presents:" <<  cartridge.trainer_present << '\n';
 
+        bus.mapper.mtype = static_cast<Mapper::MapperType>(cartridge.mapper_num);
+
         // for test
         size_t tiles_index_start = 16;
         if (cartridge.trainer_present)
             tiles_index_start += 512;
-        // TODO: update
-        std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 32768, cpu.mem.map + 0x8000);
+
+        bus.mapper.rom.reserve(16384 * cartridge.prg_rom_sz);
+        std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + (16384 * cartridge.prg_rom_sz), bus.mapper.rom.begin());
+
         tiles_index_start += 16384 * cartridge.prg_rom_sz;
+        // todo: update
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 8192, ppu.mem.map);
     }
 
