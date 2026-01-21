@@ -4,7 +4,6 @@
 #include "Mappers.h"
 struct Bus {
     Mapper mapper;
-
     unsigned char oam[0x100]{};
     unsigned short dma_address{};
     bool dma_active = false;
@@ -17,7 +16,7 @@ struct Bus {
     };
     PPUREG ppuctrl{};
     PPUREG ppumask{};
-    PPUREG ppustatus{};
+    PPUREG ppustatus = {0xff, false}; // Enable Vblank for test
     PPUREG oamaddr{};
     PPUREG oamdata{};
     PPUREG ppuscroll{};
@@ -29,7 +28,5 @@ struct Bus {
     unsigned char read(unsigned short addr);
     unsigned char* read_ptr(unsigned short addr);
     void dma_tick(unsigned char val);
-
-
 };
 #endif //NES_BUS_HPP

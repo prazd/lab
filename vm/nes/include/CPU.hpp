@@ -24,14 +24,33 @@ struct CPU {
         static void adjust_if_mirror(unsigned short&);
     } mem;
 
+
+
+    // For debug
     inline static unsigned short write_mmio_addr[] = {
-            constants::PPUCTRL, constants::PPUMASK, constants::OAMADDR, constants::OAMDATA,
-            constants::PPUSCROLL, constants::PPUADDR, constants::PPUDATA, constants::OAMDMA,
+            constants::PPUCTRL,
+            constants::PPUMASK,
+            constants::PPUSTATUS,
+            constants::OAMADDR,
+            constants::OAMDATA,
+            constants::PPUSCROLL,
+            constants::PPUADDR,
+            constants::PPUDATA,
+            constants::OAMDMA,
             constants::CONTROLLER1
     };
 
     inline static unsigned short read_mmio_addr[] = {
-            constants::PPUSTATUS,  constants::OAMDATA,constants::PPUDATA,constants::CONTROLLER1
+            constants::PPUCTRL,
+            constants::PPUMASK,
+            constants::PPUSTATUS,
+            constants::OAMADDR,
+            constants::OAMDATA,
+            constants::PPUSCROLL,
+            constants::PPUADDR,
+            constants::PPUDATA,
+            constants::OAMDMA,
+            constants::CONTROLLER1
     };
 
     // https://www.nesdev.org/NESDoc.pdf (page 12-13)
@@ -97,9 +116,13 @@ struct CPU {
     };
 
     struct AddressingResult {
-        unsigned char* value{};
+        unsigned short addr{};
         bool page_crossed{};
+        bool is_accumulator = false;
     };
+
+    unsigned char read(Bus& bus, AddressingResult ar);
+    void write(Bus& bus, AddressingResult ar, unsigned char value);
 
     AddressingResult get_arg(Bus& bus, AddressingMode am, bool cross_check);
     std::string get_arg_str(Bus& bus, AddressingMode am);

@@ -9,7 +9,12 @@ void Bus::write(unsigned short addr, unsigned char value) {
     if (addr == constants::PPUSCROLL) {ppuscroll =   {value, true}; return;}
     if (addr == constants::PPUADDR)   {ppuaddr   =   {value, true}; return;}
     if (addr == constants::PPUDATA)   {ppudata   =   {value, true}; return;}
-    if (addr == constants::OAMDMA)    {dma_address = value * 256; dma_active = true; dma_index = 0;  return;}
+    if (addr == constants::OAMDMA)    {
+        dma_address = value * 256;
+        dma_active = true;
+        dma_index = 0;
+        return;
+    }
     if (addr == constants::CONTROLLER1) {if (value == 1) c.latch1 = true;}
     if (addr == constants::CONTROLLER1) {if (value == 0) c.update_status1();}
 
