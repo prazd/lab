@@ -296,6 +296,9 @@ void CPU::handle_interrupt(Bus& bus, Interrupt i) {
 }
 
 void CPU::tick(Bus& bus){
+#if UI_DEBUGGER
+    if (!debug_run) return;
+#endif
     if (!execute_in_progress) {
         if (bus.dma_active){
             // Every cpu cycle
@@ -415,13 +418,15 @@ void CPU::tick(Bus& bus){
         case BVC:{
             auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (!sr.get(StatusReg::V)) pc += (char)(read(bus, arg));
+            if (!sr.get(StatusReg::V))
+                pc += (char)(read(bus, arg));
             break;
         }
         case BVS:{
             auto arg = get_arg(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (sr.get(StatusReg::V)) pc += (char)(read(bus, arg));
+            if (sr.get(StatusReg::V))
+                pc += (char)(read(bus, arg));
             break;
         }
 
@@ -568,7 +573,7 @@ void CPU::tick(Bus& bus){
         }
         case LDX:{
             auto arg = get_arg(bus, di.addr_mode, true);
-            x= read(bus, arg);
+            x = read(bus, arg);
             sr.set(StatusReg::Z, x == 0);
             sr.set(StatusReg::N, x & 0x80);
             pc += di.bytes;
@@ -674,7 +679,7 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::C, res >= 0);
             sr.set(StatusReg::Z, res == 0);
             // TODO: check - (result ^ A) & (result ^ ~memory) & $80 in doc
-            sr.set(StatusReg::V, (res ^ a) & (res ^ val) & 0x80);
+            sr.set(StatusReg::V, (res ^ a) & (res ^ ~val) & 0x80);
             sr.set(StatusReg::N, res & 0x80);
             a = res & 0xff;
             pc += di.bytes;
@@ -743,6 +748,9 @@ void CPU::tick(Bus& bus){
         }
     }
     execute_in_progress = false;
+#if UI_DEBUGGER
+    debug_run = false;
+#endif
 }
 
 std::string CPU::get_arg_str(Bus& bus, AddressingMode am){

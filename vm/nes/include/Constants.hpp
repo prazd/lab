@@ -2,6 +2,8 @@
 #define NES_CONSTANTS_HPP
 #include <iostream>
 #define DEBUG_MODE 1
+#define UI_DEBUGGER 1
+
 namespace constants {
     constexpr float WIDTH = 600.f;
     constexpr float HEIGHT = 600.f;

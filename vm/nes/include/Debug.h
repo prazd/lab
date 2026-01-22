@@ -37,6 +37,11 @@ struct DebugWindow {
     void draw_win(){
         DrawRectangleLinesEx(rec, 1.f, BLACK);
     }
+
+    static void draw_button(Rectangle rec, const char* text, Color c, float font_sz = 10.1f){
+        DrawRectangleLinesEx(rec, 1.f, BLACK);
+        DrawText(text, rec.x, rec.y, font_sz, c);
+    }
 };
 
 template<size_t x, size_t y, size_t w, size_t h, size_t t_w, size_t t_h>
@@ -141,28 +146,36 @@ struct TilesView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w/8), t_h + (t_h/8
 template<size_t x, size_t y, size_t w, size_t h>
 struct Disassembler: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
+    bool next = false;
     unsigned short base{};
     unsigned short pc{};
     std::stringstream ss;
-    Disassembler(CPU& cpu, Bus& bus): base(((cpu.mem.read(bus, 0xFFFD) << 8) | cpu.mem.read(bus, 0xFFFC))){
-        std::cout << "BASE:" << std::hex << base << '\n';
-        std::cout << std::dec;
+    Rectangle field_begin;
+
+    Rectangle next_button;
+    Disassembler(CPU& cpu, Bus& bus): base(cpu.pc),
+        field_begin{x, y, 10,10},
+        next_button{x, y + h, 20,20}{}
+
+    void handle(CPU& cpu) {
+        base = cpu.pc;
+        next = (CheckCollisionPointRec(GetMousePosition(), next_button) && IsMouseButtonPressed(0));
     }
-    // TODO: debug
-    void handle(CPU& cpu, Bus& bus) {
-        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_DOWN)){
-            base += cpu.decode(cpu.mem.read(bus, base)).bytes;
-        }
+
+    void draw(CPU& cpu, Bus& bus) {
+        field_begin =  {DW::rec.x, DW::rec.y, 10, 10};
+        next_button = {DW::rec.x, DW::rec.y + h, 20, 20};
         pc = base;
-        std::array<SmallString<40>, 10> instructions{};
         for (int i = 0; i < 10; ++i){
-            cpu.disassemble(bus,instructions[i], pc);
-            ss << std::hex << pc << " " << instructions[i].data() << "\n";
+            if (pc == cpu.pc) ss << ">>";
+            auto asm_info = cpu.disassemble(bus, pc);
+            ss << std::hex << "  "  << pc << " " << asm_info.mnemonic << " " << asm_info.operand << "\n";
             pc += cpu.decode(cpu.mem.read(bus, pc)).bytes;
         }
         DW::move();
         auto str = ss.str();
         DW::draw(str.data(), 15.f);
+        DW::draw_button(next_button, "next", GREEN);
         ss.str("");
     }
 };

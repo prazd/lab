@@ -114,8 +114,16 @@ struct NESVM {
     CPU cpu{};
     PPU ppu{};
     Cartridge cartridge;
+#if UI_DEBUGGER
+    Disassembler<1200,432,200,200> dis;
+#endif
 
-    NESVM(std::string_view rom_path): cartridge(rom_path){
+    NESVM(std::string_view rom_path): cartridge(rom_path)
+#if UI_DEBUGGER
+    ,dis(cpu, bus)
+#endif
+
+    {
         std::cout << "MapperNum:" << cartridge.mapper_num << '\n';
         std::cout << "CHR_SZ:" << cartridge.chr_rom_sz << '\n';
         std::cout << "PRG_SZ:" << cartridge.prg_rom_sz << '\n';
@@ -137,10 +145,22 @@ struct NESVM {
     }
 
     void frame_execute(){
+#if UI_DEBUGGER
+            while (cpu.debug_run) {
+                cpu.tick(bus);
+            }
+            dis.handle(cpu);
+            if (dis.next){
+                cpu.debug_run = true;
+                dis.next = false;
+            }
+
+#else
         for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
             cpu.tick(bus);
-//            for (int j = 0; j < 3; ++j) ppu.tick();
+            // for (int j = 0; j < 3; ++j) ppu.tick(bus);
         }
+#endif
     }
 
     void run(){
@@ -163,7 +183,6 @@ struct NESVM {
 
 #if DEBUG_MODE
         TilesView<1110,0,480,432,128,128> tw(128,128);
-//        Disassembler<1200,432,200,200> da{cpu, bus};
 #endif
 
         auto img = GenImageColor(constants::DISPLAY_PIXELS_WIDTH, constants::DISPLAY_PIXELS_HEIGHT, WHITE);
@@ -175,8 +194,8 @@ struct NESVM {
         SetTargetFPS(60);
         while(!WindowShouldClose()){
             frame_execute();
-#if DEBUG_MODE
-
+#if DEBUG_MODE && UI_DEBUGGER
+            dis.draw(cpu, bus);
 #endif
             if (IsKeyPressed(KEY_P)) paused = !paused;
             BeginDrawing();

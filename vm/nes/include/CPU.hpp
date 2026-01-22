@@ -157,8 +157,16 @@ struct CPU {
     void handle_interrupt(Bus&, Interrupt);
     DecodedInstruction di{};
 
-    template<size_t n>
-    void disassemble(Bus& bus, SmallString<n>& ss, unsigned short pc) {
+#if UI_DEBUGGER
+    bool debug_run = true;
+#endif
+
+    struct AsmInfo {
+        std::string_view mnemonic;
+        unsigned short operand;
+    };
+
+    inline AsmInfo disassemble(Bus& bus, unsigned short pc) {
         auto di = decode(mem.read(bus, pc));
         switch (di.i) {
             case ADC:
@@ -191,11 +199,8 @@ struct CPU {
             case STX:
             case STY:
             {
-                auto arg = get_arg_str(bus, di.addr_mode);
-                ss += instruction_str[di.i];
-                ss += ' ';
-                ss += arg;
-                break;
+                auto arg = get_arg(bus,  di.addr_mode, false);
+                return {instruction_str[di.i], arg.addr};
             }
 
             case BRK:
@@ -225,19 +230,16 @@ struct CPU {
             case TXA:
             case TXS:
             case TYA:
-                {ss += instruction_str[di.i]; break;}
-
+            {return {instruction_str[di.i], 0};}
             case JMP: {
-                ss += "JMP ";
                 if (di.addr_mode == Absolute) {
-                    ss += std::to_string(mem.read(bus, pc + 1) | (mem.read(bus, pc + 2) << 8));
+                    return {instruction_str[di.i], (unsigned short)(mem.read(bus, pc + 1) | (mem.read(bus, pc + 2) << 8))};
                 } else { // Indirect
                     unsigned short arg_addr = (mem.read(bus, pc + 1) | (mem.read(bus, pc + 2) << 8));
                     unsigned char l = mem.read(bus, arg_addr);
                     unsigned char h = mem.read(bus, (arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
-                    ss += std::to_string(l | (h << 8));
+                    return {instruction_str[di.i],(unsigned short)(l | (h << 8)) };
                 }
-                break;
             }
         }
     }
