@@ -38,9 +38,13 @@ struct DebugWindow {
         DrawRectangleLinesEx(rec, 1.f, BLACK);
     }
 
-    static void draw_button(Rectangle rec, const char* text, Color c, float font_sz = 10.1f){
+    static void draw_text_button(Rectangle rec, const char* text, Color c, float font_sz = 10.1f){
         DrawRectangleLinesEx(rec, 1.f, BLACK);
         DrawText(text, rec.x, rec.y, font_sz, c);
+    }
+
+    static void draw_button(Rectangle rec, Color c){
+        DrawRectangle(rec.x, rec.y, rec.width, rec.height, c);
     }
 };
 
@@ -147,15 +151,21 @@ template<size_t x, size_t y, size_t w, size_t h>
 struct Disassembler: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
     bool next = false;
+    bool selected_move_active = false;
+    unsigned short selected_line_pc = 0;
     unsigned short base{};
     unsigned short pc{};
     std::stringstream ss;
-    Rectangle field_begin;
+    Rectangle line_button;
 
     Rectangle next_button;
+    Rectangle select_jump_button;
+
     Disassembler(CPU& cpu, Bus& bus): base(cpu.pc),
-        field_begin{x, y, 10,10},
-        next_button{x, y + h, 20,20}{}
+                                      line_button{x - 5, y - 5, 5, 5},
+                                      next_button{x, y + h, 20,20},
+                                      select_jump_button{x + w, y + h, 20,20}
+                                      {}
 
     void handle(CPU& cpu) {
         base = cpu.pc;
@@ -163,19 +173,31 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     }
 
     void draw(CPU& cpu, Bus& bus) {
-        field_begin =  {DW::rec.x, DW::rec.y, 10, 10};
-        next_button = {DW::rec.x, DW::rec.y + h, 20, 20};
+        line_button = {DW::rec.x - 20, DW::rec.y, 10, 10};
+        next_button = {DW::rec.x, DW::rec.y + h, 40, 40};
+        select_jump_button = {DW::rec.x + 40, DW::rec.y + h, 40, 40};
         pc = base;
+        if (CheckCollisionPointRec(GetMousePosition(), select_jump_button) && IsMouseButtonPressed(0)){
+            selected_move_active = true;
+        }
         for (int i = 0; i < 10; ++i){
+            auto r = Rectangle{line_button.x, line_button.y + i * (line_button.height + 25.f), line_button.width, line_button.height};
+            if (CheckCollisionPointRec(GetMousePosition(), r) && IsMouseButtonPressed(0)){
+                selected_line_pc = pc;
+            }
+            DW::draw_button(r,  selected_line_pc == pc ? RED: GREEN);
             if (pc == cpu.pc) ss << ">>";
             auto asm_info = cpu.disassemble(bus, pc);
-            ss << std::hex << "  "  << pc << " " << asm_info.mnemonic << " " << asm_info.operand << "\n";
+            ss << std::hex << "  "  << pc << " " << asm_info.mnemonic << " ";
+            asm_info.is_accumulator ? (ss << "A") : (asm_info.no_operand ? ss : (ss << asm_info.operand));
+            ss << "\n\n";
             pc += cpu.decode(cpu.mem.read(bus, pc)).bytes;
         }
         DW::move();
         auto str = ss.str();
         DW::draw(str.data(), 15.f);
-        DW::draw_button(next_button, "next", GREEN);
+        DW::draw_text_button(next_button, " next", GREEN, 15.f);
+        DW::draw_text_button(select_jump_button, " jmp", GREEN, 15.f);
         ss.str("");
     }
 };

@@ -250,8 +250,7 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
     return {};
 }
 
-
-CPU::AddressingResult CPU::get_arg(Bus& bus, AddressingMode am, bool cross_check) {
+CPU::AddressingResult CPU::get_arg_pc(Bus& bus, AddressingMode am, bool cross_check) {
     auto arg1 = mem.read(bus,pc + 1);
     auto arg2 = mem.read(bus,pc + 2);
     unsigned short args_as_addr = ((arg1) | arg2 << 8);
@@ -279,6 +278,39 @@ CPU::AddressingResult CPU::get_arg(Bus& bus, AddressingMode am, bool cross_check
         case ZeroPage: return {arg1, false, false};
         case Absolute: return {  args_as_addr, false, false};
         case Relative: return { (unsigned short)(pc + 1), false, false};
+        case Accumulator: return {0, false, true};
+    }
+    throw std::exception();
+}
+
+CPU::AddressingResult CPU::get_arg_by_addr(Bus &bus, CPU::AddressingMode am, unsigned short pc_addr) {
+    auto arg1 = mem.read(bus,pc_addr + 1);
+    auto arg2 = mem.read(bus,pc_addr + 2);
+    unsigned short args_as_addr = ((arg1) | arg2 << 8);
+    switch(am){
+        case ZeroPageX: return {(unsigned short)((arg1 + x) % 256), false, false};
+        case ZeroPageY: return {(unsigned short)((arg1 + x) % 256), false, false};
+        case AbsoluteX: {
+            unsigned short addr = args_as_addr + x;
+            return {addr, false, false};
+        }
+        case AbsoluteY:{
+            unsigned short addr = args_as_addr + y;
+            return {addr, false, false};
+        }
+        case IndexedIndirectX: return
+                    {(unsigned short)(mem.read(bus,(arg1 + x) % 256) + mem.read(bus,(arg1 + x + 1) % 256)* 256), false, false};
+        case IndexedIndirectY: {
+            unsigned char l = mem.read(bus,arg1);
+            unsigned char h = mem.read(bus,(arg1 + 1) % 256);
+            unsigned short addr = (l | (h << 8));
+            unsigned short res_addr = addr + y;
+            return {res_addr, false, false};
+        }
+        case Immediate: return { (unsigned short)(pc_addr + 1), false, false};
+        case ZeroPage: return {arg1, false, false};
+        case Absolute: return {  args_as_addr, false, false};
+        case Relative: return { (unsigned short)(pc_addr + 1), false, false};
         case Accumulator: return {0, false, true};
     }
     throw std::exception();
@@ -342,7 +374,7 @@ void CPU::tick(Bus& bus){
 
     switch(di.i) {
         case ADC: {
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             unsigned char val = read(bus, arg);
             unsigned short res = val + sr.get(StatusReg::C);
             sr.set(StatusReg::C, res > 0xff);
@@ -354,8 +386,8 @@ void CPU::tick(Bus& bus){
             break;
         }
         case AND:{
-            auto arg = get_arg(bus, di.addr_mode, true);
-            unsigned char val =  read(bus, arg);;
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
+            unsigned char val =  read(bus, arg);
             a &= val;
             sr.set(StatusReg::Z, a == 0);
             sr.set(StatusReg::N, a & 0x80);
@@ -363,7 +395,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case ASL:{
-            auto arg = get_arg(bus, di.addr_mode, false);
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
             unsigned char val =  read(bus, arg);;
             unsigned char res = val << 1;
             sr.set(StatusReg::C, val & 0x80);
@@ -374,56 +406,56 @@ void CPU::tick(Bus& bus){
             break;
         }
         case BCC:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
             if (!sr.get(StatusReg::C))
                 pc += (char)(read(bus, arg));
             break;
         }
         case BCS:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
             if (sr.get(StatusReg::C))
                 pc += (char)(read(bus, arg));
             break;
         }
         case BEQ:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
             if (sr.get(StatusReg::Z))
                 pc += (char)(read(bus, arg));
             break;
         }
         case BMI: {
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
             if (sr.get(StatusReg::N))
                 pc += (char)(read(bus, arg));
             break;
         }
         case BNE:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
             if (!sr.get(StatusReg::Z))
                 pc += (char)(read(bus, arg));
             break;
         }
         case BPL:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
             if (!sr.get(StatusReg::N))
                 pc += (char)(read(bus, arg));
             break;
         }
         case BVC:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
             if (!sr.get(StatusReg::V))
                 pc += (char)(read(bus, arg));
             break;
         }
         case BVS:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
             if (sr.get(StatusReg::V))
                 pc += (char)(read(bus, arg));
@@ -431,7 +463,7 @@ void CPU::tick(Bus& bus){
         }
 
         case BIT:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             unsigned char val = read(bus, arg);
             unsigned char res = a & val;
             sr.set(StatusReg::Z, res == 0);
@@ -453,7 +485,7 @@ void CPU::tick(Bus& bus){
         case CLI:{sr.set(StatusReg::I, 0); pc+=1; break;}
         case CLV:{sr.set(StatusReg::V, 0); pc+=1; break;}
         case CMP:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             unsigned char val =  read(bus, arg);
             unsigned char res = a - val;
             sr.set(StatusReg::C, a >= val);
@@ -463,7 +495,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case CPX:{
-            auto arg = get_arg(bus, di.addr_mode, false);
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
             unsigned char val =  read(bus, arg);
             unsigned char res = x - val;
             sr.set(StatusReg::C, x >= val);
@@ -473,7 +505,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case CPY:{
-            auto arg = get_arg(bus, di.addr_mode, false);
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
             unsigned char val =  read(bus, arg);
             unsigned char res = y - val;
             sr.set(StatusReg::C, y >= val);
@@ -483,7 +515,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case DEC:{
-            auto arg = get_arg(bus, di.addr_mode, false);
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
             unsigned char val =  read(bus, arg);
             unsigned char res = val - 1;
             sr.set(StatusReg::Z, res == 0);
@@ -509,7 +541,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case EOR:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             unsigned char val =  read(bus, arg);
             unsigned char res = a ^ val;
             sr.set(StatusReg::Z, res == 0);
@@ -519,7 +551,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case INC:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             unsigned char val =  read(bus, arg);
             unsigned char res = val + 1;
             sr.set(StatusReg::Z, res == 0);
@@ -557,14 +589,14 @@ void CPU::tick(Bus& bus){
         }
         case JSR:{
             // TODO: maybe check
-            auto arg = get_arg(bus, di.addr_mode, false);
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
             mem.write(bus,0x100 + sp, ((pc + 2) >> 8) & 0xff); --sp;
             mem.write(bus,0x100 + sp, (pc + 2) & 0xff); --sp;
             pc = arg.addr;
             break;
         }
         case LDA:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             a = read(bus, arg);
             sr.set(StatusReg::Z, a == 0);
             sr.set(StatusReg::N, a & 0x80);
@@ -572,7 +604,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case LDX:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             x = read(bus, arg);
             sr.set(StatusReg::Z, x == 0);
             sr.set(StatusReg::N, x & 0x80);
@@ -580,7 +612,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case LDY:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             y= read(bus, arg);
             sr.set(StatusReg::Z, y == 0);
             sr.set(StatusReg::N, y & 0x80);
@@ -588,7 +620,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case LSR:{
-            auto arg = get_arg(bus, di.addr_mode, false);
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
             unsigned char val =  read(bus, arg);
             unsigned char res = val >> 1;
             sr.set(StatusReg::C, val & 0x1);
@@ -600,7 +632,7 @@ void CPU::tick(Bus& bus){
         }
         case NOP:{pc+=di.bytes; break;}
         case ORA:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             unsigned char val =  read(bus, arg);
             unsigned char res = a | val;
             sr.set(StatusReg::Z, res == 0);
@@ -634,7 +666,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case ROL:{
-            auto arg = get_arg(bus, di.addr_mode, false);
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
             unsigned char val = read(bus, arg);
             bool prev_c = sr.get(StatusReg::C);
             unsigned char res = (val << 1) | (prev_c << 7) ;
@@ -646,7 +678,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case ROR:{
-            auto arg = get_arg(bus, di.addr_mode, false);
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
             unsigned char val = read(bus, arg);
             bool prev_c = sr.get(StatusReg::C);
             unsigned char res = (val >> 1) | (prev_c << 7) ;
@@ -672,7 +704,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case SBC:{
-            auto arg = get_arg(bus, di.addr_mode, true);
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
             unsigned char val = read(bus, arg);
             bool prev_c = sr.get(StatusReg::C);
             int res = a - val - (!prev_c);
@@ -689,19 +721,19 @@ void CPU::tick(Bus& bus){
         case SED:{sr.set(StatusReg::D, true); pc+=di.bytes; break;}
         case SEI:{sr.set(StatusReg::I, true); pc+=di.bytes; break;}
         case STA:{
-            auto arg = get_arg(bus, di.addr_mode, false);
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
             write(bus, arg, a);
             pc += di.bytes;
             break;
         }
         case STX:{
-            auto arg = get_arg(bus, di.addr_mode, false);
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
             write(bus, arg, x);
             pc += di.bytes;
             break;
         }
         case STY:{
-            auto arg = get_arg(bus, di.addr_mode, false);
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
             write(bus, arg, y);
             pc += di.bytes;
             break;
@@ -753,32 +785,6 @@ void CPU::tick(Bus& bus){
 #endif
 }
 
-std::string CPU::get_arg_str(Bus& bus, AddressingMode am){
-    auto arg1 = mem.read(bus,pc + 1);
-    auto arg2 = mem.read(bus,pc + 2);
-    unsigned short args_as_addr = ((arg1) | arg2 << 8);
-
-    switch(am){
-        case ZeroPageX: return std::to_string((arg1 + x) % 256);
-        case ZeroPageY: return std::to_string((arg1 + y) % 256);
-        case AbsoluteX: return std::to_string(args_as_addr + x);
-        case AbsoluteY: return std::to_string(args_as_addr + y);
-        case IndexedIndirectX: return std::to_string(((arg1 + x) % 256) + mem.read(bus,(arg1 + x + 1) % 256)* 256);
-        case IndexedIndirectY: {
-            unsigned char l = mem.read(bus,arg1);
-            unsigned char h = mem.read(bus,(arg1 + 1) % 256);
-            unsigned short addr = (l | (h << 8));
-            unsigned short res_addr = addr + y;
-            return std::to_string(res_addr);
-        }
-        case Immediate: return std::to_string(mem.read(bus,pc + 1));
-        case ZeroPage: return std::to_string(mem.read(bus,arg1));
-        case Absolute: return std::to_string(mem.read(bus,args_as_addr));
-        case Relative: return std::to_string(mem.read(bus,pc + 1));
-        case Accumulator: return {"A ", false};
-    }
-    throw std::exception();
-}
 
 unsigned char CPU::read(Bus &bus, AddressingResult ar) {
     if (ar.is_accumulator) return a;

@@ -124,8 +124,8 @@ struct CPU {
     unsigned char read(Bus& bus, AddressingResult ar);
     void write(Bus& bus, AddressingResult ar, unsigned char value);
 
-    AddressingResult get_arg(Bus& bus, AddressingMode am, bool cross_check);
-    std::string get_arg_str(Bus& bus, AddressingMode am);
+    AddressingResult get_arg_pc(Bus& bus, AddressingMode am, bool cross_check);
+    AddressingResult get_arg_by_addr(Bus& bus, AddressingMode am, unsigned short pc_addr);
 
     enum Instruction: unsigned char {
         ADC, AND, ASL,BCC, BCS,	BEQ, BIT, BMI, BNE,	BPL, BRK, BVC, BVS,	CLC,
@@ -162,16 +162,36 @@ struct CPU {
 #endif
 
     struct AsmInfo {
-        std::string_view mnemonic;
-        unsigned short operand;
+        std::string_view mnemonic{};
+        unsigned short operand{};
+        bool is_accumulator{};
+        bool no_operand{};
     };
 
-    inline AsmInfo disassemble(Bus& bus, unsigned short pc) {
-        auto di = decode(mem.read(bus, pc));
+    inline AsmInfo disassemble(Bus& bus, unsigned short address) {
+        auto di = decode(mem.read(bus, address));
         switch (di.i) {
             case ADC:
             case AND:
             case ASL:
+            case BIT:
+            case CMP:
+            case CPX:
+            case CPY:
+            case DEC:
+            case EOR:
+            case INC:
+            case LDA:
+            case LDX:
+            case LDY:
+            case LSR:
+            case ORA:
+            case SBC:
+            {
+                auto arg = get_arg_by_addr(bus, di.addr_mode, address);
+                return {instruction_str[di.i], mem.read(bus, arg.addr), arg.is_accumulator, false};
+            }
+
             case BCC:
             case BCS:
             case BEQ:
@@ -180,27 +200,19 @@ struct CPU {
             case BPL:
             case BVC:
             case BVS:
-            case BIT:
-            case CMP:
-            case CPX:
-            case CPY:
-            case DEC:
-            case EOR:
-            case INC:
+            {
+                auto arg = get_arg_by_addr(bus, di.addr_mode, address);
+                return {instruction_str[di.i], (unsigned short)(address + (char)mem.read(bus, arg.addr) + di.bytes), arg.is_accumulator,
+                        false};
+            }
+
             case JSR:
-            case LDA:
-            case LDX:
-            case LDY:
-            case LSR:
-            case ORA:
-            case SBC:
-                // TODO: check
             case STA:
             case STX:
             case STY:
             {
-                auto arg = get_arg(bus,  di.addr_mode, false);
-                return {instruction_str[di.i], arg.addr};
+                auto arg = get_arg_by_addr(bus, di.addr_mode, address);
+                return {instruction_str[di.i], arg.addr, arg.is_accumulator, false};
             }
 
             case BRK:
@@ -230,15 +242,16 @@ struct CPU {
             case TXA:
             case TXS:
             case TYA:
-            {return {instruction_str[di.i], 0};}
+                { return {instruction_str[di.i], 0, false, true}; }
             case JMP: {
                 if (di.addr_mode == Absolute) {
-                    return {instruction_str[di.i], (unsigned short)(mem.read(bus, pc + 1) | (mem.read(bus, pc + 2) << 8))};
+                    return {instruction_str[di.i], (unsigned short)(mem.read(bus, address + 1) | (mem.read(bus, address + 2) << 8)), false,
+                            false};
                 } else { // Indirect
-                    unsigned short arg_addr = (mem.read(bus, pc + 1) | (mem.read(bus, pc + 2) << 8));
+                    unsigned short arg_addr = (mem.read(bus, address + 1) | (mem.read(bus, address + 2) << 8));
                     unsigned char l = mem.read(bus, arg_addr);
                     unsigned char h = mem.read(bus, (arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
-                    return {instruction_str[di.i],(unsigned short)(l | (h << 8)) };
+                    return {instruction_str[di.i],(unsigned short)(l | (h << 8)), false , false};
                 }
             }
         }

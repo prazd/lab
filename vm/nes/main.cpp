@@ -115,7 +115,7 @@ struct NESVM {
     PPU ppu{};
     Cartridge cartridge;
 #if UI_DEBUGGER
-    Disassembler<1200,432,200,200> dis;
+    Disassembler<1200,432,200,400> dis;
 #endif
 
     NESVM(std::string_view rom_path): cartridge(rom_path)
@@ -146,10 +146,18 @@ struct NESVM {
 
     void frame_execute(){
 #if UI_DEBUGGER
-            while (cpu.debug_run) {
-                cpu.tick(bus);
-            }
-            dis.handle(cpu);
+            int current_tick = 0;
+            do {
+                while (cpu.debug_run) {
+                    cpu.tick(bus);
+                    ++current_tick;
+                }
+                if (dis.selected_move_active){
+                    dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
+                }
+            } while(dis.selected_move_active && current_tick < constants::CPU_FRAME_CYCLES);
+
+            if (!dis.selected_move_active) dis.handle(cpu);
             if (dis.next){
                 cpu.debug_run = true;
                 dis.next = false;
