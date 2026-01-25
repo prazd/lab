@@ -328,6 +328,9 @@ void CPU::handle_interrupt(Bus& bus, Interrupt i) {
 }
 
 void CPU::tick(Bus& bus){
+#if DEBUG_MODE
+    ++cycles_count;
+#endif
 #if UI_DEBUGGER
     if (!debug_run) return;
 #endif
@@ -376,7 +379,7 @@ void CPU::tick(Bus& bus){
         case ADC: {
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             unsigned char val = read(bus, arg);
-            unsigned short res = val + sr.get(StatusReg::C);
+            unsigned short res = a + val + sr.get(StatusReg::C);
             sr.set(StatusReg::C, res > 0xff);
             sr.set(StatusReg::Z, (res & 0xff) == 0);
             sr.set(StatusReg::V, (res ^ a) & (res ^ val) & 0x80);

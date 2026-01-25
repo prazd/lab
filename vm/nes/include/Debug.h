@@ -46,6 +46,7 @@ struct DebugWindow {
     static void draw_button(Rectangle rec, Color c){
         DrawRectangle(rec.x, rec.y, rec.width, rec.height, c);
     }
+
 };
 
 template<size_t x, size_t y, size_t w, size_t h, size_t t_w, size_t t_h>
@@ -147,6 +148,36 @@ struct TilesView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w/8), t_h + (t_h/8
     }
 };
 
+template <size_t x, size_t y, size_t w, size_t h>
+struct UserInput {
+    std::string s;
+    Rectangle rec;
+    std::stringstream ss;
+    UserInput(): rec{x, y, w, h} {}
+    void push_handler() {
+        if (!CheckCollisionPointRec(GetMousePosition(), rec)) return;
+        auto c = GetCharPressed();
+        if (!c) return;
+        s.push_back((char)c);
+    }
+    void pop_handler() {
+        if (!CheckCollisionPointRec(GetMousePosition(), rec)) return;
+        if (IsKeyPressed(KEY_BACKSPACE) && !s.empty())
+            s.pop_back();
+    }
+    void draw() {
+        push_handler();
+        pop_handler();
+        DrawRectangleLinesEx({rec.x, rec.y, rec.width, rec.height}, 1.f, BLACK);
+        ss << std::hex << s;
+        if (CheckCollisionPointRec(GetMousePosition(), rec))
+            ss << " |";
+        auto r_str = ss.str();
+        DrawText(r_str.data(), rec.x, rec.y, 15.f, BLACK);
+        ss.str("");
+    }
+};
+
 template<size_t x, size_t y, size_t w, size_t h>
 struct Disassembler: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
@@ -156,15 +187,19 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     unsigned short base{};
     unsigned short pc{};
     std::stringstream ss;
+
     Rectangle line_button;
+    UserInput<x, y - 30, w, 30> u_input;
 
     Rectangle next_button;
     Rectangle select_jump_button;
+    Rectangle input_address_jump_button;
 
     Disassembler(CPU& cpu, Bus& bus): base(cpu.pc),
-                                      line_button{x - 5, y - 5, 5, 5},
-                                      next_button{x, y + h, 20,20},
-                                      select_jump_button{x + w, y + h, 20,20}
+                                      line_button{DW::rec.x - 20, DW::rec.y, 10, 10},
+                                      next_button{DW::rec.x, DW::rec.y + h, 40, 40},
+                                      select_jump_button{DW::rec.x + 40, DW::rec.y + h, 40, 40},
+                                      input_address_jump_button{DW::rec.x + 40 + 40, DW::rec.y + h, 40, 40}
                                       {}
 
     void handle(CPU& cpu) {
@@ -176,10 +211,20 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         line_button = {DW::rec.x - 20, DW::rec.y, 10, 10};
         next_button = {DW::rec.x, DW::rec.y + h, 40, 40};
         select_jump_button = {DW::rec.x + 40, DW::rec.y + h, 40, 40};
+        input_address_jump_button = {DW::rec.x + 40 + 40, DW::rec.y + h, 40, 40};
+        u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
+
         pc = base;
         if (CheckCollisionPointRec(GetMousePosition(), select_jump_button) && IsMouseButtonPressed(0)){
             selected_move_active = true;
         }
+
+        if (CheckCollisionPointRec(GetMousePosition(), input_address_jump_button) && IsMouseButtonPressed(0)) {
+            auto val = std::stoul(u_input.s, nullptr, 16);
+            selected_line_pc = (unsigned short)val;
+            selected_move_active = true;
+        }
+
         for (int i = 0; i < 10; ++i){
             auto r = Rectangle{line_button.x, line_button.y + i * (line_button.height + 25.f), line_button.width, line_button.height};
             if (CheckCollisionPointRec(GetMousePosition(), r) && IsMouseButtonPressed(0)){
@@ -198,7 +243,34 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         DW::draw(str.data(), 15.f);
         DW::draw_text_button(next_button, " next", GREEN, 15.f);
         DW::draw_text_button(select_jump_button, " jmp", GREEN, 15.f);
+        DW::draw_text_button(input_address_jump_button, " tjmp", GREEN, 15.f);
+        u_input.draw();
         ss.str("");
+    }
+};
+
+template<size_t x, size_t y, size_t w, size_t h>
+struct RegsInfo: DebugWindowText<x, y, w, h> {
+    using DW = DebugWindowText<x, y, w, h>;
+    std::stringstream ss;
+    void handle(CPU& cpu, PPU& ppu) {
+        ss  << std::dec << " Cycles count:" << cpu.cycles_count << '\n'
+        << std::hex << " A:" << (unsigned)cpu.a << '\n'
+        << " X:" << (unsigned)cpu.x << '\n'
+        << " Y:" << (unsigned)cpu.y << '\n'
+        << " PC:" << cpu.pc << '\n'
+        << " SP:" << (unsigned )cpu.sp << '\n'
+        << "  Flags:" << (unsigned)(cpu.sr.reg & 0xcf) << '\n'
+        << "  Cf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::C)) << '\n'
+        << "  Zf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::Z)) << '\n'
+        << "  If:" << (unsigned)(cpu.sr.get(CPU::StatusReg::I)) << '\n'
+        << "  Df:" << (unsigned)(cpu.sr.get(CPU::StatusReg::D)) << '\n'
+        << "  Vf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::V)) << '\n'
+        << "  Nf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::N)) << '\n';
+        auto s = ss.str();
+        DW::draw(s.c_str(), 15.f);
+        ss.str("");
+        DW::move();
     }
 };
 

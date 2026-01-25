@@ -25,7 +25,6 @@ struct CPU {
     } mem;
 
 
-
     // For debug
     inline static unsigned short write_mmio_addr[] = {
             constants::PPUCTRL,
@@ -60,7 +59,7 @@ struct CPU {
     struct StatusReg {
         // | N | V |   | B | D | I | Z | C |
         // | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
-        unsigned char reg = 0b0000'0000; //
+        unsigned char reg = 0b0000'0011; // todo: check
         enum Flag: unsigned char {
             C = 0,
             Z = 1,
@@ -115,6 +114,11 @@ struct CPU {
         IndirectIndexed,
     };
 
+
+#if DEBUG_MODE
+    unsigned long cycles_count = 0;
+#endif
+
     struct AddressingResult {
         unsigned short addr{};
         bool page_crossed{};
@@ -151,6 +155,7 @@ struct CPU {
 
     DecodedInstruction decode(unsigned char v);
     void tick(Bus& mem);
+    bool reset_requested = false;
     bool execute_in_progress = false;
     bool interrupt_handling_in_progress = false;
     int interrupt_handling_cycle = 0;

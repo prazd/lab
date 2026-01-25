@@ -115,7 +115,7 @@ struct NESVM {
     PPU ppu{};
     Cartridge cartridge;
 #if UI_DEBUGGER
-    Disassembler<1200,432,200,400> dis;
+    Disassembler<30,432,200,400> dis;
 #endif
 
     NESVM(std::string_view rom_path): cartridge(rom_path)
@@ -148,10 +148,17 @@ struct NESVM {
 #if UI_DEBUGGER
             int current_tick = 0;
             do {
+                if (cpu.reset_requested) {
+                    cpu.sr.set(CPU::StatusReg::I, false);
+                    cpu.interrupt_requests[CPU::RESET] = true;
+                    cpu.debug_run = true;
+                    cpu.reset_requested = false;
+                }
                 while (cpu.debug_run) {
                     cpu.tick(bus);
                     ++current_tick;
                 }
+
                 if (dis.selected_move_active){
                     dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
                 }
@@ -191,6 +198,7 @@ struct NESVM {
 
 #if DEBUG_MODE
         TilesView<1110,0,480,432,128,128> tw(128,128);
+        RegsInfo<0,0,300,300> reg_info{};
 #endif
 
         auto img = GenImageColor(constants::DISPLAY_PIXELS_WIDTH, constants::DISPLAY_PIXELS_HEIGHT, WHITE);
@@ -209,12 +217,13 @@ struct NESVM {
             BeginDrawing();
             ClearBackground(WHITE);
 #if DEBUG_MODE
-
+            reg_info.handle(cpu, ppu);
             tw.handle(ppu);
 //            da.handle(cpu, bus);
-            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, {0, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, {0, 0},0, WHITE);
-            DrawRectangleLinesEx({0, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, 1.f, BLACK);
+//            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, {0, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, {0, 0},0, WHITE);
+//            DrawRectangleLinesEx({0, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, 1.f, BLACK);
 #endif
+            cpu.reset_requested = (IsKeyPressed(KEY_R));
 
             EndDrawing();
         }
