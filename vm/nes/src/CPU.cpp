@@ -62,6 +62,15 @@ void CPU::StatusReg::set_status(unsigned char v) {
     reg |= (1 << 5);
 }
 
+void CPU::reset() {
+    sp = 0xFD;
+    sr.reg = 0b0000'0011;
+    a = 0;
+    x = 0;
+    y = 0;
+    interrupt_requests[CPU::RESET] = true;
+}
+
 
 // https://www.nesdev.org/wiki/Instruction_reference
 CPU::DecodedInstruction CPU::decode(unsigned char i) {
@@ -236,7 +245,23 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x40: {return {Implied, RTI, 1, 6};}
         case 0xE8: {return {Implied, INX, 1, 2};}
         case 0xC8: {return {Implied, INY, 1, 2};}
-        case 0xEA: {return {Implied, NOP, 1, 2};}
+
+        case 0xEA:
+// unofficial (blargg test)
+//entry $1A,"NOP"
+//entry $3A,"NOP"
+//entry $5A,"NOP"
+//entry $7A,"NOP"
+//entry $DA,"NOP"
+//entry $FA,"NOP"
+        case 0x1A:
+        case 0x3A:
+        case 0x5A:
+        case 0x7A:
+        case 0xDA:
+        case 0xFA:
+            {return {Implied, NOP, 1, 2};}
+
         case 0xCA: {return {Implied, DEX, 1, 2};}
         case 0x88: {return {Implied, DEY, 1, 2};}
         case 0x18: {return {Implied, CLC, 1, 2};}
@@ -672,7 +697,7 @@ void CPU::tick(Bus& bus){
             auto arg = get_arg_pc(bus, di.addr_mode, false);
             unsigned char val = read(bus, arg);
             bool prev_c = sr.get(StatusReg::C);
-            unsigned char res = (val << 1) | (prev_c << 7) ;
+            unsigned char res = (val << 1) | prev_c;
             sr.set(StatusReg::C, val & 0x80);
             sr.set(StatusReg::Z, res == 0);
             sr.set(StatusReg::N, res & 0x80);

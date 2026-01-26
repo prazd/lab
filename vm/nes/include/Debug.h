@@ -194,12 +194,14 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle next_button;
     Rectangle select_jump_button;
     Rectangle input_address_jump_button;
+    Rectangle ntjump_button;
 
     Disassembler(CPU& cpu, Bus& bus): base(cpu.pc),
                                       line_button{DW::rec.x - 20, DW::rec.y, 10, 10},
                                       next_button{DW::rec.x, DW::rec.y + h, 40, 40},
                                       select_jump_button{DW::rec.x + 40, DW::rec.y + h, 40, 40},
-                                      input_address_jump_button{DW::rec.x + 40 + 40, DW::rec.y + h, 40, 40}
+                                      input_address_jump_button{DW::rec.x + 40 + 40, DW::rec.y + h, 40, 40},
+                                      ntjump_button{DW::rec.x + 40 + 40 + 40, DW::rec.y + h, 40, 40}
                                       {}
 
     void handle(CPU& cpu) {
@@ -213,6 +215,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         select_jump_button = {DW::rec.x + 40, DW::rec.y + h, 40, 40};
         input_address_jump_button = {DW::rec.x + 40 + 40, DW::rec.y + h, 40, 40};
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
+        ntjump_button = {DW::rec.x + 40 + 40 + 40, DW::rec.y + h, 40, 40};
 
         pc = base;
         if (CheckCollisionPointRec(GetMousePosition(), select_jump_button) && IsMouseButtonPressed(0)){
@@ -220,6 +223,13 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         }
 
         if (CheckCollisionPointRec(GetMousePosition(), input_address_jump_button) && IsMouseButtonPressed(0)) {
+            auto val = std::stoul(u_input.s, nullptr, 16);
+            selected_line_pc = (unsigned short)val;
+            selected_move_active = true;
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), ntjump_button) && IsMouseButtonPressed(0)) {
+            next = true;
             auto val = std::stoul(u_input.s, nullptr, 16);
             selected_line_pc = (unsigned short)val;
             selected_move_active = true;
@@ -244,6 +254,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         DW::draw_text_button(next_button, " next", GREEN, 15.f);
         DW::draw_text_button(select_jump_button, " jmp", GREEN, 15.f);
         DW::draw_text_button(input_address_jump_button, " tjmp", GREEN, 15.f);
+        DW::draw_text_button(ntjump_button, " ntjmp", GREEN, 15.f);
         u_input.draw();
         ss.str("");
     }

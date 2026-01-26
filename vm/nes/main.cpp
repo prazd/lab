@@ -144,13 +144,19 @@ struct NESVM {
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 8192, ppu.mem.map);
     }
 
+
+    // Debug: - 81E9,  81EC, c4c3, c4a0 (on c44d - 19 iter) (c4e2- JMP 0x200 failed)
+    // target - C44f +
     void frame_execute(){
 #if UI_DEBUGGER
+            if (dis.next){
+                cpu.debug_run = true;
+                dis.next = false;
+            }
             int current_tick = 0;
             do {
                 if (cpu.reset_requested) {
-                    cpu.sr.set(CPU::StatusReg::I, false);
-                    cpu.interrupt_requests[CPU::RESET] = true;
+                    cpu.reset();
                     cpu.debug_run = true;
                     cpu.reset_requested = false;
                 }
@@ -163,13 +169,7 @@ struct NESVM {
                     dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
                 }
             } while(dis.selected_move_active && current_tick < constants::CPU_FRAME_CYCLES);
-
             if (!dis.selected_move_active) dis.handle(cpu);
-            if (dis.next){
-                cpu.debug_run = true;
-                dis.next = false;
-            }
-
 #else
         for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
             cpu.tick(bus);

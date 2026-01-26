@@ -181,9 +181,6 @@ struct PPU {
     void read_ppuaddr(Bus& mem);
     void update_state(Bus& mem);
 
-    std::array<std::array<Color , 256>, 240> internal_display{};
-    std::array<std::array<Color, 256>, 240> display{};
-
     std::array<Color, 64> palette{
         Color{0x75, 0x75,  0x75, 0xFF},
         Color{0x27, 0x1B,  0x8F, 0xFF},
@@ -262,7 +259,6 @@ struct PPU {
         }
         return res;
     }
-
 
 
     unsigned char tile_byte_from_addr(Bus& bus, unsigned short addr);

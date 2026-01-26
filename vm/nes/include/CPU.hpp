@@ -127,6 +127,7 @@ struct CPU {
 
     unsigned char read(Bus& bus, AddressingResult ar);
     void write(Bus& bus, AddressingResult ar, unsigned char value);
+    void reset();
 
     AddressingResult get_arg_pc(Bus& bus, AddressingMode am, bool cross_check);
     AddressingResult get_arg_by_addr(Bus& bus, AddressingMode am, unsigned short pc_addr);
