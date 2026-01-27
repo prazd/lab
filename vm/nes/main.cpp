@@ -157,11 +157,13 @@ struct NESVM {
             do {
                 if (cpu.reset_requested) {
                     cpu.reset();
+                    ppu.reset();
                     cpu.debug_run = true;
                     cpu.reset_requested = false;
                 }
                 while (cpu.debug_run) {
                     cpu.tick(bus);
+                    for (int j = 0; j < 3; ++j) ppu.tick(bus);
                     ++current_tick;
                 }
 
@@ -171,9 +173,10 @@ struct NESVM {
             } while(dis.selected_move_active && current_tick < constants::CPU_FRAME_CYCLES);
             if (!dis.selected_move_active) dis.handle(cpu);
 #else
+        if (cpu.stop_requested) return;
         for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
             cpu.tick(bus);
-            // for (int j = 0; j < 3; ++j) ppu.tick(bus);
+             for (int j = 0; j < 3; ++j) ppu.tick(bus);
         }
 #endif
     }
@@ -197,33 +200,53 @@ struct NESVM {
 #endif
 
 #if DEBUG_MODE
-        TilesView<1110,0,480,432,128,128> tw(128,128);
+        PatternTableView<1110,0,480,432,128,128> ptv(128, 128);
+        NameTableNumView<1110,0,480,432> ntnv{};
+
+
+        NameTableView<1110,432,480,432> ntv{};
         RegsInfo<0,0,300,300> reg_info{};
+
+        enum UpRightView {
+            PatternTableV,
+            NameTableNumV,
+            UpRightViewCount,
+        } current_up_right_view = PatternTableV;
+
+        auto handle_up_right_view = [&]{
+            switch(current_up_right_view) {
+                case PatternTableV: {ptv.handle(ppu); break;}
+                default: {ntnv.handle(ppu); break;}
+            }
+        };
 #endif
 
         auto img = GenImageColor(constants::DISPLAY_PIXELS_WIDTH, constants::DISPLAY_PIXELS_HEIGHT, WHITE);
         auto display_texture = LoadTextureFromImage(img);
         UnloadImage(img);
 
-
-        bool paused = false;
         SetTargetFPS(60);
         while(!WindowShouldClose()){
             frame_execute();
 #if DEBUG_MODE && UI_DEBUGGER
             dis.draw(cpu, bus);
 #endif
-            if (IsKeyPressed(KEY_P)) paused = !paused;
+            UpdateTexture(display_texture, ppu.display.data());
             BeginDrawing();
             ClearBackground(WHITE);
 #if DEBUG_MODE
+            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, {0, 0},0, WHITE);
+            DrawRectangleLinesEx({320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, 1.f, BLACK);
             reg_info.handle(cpu, ppu);
-            tw.handle(ppu);
-//            da.handle(cpu, bus);
-//            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, {0, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, {0, 0},0, WHITE);
-//            DrawRectangleLinesEx({0, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, 1.f, BLACK);
+            ntv.handle(ppu);
+            handle_up_right_view();
+            if (IsKeyPressed(KEY_M))
+                current_up_right_view = static_cast<UpRightView>((current_up_right_view + 1) % UpRightViewCount);
 #endif
             cpu.reset_requested = (IsKeyPressed(KEY_R));
+            if (IsKeyPressed(KEY_S))
+                cpu.stop_requested = !cpu.stop_requested;
+
 
             EndDrawing();
         }

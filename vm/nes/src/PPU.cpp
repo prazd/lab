@@ -57,10 +57,10 @@ void PPU::read_ppuaddr(Bus& mem) {
         t &= 0xff;
         t |= ((mem.ppuaddr.reg) << 8); //TODO: maybe 6 byte
     }
-    if (w) v = t;
+    if (w)
+        v = t;
     w = !w;
 }
-
 
 void PPU::update_state(Bus& bus) {
     if (bus.ppuctrl.was_written)    {read_ppuctrl(bus); bus.ppuctrl.was_written = false;}
@@ -68,7 +68,13 @@ void PPU::update_state(Bus& bus) {
     if (bus.ppuscroll.was_written)  {read_ppuscroll(bus); bus.ppuscroll.was_written = false;}
     if (bus.ppuaddr.was_written)    {read_ppuaddr(bus); bus.ppuaddr.was_written = false;}
     // TODO: finish
-    if (bus.ppudata.was_written)    {v += ppuctrl.addr_inc ? 1 : 32; bus.ppudata.was_written = false;}
+    if (bus.ppudata.was_written)    {
+        unsigned short addr = v;
+        Memory::adjust_if_mirror(addr);
+        mem.map[addr] = bus.ppudata.reg;
+        v =  (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff; // todo: switch
+        bus.ppudata.was_written = false;
+    }
 }
 
 unsigned char PPU::tile_byte_from_addr(Bus& bus, unsigned short addr) {
@@ -92,51 +98,88 @@ unsigned short PPU::to_pattern_addr(unsigned char y, unsigned char tile_n, bool 
     return y | (plane << 3) | (tile_n << 4) | (h << 12);
 }
 
+void PPU::reset() {
+    current_y = 0;
+    current_x = 0;
+    current_cycle = 0;
+    v = 0;
+    t = 0;
+    x = 0;
+}
+
 void PPU::tick(Bus& bus) {
-    if (current_cycle == 0) {++current_cycle; return;} // idle cycle
-
-    static unsigned char nt_byte = 0;
-    static unsigned char attrib_value = 0;
-    static unsigned char pattern_table_l = 0;
-    static unsigned char pattern_table_h = 0;
-
-    unsigned char x_tile_n = (v & 0x1f);
-    unsigned char y_tile_n = ((v >> 5) & 0x1f);
-
-    // 1-256 cycles
-    if (current_step % 2 == 0) {
-        switch (current_step) {
-            // fetch nametable byte
-           case NT:  { nt_byte = mem.read(bus, base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;}
-           case AT:  {
-               auto val = mem.read(bus, base_attrib_address + y_tile_n/4 + x_tile_n/4);
-               // TODO: check
-               //  3 3 2 2
-               //  3 3 2 2
-               //  1 1 0 0
-               //  1 1 0 0
-               auto shift_y = (y_tile_n/2) % 2;
-               auto shift_x = (x_tile_n/2) % 2;
-               attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
-               current_step = PTL;
-               break;}  // fetch attribute table byte
-           case PTL: {
-               pattern_table_l = tile_byte_from_addr(bus, to_pattern_addr(y_tile_n % 8, nt_byte, false, ppuctrl.bg_pattern_table_addr));
-               current_step = PTH; break;}     // pattern table tile low
-           case PTH: {
-               pattern_table_h = tile_byte_from_addr(bus, to_pattern_addr(y_tile_n % 8, nt_byte, true, ppuctrl.bg_pattern_table_addr));
-               shift_register_low |= pattern_table_l;
-               shift_register_high |= pattern_table_h;
-               current_step = NT;  break;}     // pattern table tile high
-        }
-    }
-    // Get pixel
-    shift_register_high <<= 1;
-    shift_register_low <<= 1;
-
-//   TODO: maybe use register for attrib_value
-    unsigned char pixel_index =
-            mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (4 * attrib_value) + ((bool(shift_register_high & 0x8000) << 1) | bool(shift_register_low & 0x8000)));
-
     ++current_cycle;
+    // TODO: continue debug
+    update_state(bus);
+    if (!ppumask.enable_background_rendering) return;
+    if (current_y == 0) {
+        ++current_y;
+        return;
+    } // idle cycle
+
+    if (current_y < 240){
+        static unsigned char nt_byte = 0;
+        static unsigned char attrib_value = 0;
+        static unsigned char pattern_table_l = 0;
+        static unsigned char pattern_table_h = 0;
+
+        unsigned char x_tile_n = (v & 0x1f);
+        unsigned char y_tile_n = ((v >> 5) & 0x1f);
+
+        // 1-256 cycles
+        if (current_step % 2 == 0) {
+            switch (current_step) {
+                // fetch nametable byte
+                case NT:  { nt_byte = mem.read(bus, base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;}
+                case AT:  {
+                    auto val = mem.read(bus, base_attrib_address + y_tile_n/4 + x_tile_n/4);
+                    // TODO: check
+                    //  3 3 2 2
+                    //  3 3 2 2
+                    //  1 1 0 0
+                    //  1 1 0 0
+                    auto shift_y = (y_tile_n/2) % 2;
+                    auto shift_x = (x_tile_n/2) % 2;
+                    attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
+                    current_step = PTL;
+                    break;}  // fetch attribute table byte
+                case PTL: {
+                    pattern_table_l = tile_byte_from_addr(bus, to_pattern_addr(y_tile_n % 8, nt_byte, false, ppuctrl.bg_pattern_table_addr));
+                    current_step = PTH; break;}     // pattern table tile low
+                case PTH: {
+                    pattern_table_h = tile_byte_from_addr(bus, to_pattern_addr(y_tile_n % 8, nt_byte, true, ppuctrl.bg_pattern_table_addr));
+                    shift_register_low |= pattern_table_l;
+                    shift_register_high |= pattern_table_h;
+                    current_step = NT;  break;}     // pattern table tile high
+            }
+        }
+        // Get pixel
+        shift_register_high <<= 1;
+        shift_register_low <<= 1;
+        //   TODO: maybe use register for attrib_value
+        unsigned char pixel_index =
+                mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (4 * attrib_value) + ((bool(shift_register_high & 0x8000) << 1) | bool(shift_register_low & 0x8000)));
+        update_internal_display(palette[pixel_index]);
+        if (pixel_index != 0)
+            pixel_index += 0;
+        if (current_x % 256 == 0){
+            ++current_y;
+        }
+    } else if (current_y == 240){
+        if (current_x++ % 256 == 0){
+            ++current_y;
+        }
+    } else if (current_y > 240 && current_y < 261){
+        if (current_y == 241 && (current_x % 256) == 1){
+            // VBlank
+        } else if (current_x % 256 == 0){
+            ++current_y;
+        }
+        ++current_x;
+    } else if (current_y == 261){
+        //
+        current_y = 0;
+        current_x = 0;
+        std::copy(internal_display.begin(), internal_display.end(), display.begin());
+    }
 }

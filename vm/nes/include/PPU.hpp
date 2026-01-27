@@ -7,7 +7,6 @@
 #include <tuple>
 
 // TODO: https://www.nesdev.org/wiki/Mirroring + Attributes
-
 inline bool operator==(const Color& lhs, const Color& rhs){
     return std::tuple(rhs) == std::tuple(lhs);
 }
@@ -38,13 +37,13 @@ struct PPU {
 //  $0000-$0FFF	$1000	Pattern table 0	Cartridge
 //  $1000-$1FFF	$1000	Pattern table 1	Cartridge
 //  $2000-$23BF	$03c0	Nametable 0	Cartridge
-//  $23C0-$23FF	$0040	Attribute table 0	Cartridge
+//  $23C0-$23FF	$0040	Attribute table 0 Cartridge
 //  $2400-$27BF	$03c0	Nametable 1	Cartridge
-//  $27C0-$27FF	$0040	Attribute table 1	Cartridge
+//  $27C0-$27FF	$0040	Attribute table 1 Cartridge
 //  $2800-$2BBF	$03c0	Nametable 2	Cartridge
-//  $2BC0-$2BFF	$0040	Attribute table 2	Cartridge
+//  $2BC0-$2BFF	$0040	Attribute table 2 Cartridge
 //  $2C00-$2FBF	$03c0	Nametable 3	Cartridge
-//  $2FC0-$2FFF	$0040	Attribute table 3	Cartridge
+//  $2FC0-$2FFF	$0040	Attribute table 3 Cartridge
 //  $3000-$3EFF	$0F00	Table Mirror $2000-$2EFF
 //  $3F00-$3F1F	$0020	Palette RAM indexes	Internal to PPU
 //  $3F20-$3FFF	$00E0	Mirrors of $3F00-$3F1F	Internal to PPU
@@ -77,7 +76,7 @@ struct PPU {
     // First or second write toggle (1 bit)
     bool w{};
 
-    unsigned current_cycle{};
+    size_t current_cycle{};
 
     enum FetchStep {
         NT, AT, PTL, PTH
@@ -175,11 +174,21 @@ struct PPU {
     unsigned char x_scroll{};
     unsigned char y_scroll{};
 
+    void reset();
+
 // REGS
     void read_ppuctrl(Bus& mem);
     void read_ppuscroll(Bus& mem);
     void read_ppuaddr(Bus& mem);
     void update_state(Bus& mem);
+
+    std::array<Color, 256 * 240> internal_display{};
+    size_t current_x = 0;
+    size_t current_y = 0;
+    inline void update_internal_display(Color pixel){
+        internal_display[current_x++] = pixel;
+    }
+    std::array<Color, 256 * 240> display{};
 
     std::array<Color, 64> palette{
         Color{0x75, 0x75,  0x75, 0xFF},
@@ -259,7 +268,6 @@ struct PPU {
         }
         return res;
     }
-
 
     unsigned char tile_byte_from_addr(Bus& bus, unsigned short addr);
     //    0HNNNN NNNNPyyy

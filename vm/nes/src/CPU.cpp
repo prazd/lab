@@ -731,13 +731,14 @@ void CPU::tick(Bus& bus){
             ++pc;
             break;
         }
+        // todo: debug (blargg)
         case SBC:{
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             unsigned char val = read(bus, arg);
             bool prev_c = sr.get(StatusReg::C);
-            int res = a - val - (!prev_c);
+            int res = (a - val - (!prev_c));
             sr.set(StatusReg::C, res >= 0);
-            sr.set(StatusReg::Z, res == 0);
+            sr.set(StatusReg::Z, res  == 0);
             // TODO: check - (result ^ A) & (result ^ ~memory) & $80 in doc
             sr.set(StatusReg::V, (res ^ a) & (res ^ ~val) & 0x80);
             sr.set(StatusReg::N, res & 0x80);

@@ -157,6 +157,7 @@ struct CPU {
     DecodedInstruction decode(unsigned char v);
     void tick(Bus& mem);
     bool reset_requested = false;
+    bool stop_requested = false;
     bool execute_in_progress = false;
     bool interrupt_handling_in_progress = false;
     int interrupt_handling_cycle = 0;

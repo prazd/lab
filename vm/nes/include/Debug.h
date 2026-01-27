@@ -80,7 +80,7 @@ struct DebugWindowText: DebugWindow<x,y,w,h>{
 };
 
 template <size_t x, size_t y, size_t w, size_t h, size_t t_w, size_t t_h>
-struct TilesView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w/8), t_h + (t_h/8)> {
+struct PatternTableView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w / 8), t_h + (t_h / 8)> {
     using DW = DebugWindowWithTexture<x, y, w, h, t_w + (t_w/8), t_h + (t_h/8)>;
     using TileRow = std::array<Color, 8>;
 
@@ -98,7 +98,7 @@ struct TilesView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w/8), t_h + (t_h/8
         return res;
     }
 
-    TilesView(size_t tiles_w, size_t tiles_h):
+    PatternTableView(size_t tiles_w, size_t tiles_h):
     tiles_w(tiles_w),
     tiles_h(tiles_h){}
 
@@ -145,6 +145,68 @@ struct TilesView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w/8), t_h + (t_h/8
         }
 
         DW::handle();
+    }
+};
+
+
+template <size_t x, size_t y, size_t w, size_t h, size_t t_w = 256, size_t t_h = 240>
+struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
+    using DW = DebugWindowWithTexture<x, y, w, h, t_w, t_h>;
+    using TileRow = std::array<Color, 8>;
+    // 32 x 30
+    short base_pt_address = constants::PATTERN_TABLE0_BEGIN;
+    short base_nt_address = constants::NAME_TABLE0_BEGIN;
+
+    TileRow get_tile_row(unsigned char a, unsigned char b) {
+        std::array<Color, 8> res{};
+        for (int i = 0; i < 8; ++i){
+            res[i] = color_by_id((((a >> (7-i)) & 1) << 1) | ((b >> (7-i)) & 1));
+        }
+        return res;
+    }
+
+    void handle(PPU& ppu){
+        size_t current = 0;
+        for (int s = 0; s < 30; ++s){
+            for (int z = 0; z < 8; ++z) {
+                for (int i = 0; i < 32; ++i){
+                    auto pt_addr = ((base_pt_address + (16 * (*(ppu.mem.map + (base_nt_address + (s * 32) + i))))));
+                    auto l_tile = *(ppu.mem.map + pt_addr + z);
+                    auto h_tile = *(ppu.mem.map + pt_addr + z + 8);
+                    auto tile_row = get_tile_row(h_tile, l_tile);
+                    for (int k = 0; k < 8; ++k){
+                        DW::buffer[current++] = tile_row[k];
+                    }
+                }
+            }
+        }
+        DW::handle();
+    }
+};
+
+template <size_t x, size_t y, size_t w, size_t h>
+struct NameTableNumView: DebugWindowText<x, y, w, h> {
+    using DW = DebugWindowText<x, y, w, h>;
+    std::stringstream ss;
+    bool ascii_print = false;
+    // 32 x 30
+    short base_pt_address = constants::PATTERN_TABLE0_BEGIN;
+    short base_nt_address = constants::NAME_TABLE0_BEGIN;
+    void handle(PPU& ppu){
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
+            ascii_print = !ascii_print;
+        for (int s = 0; s < 30; ++s){
+            for (int i = 0; i < 32; ++i){
+                auto v = *(ppu.mem.map + (base_nt_address + (s * 32) + i));
+                if (ascii_print) ss << v; else ss << (unsigned)v;
+                ss << " ";
+            }
+            ss << '\n';
+        }
+        auto s = ss.str();
+        DW::move();
+        DW::draw(s.c_str());
+        ss.str("");
     }
 };
 
@@ -266,6 +328,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
     std::stringstream ss;
     void handle(CPU& cpu, PPU& ppu) {
         ss  << std::dec << " Cycles count:" << cpu.cycles_count << '\n'
+        << "  CPU:\n\n"
         << std::hex << " A:" << (unsigned)cpu.a << '\n'
         << " X:" << (unsigned)cpu.x << '\n'
         << " Y:" << (unsigned)cpu.y << '\n'
@@ -277,7 +340,13 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  If:" << (unsigned)(cpu.sr.get(CPU::StatusReg::I)) << '\n'
         << "  Df:" << (unsigned)(cpu.sr.get(CPU::StatusReg::D)) << '\n'
         << "  Vf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::V)) << '\n'
-        << "  Nf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::N)) << '\n';
+        << "  Nf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::N)) << '\n'
+        << "  PPU:\n\n"
+        << "  V:" << (unsigned)(ppu.v) << '\n'
+        << "  X:" << (unsigned)(ppu.x) << '\n'
+        << "  T:" << (unsigned)(ppu.t) << '\n'
+        << std::dec << "  Cycles:" << ppu.current_cycle
+        << "  Scanline:" << ppu.current_y;
         auto s = ss.str();
         DW::draw(s.c_str(), 15.f);
         ss.str("");
