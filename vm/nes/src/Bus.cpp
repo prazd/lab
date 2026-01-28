@@ -39,10 +39,12 @@ void Bus::write(unsigned short addr, unsigned char value) {
     if (addr == constants::CONTROLLER1) {
         if (value == 1)
             c.latch1 = true;
+        return;
     }
     if (addr == constants::CONTROLLER1) {
         if (value == 0)
             c.update_status1();
+        return;
     }
 
     if (addr >= 0x8000 && addr <= 0xffff){
@@ -77,31 +79,6 @@ unsigned char Bus::read(unsigned short addr) {
     }
     // dummy
     return 0xff;
-}
-
-unsigned char* Bus::read_ptr(unsigned short addr) {
-    // todo: maybe return dummy reg addr
-    if (addr == constants::PPUCTRL)
-        return &ppuctrl.reg;
-    if (addr == constants::PPUMASK)
-        return &ppumask.reg;
-    if (addr == constants::PPUSTATUS)
-        return &ppustatus.reg;
-    if (addr == constants::OAMADDR)
-        return &oamaddr.reg;
-    if (addr == constants::OAMDATA)
-        return &oamdata.reg;
-    if (addr == constants::PPUSCROLL)
-        return &ppuscroll.reg;
-    if (addr == constants::PPUADDR)
-        return &ppuaddr.reg;
-    if (addr == constants::PPUDATA)
-        return &ppudata.reg;
-    // TODO: check for controller
-    if (addr >= 0x8000 && addr <= 0xffff){
-        return mapper.read_rom(addr);
-    }
-    return nullptr;
 }
 
 void Bus::dma_tick(unsigned char val) {

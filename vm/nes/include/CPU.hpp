@@ -17,8 +17,6 @@ struct CPU {
 //    • $6000–$7FFF $2000   Usually cartridge RAM, when present.
 //    • $8000–$FFFF $8000   Usually cartridge ROM and mapper registers.
         unsigned char map[0x10000]{};
-
-        unsigned char* read_addr(Bus&, unsigned short addr);
         unsigned char read(Bus&, unsigned short addr) const;
         void write(Bus&, unsigned short addr, unsigned char value);
         static void adjust_if_mirror(unsigned short&);

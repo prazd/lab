@@ -16,7 +16,7 @@ struct Bus {
     };
     PPUREG ppuctrl{};
     PPUREG ppumask{};
-    PPUREG ppustatus = {0xff, false}; // Enable Vblank for test
+    PPUREG ppustatus{128, false}; // Enable Vblank for test
     PPUREG oamaddr{};
     PPUREG oamdata{};
     PPUREG ppuscroll{};

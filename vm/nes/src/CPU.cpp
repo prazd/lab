@@ -21,14 +21,6 @@ unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) const {
     return map[addr];
 }
 
-unsigned char* CPU::Memory::read_addr(Bus& bus, unsigned short addr) {
-    adjust_if_mirror(addr);
-    if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})){
-        return bus.read_ptr(addr);
-    }
-    return map + addr;
-}
-
 void CPU::Memory::adjust_if_mirror(unsigned short& addr) {
     if (addr >= constants::RAM_MIRROR1_BEGIN && addr <= constants::RAM_MIRROR1_END)
         addr-=constants::RAM_MIRROR1_BEGIN;

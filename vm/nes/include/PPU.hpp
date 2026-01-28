@@ -68,7 +68,6 @@ struct PPU {
     //  +++------------------ fine Y
     unsigned short v{};
 
-
     // Temporary VRAM address (15 bits); can also be thought of as the address of the top left onscreen tile.
     unsigned short t{};
     // Fine X scroll (3 bits)

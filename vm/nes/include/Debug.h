@@ -354,4 +354,20 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
     }
 };
 
+template <size_t x, size_t y>
+struct DummyTilesGrid {
+    void draw(float cell_w, float cell_h) {
+        float cur_x = x;
+        float cur_y = y;
+        for (size_t i = 0; i < 30; ++i){
+            for (size_t j = 0; j < 32; ++j){
+                DrawRectangleLinesEx({cur_x, cur_y, cell_w, cell_h}, 1.f, RED);
+                cur_x += cell_w;
+            }
+            cur_x = x;
+            cur_y += cell_h;
+        }
+    }
+};
+
 #endif //NES_DEBUG_H

@@ -207,6 +207,8 @@ struct NESVM {
         NameTableView<1110,432,480,432> ntv{};
         RegsInfo<0,0,300,300> reg_info{};
 
+        DummyTilesGrid<320, 0> dtg;
+
         enum UpRightView {
             PatternTableV,
             NameTableNumV,
@@ -246,6 +248,7 @@ struct NESVM {
             cpu.reset_requested = (IsKeyPressed(KEY_R));
             if (IsKeyPressed(KEY_S))
                 cpu.stop_requested = !cpu.stop_requested;
+            dtg.draw(22.4f,22.4f);
 
 
             EndDrawing();
