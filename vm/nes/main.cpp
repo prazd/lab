@@ -208,6 +208,7 @@ struct NESVM {
         RegsInfo<0,0,300,300> reg_info{};
 
         DummyTilesGrid<320, 0> dtg;
+        bool grid_view_enable = false;
 
         enum UpRightView {
             PatternTableV,
@@ -221,6 +222,7 @@ struct NESVM {
                 default: {ntnv.handle(ppu); break;}
             }
         };
+
 #endif
 
         auto img = GenImageColor(constants::DISPLAY_PIXELS_WIDTH, constants::DISPLAY_PIXELS_HEIGHT, WHITE);
@@ -245,10 +247,16 @@ struct NESVM {
             if (IsKeyPressed(KEY_M))
                 current_up_right_view = static_cast<UpRightView>((current_up_right_view + 1) % UpRightViewCount);
 #endif
+
             cpu.reset_requested = (IsKeyPressed(KEY_R));
+
             if (IsKeyPressed(KEY_S))
                 cpu.stop_requested = !cpu.stop_requested;
-            dtg.draw(22.4f,22.4f);
+
+            if (IsKeyPressed(KEY_X))
+                grid_view_enable = !grid_view_enable;
+
+            if (grid_view_enable) dtg.draw(22.4f,22.4f);
 
 
             EndDrawing();

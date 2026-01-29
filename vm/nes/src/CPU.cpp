@@ -76,6 +76,10 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x61: {return {IndexedIndirectX, ADC, 2, 6};}
         case 0x71: {return {IndexedIndirectY, ADC, 2, 5};} // 6 if page crossed
 
+        case 0x0B:
+        case 0x2B:
+                    {return {Immediate, AAC, 2, 2};}
+
         case 0x29: {return {Immediate, AND, 2, 2};}
         case 0x25: {return {ZeroPage,  AND, 2, 3};}
         case 0x35: {return {ZeroPageX, AND, 2, 4};}
@@ -158,6 +162,13 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xAC: {return {Absolute, LDY,  3, 4};}
         case 0xBC: {return {AbsoluteX, LDY, 3, 4};}  // 5 if page crossed
 
+
+        case 0x6B: {return {Immediate, ARR, 2, 2};}
+
+        case 0xAB: {return {Immediate, ATX, 2, 2};}
+        case 0xCB: {return {Immediate, AXS, 2, 2};}
+
+        case 0x4B: {return {Immediate, ASR, 2, 2};}
         case 0x4A: {return {Accumulator, LSR, 1, 2};}
         case 0x46: {return {ZeroPage, LSR,    2, 5};}
         case 0x56: {return {ZeroPageX, LSR,    2, 6};}
@@ -185,6 +196,7 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x6E: {return {Absolute,  ROR,    3, 6};}
         case 0x7E: {return {AbsoluteX, ROR,    3, 7};}
 
+        case 0xEB:
         case 0xE9: {return {Immediate, SBC,         2, 2};}
         case 0xE5: {return {ZeroPage,  SBC,         2, 3};}
         case 0xF5: {return {ZeroPageX, SBC,         2, 4};}
@@ -254,6 +266,13 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xFA:
             {return {Implied, NOP, 1, 2};}
 
+        case 0x80:
+        case 0x82:
+        case 0x89:
+        case 0xC2:
+        case 0xE2:
+             {return {Implied, DOP, 2, 2};}
+
         case 0xCA: {return {Implied, DEX, 1, 2};}
         case 0x88: {return {Implied, DEY, 1, 2};}
         case 0x18: {return {Implied, CLC, 1, 2};}
@@ -261,6 +280,9 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x58: {return {Implied, CLI, 1, 2};}
         case 0xB8: {return {Implied, CLV, 1, 2};}
         case 0x00: {return {Implied, BRK, 2, 7};}
+
+
+
         
     }
     // TODO: maybe error or optional
@@ -650,7 +672,69 @@ void CPU::tick(Bus& bus){
             pc += di.bytes;
             break;
         }
+        case ASR: {
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char val = read(bus, arg);
+            unsigned char res = a & val;
+            unsigned char shifted_res = res >> 1;
+            sr.set(StatusReg::C, res & 0x1);
+            sr.set(StatusReg::Z, shifted_res == 0);
+            sr.set(StatusReg::N, shifted_res & 0x80);
+            a = shifted_res;
+            pc += di.bytes;
+            break;
+        }
+
+        // TODO: debug
+        case ATX: {
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char val = read(bus, arg);
+            a &= val;
+            x = a;
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            pc += di.bytes;
+            break;
+        }
+
+        case AXS: {
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char val = read(bus, arg);
+            int tmp = (a & x) - val;
+            sr.set(StatusReg::C, tmp >= 0);
+            sr.set(StatusReg::Z, (tmp & 0xff) == 0);
+            sr.set(StatusReg::N, tmp & 0x80);
+            x = tmp & 0xff;
+            pc += di.bytes;
+            break;
+        }
+
+        case ARR: {
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char val = read(bus, arg);
+            a = (a & val);
+            a = (a >> 1) | (sr.get(StatusReg::C) << 7);
+            sr.set(StatusReg::C, (a >> 6) & 0x1);
+            sr.set(StatusReg::V, ((a >> 6) & 0x1) ^  ((a >> 5) & 0x1));
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case AAC:{
+            auto arg = get_arg_pc(bus, di.addr_mode, true);
+            unsigned char val =  read(bus, arg);
+            a &= val;
+            sr.set(StatusReg::C, a & 0x80);
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            pc += di.bytes;
+            break;
+        }
+
         case NOP:{pc+=di.bytes; break;}
+        case DOP:{pc+=di.bytes; break;}
+
         case ORA:{
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             unsigned char val =  read(bus, arg);
@@ -730,9 +814,9 @@ void CPU::tick(Bus& bus){
             bool prev_c = sr.get(StatusReg::C);
             int res = (a - val - (!prev_c));
             sr.set(StatusReg::C, res >= 0);
-            sr.set(StatusReg::Z, res  == 0);
+            sr.set(StatusReg::Z, (res & 0xff) == 0);
             // TODO: check - (result ^ A) & (result ^ ~memory) & $80 in doc
-            sr.set(StatusReg::V, (res ^ a) & (res ^ ~val) & 0x80);
+            sr.set(StatusReg::V, (((res & 0xff) ^ a) & ((res & 0xff) ^ (~val))) & 0x80);
             sr.set(StatusReg::N, res & 0x80);
             a = res & 0xff;
             pc += di.bytes;

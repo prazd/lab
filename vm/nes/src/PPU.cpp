@@ -41,18 +41,18 @@ void PPU::read_ppuctrl(Bus& bus) {
 }
 
 void PPU::read_ppuscroll(Bus& bus) {
-    // TODO: finish
-    if (w){
+    if (!w){
         // set x coarse + x
         t &= 0xffe0;
-        t |= (bus.ppuscroll.reg >> 3) & 0x1f;
+        t |= ((bus.ppuscroll.reg >> 3) & 0x1f);
         x = bus.ppuscroll.reg & 0x7;
     } else {
         // set y coarse + y fine
         t &= 0xfc1f;
-        t |= (bus.ppuscroll.reg >> 3) & 0x1f;
+        t |= ((bus.ppuscroll.reg & 0xf8)) << 2;
+
         t &= 0x1fff;
-        t |= 13 << (t & 0x7);
+        t |= (t & 0x7) << 12;
     }
     w = !w;
 }
@@ -63,7 +63,7 @@ void PPU::read_ppuaddr(Bus& mem) {
         t |= mem.ppuaddr.reg;
     } else {
         t &= 0xff;
-        t |= ((mem.ppuaddr.reg) << 8); //TODO: maybe 6 byte
+        t |= (((mem.ppuaddr.reg & 0x7f) << 8));
     }
     if (w)
         v = t;
@@ -80,7 +80,7 @@ void PPU::update_state(Bus& bus) {
         unsigned short addr = v;
         Memory::adjust_if_mirror(addr);
         mem.map[addr] = bus.ppudata.reg;
-        v = (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff; // todo: switch
+        v = (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff;
         bus.ppudata.was_written = false;
     }
 }
@@ -134,21 +134,22 @@ void PPU::tick(Bus& bus) {
         static unsigned char pattern_table_h = 0;
 
         if (!current_scanline_cycle){++current_scanline_cycle; return;}
-
+        
         // 1-256 cycles
         if (current_scanline_cycle >= 1 && current_scanline_cycle < 257) {
             if (current_scanline_cycle & 1) {
                 unsigned char x_tile_n = (v & 0x1f);
                 unsigned char y_tile_n = ((v >> 5) & 0x1f);
-//                switch (((v >> 10) & 0x3)) {
-//                    case 0b00 : base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
-//                    case 0b10 : base_name_table_address = constants::NAME_TABLE1_BEGIN; break;
-//                    case 0b01 : base_name_table_address = constants::NAME_TABLE2_BEGIN; break;
-//                    default:    base_name_table_address = constants::NAME_TABLE3_BEGIN; break;
-//                }
+                switch (((v >> 10) & 0x3)) {
+                    case 0b00 : base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
+                    case 0b10 : base_name_table_address = constants::NAME_TABLE1_BEGIN; break;
+                    case 0b01 : base_name_table_address = constants::NAME_TABLE2_BEGIN; break;
+                    default:    base_name_table_address = constants::NAME_TABLE3_BEGIN; break;
+                }
                 switch (current_step) {
                     // fetch nametable byte
-                    case NT:  { nt_byte = mem.read(bus,  base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
+                                                                // TODO: debug base_name_table_address
+                    case NT:  { nt_byte = mem.read(bus,  constants::NAME_TABLE0_BEGIN + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
                     case AT:  {
                         auto val = mem.read(bus, base_attrib_address + y_tile_n/4 + x_tile_n/4);
                         // TODO: check
@@ -172,7 +173,8 @@ void PPU::tick(Bus& bus) {
                         shift_register_high |= pattern_table_h;
 
                         unsigned char add_val = (((v & 0x1f) + 1) % 32);
-                        if (!add_val) v ^= 0x400;
+                        if (!add_val)
+                            v ^= 0x400;
                         v &= 0xffe0;
                         v |= add_val;
                         current_step = NT;  break;}  // pattern table tile high
@@ -182,20 +184,16 @@ void PPU::tick(Bus& bus) {
             shift_register_low <<= 1;
             //   TODO: maybe use register for attrib_value
             unsigned char pixel_index =
-                    mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (4 * attrib_value) + ((bool(shift_register_high & 0x8000) << 1) | bool(shift_register_low & 0x8000)));
+                    mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (4 * attrib_value) + ((shift_register_high >> (15-x)) & 1) | ((shift_register_low >> (15-x)) & 1));
             update_internal_display(palette[pixel_index]);
             if (current_scanline_cycle == 256){
-
                 unsigned char y_fine_add_val = ((((v >> 12) & 0x7) + 1) % 8);
                 v &= 0x8fff;
                 v |= y_fine_add_val << 12;
 
-
                 if (!y_fine_add_val){
                     auto add_val = ((((v >> 5) & 0x1f) + 1) % 30);
-                    if (!add_val){
-                        v ^= 0x800;
-                    }
+                    if (!add_val){v ^= 0x800;}
                     v &= 0xfc1f;
                     v |= (add_val << 5);
                 }
@@ -206,8 +204,6 @@ void PPU::tick(Bus& bus) {
                 v &= 0xffe0;
                 v |= (t & 0x1f);
 
-                // Current VRAM address (15 bits)
-                //  yyy NN YYYYY XXXXX
                 v &= 0xfbff;
                 v |= (t & (~0xfbff & 0xffff));
             }
@@ -233,12 +229,6 @@ void PPU::tick(Bus& bus) {
     } else if (current_y == 261){
         if (current_scanline_cycle++ % 341 == 0){
             v = t;
-            // set coarse y
-//            v &= 0xfc1f;
-//            v |= (t & ~0xfc1f);
-//
-//            v &= 0xf7ff;
-//            v |= (t & ~0xf7ff);
             current_y = 0;
             current_x = 0;
             std::copy(internal_display.begin(), internal_display.end(), display.begin());
