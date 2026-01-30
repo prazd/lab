@@ -214,6 +214,60 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x81: {return {IndexedIndirectX, STA,  2, 6};} 
         case 0x91: {return {IndexedIndirectY, STA,  2, 6};}
 
+
+        case 0x07: {return {ZeroPage,  SLO,    2, 3};}
+        case 0x0F: {return {Absolute,  SLO,    3, 4};}
+        case 0x1F: {return {AbsoluteX,  SLO,    3, 5};}
+        case 0x1B: {return {AbsoluteY,  SLO,    3, 5};}
+
+
+        case 0x17: {return {ZeroPageX,  SLO,    2, 4};}
+
+
+        case 0x27: {return {ZeroPage,  RLA,    2, 3};}
+        case 0x2F: {return {Absolute,  RLA,    3, 4};}
+        case 0x3F: {return {AbsoluteX,  RLA,    3, 5};}
+        case 0x3B: {return {AbsoluteY,  RLA,    3, 5};}
+
+        case 0x37: {return {ZeroPageX,  RLA,    2, 4};}
+
+        case 0x47: {return {ZeroPage,  SRE,    2, 3};}
+        case 0x4F: {return {Absolute,  SRE,    3, 4};}
+        case 0x5F: {return {AbsoluteX,  SRE,    3, 5};}
+        case 0x5B: {return {AbsoluteY,  SRE,    3, 5};}
+        case 0x57: {return {ZeroPageX,  SRE,    2, 4};}
+
+
+        case 0x67: {return {ZeroPage,  RRA,    2, 5};}
+        case 0x6F: {return {Absolute,  RRA,    3, 5};} // TODO: check
+        case 0x7F: {return {AbsoluteX,  RRA,    3, 5};} // TODO: check
+        case 0x7B: {return {AbsoluteY,  RRA,    3, 5};} // TODO: check
+
+        case 0x77: {return {ZeroPageX,  RRA,    2, 6};}
+
+        case 0x87: {return {ZeroPage,  AAX,    2, 3};}
+        case 0x8F: {return {Absolute,  AAX,    3, 4};}
+        case 0x97: {return {ZeroPageY,  AAX,    2, 4};}
+        case 0xA7: {return {ZeroPage,  LAX,    2, 3};}
+        case 0xAF: {return {Absolute,  LAX,    3, 4};}
+        case 0xBF: {return {AbsoluteY,  LAX,    3, 5};}
+        case 0xB7: {return {ZeroPageY,  LAX,    2, 4};}
+
+        case 0xC7: {return {ZeroPage,  DCP,    2, 3};}
+        case 0xCF: {return {Absolute,  DCP,    3, 4};}
+        case 0xDF: {return {AbsoluteX,  DCP,    3, 5};}
+        case 0xDB: {return {AbsoluteY,  DCP,    3, 5};}
+
+        case 0xD7: {return {ZeroPageX,  DCP,    2, 4};}
+        case 0xE7: {return {ZeroPage,  ISC,    2, 3};}
+        case 0xEF: {return {Absolute,  ISC,    3, 4};}
+        case 0xFF: {return {AbsoluteX,  ISC,    3, 5};}
+        case 0xFB: {return {AbsoluteY,  ISC,    3, 5};}
+        case 0xF7: {return {ZeroPageX,  ISC,    2, 4};}
+
+        case 0x9C: {return {AbsoluteX,  SYA,    3, 5};}
+        case 0x9E: {return {AbsoluteY,  SXA,    3, 5};}
+
         case 0x86: {return {ZeroPage, STX, 2, 3};}
         case 0x96: {return {ZeroPageY, STX, 2, 4};}
         case 0x8E: {return {Absolute, STX, 3, 4};}
@@ -251,13 +305,6 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xC8: {return {Implied, INY, 1, 2};}
 
         case 0xEA:
-// unofficial (blargg test)
-//entry $1A,"NOP"
-//entry $3A,"NOP"
-//entry $5A,"NOP"
-//entry $7A,"NOP"
-//entry $DA,"NOP"
-//entry $FA,"NOP"
         case 0x1A:
         case 0x3A:
         case 0x5A:
@@ -272,6 +319,30 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xC2:
         case 0xE2:
              {return {Implied, DOP, 2, 2};}
+
+        case 0x04:
+        case 0x44:
+        case 0x64:
+            {return {ZeroPage, DOP, 2, 2};}
+
+        case 0x14:
+        case 0x34:
+        case 0x54:
+        case 0x74:
+        case 0xD4:
+        case 0xF4:
+            {return {ZeroPageX, DOP, 2, 4};}
+
+        case 0x0C:
+            {return {Absolute, TOP, 3, 4};}
+
+        case 0x1C:
+        case 0x3C:
+        case 0x5C:
+        case 0x7C:
+        case 0xDC:
+        case 0xFC:
+            {return {AbsoluteX, TOP, 3, 5};}
 
         case 0xCA: {return {Implied, DEX, 1, 2};}
         case 0x88: {return {Implied, DEY, 1, 2};}
@@ -295,7 +366,7 @@ CPU::AddressingResult CPU::get_arg_pc(Bus& bus, AddressingMode am, bool cross_ch
     unsigned short args_as_addr = ((arg1) | arg2 << 8);
     switch(am){
         case ZeroPageX: return {(unsigned short)((arg1 + x) % 256), false, false};
-        case ZeroPageY: return {(unsigned short)((arg1 + x) % 256), false, false};
+        case ZeroPageY: return {(unsigned short)((arg1 + y) % 256), false, false};
         case AbsoluteX: {
             unsigned short addr = args_as_addr + x;
             return {addr, cross_check && (arg2 != ((addr >> 8) & 0xff)), false};
@@ -328,7 +399,7 @@ CPU::AddressingResult CPU::get_arg_by_addr(Bus &bus, CPU::AddressingMode am, uns
     unsigned short args_as_addr = ((arg1) | arg2 << 8);
     switch(am){
         case ZeroPageX: return {(unsigned short)((arg1 + x) % 256), false, false};
-        case ZeroPageY: return {(unsigned short)((arg1 + x) % 256), false, false};
+        case ZeroPageY: return {(unsigned short)((arg1 + y) % 256), false, false};
         case AbsoluteX: {
             unsigned short addr = args_as_addr + x;
             return {addr, false, false};
@@ -438,12 +509,123 @@ void CPU::tick(Bus& bus){
         }
         case ASL:{
             auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val =  read(bus, arg);;
+            unsigned char val =  read(bus, arg);
             unsigned char res = val << 1;
             sr.set(StatusReg::C, val & 0x80);
             sr.set(StatusReg::Z, res == 0);
             sr.set(StatusReg::N, res & 0x80);
             write(bus, arg, res & 0xff);
+            pc += di.bytes;
+            break;
+        }
+        case SLO:{
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char val =  read(bus, arg);
+            unsigned char res = val << 1;
+            a |= res;
+            sr.set(StatusReg::C, val & 0x80);
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            write(bus, arg, res & 0xff);
+            pc += di.bytes;
+            break;
+        }
+        case RLA:{
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char val =  read(bus, arg);
+            unsigned char res = (val << 1) | sr.get(StatusReg::C);
+            a &= res;
+            sr.set(StatusReg::C, val & 0x80);
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            write(bus, arg, res & 0xff);
+            pc += di.bytes;
+            break;
+        }
+        case SRE:{
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char val =  read(bus, arg);
+            unsigned char res = val >> 1;
+            a ^= res;
+            sr.set(StatusReg::C, val & 0x1);
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            write(bus, arg, res & 0xff);
+            pc += di.bytes;
+            break;
+        }
+        case RRA:{
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char val = read(bus, arg);
+            unsigned char ror_res = (val >> 1) | (sr.get(StatusReg::C) << 7);
+            sr.set(StatusReg::C, val & 0x1);
+            sr.set(StatusReg::Z, ror_res == 0);
+            sr.set(StatusReg::N, ror_res & 0x80);
+            write(bus, arg, ror_res);
+            val = read(bus, arg);
+            unsigned short res = (a + val + sr.get(StatusReg::C));
+            sr.set(StatusReg::C, res > 0xff);
+            sr.set(StatusReg::Z, (res & 0xff) == 0);
+            sr.set(StatusReg::V, (res ^ a) & (res ^ val) & 0x80);
+            sr.set(StatusReg::N, res & 0x80);
+            a = res & 0xff;
+            pc += di.bytes;
+            break;
+        }
+        case AAX:{
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            write(bus, arg, a & x);
+            pc += di.bytes;
+            break;
+        }
+        case LAX:{
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char val = read(bus, arg);
+            a = val;
+            x = val;
+            sr.set(StatusReg::Z, a == 0);
+            sr.set(StatusReg::N, a & 0x80);
+            pc += di.bytes;
+            break;
+        }
+        case DCP:{
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char val = read(bus, arg);
+            unsigned char res = val - 1;
+            sr.set(StatusReg::C, a >= res);
+            sr.set(StatusReg::Z, a == res);
+            sr.set(StatusReg::N, (a - res) & 0x80);
+            write(bus, arg, res & 0xff);
+            pc += di.bytes;
+            break;
+        }
+        case ISC:{
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char val = read(bus, arg);
+            write(bus, arg, val + 1);
+            val = read(bus, arg);
+            int res = a - val - (1 - sr.get(StatusReg::C));
+            sr.set(StatusReg::C, res >= 0);
+            sr.set(StatusReg::Z, (res & 0xff) == 0);
+            sr.set(StatusReg::V, (((res & 0xff) ^ a) & ((res & 0xff) ^ (~val))) & 0x80);
+            sr.set(StatusReg::N, res & 0x80);
+            a = res & 0xff;
+            pc += di.bytes;
+            break;
+        }
+        case SYA:{
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char res = y & (((arg.addr >> 8) & 0xff) + 1);
+            if (res > 0)
+                write(bus, arg, res);
+            pc += di.bytes;
+            break;
+        }
+        case SXA:{
+            auto arg = get_arg_pc(bus, di.addr_mode, false);
+            unsigned char res = x & (((arg.addr >> 8) & 0xff) + 1);
+            if (res > 0)
+                write(bus, arg, res);
             pc += di.bytes;
             break;
         }
@@ -684,12 +866,11 @@ void CPU::tick(Bus& bus){
             pc += di.bytes;
             break;
         }
-
-        // TODO: debug
+        // TODO: check
         case ATX: {
             auto arg = get_arg_pc(bus, di.addr_mode, false);
             unsigned char val = read(bus, arg);
-            a &= val;
+            a = val;
             x = a;
             sr.set(StatusReg::Z, a == 0);
             sr.set(StatusReg::N, a & 0x80);
@@ -732,8 +913,9 @@ void CPU::tick(Bus& bus){
             break;
         }
 
-        case NOP:{pc+=di.bytes; break;}
-        case DOP:{pc+=di.bytes; break;}
+        case NOP:
+        case DOP:
+        case TOP:{pc+=di.bytes; break;}
 
         case ORA:{
             auto arg = get_arg_pc(bus, di.addr_mode, true);
@@ -807,7 +989,6 @@ void CPU::tick(Bus& bus){
             ++pc;
             break;
         }
-        // todo: debug (blargg)
         case SBC:{
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             unsigned char val = read(bus, arg);
@@ -815,7 +996,6 @@ void CPU::tick(Bus& bus){
             int res = (a - val - (!prev_c));
             sr.set(StatusReg::C, res >= 0);
             sr.set(StatusReg::Z, (res & 0xff) == 0);
-            // TODO: check - (result ^ A) & (result ^ ~memory) & $80 in doc
             sr.set(StatusReg::V, (((res & 0xff) ^ a) & ((res & 0xff) ^ (~val))) & 0x80);
             sr.set(StatusReg::N, res & 0x80);
             a = res & 0xff;
