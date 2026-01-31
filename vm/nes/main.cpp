@@ -4,6 +4,7 @@
 #include "PPU.hpp"
 #include "CPU.hpp"
 #include "Debug.h"
+#include <iterator>
 
 struct Cartridge {
     std::vector<unsigned char> buffer{};
@@ -136,12 +137,19 @@ struct NESVM {
         if (cartridge.trainer_present)
             tiles_index_start += 512;
 
-        bus.mapper.rom.reserve(16384 * cartridge.prg_rom_sz);
-        std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + (16384 * cartridge.prg_rom_sz), bus.mapper.rom.begin());
+        if (cartridge.prg_rom_sz == 1){
+            // TODO: update
+            bus.mapper.prg_rom.resize(16384 * 2);
+            std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 16384, bus.mapper.prg_rom.begin());
+            std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 16384, bus.mapper.prg_rom.begin() + 16384);
+        } else {
+            bus.mapper.prg_rom.resize(16384 * cartridge.prg_rom_sz);
+            std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + (16384 * cartridge.prg_rom_sz), bus.mapper.prg_rom.begin());
+        }
 
         tiles_index_start += 16384 * cartridge.prg_rom_sz;
-        // todo: update
-        std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 8192, ppu.mem.map);
+        bus.mapper.chr_rom.resize(16384 * cartridge.chr_rom_sz);
+        std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + (16384 * cartridge.chr_rom_sz), bus.mapper.chr_rom.begin());
     }
 
 
@@ -218,7 +226,7 @@ struct NESVM {
 
         auto handle_up_right_view = [&]{
             switch(current_up_right_view) {
-                case PatternTableV: {ptv.handle(ppu); break;}
+                case PatternTableV: {ptv.handle(ppu,bus); break;}
                 default: {ntnv.handle(ppu); break;}
             }
         };
@@ -242,7 +250,7 @@ struct NESVM {
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, {0, 0},0, WHITE);
             DrawRectangleLinesEx({320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, 1.f, BLACK);
             reg_info.handle(cpu, ppu);
-            ntv.handle(ppu);
+            ntv.handle(ppu, bus);
             handle_up_right_view();
             if (IsKeyPressed(KEY_M))
                 current_up_right_view = static_cast<UpRightView>((current_up_right_view + 1) % UpRightViewCount);
@@ -265,7 +273,17 @@ struct NESVM {
     }
 };
 
+// /Users/prazd/Desktop/dev/DonkeyKongJU.nes (NROM)
+
+// PPU tests:
+// - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes
+
+// Done:
+// - /Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes
+
+
 int main(){
+    // TODO: CNROM support (for ppu tests)
     auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes");
     nes.run();
 }

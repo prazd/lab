@@ -25,8 +25,8 @@ struct Bus {
     Controller c;
 
     void write(unsigned short addr, unsigned char val);
-    unsigned char read(unsigned short addr);
-    unsigned char* read_ptr(unsigned short addr);
+    unsigned char read_prg(unsigned short addr);
+    unsigned char read_chr(unsigned short addr);
     void dma_tick(unsigned char val);
 };
 #endif //NES_BUS_HPP

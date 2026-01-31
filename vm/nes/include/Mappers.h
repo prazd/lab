@@ -2,6 +2,15 @@
 #define NES_MAPPERS_H
 #include <vector>
 namespace mappers {
+    struct NROM {
+        inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
+            return rom[addr-0x8000];
+        }
+        inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
+            return rom[addr];
+        }
+    };
+
     struct MMC1 {
         //  CPU $6000-$7FFF: 8 KB PRG-RAM bank, (optional)
         //  CPU $8000-$BFFF: 16 KB PRG-ROM bank, either switchable or fixed to the first bank
@@ -45,40 +54,60 @@ namespace mappers {
         };
 
         // todo: check MMC1A/MMC1B
-        inline unsigned char* read_rom(std::vector<unsigned char>& rom, unsigned short addr){
+        inline unsigned char read_prg_rom(std::vector<unsigned char>& rom, unsigned short addr){
             unsigned short local_addr = addr-0x8000;
             switch ((control_register >> 2) & 0x3) {
                 case 0b00:
-                case 0b01: return &rom[((prg_bank & 0xe) * 0x4000) + local_addr]; // 0,2,4...
+                case 0b01: return rom[((prg_bank & 0xe) * 0x4000) + local_addr]; // 0,2,4...
                 case 0b10: {
                     // first 16kb (0) lock
-                    if (local_addr < 0x4000) return &rom[local_addr];
-                    return &rom[(local_addr-0x4000) + (0x4000 * (prg_bank & 0xf))];
+                    if (local_addr < 0x4000) return rom[local_addr];
+                    return rom[(local_addr-0x4000) + (0x4000 * (prg_bank & 0xf))];
                 }
                 default: {
                     // last 16kb (sz-1) lock
-                    if (local_addr >= 0x4000 && local_addr < 0x8000) return &rom[(local_addr-0x4000) + (0x4000 * ((rom.size()/0x4000)-1))];
-                    return &rom[local_addr + (0x4000 * (prg_bank & 0xf))];
+                    if (local_addr >= 0x4000 && local_addr < 0x8000) return rom[(local_addr-0x4000) + (0x4000 * ((rom.size()/0x4000)-1))];
+                    return rom[local_addr + (0x4000 * (prg_bank & 0xf))];
                 }
             }
+        }
+        inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr){
+            // todo: check
+            return rom[addr];
         }
     };
 }
 
 struct Mapper {
+
     enum MapperType {
+        NROM = 0x0,
         MMC1 = 0x1
+
     } mtype = MMC1;
 
-    std::vector<unsigned char> ram;
-    std::vector<unsigned char> rom;
+    std::vector<unsigned char> prg_rom{};
+    std::vector<unsigned char> chr_rom{};
 
+    mappers::NROM nrom;
     mappers::MMC1 mmc1;
 
-    inline unsigned char* read_rom(unsigned short addr){
-        if (mtype == MMC1) return mmc1.read_rom(rom, addr);
-        return nullptr;
+    inline unsigned char read_prg_rom(unsigned short addr){
+        switch (mtype) {
+            case NROM: return nrom.read_prg_rom(prg_rom, addr);
+            case MMC1: return mmc1.read_prg_rom(prg_rom, addr);
+            default: return 0xff;
+        }
     }
+
+    inline unsigned char read_chr_rom(unsigned short addr){
+        switch (mtype) {
+            case NROM: return nrom.read_chr_rom(chr_rom, addr);
+            case MMC1: return mmc1.read_chr_rom(chr_rom, addr);
+            default: return 0xff;
+        }
+    }
+
 };
 
 #endif //NES_MAPPERS_H

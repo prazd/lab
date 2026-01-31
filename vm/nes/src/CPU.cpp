@@ -16,7 +16,7 @@ unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) const {
     adjust_if_mirror(addr);
     if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
         || addr >= 0x8000 && addr <= 0xffff){
-        return bus.read(addr);
+        return bus.read_prg(addr);
     }
     return map[addr];
 }
@@ -219,15 +219,17 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x0F: {return {Absolute,  SLO,    3, 4};}
         case 0x1F: {return {AbsoluteX,  SLO,    3, 5};}
         case 0x1B: {return {AbsoluteY,  SLO,    3, 5};}
-
+        case 0x03: {return {IndexedIndirectX, SLO,  2, 6};}
+        case 0x13: {return {IndexedIndirectY, SLO,  2, 6};}
 
         case 0x17: {return {ZeroPageX,  SLO,    2, 4};}
-
 
         case 0x27: {return {ZeroPage,  RLA,    2, 3};}
         case 0x2F: {return {Absolute,  RLA,    3, 4};}
         case 0x3F: {return {AbsoluteX,  RLA,    3, 5};}
         case 0x3B: {return {AbsoluteY,  RLA,    3, 5};}
+        case 0x23: {return {IndexedIndirectX, RLA,  2, 6};}
+        case 0x33: {return {IndexedIndirectY, RLA,  2, 6};}
 
         case 0x37: {return {ZeroPageX,  RLA,    2, 4};}
 
@@ -236,27 +238,36 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x5F: {return {AbsoluteX,  SRE,    3, 5};}
         case 0x5B: {return {AbsoluteY,  SRE,    3, 5};}
         case 0x57: {return {ZeroPageX,  SRE,    2, 4};}
-
+        case 0x43: {return {IndexedIndirectX, SRE,  2, 6};}
+        case 0x53: {return {IndexedIndirectY, SRE,  2, 6};}
 
         case 0x67: {return {ZeroPage,  RRA,    2, 5};}
         case 0x6F: {return {Absolute,  RRA,    3, 5};} // TODO: check
         case 0x7F: {return {AbsoluteX,  RRA,    3, 5};} // TODO: check
         case 0x7B: {return {AbsoluteY,  RRA,    3, 5};} // TODO: check
+        case 0x63: {return {IndexedIndirectX, RRA,  2, 6};}
+        case 0x73: {return {IndexedIndirectY, RRA,  2, 6};}
 
         case 0x77: {return {ZeroPageX,  RRA,    2, 6};}
 
         case 0x87: {return {ZeroPage,  AAX,    2, 3};}
         case 0x8F: {return {Absolute,  AAX,    3, 4};}
         case 0x97: {return {ZeroPageY,  AAX,    2, 4};}
+        case 0x83: {return {IndexedIndirectX, AAX,  2, 6};}
+
         case 0xA7: {return {ZeroPage,  LAX,    2, 3};}
         case 0xAF: {return {Absolute,  LAX,    3, 4};}
         case 0xBF: {return {AbsoluteY,  LAX,    3, 5};}
         case 0xB7: {return {ZeroPageY,  LAX,    2, 4};}
+        case 0xA3: {return {IndexedIndirectX, LAX,  2, 6};}
+        case 0xB3: {return {IndexedIndirectY, LAX,  2, 6};}
 
         case 0xC7: {return {ZeroPage,  DCP,    2, 3};}
         case 0xCF: {return {Absolute,  DCP,    3, 4};}
         case 0xDF: {return {AbsoluteX,  DCP,    3, 5};}
         case 0xDB: {return {AbsoluteY,  DCP,    3, 5};}
+        case 0xC3: {return {IndexedIndirectX, DCP,  2, 6};}
+        case 0xD3: {return {IndexedIndirectY, DCP,  2, 6};}
 
         case 0xD7: {return {ZeroPageX,  DCP,    2, 4};}
         case 0xE7: {return {ZeroPage,  ISC,    2, 3};}
@@ -264,6 +275,8 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xFF: {return {AbsoluteX,  ISC,    3, 5};}
         case 0xFB: {return {AbsoluteY,  ISC,    3, 5};}
         case 0xF7: {return {ZeroPageX,  ISC,    2, 4};}
+        case 0xE3: {return {IndexedIndirectX, ISC,  2, 6};}
+        case 0xF3: {return {IndexedIndirectY, ISC,  2, 6};}
 
         case 0x9C: {return {AbsoluteX,  SYA,    3, 5};}
         case 0x9E: {return {AbsoluteY,  SXA,    3, 5};}
@@ -352,9 +365,6 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xB8: {return {Implied, CLV, 1, 2};}
         case 0x00: {return {Implied, BRK, 2, 7};}
 
-
-
-        
     }
     // TODO: maybe error or optional
     return {};

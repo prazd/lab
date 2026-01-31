@@ -8,6 +8,9 @@ void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
 
 unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {
     adjust_if_mirror(addr);
+    if (addr >= 0x0000 && addr <= 0x1FFF){
+        return bus.read_chr(addr);
+    }
     return map[addr];
 }
 
@@ -148,7 +151,7 @@ void PPU::tick(Bus& bus) {
                 }
                 switch (current_step) {
                     // fetch nametable byte
-                                                                // TODO: debug base_name_table_address
+                    // TODO: debug base_name_table_address
                     case NT:  { nt_byte = mem.read(bus,  constants::NAME_TABLE0_BEGIN + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
                     case AT:  {
                         auto val = mem.read(bus, base_attrib_address + y_tile_n/4 + x_tile_n/4);

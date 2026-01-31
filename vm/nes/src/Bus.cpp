@@ -2,83 +2,50 @@
 #include "Constants.hpp"
 
 void Bus::write(unsigned short addr, unsigned char value) {
-    if (addr == constants::PPUCTRL)   {
-        ppuctrl   =   {value, true};
-        return;
-    }
-    if (addr == constants::PPUMASK)   {
-        ppumask   =   {value, true};
-        return;
-    }
-    if (addr == constants::OAMADDR)   {
-        oamaddr   =   {value, true};
-        return;
-    }
-    if (addr == constants::OAMDATA)   {
-        oamdata   =   {value, true};
-        return;
-    }
-    if (addr == constants::PPUSCROLL) {
-        ppuscroll =   {value, true};
-        return;
-    }
-    if (addr == constants::PPUADDR)   {
-        ppuaddr   =   {value, true};
-        return;
-    }
-    if (addr == constants::PPUDATA)   {
-        ppudata   =   {value, true};
-        return;
-    }
-    if (addr == constants::OAMDMA)    {
-        dma_address = value * 256;
-        dma_active = true;
-        dma_index = 0;
-        return;
-    }
-    if (addr == constants::CONTROLLER1) {
-        if (value == 1)
-            c.latch1 = true;
-        return;
-    }
-    if (addr == constants::CONTROLLER1) {
-        if (value == 0)
-            c.update_status1();
-        return;
-    }
-
     if (addr >= 0x8000 && addr <= 0xffff){
         if (mapper.mtype == Mapper::MapperType::MMC1){
             mapper.mmc1.handle(addr, value);
         }
     }
+    switch (addr) {
+        case constants::PPUCTRL:   { ppuctrl   =   {value, true}; break;}
+        case constants::PPUMASK:   { ppumask   =   {value, true}; break;}
+        case constants::OAMADDR:   { oamaddr   =   {value, true}; break;}
+        case constants::OAMDATA:   { oamdata   =   {value, true}; break;}
+        case constants::PPUSCROLL: { ppuscroll =   {value, true}; break;}
+        case constants::PPUADDR:   { ppuaddr   =   {value, true}; break;}
+        case constants::PPUDATA:   { ppudata   =   {value, true}; break;}
+        case constants::OAMDMA : {
+            dma_address = value * 256;
+            dma_active = true;
+            dma_index = 0;
+            break;
+        }
+        case constants::CONTROLLER1: { if (value) c.latch1 = true; else c.update_status1();  break; }
+    }
 }
 
 // All regs for debug
-unsigned char Bus::read(unsigned short addr) {
-    if (addr == constants::PPUCTRL)
-        return ppuctrl.reg;
-    if (addr == constants::PPUMASK)
-        return ppumask.reg;
-    if (addr == constants::PPUSTATUS)
-        return ppustatus.reg;
-    if (addr == constants::OAMADDR)
-        return oamaddr.reg;
-    if (addr == constants::OAMDATA)
-        return oamdata.reg;
-    if (addr == constants::PPUSCROLL)
-        return ppuscroll.reg;
-    if (addr == constants::PPUADDR)
-        return ppuaddr.reg;
-    if (addr == constants::PPUDATA)
-        return ppudata.reg;
-    if (addr == constants::CONTROLLER1)
-        return c.read_status1();
+unsigned char Bus::read_prg(unsigned short addr) {
     if (addr >= 0x8000 && addr <= 0xffff){
-        return *mapper.read_rom(addr);
+        return mapper.read_prg_rom(addr);
     }
-    // dummy
-    return 0xff;
+    switch (addr) {
+        case constants::PPUCTRL: return ppuctrl.reg;
+        case constants::PPUMASK: return ppumask.reg;
+        case constants::PPUSTATUS: return ppustatus.reg;
+        case constants::OAMADDR: return oamaddr.reg;
+        case constants::OAMDATA: return oamdata.reg;
+        case constants::PPUSCROLL: return ppuscroll.reg;
+        case constants::PPUADDR: return ppuaddr.reg;
+        case constants::PPUDATA: return ppudata.reg;
+        case constants::CONTROLLER1: return c.read_status1();
+        default: return 0xff; // dummy
+    }
+}
+
+unsigned char Bus::read_chr(unsigned short addr) {
+        return mapper.read_chr_rom(addr);
 }
 
 void Bus::dma_tick(unsigned char val) {

@@ -102,7 +102,7 @@ struct PatternTableView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w / 8), t_h
     tiles_w(tiles_w),
     tiles_h(tiles_h){}
 
-    void handle(PPU& ppu){
+    void handle(PPU& ppu, Bus& bus){
       if (CheckCollisionPointRec(GetMousePosition(), DW::rec)){
           if (auto m = GetMouseWheelMove(); m != 0.f){
               if (m > 0.f){
@@ -125,7 +125,7 @@ struct PatternTableView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w / 8), t_h
         current_index = base_index;
         size_t current = 0;
         for (int s = 0; s < tiles_h; s+=8){
-            auto it = (ppu.mem.map + current_index);
+            auto it =  (bus.mapper.chr_rom.data() + current_index); // todo: check
             for (int z = 0; z < 8; ++z) {
                 for (int i = 0; i < t_w/8; ++i){
                     auto l_tile = *(it + i * 16);
@@ -165,14 +165,14 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
         return res;
     }
 
-    void handle(PPU& ppu){
+    void handle(PPU& ppu, Bus& bus){
         size_t current = 0;
         for (int s = 0; s < 30; ++s){
             for (int z = 0; z < 8; ++z) {
                 for (int i = 0; i < 32; ++i){
-                    auto pt_addr = ((base_pt_address + (16 * (*(ppu.mem.map + (base_nt_address + (s * 32) + i))))));
-                    auto l_tile = *(ppu.mem.map + pt_addr + z);
-                    auto h_tile = *(ppu.mem.map + pt_addr + z + 8);
+                    auto pt_addr = ((base_pt_address + (16 * *(ppu.mem.map + (base_nt_address + (s * 32) + i)))));
+                    auto l_tile = bus.read_chr(pt_addr + z);
+                    auto h_tile = bus.read_chr(pt_addr + z + 8);
                     auto tile_row = get_tile_row(h_tile, l_tile);
                     for (int k = 0; k < 8; ++k){
                         DW::buffer[current++] = tile_row[k];
@@ -190,7 +190,6 @@ struct NameTableNumView: DebugWindowText<x, y, w, h> {
     std::stringstream ss;
     bool ascii_print = false;
     // 32 x 30
-    short base_pt_address = constants::PATTERN_TABLE0_BEGIN;
     short base_nt_address = constants::NAME_TABLE0_BEGIN;
     void handle(PPU& ppu){
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
@@ -198,7 +197,7 @@ struct NameTableNumView: DebugWindowText<x, y, w, h> {
         for (int s = 0; s < 30; ++s){
             for (int i = 0; i < 32; ++i){
                 auto v = *(ppu.mem.map + (base_nt_address + (s * 32) + i));
-                if (ascii_print) ss << v; else ss << (unsigned)v;
+                if (ascii_print && v != '\0') ss << v; else ss << (unsigned)v;
                 ss << " ";
             }
             ss << '\n';
