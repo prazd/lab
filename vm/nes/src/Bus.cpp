@@ -1,22 +1,26 @@
 #include "Bus.hpp"
 #include "Constants.hpp"
-
 void Bus::write(unsigned short addr, unsigned char value) {
     if (addr >= 0x8000 && addr <= 0xffff){
         if (mapper.mtype == Mapper::MapperType::MMC1){
-            mapper.mmc1.handle(addr, value);
+            mapper.handle(addr, value);
         }
+        return;
     }
     switch (addr) {
-        case constants::PPUCTRL:   { ppuctrl   =   {value, true}; break;}
-        case constants::PPUMASK:   { ppumask   =   {value, true}; break;}
+        case constants::PPUCTRL:   {
+            ppuctrl   =   {value, true};
+            break;}
+        case constants::PPUMASK:   {
+            ppumask   =   {value, true};
+            break;}
         case constants::OAMADDR:   { oamaddr   =   {value, true}; break;}
-        case constants::OAMDATA:   { oamdata   =   {value, true}; break;}
+        case constants::OAMDATA:   { oamdata   =   {value, true}; oam[oamaddr.reg++] = value; break;}
         case constants::PPUSCROLL: { ppuscroll =   {value, true}; break;}
         case constants::PPUADDR:   { ppuaddr   =   {value, true}; break;}
         case constants::PPUDATA:   { ppudata   =   {value, true}; break;}
         case constants::OAMDMA : {
-            dma_address = value * 256;
+            dma_address = value << 8;
             dma_active = true;
             dma_index = 0;
             break;
@@ -31,21 +35,27 @@ unsigned char Bus::read_prg(unsigned short addr) {
         return mapper.read_prg_rom(addr);
     }
     switch (addr) {
-        case constants::PPUCTRL: return ppuctrl.reg;
-        case constants::PPUMASK: return ppumask.reg;
-        case constants::PPUSTATUS: return ppustatus.reg;
-        case constants::OAMADDR: return oamaddr.reg;
-        case constants::OAMDATA: return oamdata.reg;
-        case constants::PPUSCROLL: return ppuscroll.reg;
-        case constants::PPUADDR: return ppuaddr.reg;
-        case constants::PPUDATA: return ppudata.reg;
+        case constants::PPUCTRL:
+            return ppuctrl.reg;
+        case constants::PPUMASK:
+            return ppumask.reg;
+        case constants::PPUSTATUS: {
+            auto current = ppustatus.reg;
+            ppustatus.reg = 0;
+            return current;
+        }
+        case constants::OAMADDR:     return oamaddr.reg;
+        case constants::OAMDATA:     return oam[oamaddr.reg];
+        case constants::PPUSCROLL:   return ppuscroll.reg;
+        case constants::PPUADDR:     return ppuaddr.reg;
+        case constants::PPUDATA:     return ppudata.reg;
         case constants::CONTROLLER1: return c.read_status1();
         default: return 0xff; // dummy
     }
 }
 
 unsigned char Bus::read_chr(unsigned short addr) {
-        return mapper.read_chr_rom(addr);
+    return mapper.read_chr_rom(addr);
 }
 
 void Bus::dma_tick(unsigned char val) {

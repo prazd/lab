@@ -344,6 +344,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  V:" << (unsigned)(ppu.v) << '\n'
         << "  X:" << (unsigned)(ppu.x) << '\n'
         << "  T:" << (unsigned)(ppu.t) << '\n'
+        << "  VBLank:" << (unsigned)(ppu.ppustatus.vblank_flag) << '\n'
         << std::dec << "  Cycles:" << ppu.current_cycle
         << "  Scanline:" << ppu.current_y;
         auto s = ss.str();

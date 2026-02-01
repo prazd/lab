@@ -1,5 +1,6 @@
 #include "PPU.hpp"
 #include "Constants.hpp"
+#include <cassert>
 
 void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
     adjust_if_mirror(addr);
@@ -74,12 +75,15 @@ void PPU::read_ppuaddr(Bus& mem) {
 }
 
 void PPU::update_state(Bus& bus) {
+    if (bus.ppustatus.was_written)    {read_ppuctrl(bus); bus.ppuctrl.was_written = false;}
     if (bus.ppuctrl.was_written)    {read_ppuctrl(bus); bus.ppuctrl.was_written = false;}
     if (bus.ppumask.was_written)    {ppumask.set(bus.ppumask.reg); bus.ppumask.was_written = false;}
     if (bus.ppuscroll.was_written)  {read_ppuscroll(bus); bus.ppuscroll.was_written = false;}
     if (bus.ppuaddr.was_written)    {read_ppuaddr(bus); bus.ppuaddr.was_written = false;}
     // TODO: finish
     if (bus.ppudata.was_written)    {
+//        if (current_y < 240 && ppumask.enable_background_rendering)
+//            return;
         unsigned short addr = v;
         Memory::adjust_if_mirror(addr);
         mem.map[addr] = bus.ppudata.reg;
@@ -123,23 +127,17 @@ void PPU::tick(Bus& bus) {
     ++current_cycle;
     // TODO: continue debug
     update_state(bus);
-    if (!ppumask.enable_background_rendering) return;
 
     if (current_y < 240){
-        // todo: do it on -1 (pre-render) scanline
-        if (current_y == 0 && current_scanline_cycle == 1) {
-            ppustatus.vblank_flag = 0;
-            bus.ppustatus.reg &= ~(1 << 7);
-        }
         static unsigned char nt_byte = 0;
         static unsigned char attrib_value = 0;
         static unsigned char pattern_table_l = 0;
         static unsigned char pattern_table_h = 0;
 
         if (!current_scanline_cycle){++current_scanline_cycle; return;}
-        
+
         // 1-256 cycles
-        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257) {
+        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && ppumask.enable_background_rendering) {
             if (current_scanline_cycle & 1) {
                 unsigned char x_tile_n = (v & 0x1f);
                 unsigned char y_tile_n = ((v >> 5) & 0x1f);
@@ -202,7 +200,7 @@ void PPU::tick(Bus& bus) {
                 }
             }
         } else if(current_scanline_cycle >= 257 && current_scanline_cycle < 320) {
-            if (current_scanline_cycle == 257) {
+            if (current_scanline_cycle == 257 && ppumask.enable_background_rendering) {
                 // set coarse x + update ntx bit
                 v &= 0xffe0;
                 v |= (t & 0x1f);
@@ -231,10 +229,14 @@ void PPU::tick(Bus& bus) {
         }
     } else if (current_y == 261){
         if (current_scanline_cycle++ % 341 == 0){
-            v = t;
+            ppustatus.vblank_flag = 0;
+            bus.ppustatus.reg &= 0x7f;
             current_y = 0;
             current_x = 0;
-            std::copy(internal_display.begin(), internal_display.end(), display.begin());
+            if (ppumask.enable_background_rendering){
+                v = t;
+                std::copy(internal_display.begin(), internal_display.end(), display.begin());
+            }
         }
     }
 }

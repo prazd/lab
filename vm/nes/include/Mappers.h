@@ -11,6 +11,19 @@ namespace mappers {
         }
     };
 
+    struct CNROM {
+        unsigned short current_offset{};
+        inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
+            return rom[addr-0x8000];
+        }
+        inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
+            return rom[(0x2000 * current_offset) + addr];
+        }
+        inline void handle(unsigned short addr, unsigned char value){
+            current_offset = value;
+        }
+    };
+
     struct MMC1 {
         //  CPU $6000-$7FFF: 8 KB PRG-RAM bank, (optional)
         //  CPU $8000-$BFFF: 16 KB PRG-ROM bank, either switchable or fixed to the first bank
@@ -79,11 +92,10 @@ namespace mappers {
 }
 
 struct Mapper {
-
     enum MapperType {
         NROM = 0x0,
-        MMC1 = 0x1
-
+        MMC1 = 0x1,
+        CNROM = 0x3
     } mtype = MMC1;
 
     std::vector<unsigned char> prg_rom{};
@@ -91,11 +103,13 @@ struct Mapper {
 
     mappers::NROM nrom;
     mappers::MMC1 mmc1;
+    mappers::CNROM cnrom;
 
     inline unsigned char read_prg_rom(unsigned short addr){
         switch (mtype) {
             case NROM: return nrom.read_prg_rom(prg_rom, addr);
             case MMC1: return mmc1.read_prg_rom(prg_rom, addr);
+            case CNROM: return cnrom.read_prg_rom(prg_rom, addr);
             default: return 0xff;
         }
     }
@@ -104,10 +118,18 @@ struct Mapper {
         switch (mtype) {
             case NROM: return nrom.read_chr_rom(chr_rom, addr);
             case MMC1: return mmc1.read_chr_rom(chr_rom, addr);
+            case CNROM: return cnrom.read_chr_rom(chr_rom, addr);
             default: return 0xff;
         }
     }
 
+    inline void handle(unsigned short addr, unsigned char value){
+        switch (mtype) {
+            case MMC1: {mmc1.handle(addr, value); break;}
+            case CNROM: {cnrom.handle(addr, value); break;}
+            default: return;
+        }
+    }
 };
 
 #endif //NES_MAPPERS_H

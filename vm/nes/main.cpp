@@ -274,16 +274,14 @@ struct NESVM {
 };
 
 // /Users/prazd/Desktop/dev/DonkeyKongJU.nes (NROM)
-
+// /Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes
 // PPU tests:
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes
 
 // Done:
+// CPU:
 // - /Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes
-
-
 int main(){
-    // TODO: CNROM support (for ppu tests)
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes");
     nes.run();
 }
