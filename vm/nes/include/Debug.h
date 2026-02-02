@@ -324,33 +324,72 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
 template<size_t x, size_t y, size_t w, size_t h>
 struct RegsInfo: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
+    UserInput<x, y - 30, w, 30> u_input;
+    Rectangle button_rec;
+    enum RegNum {
+        A, CPU_X, Y, PC, SP, Flags,
+        V, PPU_X, T, RegsNumCount
+    };
+    std::array<float, RegsNumCount> set_button_coords_offset = {
+            55.0f,
+            70.0f,
+            85.0f,
+            105.0f,
+            120.0f,
+            135.0f,
+            225.0f,
+            240.0f,
+            255.0f,
+    };
     std::stringstream ss;
+    void update_reg(CPU& cpu, PPU& ppu, RegNum rn, unsigned short value){
+        switch (rn) {
+            case A:     {cpu.a = value & 0xff; break;}
+            case CPU_X: {cpu.x = value & 0xff; break;}
+            case Y:     {cpu.y = value & 0xff; break;}
+            case PC:    {cpu.pc = value; break;}
+            case SP:    {cpu.sp = value; break;}
+            case V:     {ppu.v = value; break;}
+            case PPU_X: {ppu.x = value & 0x7; break;}
+            case T:     {ppu.t = value; break;}
+        }
+    }
     void handle(CPU& cpu, PPU& ppu) {
+        u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
         ss  << std::dec << " Cycles count:" << cpu.cycles_count << '\n'
-        << "  CPU:\n\n"
+        << " CPU:\n\n"
         << std::hex << " A:" << (unsigned)cpu.a << '\n'
         << " X:" << (unsigned)cpu.x << '\n'
         << " Y:" << (unsigned)cpu.y << '\n'
         << " PC:" << cpu.pc << '\n'
         << " SP:" << (unsigned )cpu.sp << '\n'
         << "  Flags:" << (unsigned)(cpu.sr.reg & 0xcf) << '\n'
-        << "  Cf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::C)) << '\n'
-        << "  Zf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::Z)) << '\n'
+        << "  Cf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::C)) << ' '
+        << "  Zf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::Z)) << ' '
         << "  If:" << (unsigned)(cpu.sr.get(CPU::StatusReg::I)) << '\n'
-        << "  Df:" << (unsigned)(cpu.sr.get(CPU::StatusReg::D)) << '\n'
-        << "  Vf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::V)) << '\n'
-        << "  Nf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::N)) << '\n'
-        << "  PPU:\n\n"
+        << "  Df:" << (unsigned)(cpu.sr.get(CPU::StatusReg::D)) << ' '
+        << "  Vf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::V)) << ' '
+        << "  Nf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::N)) << ' '
+        << " \n PPU:\n\n"
         << "  V:" << (unsigned)(ppu.v) << '\n'
         << "  X:" << (unsigned)(ppu.x) << '\n'
         << "  T:" << (unsigned)(ppu.t) << '\n'
         << "  VBLank:" << (unsigned)(ppu.ppustatus.vblank_flag) << '\n'
+
         << std::dec << "  Cycles:" << ppu.current_cycle
         << "  Scanline:" << ppu.current_y;
+        for (int i = 0; i < RegsNumCount; ++i){
+            auto current_button_rec =Rectangle {DW::rec.x-20,DW::rec.y+set_button_coords_offset[i], 20, 10};
+            DW::draw_text_button(current_button_rec, "set", BLACK);
+            if (CheckCollisionPointRec(GetMousePosition(), current_button_rec) && IsMouseButtonPressed(0) && !u_input.s.empty())
+                update_reg(cpu, ppu, static_cast<RegNum>(i), std::stoul(u_input.s, nullptr, 16));
+        }
+
         auto s = ss.str();
         DW::draw(s.c_str(), 15.f);
         ss.str("");
         DW::move();
+        u_input.draw();
     }
 };
 

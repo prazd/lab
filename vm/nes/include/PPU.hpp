@@ -183,7 +183,7 @@ struct PPU {
 
     std::array<Color, 256 * 240> internal_display{};
     size_t current_x = 0;
-    size_t current_y = 0;
+    size_t current_y = 261;
     inline void update_internal_display(Color pixel){
         internal_display[current_x++] = pixel;
     }

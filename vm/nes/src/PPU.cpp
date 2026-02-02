@@ -82,8 +82,6 @@ void PPU::update_state(Bus& bus) {
     if (bus.ppuaddr.was_written)    {read_ppuaddr(bus); bus.ppuaddr.was_written = false;}
     // TODO: finish
     if (bus.ppudata.was_written)    {
-//        if (current_y < 240 && ppumask.enable_background_rendering)
-//            return;
         unsigned short addr = v;
         Memory::adjust_if_mirror(addr);
         mem.map[addr] = bus.ppudata.reg;
@@ -114,7 +112,7 @@ unsigned short PPU::to_pattern_addr(unsigned char y, unsigned char tile_n, bool 
 }
 
 void PPU::reset() {
-    current_y = 0;
+    current_y = 261;
     current_x = 0;
     current_cycle = 0;
     v = 0;
@@ -127,19 +125,23 @@ void PPU::tick(Bus& bus) {
     ++current_cycle;
     // TODO: continue debug
     update_state(bus);
-
     if (current_y < 240){
         static unsigned char nt_byte = 0;
         static unsigned char attrib_value = 0;
         static unsigned char pattern_table_l = 0;
         static unsigned char pattern_table_h = 0;
 
-        if (!current_scanline_cycle){++current_scanline_cycle; return;}
+        if (!current_scanline_cycle){
+            ++current_scanline_cycle; return;}
 
         // 1-256 cycles
         if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && ppumask.enable_background_rendering) {
+//            if (current_scanline_cycle == 1) {
+//                assert((v & 0x1f) == 2);
+//            }
             if (current_scanline_cycle & 1) {
                 unsigned char x_tile_n = (v & 0x1f);
+
                 unsigned char y_tile_n = ((v >> 5) & 0x1f);
                 switch (((v >> 10) & 0x3)) {
                     case 0b00 : base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
@@ -201,12 +203,13 @@ void PPU::tick(Bus& bus) {
             }
         } else if(current_scanline_cycle >= 257 && current_scanline_cycle < 320) {
             if (current_scanline_cycle == 257 && ppumask.enable_background_rendering) {
-                // set coarse x + update ntx bit
-                v &= 0xffe0;
-                v |= (t & 0x1f);
+                  // TODO: debug (oam_read test (v & 0x1f) == 2)
+                  // set coarse x + update ntx bit
+                    v &= 0xffe0;
+                    v |= (t & 0x1f);
 
-                v &= 0xfbff;
-                v |= (t & (~0xfbff & 0xffff));
+                    v &= 0xfbff;
+                    v |= (t & (~0xfbff & 0xffff));
             }
         }
         ++current_scanline_cycle;
@@ -214,12 +217,7 @@ void PPU::tick(Bus& bus) {
             ++current_y;
             current_scanline_cycle = 0;
         }
-    } else if (current_y == 240){
-        if (current_scanline_cycle++ % 341 == 0){
-            ++current_y;
-            current_scanline_cycle = 0;
-        }
-    } else if (current_y > 240 && current_y < 261){
+    } else if (current_y >= 240 && current_y < 261){
         if (current_y == 241 && (current_scanline_cycle++ % 341) == 2) {
             ppustatus.vblank_flag = 1;
             bus.ppustatus.reg |= 1 << 7;
@@ -229,13 +227,38 @@ void PPU::tick(Bus& bus) {
         }
     } else if (current_y == 261){
         if (current_scanline_cycle++ % 341 == 0){
+            // update shift registers
             ppustatus.vblank_flag = 0;
             bus.ppustatus.reg &= 0x7f;
             current_y = 0;
             current_x = 0;
             if (ppumask.enable_background_rendering){
-                v = t;
                 std::copy(internal_display.begin(), internal_display.end(), display.begin());
+                v = t;
+                auto get_next_shifts = [&]() -> unsigned short{
+                    unsigned char x_tile_n = (v & 0x1f) + 1;
+                    unsigned char y_tile_n = ((v >> 5) & 0x1f);
+                    auto nt_byte = mem.read(bus,  constants::NAME_TABLE0_BEGIN + (y_tile_n * 32) + x_tile_n);
+                    auto val = mem.read(bus, base_attrib_address + y_tile_n/4 + x_tile_n/4);
+                    auto shift_y = (y_tile_n/2) % 2;
+                    auto shift_x = (x_tile_n/2) % 2;
+                    auto attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
+                    auto pattern_table_l = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, false, ppuctrl.bg_pattern_table_addr));
+                    auto pattern_table_h = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, true, ppuctrl.bg_pattern_table_addr));
+                    unsigned char add_val = (((v & 0x1f) + 1) % 32);
+                    if (!add_val)
+                        v ^= 0x400;
+                    v &= 0xffe0;
+                    v |= add_val;
+
+                    return ((pattern_table_h << 8) | pattern_table_l);
+                };
+                auto first = get_next_shifts();
+                shift_register_low |= (first & 0xff) << 8;
+                shift_register_high |= first & 0xff00;
+                auto second = get_next_shifts();
+                shift_register_low |= (second & 0xff);
+                shift_register_high |= ((second >> 8)& 0xff);
             }
         }
     }
