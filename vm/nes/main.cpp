@@ -171,6 +171,7 @@ struct NESVM {
                 }
                 while (cpu.debug_run) {
                     cpu.tick(bus);
+                    bus.open_bus_decay();
                     for (int j = 0; j < 3; ++j) ppu.tick(bus);
                     ++current_tick;
                 }
@@ -183,7 +184,8 @@ struct NESVM {
 #else
         if (cpu.stop_requested) return;
         for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
-            cpu.tick(bus);
+             cpu.tick(bus);
+             bus.open_bus_decay();
              for (int j = 0; j < 3; ++j) ppu.tick(bus);
         }
 #endif
@@ -275,13 +277,18 @@ struct NESVM {
 // /Users/prazd/Desktop/dev/DonkeyKongJU.nes (NROM)
 
 // PPU tests:
-// - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes
+// - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes - todo
+
 
 // Done:
 // CPU:
 // - /Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes
 // - /Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes
+
+// PPU:
+// - /Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes
+
 int main(){
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes");
     nes.run();
 }

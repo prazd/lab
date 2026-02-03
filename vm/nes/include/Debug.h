@@ -328,7 +328,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
     Rectangle button_rec;
     enum RegNum {
         A, CPU_X, Y, PC, SP, Flags,
-        V, PPU_X, T, RegsNumCount
+        V, PPU_X, T, W,  RegsNumCount
     };
     std::array<float, RegsNumCount> set_button_coords_offset = {
             55.0f,
@@ -340,6 +340,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
             225.0f,
             240.0f,
             255.0f,
+            270.0f,
     };
     std::stringstream ss;
     void update_reg(CPU& cpu, PPU& ppu, RegNum rn, unsigned short value){
@@ -352,6 +353,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
             case V:     {ppu.v = value; break;}
             case PPU_X: {ppu.x = value & 0x7; break;}
             case T:     {ppu.t = value; break;}
+            case W:     {ppu.w = (value); break;}
         }
     }
     void handle(CPU& cpu, PPU& ppu) {
@@ -374,6 +376,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  V:" << (unsigned)(ppu.v) << '\n'
         << "  X:" << (unsigned)(ppu.x) << '\n'
         << "  T:" << (unsigned)(ppu.t) << '\n'
+        << "  W:" << (unsigned)(ppu.w) << '\n'
         << "  VBLank:" << (unsigned)(ppu.ppustatus.vblank_flag) << '\n'
 
         << std::dec << "  Cycles:" << ppu.current_cycle

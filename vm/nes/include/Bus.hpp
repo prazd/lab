@@ -9,7 +9,9 @@ struct Bus {
     bool dma_active = false;
     unsigned dma_index = 0;
     bool nmi_interrupt_flip_flop = false;
-
+    size_t open_bus_value_cycles = 0;
+    unsigned char open_bus_value {};
+    unsigned short last_ppu_address = 0;
     struct PPUREG {
         unsigned char reg{};
         bool was_written{};
@@ -28,5 +30,6 @@ struct Bus {
     unsigned char read_prg(unsigned short addr);
     unsigned char read_chr(unsigned short addr);
     void dma_tick(unsigned char val);
+    void open_bus_decay();
 };
 #endif //NES_BUS_HPP

@@ -1,5 +1,6 @@
 #include "PPU.hpp"
 #include "Constants.hpp"
+#include <bitset>
 #include <cassert>
 
 void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
@@ -61,21 +62,25 @@ void PPU::read_ppuscroll(Bus& bus) {
     w = !w;
 }
 
-void PPU::read_ppuaddr(Bus& mem) {
+void PPU::read_ppuaddr(Bus& bus) {
     if (w){
         t &= 0xff00;
-        t |= mem.ppuaddr.reg;
+        t |= bus.ppuaddr.reg;
     } else {
         t &= 0xff;
-        t |= (((mem.ppuaddr.reg & 0x7f) << 8));
+        t |= (((bus.ppuaddr.reg & 0x7f) << 8));
     }
-    if (w)
+    if (w){
         v = t;
+        bus.last_ppu_address = v;
+    }
     w = !w;
 }
 
 void PPU::update_state(Bus& bus) {
-    if (bus.ppustatus.was_written)    {read_ppuctrl(bus); bus.ppuctrl.was_written = false;}
+    if (bus.ppustatus.was_written)  {
+        w = false;
+        bus.ppustatus.was_written = false;}
     if (bus.ppuctrl.was_written)    {read_ppuctrl(bus); bus.ppuctrl.was_written = false;}
     if (bus.ppumask.was_written)    {ppumask.set(bus.ppumask.reg); bus.ppumask.was_written = false;}
     if (bus.ppuscroll.was_written)  {read_ppuscroll(bus); bus.ppuscroll.was_written = false;}
@@ -118,6 +123,7 @@ void PPU::reset() {
     v = 0;
     t = 0;
     x = 0;
+    w = false;
 }
 
 void PPU::tick(Bus& bus) {
@@ -141,7 +147,6 @@ void PPU::tick(Bus& bus) {
 //            }
             if (current_scanline_cycle & 1) {
                 unsigned char x_tile_n = (v & 0x1f);
-
                 unsigned char y_tile_n = ((v >> 5) & 0x1f);
                 switch (((v >> 10) & 0x3)) {
                     case 0b00 : base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
@@ -183,12 +188,12 @@ void PPU::tick(Bus& bus) {
                         current_step = NT;  break;}  // pattern table tile high
                 }
             }
-            shift_register_high <<= 1;
-            shift_register_low <<= 1;
-            //   TODO: maybe use register for attrib_value
             unsigned char pixel_index =
                     mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (4 * attrib_value) + ((shift_register_high >> (15-x)) & 1) | ((shift_register_low >> (15-x)) & 1));
             update_internal_display(palette[pixel_index]);
+            shift_register_high <<= 1;
+            shift_register_low <<= 1;
+
             if (current_scanline_cycle == 256){
                 unsigned char y_fine_add_val = ((((v >> 12) & 0x7) + 1) % 8);
                 v &= 0x8fff;
@@ -203,13 +208,12 @@ void PPU::tick(Bus& bus) {
             }
         } else if(current_scanline_cycle >= 257 && current_scanline_cycle < 320) {
             if (current_scanline_cycle == 257 && ppumask.enable_background_rendering) {
-                  // TODO: debug (oam_read test (v & 0x1f) == 2)
-                  // set coarse x + update ntx bit
-                    v &= 0xffe0;
-                    v |= (t & 0x1f);
-
-                    v &= 0xfbff;
-                    v |= (t & (~0xfbff & 0xffff));
+                // TODO: debug (oam_read test (v & 0x1f) == 2)
+                // set coarse x + update ntx bit
+//                v &= 0xffe0;
+//                v |= (t & 0x1f);
+//                v &= 0xfbff;
+//                v |= (t & (~0xfbff & 0xffff));
             }
         }
         ++current_scanline_cycle;
