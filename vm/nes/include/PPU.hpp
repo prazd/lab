@@ -77,6 +77,11 @@ struct PPU {
 
     size_t current_cycle{};
 
+#if UI_DEBUGGER
+    bool frame_start = false;
+    size_t frames_count{};
+#endif
+
     enum FetchStep {
         NT, AT, PTL, PTH
     } current_step = NT;
@@ -255,6 +260,8 @@ struct PPU {
         Color{0x00, 0x00, 0x00,  0xFF},
         Color{0x00, 0x00, 0x00,  0xFF},
     };
+
+    void update_base_nt(Bus& bus);
 
 //  Pattern table
     template <typename = void>

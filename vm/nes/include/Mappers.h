@@ -98,6 +98,8 @@ struct Mapper {
         CNROM = 0x3
     } mtype = MMC1;
 
+    bool is_horizontal_arrangement = false;
+
     std::vector<unsigned char> prg_rom{};
     std::vector<unsigned char> chr_rom{};
 

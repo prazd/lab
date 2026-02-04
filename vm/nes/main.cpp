@@ -150,16 +150,16 @@ struct NESVM {
         tiles_index_start += 16384 * cartridge.prg_rom_sz;
         bus.mapper.chr_rom.resize(16384 * cartridge.chr_rom_sz);
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + (16384 * cartridge.chr_rom_sz), bus.mapper.chr_rom.begin());
+        bus.mapper.is_horizontal_arrangement = cartridge.is_horizontal_arrangement;
     }
 
-
-    // Debug: - 81E9,  81EC, c4c3, c4a0 (on c44d - 19 iter) (c4e2- JMP 0x200 failed)
-    // target - C44f +
     void frame_execute(){
 #if UI_DEBUGGER
             if (dis.next){
                 cpu.debug_run = true;
                 dis.next = false;
+            } else if (dis.is_frame_jump_active){
+                cpu.debug_run = true;
             }
             int current_tick = 0;
             do {
@@ -172,15 +172,21 @@ struct NESVM {
                 while (cpu.debug_run) {
                     cpu.tick(bus);
                     bus.open_bus_decay();
-                    for (int j = 0; j < 3; ++j) ppu.tick(bus);
+                    for (int j = 0; j < 3; ++j){
+                        if (dis.is_frame_jump_active && ppu.frame_start){
+                            dis.is_frame_jump_active = false;
+                        }
+                        ppu.tick(bus);
+                    }
                     ++current_tick;
                 }
 
                 if (dis.selected_move_active){
                     dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
-                }
-            } while(dis.selected_move_active && current_tick < constants::CPU_FRAME_CYCLES);
-            if (!dis.selected_move_active) dis.handle(cpu);
+                } else if (dis.is_frame_jump_active) cpu.debug_run = true;
+
+            } while((dis.selected_move_active || dis.is_frame_jump_active) && current_tick < constants::CPU_FRAME_CYCLES);
+            if (!dis.selected_move_active && !dis.is_frame_jump_active) dis.handle(cpu);
 #else
         if (cpu.stop_requested) return;
         for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
@@ -289,6 +295,6 @@ struct NESVM {
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes
 
 int main(){
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes");
     nes.run();
 }

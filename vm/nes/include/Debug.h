@@ -249,6 +249,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     unsigned short pc{};
     std::stringstream ss;
 
+    bool is_frame_jump_active = false;
+
     Rectangle line_button;
     UserInput<x, y - 30, w, 30> u_input;
 
@@ -256,13 +258,15 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle select_jump_button;
     Rectangle input_address_jump_button;
     Rectangle ntjump_button;
+    Rectangle frame_jump_button;
 
     Disassembler(CPU& cpu, Bus& bus): base(cpu.pc),
                                       line_button{DW::rec.x - 20, DW::rec.y, 10, 10},
                                       next_button{DW::rec.x, DW::rec.y + h, 40, 40},
                                       select_jump_button{DW::rec.x + 40, DW::rec.y + h, 40, 40},
-                                      input_address_jump_button{DW::rec.x + 40 + 40, DW::rec.y + h, 40, 40},
-                                      ntjump_button{DW::rec.x + 40 + 40 + 40, DW::rec.y + h, 40, 40}
+                                      input_address_jump_button{DW::rec.x + 40 * 2, DW::rec.y + h, 40, 40},
+                                      ntjump_button{DW::rec.x + 40 * 3, DW::rec.y + h, 40, 40},
+                                      frame_jump_button{DW::rec.x + 40 * 4, DW::rec.y + h, 40, 40}
                                       {}
 
     void handle(CPU& cpu) {
@@ -274,9 +278,10 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         line_button = {DW::rec.x - 20, DW::rec.y, 10, 10};
         next_button = {DW::rec.x, DW::rec.y + h, 40, 40};
         select_jump_button = {DW::rec.x + 40, DW::rec.y + h, 40, 40};
-        input_address_jump_button = {DW::rec.x + 40 + 40, DW::rec.y + h, 40, 40};
+        input_address_jump_button = {DW::rec.x + 40 * 2, DW::rec.y + h, 40, 40};
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
-        ntjump_button = {DW::rec.x + 40 + 40 + 40, DW::rec.y + h, 40, 40};
+        ntjump_button = {DW::rec.x + 40 * 3, DW::rec.y + h, 40, 40};
+        frame_jump_button = {DW::rec.x + 40 * 4, DW::rec.y + h, 40, 40};
 
         pc = base;
         if (CheckCollisionPointRec(GetMousePosition(), select_jump_button) && IsMouseButtonPressed(0)){
@@ -295,6 +300,9 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             selected_line_pc = (unsigned short)val;
             selected_move_active = true;
         }
+
+        if (CheckCollisionPointRec(GetMousePosition(), frame_jump_button) && IsMouseButtonPressed(0))
+            is_frame_jump_active = true;
 
         for (int i = 0; i < 10; ++i){
             auto r = Rectangle{line_button.x, line_button.y + i * (line_button.height + 25.f), line_button.width, line_button.height};
@@ -316,6 +324,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         DW::draw_text_button(select_jump_button, " jmp", GREEN, 15.f);
         DW::draw_text_button(input_address_jump_button, " tjmp", GREEN, 15.f);
         DW::draw_text_button(ntjump_button, " ntjmp", GREEN, 15.f);
+        DW::draw_text_button(frame_jump_button, " fjmp", GREEN, 15.f);
         u_input.draw();
         ss.str("");
     }
@@ -338,9 +347,9 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
             120.0f,
             135.0f,
             225.0f,
-            240.0f,
-            255.0f,
-            270.0f,
+            290.0f,
+            305.0f,
+            320.0f,
     };
     std::stringstream ss;
     void update_reg(CPU& cpu, PPU& ppu, RegNum rn, unsigned short value){
@@ -374,11 +383,16 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  Nf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::N)) << ' '
         << " \n PPU:\n\n"
         << "  V:" << (unsigned)(ppu.v) << '\n'
+        << " Coarse(X):" << (unsigned)(ppu.v & 0x1f) << '\n'
+        << " Coarse(Y):" << (unsigned)((ppu.v >> 5) & 0x1f) << '\n'
+        << "  NT:" << (unsigned)((ppu.v >> 10) & 0x3) << '\n'
         << "  X:" << (unsigned)(ppu.x) << '\n'
         << "  T:" << (unsigned)(ppu.t) << '\n'
         << "  W:" << (unsigned)(ppu.w) << '\n'
         << "  VBLank:" << (unsigned)(ppu.ppustatus.vblank_flag) << '\n'
-
+#if UI_DEBUGGER
+        << "  FramesCount:" << ppu.frames_count << '\n'
+#endif
         << std::dec << "  Cycles:" << ppu.current_cycle
         << "  Scanline:" << ppu.current_y;
         for (int i = 0; i < RegsNumCount; ++i){

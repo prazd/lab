@@ -126,11 +126,29 @@ void PPU::reset() {
     w = false;
 }
 
+void PPU::update_base_nt(Bus& bus) {
+    // mirroring
+    if (bus.mapper.is_horizontal_arrangement){
+        switch (((v >> 10) & 0x3)) {
+            case 0b00 :
+            case 0b10 : base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
+            default:    base_name_table_address = constants::NAME_TABLE1_BEGIN; break;
+        }
+    } else {
+        switch (((v >> 10) & 0x3)) {
+            case 0b00 :
+            case 0b01 : base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
+            default:    base_name_table_address = constants::NAME_TABLE1_BEGIN; break;
+        }
+    }
+}
+
 void PPU::tick(Bus& bus) {
     static unsigned short current_scanline_cycle = 0;
     ++current_cycle;
     // TODO: continue debug
     update_state(bus);
+
     if (current_y < 240){
         static unsigned char nt_byte = 0;
         static unsigned char attrib_value = 0;
@@ -138,26 +156,22 @@ void PPU::tick(Bus& bus) {
         static unsigned char pattern_table_h = 0;
 
         if (!current_scanline_cycle){
-            ++current_scanline_cycle; return;}
+#if UI_DEBUGGER
+            frame_start = false;
+#endif
+            ++current_scanline_cycle;
+            return;}
 
         // 1-256 cycles
         if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && ppumask.enable_background_rendering) {
-//            if (current_scanline_cycle == 1) {
-//                assert((v & 0x1f) == 2);
-//            }
             if (current_scanline_cycle & 1) {
                 unsigned char x_tile_n = (v & 0x1f);
                 unsigned char y_tile_n = ((v >> 5) & 0x1f);
-                switch (((v >> 10) & 0x3)) {
-                    case 0b00 : base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
-                    case 0b10 : base_name_table_address = constants::NAME_TABLE1_BEGIN; break;
-                    case 0b01 : base_name_table_address = constants::NAME_TABLE2_BEGIN; break;
-                    default:    base_name_table_address = constants::NAME_TABLE3_BEGIN; break;
-                }
+                update_base_nt(bus);
                 switch (current_step) {
                     // fetch nametable byte
                     // TODO: debug base_name_table_address
-                    case NT:  { nt_byte = mem.read(bus,  constants::NAME_TABLE0_BEGIN + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
+                    case NT:  { nt_byte = mem.read(bus,  base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
                     case AT:  {
                         auto val = mem.read(bus, base_attrib_address + y_tile_n/4 + x_tile_n/4);
                         // TODO: check
@@ -181,8 +195,7 @@ void PPU::tick(Bus& bus) {
                         shift_register_high |= pattern_table_h;
 
                         unsigned char add_val = (((v & 0x1f) + 1) % 32);
-                        if (!add_val)
-                            v ^= 0x400;
+                        if (!add_val) v ^= 0x400;
                         v &= 0xffe0;
                         v |= add_val;
                         current_step = NT;  break;}  // pattern table tile high
@@ -201,7 +214,7 @@ void PPU::tick(Bus& bus) {
 
                 if (!y_fine_add_val){
                     auto add_val = ((((v >> 5) & 0x1f) + 1) % 30);
-                    if (!add_val){v ^= 0x800;}
+                    if (!add_val) v ^= 0x800;
                     v &= 0xfc1f;
                     v |= (add_val << 5);
                 }
@@ -210,14 +223,13 @@ void PPU::tick(Bus& bus) {
             if (current_scanline_cycle == 257 && ppumask.enable_background_rendering) {
                 // TODO: debug (oam_read test (v & 0x1f) == 2)
                 // set coarse x + update ntx bit
-//                v &= 0xffe0;
-//                v |= (t & 0x1f);
-//                v &= 0xfbff;
-//                v |= (t & (~0xfbff & 0xffff));
+                v &= 0xffe0;
+                v |= (t & 0x1f);
+                v &= 0xfbff;
+                v |= (t & (~0xfbff & 0xffff));
             }
         }
-        ++current_scanline_cycle;
-        if (current_scanline_cycle % 341 == 0){
+        if (current_scanline_cycle++ % 341 == 0){
             ++current_y;
             current_scanline_cycle = 0;
         }
@@ -238,7 +250,9 @@ void PPU::tick(Bus& bus) {
             current_x = 0;
             if (ppumask.enable_background_rendering){
                 std::copy(internal_display.begin(), internal_display.end(), display.begin());
-                v = t;
+                v &= 0x841f;
+                v |= ((t & (~0x841f & 0xffff)));
+
                 auto get_next_shifts = [&]() -> unsigned short{
                     unsigned char x_tile_n = (v & 0x1f) + 1;
                     unsigned char y_tile_n = ((v >> 5) & 0x1f);
@@ -254,7 +268,6 @@ void PPU::tick(Bus& bus) {
                         v ^= 0x400;
                     v &= 0xffe0;
                     v |= add_val;
-
                     return ((pattern_table_h << 8) | pattern_table_l);
                 };
                 auto first = get_next_shifts();
@@ -263,6 +276,11 @@ void PPU::tick(Bus& bus) {
                 auto second = get_next_shifts();
                 shift_register_low |= (second & 0xff);
                 shift_register_high |= ((second >> 8)& 0xff);
+                current_scanline_cycle = 0;
+#if UI_DEBUGGER
+                frame_start = true;
+                ++frames_count;
+#endif
             }
         }
     }
