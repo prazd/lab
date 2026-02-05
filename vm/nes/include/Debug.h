@@ -351,6 +351,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
             305.0f,
             320.0f,
     };
+    Rectangle mirroring_switch_button = {DW::rec.x-30, DW::rec.y+DW::rec.height-30, 30, 30};
     std::stringstream ss;
     void update_reg(CPU& cpu, PPU& ppu, RegNum rn, unsigned short value){
         switch (rn) {
@@ -365,8 +366,13 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
             case W:     {ppu.w = (value); break;}
         }
     }
-    void handle(CPU& cpu, PPU& ppu) {
+    void handle(CPU& cpu, PPU& ppu, Bus& bus) {
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
+        mirroring_switch_button = {DW::rec.x-30, DW::rec.y+DW::rec.height-30, 30, 30};
+        if (CheckCollisionPointRec(GetMousePosition(), mirroring_switch_button) && IsMouseButtonPressed(0))
+            bus.mapper.current_screen_mirroring =
+                    static_cast<Mapper::ScreenMirroring>((bus.mapper.current_screen_mirroring + 1) % Mapper::ScreenMirroring::MirroringCount);
+
         ss  << std::dec << " Cycles count:" << cpu.cycles_count << '\n'
         << " CPU:\n\n"
         << std::hex << " A:" << (unsigned)cpu.a << '\n'
@@ -390,20 +396,28 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  T:" << (unsigned)(ppu.t) << '\n'
         << "  W:" << (unsigned)(ppu.w) << '\n'
         << "  VBLank:" << (unsigned)(ppu.ppustatus.vblank_flag) << '\n'
+        << "  Bus VBLank:" << (unsigned)(bus.ppustatus.reg & 0x80) << '\n'
 #if UI_DEBUGGER
         << "  FramesCount:" << ppu.frames_count << '\n'
 #endif
         << std::dec << "  Cycles:" << ppu.current_cycle
         << "  Scanline:" << ppu.current_y;
+        ss << "\nScreenMirroring:";
+        switch (bus.mapper.current_screen_mirroring) {
+            case Mapper::ScreenMirroring::Horizontal: ss << "Horizontal"; break;
+            case Mapper::ScreenMirroring::Vertical: ss << "Vertical"; break;
+            case Mapper::ScreenMirroring::SingleScreenLower: ss << "SingleScreenLower"; break;
+            case Mapper::ScreenMirroring::SingleScreenUpper: ss << "SingleScreenUpper"; break;
+        }
         for (int i = 0; i < RegsNumCount; ++i){
-            auto current_button_rec =Rectangle {DW::rec.x-20,DW::rec.y+set_button_coords_offset[i], 20, 10};
+            auto current_button_rec = Rectangle{DW::rec.x-20,DW::rec.y+set_button_coords_offset[i], 20, 10};
             DW::draw_text_button(current_button_rec, "set", BLACK);
             if (CheckCollisionPointRec(GetMousePosition(), current_button_rec) && IsMouseButtonPressed(0) && !u_input.s.empty())
                 update_reg(cpu, ppu, static_cast<RegNum>(i), std::stoul(u_input.s, nullptr, 16));
         }
-
         auto s = ss.str();
         DW::draw(s.c_str(), 15.f);
+        DW::draw_text_button(mirroring_switch_button, "MS", BLACK);
         ss.str("");
         DW::move();
         u_input.draw();

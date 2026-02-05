@@ -46,7 +46,7 @@ unsigned char Bus::read_prg(unsigned short addr) {
         case constants::PPUMASK:
             return open_bus_value;
         case constants::PPUSTATUS: {
-            auto current = (ppustatus.reg & 0xe0) | open_bus_value;
+            unsigned char current = (ppustatus.reg & 0xe0) | open_bus_value;
             ppustatus.reg = 0;
             ppustatus.was_written = true;
             return current;
@@ -93,7 +93,7 @@ void Bus::dma_tick(unsigned char val) {
 }
 
 void Bus::open_bus_decay() {
-    if (open_bus_value && open_bus_value_cycles++ == 10'000){ // todo: check
+    if (open_bus_value && open_bus_value_cycles++ == 5'000){ // todo: check
         open_bus_value_cycles = 0;
         open_bus_value = 0;
     }

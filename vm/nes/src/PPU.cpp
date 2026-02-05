@@ -127,19 +127,27 @@ void PPU::reset() {
 }
 
 void PPU::update_base_nt(Bus& bus) {
-    // mirroring
-    if (bus.mapper.is_horizontal_arrangement){
-        switch (((v >> 10) & 0x3)) {
-            case 0b00 :
-            case 0b10 : base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
-            default:    base_name_table_address = constants::NAME_TABLE1_BEGIN; break;
+    using SM = Mapper::ScreenMirroring;
+    unsigned char current_nt_value = ((v >> 10) & 0x3);
+    switch (bus.mapper.current_screen_mirroring) {
+        case SM::Horizontal: {
+            if (current_nt_value == 0 || current_nt_value == 2)
+                base_name_table_address = constants::NAME_TABLE0_BEGIN;
+            else
+                base_name_table_address =  constants::NAME_TABLE1_BEGIN;
+            break;
         }
-    } else {
-        switch (((v >> 10) & 0x3)) {
-            case 0b00 :
-            case 0b01 : base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
-            default:    base_name_table_address = constants::NAME_TABLE1_BEGIN; break;
+        case SM::Vertical: {
+            if (current_nt_value == 0 || current_nt_value == 1)
+                base_name_table_address = constants::NAME_TABLE0_BEGIN;
+            else
+                base_name_table_address = base_name_table_address = constants::NAME_TABLE1_BEGIN;
+            break;
         }
+        case SM::SingleScreenLower: {base_name_table_address = constants::NAME_TABLE0_BEGIN; break;}
+        case SM::SingleScreenUpper: {base_name_table_address = constants::NAME_TABLE1_BEGIN; break;}
+        default:
+            base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
     }
 }
 

@@ -455,15 +455,13 @@ void CPU::tick(Bus& bus){
     if (!debug_run) return;
 #endif
     if (!execute_in_progress) {
+        if (bus.ppustatus.reg & 0x80 && bus.ppuctrl.reg & 0x80){
+            interrupt_requests[NMI] = true;
+        }
         if (bus.dma_active){
             // Every cpu cycle
             bus.dma_tick(mem.read(bus, bus.dma_address + bus.dma_index));
             return;
-        }
-
-        if (bus.nmi_interrupt_flip_flop){
-            interrupt_requests[NMI] = true;
-            bus.nmi_interrupt_flip_flop = false;
         }
 
         if (!sr.get(StatusReg::I)){
@@ -488,6 +486,7 @@ void CPU::tick(Bus& bus){
 
         di = decode(mem.read(bus, pc));
         execute_in_progress = true;
+        --di.cycles;
     }
 
     if (di.cycles){

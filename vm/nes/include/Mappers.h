@@ -37,18 +37,18 @@ namespace mappers {
         unsigned char chr_bank1 = 0;        // $C000-$DFFF
         unsigned char prg_bank = 0;         // $E000-$FFFF
 
-        inline void handle(unsigned short address, unsigned char val) {
+        inline bool handle(unsigned short address, unsigned char val) {
             if (val & 0x80) {
                 mmc1_sr = 0x10;
                 control_register = 0; // todo: check
-                return;
+                return false;
             }
 
             // in progress
             if (!(mmc1_sr & 1)) {
                 mmc1_sr >>= 1;
                 mmc1_sr |= ((val & 1) << 4);
-                return;
+                return false;
             }
 
             mmc1_sr >>= 1;
@@ -64,7 +64,12 @@ namespace mappers {
                 prg_bank = mmc1_sr;
             }
             mmc1_sr = 0x10;
+            return true;
         };
+
+        inline unsigned char get_screen_mirroring_value() const {
+            return control_register & 0x3;
+        }
 
         // todo: check MMC1A/MMC1B
         inline unsigned char read_prg_rom(std::vector<unsigned char>& rom, unsigned short addr){
@@ -98,7 +103,13 @@ struct Mapper {
         CNROM = 0x3
     } mtype = MMC1;
 
-    bool is_horizontal_arrangement = false;
+    enum ScreenMirroring {
+        Vertical,
+        Horizontal,
+        SingleScreenLower,
+        SingleScreenUpper,
+        MirroringCount
+    } current_screen_mirroring;
 
     std::vector<unsigned char> prg_rom{};
     std::vector<unsigned char> chr_rom{};
@@ -106,6 +117,26 @@ struct Mapper {
     mappers::NROM nrom;
     mappers::MMC1 mmc1;
     mappers::CNROM cnrom;
+
+    inline unsigned char update_screen_mirroring(bool is_horizontal_arrangement, bool is_alternative_nametable) {
+        switch (mtype) {
+            case MMC1: {
+                switch (mmc1.get_screen_mirroring_value()) {
+                    case 0b00: current_screen_mirroring = SingleScreenLower; break;
+                    case 0b01: current_screen_mirroring = SingleScreenUpper; break;
+                    case 0b10: current_screen_mirroring = Vertical;          break;
+                    case 0b11: current_screen_mirroring = Horizontal;        break;
+                }
+                break;
+            }
+            default: {
+                if (is_horizontal_arrangement)
+                    current_screen_mirroring = Horizontal;
+                else
+                    current_screen_mirroring = Vertical;
+            }
+        }
+    }
 
     inline unsigned char read_prg_rom(unsigned short addr){
         switch (mtype) {
@@ -127,7 +158,8 @@ struct Mapper {
 
     inline void handle(unsigned short addr, unsigned char value){
         switch (mtype) {
-            case MMC1: {mmc1.handle(addr, value); break;}
+            case MMC1: {
+                if (mmc1.handle(addr, value)) update_screen_mirroring(false,false); break;}
             case CNROM: {cnrom.handle(addr, value); break;}
             default: return;
         }

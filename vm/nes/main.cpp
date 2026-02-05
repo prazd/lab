@@ -150,7 +150,7 @@ struct NESVM {
         tiles_index_start += 16384 * cartridge.prg_rom_sz;
         bus.mapper.chr_rom.resize(16384 * cartridge.chr_rom_sz);
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + (16384 * cartridge.chr_rom_sz), bus.mapper.chr_rom.begin());
-        bus.mapper.is_horizontal_arrangement = cartridge.is_horizontal_arrangement;
+        bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
     }
 
     void frame_execute(){
@@ -256,7 +256,7 @@ struct NESVM {
 #if DEBUG_MODE
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, {0, 0},0, WHITE);
             DrawRectangleLinesEx({320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, 1.f, BLACK);
-            reg_info.handle(cpu, ppu);
+            reg_info.handle(cpu, ppu, bus);
             ntv.handle(ppu, bus);
             handle_up_right_view();
             if (IsKeyPressed(KEY_M))
@@ -283,7 +283,7 @@ struct NESVM {
 // /Users/prazd/Desktop/dev/DonkeyKongJU.nes (NROM)
 
 // PPU tests:
-// - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes - todo
+// - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes - todo (E224)
 
 
 // Done:
@@ -295,6 +295,6 @@ struct NESVM {
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes
 
 int main(){
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes");
     nes.run();
 }
