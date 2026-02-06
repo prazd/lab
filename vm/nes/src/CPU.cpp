@@ -494,6 +494,19 @@ void CPU::tick(Bus& bus){
         return;
     }
 
+    if (instruction_execute_done) {
+        --additional_cycles;
+        if (additional_cycles){
+            return;
+        }
+        execute_in_progress = false;
+        instruction_execute_done = false;
+#if UI_DEBUGGER
+        debug_run = false;
+#endif
+        return;
+    }
+
     switch(di.i) {
         case ADC: {
             auto arg = get_arg_pc(bus, di.addr_mode, true);
@@ -505,6 +518,7 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::N, res & 0x80);
             a = res & 0xff;
             pc += di.bytes;
+            if (arg.page_crossed) additional_cycles = 1;
             break;
         }
         case AND:{
@@ -514,6 +528,7 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::Z, a == 0);
             sr.set(StatusReg::N, a & 0x80);
             pc += di.bytes;
+            if (arg.page_crossed) additional_cycles = 1;
             break;
         }
         case ASL:{
@@ -641,57 +656,79 @@ void CPU::tick(Bus& bus){
         case BCC:{
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (!sr.get(StatusReg::C))
+            if (!sr.get(StatusReg::C)){
                 pc += (char)(read(bus, arg));
+                additional_cycles = 1 + (arg.page_crossed);
+            }
+
             break;
         }
         case BCS:{
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (sr.get(StatusReg::C))
+            if (sr.get(StatusReg::C)){
                 pc += (char)(read(bus, arg));
+                additional_cycles = 1 + (arg.page_crossed);
+            }
             break;
         }
         case BEQ:{
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (sr.get(StatusReg::Z))
+            if (sr.get(StatusReg::Z)){
                 pc += (char)(read(bus, arg));
+                additional_cycles = 1 + (arg.page_crossed);
+            }
+
             break;
         }
         case BMI: {
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (sr.get(StatusReg::N))
+            if (sr.get(StatusReg::N)){
                 pc += (char)(read(bus, arg));
+                additional_cycles = 1 + (arg.page_crossed);
+            }
+
             break;
         }
         case BNE:{
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (!sr.get(StatusReg::Z))
+            if (!sr.get(StatusReg::Z)) {
                 pc += (char)(read(bus, arg));
+                additional_cycles = 1 + (arg.page_crossed);
+            }
+
             break;
         }
         case BPL:{
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (!sr.get(StatusReg::N))
+            if (!sr.get(StatusReg::N)){
                 pc += (char)(read(bus, arg));
+                additional_cycles = 1 + (arg.page_crossed);
+            }
+
             break;
         }
         case BVC:{
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (!sr.get(StatusReg::V))
+            if (!sr.get(StatusReg::V)){
                 pc += (char)(read(bus, arg));
+                additional_cycles = 1 + (arg.page_crossed);
+            }
+
             break;
         }
         case BVS:{
             auto arg = get_arg_pc(bus, di.addr_mode, true);
             pc += di.bytes;
-            if (sr.get(StatusReg::V))
+            if (sr.get(StatusReg::V)){
                 pc += (char)(read(bus, arg));
+                additional_cycles = 1 + (arg.page_crossed);
+            }
             break;
         }
 
@@ -725,6 +762,7 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::Z, a == val);
             sr.set(StatusReg::N, res & 0x80);
             pc += di.bytes;
+            if (arg.page_crossed) additional_cycles = 1;
             break;
         }
         case CPX:{
@@ -781,6 +819,7 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::N, res & 0x80);
             a = res;
             pc += di.bytes;
+            if (arg.page_crossed) additional_cycles = 1;
             break;
         }
         case INC:{
@@ -834,6 +873,7 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::Z, a == 0);
             sr.set(StatusReg::N, a & 0x80);
             pc += di.bytes;
+            if (arg.page_crossed) additional_cycles = 1;
             break;
         }
         case LDX:{
@@ -842,6 +882,7 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::Z, x == 0);
             sr.set(StatusReg::N, x & 0x80);
             pc += di.bytes;
+            if (arg.page_crossed) additional_cycles = 1;
             break;
         }
         case LDY:{
@@ -850,6 +891,7 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::Z, y == 0);
             sr.set(StatusReg::N, y & 0x80);
             pc += di.bytes;
+            if (arg.page_crossed) additional_cycles = 1;
             break;
         }
         case LSR:{
@@ -934,6 +976,7 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::N, res & 0x80);
             a = res;
             pc += di.bytes;
+            if (arg.page_crossed) additional_cycles = 1;
             break;
         }
         case PHA:{
@@ -1009,6 +1052,7 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::N, res & 0x80);
             a = res & 0xff;
             pc += di.bytes;
+            if (arg.page_crossed) additional_cycles = 1;
             break;
         }
         case SEC:{sr.set(StatusReg::C, true); pc+=di.bytes; break;}
@@ -1073,12 +1117,15 @@ void CPU::tick(Bus& bus){
             break;
         }
     }
-    execute_in_progress = false;
+    instruction_execute_done = true;
+    if (!additional_cycles) {
+        execute_in_progress = false;
+        instruction_execute_done = false;
 #if UI_DEBUGGER
-    debug_run = false;
+        debug_run = false;
 #endif
+    }
 }
-
 
 unsigned char CPU::read(Bus &bus, AddressingResult ar) {
     if (ar.is_accumulator) return a;

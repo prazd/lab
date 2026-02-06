@@ -400,7 +400,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
 #if UI_DEBUGGER
         << "  FramesCount:" << ppu.frames_count << '\n'
 #endif
-        << std::dec << "  Cycles:" << ppu.current_cycle
+        << std::dec << "  Cycles:" << ppu.current_cycle % 341
         << "  Scanline:" << ppu.current_y;
         ss << "\nScreenMirroring:";
         switch (bus.mapper.current_screen_mirroring) {

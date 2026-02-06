@@ -83,6 +83,8 @@ struct CPU {
         RESET, NMI, IRQ, InterruptsCount
     };
 
+    size_t additional_cycles = 0; // todo: check
+
     // request RESET interrupt on start (https://www.nesdev.org/NESDoc.pdf - page 13)
     bool interrupt_requests[3]{true,false,false};
     unsigned short interrupt_addresses[3] = {
@@ -90,7 +92,6 @@ struct CPU {
             constants::NMI_INTERRUPT_HANDLER_L,
             constants::IRQ_INTERRUPT_HANDLER_L,
     };
-
 
     // https://www.nesdev.org/wiki/CPU_addressing_modes
     enum AddressingMode {
@@ -161,6 +162,7 @@ struct CPU {
     bool reset_requested = false;
     bool stop_requested = false;
     bool execute_in_progress = false;
+    bool instruction_execute_done = false;
     bool interrupt_handling_in_progress = false;
     int interrupt_handling_cycle = 0;
     void handle_interrupt(Bus&, Interrupt);

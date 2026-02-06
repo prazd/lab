@@ -242,10 +242,12 @@ void PPU::tick(Bus& bus) {
             current_scanline_cycle = 0;
         }
     } else if (current_y >= 240 && current_y < 261){
-        if (current_y == 241 && (current_scanline_cycle++ % 341) == 2) {
+        if (current_y == 241 && current_scanline_cycle % 341 == 2) {
             ppustatus.vblank_flag = 1;
             bus.ppustatus.reg |= 1 << 7;
-        } else if (current_scanline_cycle++ % 341 == 0){
+        }
+        ++current_scanline_cycle;
+        if (current_scanline_cycle % 341 == 0){
             ++current_y;
             current_scanline_cycle = 0;
         }

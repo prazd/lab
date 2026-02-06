@@ -116,7 +116,7 @@ struct NESVM {
     PPU ppu{};
     Cartridge cartridge;
 #if UI_DEBUGGER
-    Disassembler<30,480,200,400> dis;
+    Disassembler<30,520,200,400> dis;
 #endif
 
     NESVM(std::string_view rom_path): cartridge(rom_path)
@@ -220,7 +220,7 @@ struct NESVM {
         NameTableNumView<1110,0,480,432> ntnv{};
 
         NameTableView<1110,432,480,432> ntv{};
-        RegsInfo<30,30,160,400> reg_info{};
+        RegsInfo<30,30,180,425> reg_info{};
 
         DummyTilesGrid<320, 0> dtg;
         bool grid_view_enable = false;
@@ -284,7 +284,9 @@ struct NESVM {
 
 // PPU tests:
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes - todo (E224)
-
+//
+// CPU:
+// - /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
 
 // Done:
 // CPU:
@@ -295,6 +297,6 @@ struct NESVM {
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes
 
 int main(){
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes");
     nes.run();
 }
