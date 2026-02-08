@@ -81,6 +81,38 @@ unsigned char Bus::read_prg(unsigned short addr) {
     }
 }
 
+unsigned char Bus::unsafe_read_prg(unsigned short addr) {
+    if (addr >= 0x8000 && addr <= 0xffff){
+        return mapper.read_prg_rom(addr);
+    }
+    switch (addr) {
+        case constants::PPUCTRL:
+            return open_bus_value;
+        case constants::PPUMASK:
+            return open_bus_value;
+        case constants::PPUSTATUS: {
+            return ppustatus.reg;
+        }
+        case constants::OAMADDR:     return oamaddr.reg;
+        case constants::OAMDATA: {
+            if (oamaddr.reg == 0x2) {
+                open_bus_value = 0;
+                open_bus_value_cycles = 0;
+            }
+            // 3 X
+            // 2 Attrib
+            // 1 Tile index
+            // 0 Y
+            return oam[oamaddr.reg];
+        }
+        case constants::PPUSCROLL:   return ppuscroll.reg;
+        case constants::PPUADDR:     return ppuaddr.reg;
+        case constants::PPUDATA:     {return ppudata.reg;}
+        case constants::CONTROLLER1: return c.read_status1();
+        default: return 0xff; // dummy
+    }
+}
+
 unsigned char Bus::read_chr(unsigned short addr) {
     return mapper.read_chr_rom(addr);
 }

@@ -297,6 +297,7 @@ struct NESVM {
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes
 
 int main(){
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes");
+
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes"); // E055
     nes.run();
 }

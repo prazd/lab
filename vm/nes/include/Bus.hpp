@@ -28,6 +28,7 @@ struct Bus {
 
     void write(unsigned short addr, unsigned char val);
     unsigned char read_prg(unsigned short addr);
+    unsigned char unsafe_read_prg(unsigned short addr);
     unsigned char read_chr(unsigned short addr);
     void dma_tick(unsigned char val);
     void open_bus_decay();

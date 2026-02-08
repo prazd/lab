@@ -18,7 +18,9 @@ struct CPU {
 //    • $8000–$FFFF $8000   Usually cartridge ROM and mapper registers.
         unsigned char map[0x10000]{};
         unsigned char read(Bus&, unsigned short addr) const;
+        unsigned char unsafe_read(Bus&, unsigned short addr) const;
         void write(Bus&, unsigned short addr, unsigned char value);
+//        void unsafe_write(Bus&, unsigned short addr, unsigned char value);
         static void adjust_if_mirror(unsigned short&);
     } mem;
 
@@ -122,6 +124,7 @@ struct CPU {
         unsigned short addr{};
         bool page_crossed{};
         bool is_accumulator = false;
+        unsigned char add_to_addr{};
     };
 
     unsigned char read(Bus& bus, AddressingResult ar);
@@ -140,6 +143,8 @@ struct CPU {
         DOP, AAC, ASR, ARR, ATX, AXS, SLO, RLA, SRE, RRA,AAX,LAX,DCP,ISC,
         TOP, SYA, SXA
     };
+
+    AddressingResult dummy_read(Bus& bus, AddressingResult);
 
     static inline std::string_view instruction_str[73] = {
         "ADC", "AND", "ASL","BCC", "BCS","BEQ", "BIT", "BMI", "BNE","BPL", "BRK", "BVC", "BVS",	"CLC",
@@ -180,7 +185,7 @@ struct CPU {
     };
 
     inline AsmInfo disassemble(Bus& bus, unsigned short address) {
-        auto di = decode(mem.read(bus, address));
+        auto di = decode(mem.unsafe_read(bus, address));
         switch (di.i) {
             case ADC:
             case AND:
@@ -200,7 +205,7 @@ struct CPU {
             case SBC:
             {
                 auto arg = get_arg_by_addr(bus, di.addr_mode, address);
-                return {instruction_str[di.i], mem.read(bus, arg.addr), arg.is_accumulator, false};
+                return {instruction_str[di.i], mem.unsafe_read(bus, arg.addr), arg.is_accumulator, false};
             }
 
             case BCC:
@@ -213,7 +218,7 @@ struct CPU {
             case BVS:
             {
                 auto arg = get_arg_by_addr(bus, di.addr_mode, address);
-                return {instruction_str[di.i], (unsigned short)(address + (char)mem.read(bus, arg.addr) + di.bytes), arg.is_accumulator,
+                return {instruction_str[di.i], (unsigned short)(address + (char)mem.unsafe_read(bus, arg.addr) + di.bytes), arg.is_accumulator,
                         false};
             }
 
@@ -256,12 +261,12 @@ struct CPU {
                 { return {instruction_str[di.i], 0, false, true}; }
             case JMP: {
                 if (di.addr_mode == Absolute) {
-                    return {instruction_str[di.i], (unsigned short)(mem.read(bus, address + 1) | (mem.read(bus, address + 2) << 8)), false,
+                    return {instruction_str[di.i], (unsigned short)(mem.unsafe_read(bus, address + 1) | (mem.unsafe_read(bus, address + 2) << 8)), false,
                             false};
                 } else { // Indirect
-                    unsigned short arg_addr = (mem.read(bus, address + 1) | (mem.read(bus, address + 2) << 8));
-                    unsigned char l = mem.read(bus, arg_addr);
-                    unsigned char h = mem.read(bus, (arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
+                    unsigned short arg_addr = (mem.unsafe_read(bus, address + 1) | (mem.unsafe_read(bus, address + 2) << 8));
+                    unsigned char l = mem.unsafe_read(bus, arg_addr);
+                    unsigned char h = mem.unsafe_read(bus, (arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
                     return {instruction_str[di.i],(unsigned short)(l | (h << 8)), false , false};
                 }
             }
