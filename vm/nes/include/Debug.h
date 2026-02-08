@@ -124,26 +124,27 @@ struct PatternTableView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w / 8), t_h
 
         current_index = base_index;
         size_t current = 0;
-        for (int s = 0; s < tiles_h; s+=8){
-            auto it =  (bus.mapper.chr_rom.data() + current_index); // todo: check
-            for (int z = 0; z < 8; ++z) {
-                for (int i = 0; i < t_w/8; ++i){
-                    auto l_tile = *(it + i * 16);
-                    auto h_tile = *(it + i * 16 + 8);
-                    auto tile_row = get_tile_row(h_tile, l_tile);
-                    for (int k = 0; k < 8; ++k){
-                        DW::buffer[current++] = tile_row[k];
+        if (!bus.mapper.chr.empty()) {
+            for (int s = 0; s < tiles_h; s+=8){
+                auto it =  (bus.mapper.chr.data() + current_index); // todo: check
+                for (int z = 0; z < 8; ++z) {
+                    for (int i = 0; i < t_w/8; ++i){
+                        auto l_tile = *(it + i * 16);
+                        auto h_tile = *(it + i * 16 + 8);
+                        auto tile_row = get_tile_row(h_tile, l_tile);
+                        for (int k = 0; k < 8; ++k){
+                            DW::buffer[current++] = tile_row[k];
+                        }
+                        DW::buffer[current++] = RED;
                     }
+                    ++it;
+                }
+                for (int i = 0; i < t_w + (t_w/8); i++){
                     DW::buffer[current++] = RED;
                 }
-                ++it;
+                current_index = (current_index + (t_w/8 * 16)) % 8192;
             }
-            for (int i = 0; i < t_w + (t_w/8); i++){
-                DW::buffer[current++] = RED;
-            }
-            current_index = (current_index + (t_w/8 * 16)) % 8192;
         }
-
         DW::handle();
     }
 };
@@ -167,15 +168,17 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
 
     void handle(PPU& ppu, Bus& bus){
         size_t current = 0;
-        for (int s = 0; s < 30; ++s){
-            for (int z = 0; z < 8; ++z) {
-                for (int i = 0; i < 32; ++i){
-                    auto pt_addr = ((base_pt_address + (16 * *(ppu.mem.map + (base_nt_address + (s * 32) + i)))));
-                    auto l_tile = bus.read_chr(pt_addr + z);
-                    auto h_tile = bus.read_chr(pt_addr + z + 8);
-                    auto tile_row = get_tile_row(h_tile, l_tile);
-                    for (int k = 0; k < 8; ++k){
-                        DW::buffer[current++] = tile_row[k];
+        if (!bus.mapper.chr.empty()) {
+            for (int s = 0; s < 30; ++s){
+                for (int z = 0; z < 8; ++z) {
+                    for (int i = 0; i < 32; ++i){
+                        auto pt_addr = ((base_pt_address + (16 * *(ppu.mem.map + (base_nt_address + (s * 32) + i)))));
+                        auto l_tile = bus.read_chr(pt_addr + z);
+                        auto h_tile = bus.read_chr(pt_addr + z + 8);
+                        auto tile_row = get_tile_row(h_tile, l_tile);
+                        for (int k = 0; k < 8; ++k){
+                            DW::buffer[current++] = tile_row[k];
+                        }
                     }
                 }
             }

@@ -11,6 +11,22 @@ namespace mappers {
         }
     };
 
+    struct UXROM {
+        unsigned char current_bank = 0;
+
+        inline void handle(unsigned short addr, unsigned char value){
+            current_bank = value & 0xf;
+        }
+        inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
+            if (addr >= 0xC000 && addr <= 0xFFFF)
+                return  rom[(rom.size()-0x4000) + addr-0xC000];
+            return rom[addr-0x8000 + (current_bank * 0x4000)];
+        }
+        inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
+            return rom[addr];
+        }
+    };
+
     struct CNROM {
         unsigned short current_offset{};
         inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
@@ -100,6 +116,7 @@ struct Mapper {
     enum MapperType {
         NROM = 0x0,
         MMC1 = 0x1,
+        UxROM = 0x2,
         CNROM = 0x3
     } mtype = MMC1;
 
@@ -111,12 +128,15 @@ struct Mapper {
         MirroringCount
     } current_screen_mirroring;
 
-    std::vector<unsigned char> prg_rom{};
-    std::vector<unsigned char> chr_rom{};
+    bool is_chr_ram = false;
+
+    std::vector<unsigned char> prg{};
+    std::vector<unsigned char> chr{}; // rom/ram
 
     mappers::NROM nrom;
     mappers::MMC1 mmc1;
     mappers::CNROM cnrom;
+    mappers::UXROM uxrom;
 
     inline unsigned char update_screen_mirroring(bool is_horizontal_arrangement, bool is_alternative_nametable) {
         switch (mtype) {
@@ -140,26 +160,35 @@ struct Mapper {
 
     inline unsigned char read_prg_rom(unsigned short addr){
         switch (mtype) {
-            case NROM: return nrom.read_prg_rom(prg_rom, addr);
-            case MMC1: return mmc1.read_prg_rom(prg_rom, addr);
-            case CNROM: return cnrom.read_prg_rom(prg_rom, addr);
+            case NROM: return nrom.read_prg_rom(prg, addr);
+            case MMC1: return mmc1.read_prg_rom(prg, addr);
+            case UxROM: return uxrom.read_prg_rom(prg, addr);
+            case CNROM: return cnrom.read_prg_rom(prg, addr);
             default: return 0xff;
         }
     }
 
     inline unsigned char read_chr_rom(unsigned short addr){
         switch (mtype) {
-            case NROM: return nrom.read_chr_rom(chr_rom, addr);
-            case MMC1: return mmc1.read_chr_rom(chr_rom, addr);
-            case CNROM: return cnrom.read_chr_rom(chr_rom, addr);
+            case NROM:   return nrom.read_chr_rom(chr, addr);
+            case MMC1: { return mmc1.read_chr_rom(chr, addr);}
+            case UxROM: { return uxrom.read_chr_rom(chr, addr);}
+            case CNROM:  return cnrom.read_chr_rom(chr, addr);
             default: return 0xff;
         }
+    }
+
+    inline void write_chr_ram(unsigned short addr, unsigned char value){
+        // todo: check
+        chr[addr] = value;
     }
 
     inline void handle(unsigned short addr, unsigned char value){
         switch (mtype) {
             case MMC1: {
                 if (mmc1.handle(addr, value)) update_screen_mirroring(false,false); break;}
+            case UxROM:
+                uxrom.handle(addr, value); break;
             case CNROM: {cnrom.handle(addr, value); break;}
             default: return;
         }

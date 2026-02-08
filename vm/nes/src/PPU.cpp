@@ -5,6 +5,10 @@
 
 void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
     adjust_if_mirror(addr);
+    if (addr >= 0x0000 && addr <= 0x1FFF) {
+        bus.mapper.write_chr_ram(addr, value);
+        return;
+    }
     map[addr] = value;
 }
 

@@ -2,9 +2,7 @@
 #include "Constants.hpp"
 void Bus::write(unsigned short addr, unsigned char value) {
     if (addr >= 0x8000 && addr <= 0xffff){
-        if (mapper.mtype == Mapper::MapperType::MMC1){
-            mapper.handle(addr, value);
-        }
+        mapper.handle(addr, value);
         return;
     }
 

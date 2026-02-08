@@ -139,17 +139,20 @@ struct NESVM {
 
         if (cartridge.prg_rom_sz == 1){
             // TODO: update
-            bus.mapper.prg_rom.resize(16384 * 2);
-            std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 16384, bus.mapper.prg_rom.begin());
-            std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 16384, bus.mapper.prg_rom.begin() + 16384);
+            bus.mapper.prg.resize(16384 * 2);
+            std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 16384, bus.mapper.prg.begin());
+            std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + 16384, bus.mapper.prg.begin() + 16384);
         } else {
-            bus.mapper.prg_rom.resize(16384 * cartridge.prg_rom_sz);
-            std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + (16384 * cartridge.prg_rom_sz), bus.mapper.prg_rom.begin());
+            bus.mapper.prg.resize(16384 * cartridge.prg_rom_sz);
+            std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + (16384 * cartridge.prg_rom_sz), bus.mapper.prg.begin());
         }
 
         tiles_index_start += 16384 * cartridge.prg_rom_sz;
-        bus.mapper.chr_rom.resize(16384 * cartridge.chr_rom_sz);
-        std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + (16384 * cartridge.chr_rom_sz), bus.mapper.chr_rom.begin());
+        size_t chr_sz = cartridge.chr_rom_sz == 0 ?
+                        8000 : // CHR_RAM
+                        16384 * cartridge.chr_rom_sz;
+        bus.mapper.chr.resize(chr_sz);
+        std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + chr_sz, bus.mapper.chr.begin());
         bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
     }
 
@@ -284,20 +287,19 @@ struct NESVM {
 
 // PPU tests:
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes - todo (E224)
-//
-// CPU:
-// - /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
 
 // Done:
 // CPU:
 // - /Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes
 // - /Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes
+// - /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
 
 // PPU:
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes
 
-int main(){
 
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes"); // E055
+int main(){
+    //    /Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes - c2c0 (NMI)
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes");
     nes.run();
 }
