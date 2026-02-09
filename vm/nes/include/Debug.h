@@ -427,6 +427,52 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
     }
 };
 
+template <size_t x, size_t y, size_t w, size_t h, size_t t_w = 4 * 2 + 5, size_t t_h = 8 * 2 + 8>
+struct PaletteViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
+    using DW = DebugWindowWithTexture<x, y, w, h, t_w, t_h>;
+    enum View {
+        Num,
+        Colors,
+        ViewCount
+    } current_view = Num;
+    std::stringstream ss;
+
+    void handle(Bus& bus, PPU& ppu){
+        if (IsKeyPressed(KEY_ONE))
+            current_view = static_cast<View>((current_view + 1) % ViewCount);
+        if (current_view == Num) {
+            DW::buffer.fill(WHITE);
+            DW::handle();
+            for (int i = 0; i < 0x20; ++i){
+                ss << std::hex << (unsigned)ppu.mem.map[constants::IMAGE_PALETTE_BEGIN + i] << ' ';
+                if (i % 4 == 3) ss << '\n';
+            }
+            auto str = ss.str();
+            DrawText(str.c_str(), DW::rec.x, DW::rec.y,  12.f, BLACK);
+            ss.str("");
+            return;
+        }
+        size_t current_buffer_index = 0;
+        size_t current_palette_index = 0;
+        for (int i = 0; i < t_h; ++i){
+            for (int j = 0; j < t_w; ++j){
+                if (i % 3 == 0){
+                    current_palette_index += (j % 4 == 0 && !(j == 0 && i == 0));
+                    DW::buffer[current_buffer_index++] = WHITE;
+                } else {
+                    if (j % 3 == 0){
+                        DW::buffer[current_buffer_index++] = WHITE;
+                    } else {
+                        unsigned char c_index = ppu.mem.read(bus, constants::IMAGE_PALETTE_BEGIN + current_palette_index);
+                        DW::buffer[current_buffer_index++] = ppu.palette[c_index];
+                    }
+                }
+            }
+        }
+        DW::handle();
+    }
+};
+
 template <size_t x, size_t y>
 struct DummyTilesGrid {
     void draw(float cell_w, float cell_h) {

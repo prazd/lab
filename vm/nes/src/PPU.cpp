@@ -210,14 +210,25 @@ void PPU::tick(Bus& bus) {
                         if (!add_val) v ^= 0x400;
                         v &= 0xffe0;
                         v |= add_val;
+
+                        attributes_low &= 0xf0;
+                        attributes_high &= 0xf0;
+
+                        attributes_low |= (attrib_value & 0x1) ? 0xf : 0;
+                        attributes_high |= (attrib_value & 0x2) ? 0xf : 0;
+
                         current_step = NT;  break;}  // pattern table tile high
                 }
             }
+
             unsigned char pixel_index =
-                    mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (4 * attrib_value) + ((shift_register_high >> (15-x)) & 1) | ((shift_register_low >> (15-x)) & 1));
+                    mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (4 * ((((attributes_high >> 15) & 1) << 1) | (attributes_low >> 15) & 1)) + ((shift_register_high >> (15-x)) & 1) | ((shift_register_low >> (15-x)) & 1));
             update_internal_display(palette[pixel_index]);
+
             shift_register_high <<= 1;
             shift_register_low <<= 1;
+            attributes_low <<= 1;
+            attributes_high <<= 1;
 
             if (current_scanline_cycle == 256){
                 unsigned char y_fine_add_val = ((((v >> 12) & 0x7) + 1) % 8);
@@ -249,6 +260,7 @@ void PPU::tick(Bus& bus) {
         if (current_y == 241 && current_scanline_cycle % 341 == 2) {
             ppustatus.vblank_flag = 1;
             bus.ppustatus.reg |= 1 << 7;
+            bus.nmi_interrupt_flip_flop = true;
         }
         ++current_scanline_cycle;
         if (current_scanline_cycle % 341 == 0){
@@ -260,6 +272,8 @@ void PPU::tick(Bus& bus) {
             // update shift registers
             ppustatus.vblank_flag = 0;
             bus.ppustatus.reg &= 0x7f;
+            bus.nmi_interrupt_flip_flop = false; // todo: check
+
             current_y = 0;
             current_x = 0;
             if (ppumask.enable_background_rendering){

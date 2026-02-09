@@ -481,9 +481,10 @@ void CPU::tick(Bus& bus){
     if (!debug_run) return;
 #endif
     if (!execute_in_progress) {
-        if (bus.ppustatus.reg & 0x80 && bus.ppuctrl.reg & 0x80){
+        if (bus.ppustatus.reg & 0x80 && bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop){
             interrupt_requests[NMI] = true;
             sr.set(StatusReg::I, false);
+            bus.nmi_interrupt_flip_flop = false;
         }
         if (bus.dma_active){
             // Every cpu cycle

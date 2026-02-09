@@ -167,6 +167,9 @@ struct PPU {
     unsigned short shift_register_low{};
     unsigned short shift_register_high{};
 
+    unsigned short attributes_low{};
+    unsigned short attributes_high{};
+
     bool address_increment_on_read_ppudata = false; //    RAM address increment per CPU read/write of PPUDATA
 
     enum SpriteMode {

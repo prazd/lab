@@ -221,6 +221,7 @@ struct NESVM {
 #if DEBUG_MODE
         PatternTableView<1110,0,480,432,128,128> ptv(128, 128);
         NameTableNumView<1110,0,480,432> ntnv{};
+        PaletteViewer<1110,0,300,300> pv{};
 
         NameTableView<1110,432,480,432> ntv{};
         RegsInfo<30,30,180,425> reg_info{};
@@ -231,12 +232,14 @@ struct NESVM {
         enum UpRightView {
             PatternTableV,
             NameTableNumV,
+            PaletteViewer,
             UpRightViewCount,
         } current_up_right_view = PatternTableV;
 
         auto handle_up_right_view = [&]{
             switch(current_up_right_view) {
                 case PatternTableV: {ptv.handle(ppu,bus); break;}
+                case PaletteViewer: {pv.handle(bus, ppu); break;}
                 default: {ntnv.handle(ppu); break;}
             }
         };
@@ -299,7 +302,7 @@ struct NESVM {
 
 
 int main(){
-    //    /Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes - c2c0 (NMI)
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes");
+    // todo: continue debug (palette)
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes");
     nes.run();
 }
