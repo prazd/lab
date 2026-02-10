@@ -224,10 +224,25 @@ struct NESVM {
         PaletteViewer<1110,0,300,300> pv{};
 
         NameTableView<1110,432,480,432> ntv{};
+        ColorsViewer<1110,432,480,432> cv{};
+
         RegsInfo<30,30,180,425> reg_info{};
 
         DummyTilesGrid<320, 0> dtg;
         bool grid_view_enable = false;
+
+        enum DownLeftView {
+            NameTableV,
+            ColorsV,
+            DownLeftViewCount
+        } current_down_left_view = NameTableV;
+
+        auto handle_down_left_view = [&]{
+            switch (current_down_left_view) {
+                case NameTableV: {ntv.handle(ppu, bus); break;}
+                case ColorsV:    {cv.handle(bus, ppu);  break;}
+            }
+        };
 
         enum UpRightView {
             PatternTableV,
@@ -263,10 +278,15 @@ struct NESVM {
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, {0, 0},0, WHITE);
             DrawRectangleLinesEx({320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, 1.f, BLACK);
             reg_info.handle(cpu, ppu, bus);
-            ntv.handle(ppu, bus);
+
             handle_up_right_view();
-            if (IsKeyPressed(KEY_M))
+            handle_down_left_view();
+
+            if (CheckCollisionPointRec(GetMousePosition(), ptv.rec) && IsKeyPressed(KEY_M))
                 current_up_right_view = static_cast<UpRightView>((current_up_right_view + 1) % UpRightViewCount);
+            if (CheckCollisionPointRec(GetMousePosition(), ntv.rec) && IsKeyPressed(KEY_M))
+                current_down_left_view = static_cast<DownLeftView>((current_down_left_view + 1) % DownLeftViewCount);
+
 #endif
 
             cpu.reset_requested = (IsKeyPressed(KEY_R));
@@ -303,6 +323,6 @@ struct NESVM {
 
 int main(){
     // todo: continue debug (palette)
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes");
     nes.run();
 }

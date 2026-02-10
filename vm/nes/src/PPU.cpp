@@ -93,7 +93,11 @@ void PPU::update_state(Bus& bus) {
     if (bus.ppudata.was_written)    {
         unsigned short addr = v;
         Memory::adjust_if_mirror(addr);
-        mem.map[addr] = bus.ppudata.reg;
+        if (addr >= 0x0 && addr <= 0x1FFF){
+            mem.write(bus, addr, bus.ppudata.reg);
+        } else {
+            mem.map[addr] = bus.ppudata.reg;
+        }
         v = (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff;
         bus.ppudata.was_written = false;
     }
@@ -281,7 +285,7 @@ void PPU::tick(Bus& bus) {
                 v &= 0x841f;
                 v |= ((t & (~0x841f & 0xffff)));
 
-                auto get_next_shifts = [&]() -> unsigned short{
+                auto get_next_shifts = [&]() -> std::pair<unsigned short, unsigned char>{
                     unsigned char x_tile_n = (v & 0x1f) + 1;
                     unsigned char y_tile_n = ((v >> 5) & 0x1f);
                     auto nt_byte = mem.read(bus,  constants::NAME_TABLE0_BEGIN + (y_tile_n * 32) + x_tile_n);
@@ -296,14 +300,23 @@ void PPU::tick(Bus& bus) {
                         v ^= 0x400;
                     v &= 0xffe0;
                     v |= add_val;
-                    return ((pattern_table_h << 8) | pattern_table_l);
+                    return {((pattern_table_h << 8) | pattern_table_l), attrib_value};
                 };
-                auto first = get_next_shifts();
-                shift_register_low |= (first & 0xff) << 8;
-                shift_register_high |= first & 0xff00;
-                auto second = get_next_shifts();
-                shift_register_low |= (second & 0xff);
-                shift_register_high |= ((second >> 8)& 0xff);
+                auto h = get_next_shifts();
+                shift_register_low |= (h.first & 0xff) << 8;
+                shift_register_high |= h.first & 0xff00;
+                attributes_low &= 0xff;
+                attributes_high &= 0xff;
+                attributes_low |= (h.second & 0x1) ? 0xff00 : 0;
+                attributes_high |= (h.second & 0x2) ? 0xff00 : 0;
+
+                auto l = get_next_shifts();
+                shift_register_low |= (l.first & 0xff);
+                shift_register_high |= ((l.first >> 8)& 0xff);
+                attributes_low &= 0xff00;
+                attributes_high &= 0xff00;
+                attributes_low |= (h.second & 0x1) ? 0xff : 0;
+                attributes_high |= (h.second & 0x2) ? 0xff : 0;
                 current_scanline_cycle = 0;
 #if UI_DEBUGGER
                 frame_start = true;

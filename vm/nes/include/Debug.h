@@ -455,21 +455,75 @@ struct PaletteViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
         size_t current_buffer_index = 0;
         size_t current_palette_index = 0;
         for (int i = 0; i < t_h; ++i){
-            for (int j = 0; j < t_w; ++j){
-                if (i % 3 == 0){
-                    current_palette_index += (j % 4 == 0 && !(j == 0 && i == 0));
+            if (i > 0 && i % 3 != 2) {
+                current_palette_index -= 4;
+            } else if (i > 0){
+                current_palette_index += 4;
+            }
+            for (int j = 0; j < t_w; ++j) {
+                if (i % 3 == 2) {
                     DW::buffer[current_buffer_index++] = WHITE;
                 } else {
-                    if (j % 3 == 0){
+                    if (j % 3 == 0) {
+                        if (j > 0) ++current_palette_index;
                         DW::buffer[current_buffer_index++] = WHITE;
                     } else {
-                        unsigned char c_index = ppu.mem.read(bus, constants::IMAGE_PALETTE_BEGIN + current_palette_index);
+                        unsigned char c_index = ppu.mem.read(bus,
+                                                             constants::IMAGE_PALETTE_BEGIN + current_palette_index);
                         DW::buffer[current_buffer_index++] = ppu.palette[c_index];
                     }
                 }
             }
         }
         DW::handle();
+    }
+};
+
+template <size_t x, size_t y, size_t w, size_t h, size_t t_w = 8 * 2 + 9, size_t t_h = 8 * 2 + 8>
+struct ColorsViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
+    using DW = DebugWindowWithTexture<x, y, w, h, t_w, t_h>;
+    std::stringstream ss;
+    void handle(Bus& bus, PPU& ppu){
+        size_t current_buffer_index = 0;
+        size_t current_palette_index = 0;
+        for (int i = 0; i < t_h; ++i){
+            if (i > 0 && i % 3 != 2) {
+                current_palette_index -= 8;
+            } else if (i > 0){
+                current_palette_index += 8;
+            }
+            for (int j = 0; j < t_w; ++j) {
+                if (i % 3 == 2) {
+                    DW::buffer[current_buffer_index++] = RAYWHITE;
+                } else {
+                    if (j % 3 == 0) {
+                        if (j > 0) ++current_palette_index;
+                        DW::buffer[current_buffer_index++] = RAYWHITE;
+                    } else {
+                        DW::buffer[current_buffer_index++] = ppu.palette[current_palette_index];
+                    }
+                }
+            }
+        }
+        DW::handle();
+        ss << "\n     ";
+        for (int i = 0; i < 64; ++i){
+            ss << std::hex << i;
+            if (i > 0 &&  i % 8 == 7){
+                if (i == 0x1f || i == 0x37) {ss << "\n\n\n    ";}
+                else if (i <= 0xe)          {ss << "\n\n\n     ";}
+                else if (i < 0x26)          {ss <<  "\n\n\n\n    ";}
+                else                        {ss <<  "\n\n\n\n       ";}
+            } else {
+                if (i == 0x1f || i == 0x37) {ss << "         ";}
+                else if (i <= 0xe)          {ss << "           ";}
+                else if (i < 0x1f)          {ss <<  "          ";}
+                else                        {ss <<  "         ";}
+            }
+        }
+        auto str = ss.str();
+        DrawText(str.c_str(), DW::rec.x, DW::rec.y,  13.5f, RAYWHITE);
+        ss.str("");
     }
 };
 
