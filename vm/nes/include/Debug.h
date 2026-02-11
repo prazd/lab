@@ -197,6 +197,7 @@ struct NameTableNumView: DebugWindowText<x, y, w, h> {
     void handle(PPU& ppu){
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
             ascii_print = !ascii_print;
+        ss << std::hex;
         for (int s = 0; s < 30; ++s){
             for (int i = 0; i < 32; ++i){
                 auto v = *(ppu.mem.map + (base_nt_address + (s * 32) + i));
@@ -253,6 +254,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     std::stringstream ss;
 
     bool is_frame_jump_active = false;
+    bool is_tile_line_jump_active = false;
+    bool is_line_jump_active = false;
 
     Rectangle line_button;
     UserInput<x, y - 30, w, 30> u_input;
@@ -261,7 +264,11 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle select_jump_button;
     Rectangle input_address_jump_button;
     Rectangle ntjump_button;
+
     Rectangle frame_jump_button;
+    Rectangle tile_jump_button;
+    Rectangle line_jump_button;
+    Rectangle line_slide_button;
 
     Disassembler(CPU& cpu, Bus& bus): base(cpu.pc),
                                       line_button{DW::rec.x - 20, DW::rec.y, 10, 10},
@@ -269,7 +276,11 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       select_jump_button{DW::rec.x + 40, DW::rec.y + h, 40, 40},
                                       input_address_jump_button{DW::rec.x + 40 * 2, DW::rec.y + h, 40, 40},
                                       ntjump_button{DW::rec.x + 40 * 3, DW::rec.y + h, 40, 40},
-                                      frame_jump_button{DW::rec.x + 40 * 4, DW::rec.y + h, 40, 40}
+
+                                      frame_jump_button{DW::rec.x, DW::rec.y + h + 40, 40, 40},
+                                      tile_jump_button{DW::rec.x + 40, DW::rec.y + h + 40, 40, 40},
+                                      line_jump_button{DW::rec.x + 40 * 2, DW::rec.y + h + 40, 40, 40},
+                                      line_slide_button{DW::rec.x + 40 * 3, DW::rec.y + h + 40, 40, 40}
                                       {}
 
     void handle(CPU& cpu) {
@@ -284,28 +295,32 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         input_address_jump_button = {DW::rec.x + 40 * 2, DW::rec.y + h, 40, 40};
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
         ntjump_button = {DW::rec.x + 40 * 3, DW::rec.y + h, 40, 40};
-        frame_jump_button = {DW::rec.x + 40 * 4, DW::rec.y + h, 40, 40};
+
+        frame_jump_button = {DW::rec.x, DW::rec.y + h + 40, 40, 40};
+        tile_jump_button = {DW::rec.x + 40, DW::rec.y + h + 40, 40, 40};
+        line_jump_button = {DW::rec.x + 40 * 2, DW::rec.y + h + 40, 40, 40};
+        line_slide_button = {DW::rec.x + 40 * 3, DW::rec.y + h + 40, 40, 40};
 
         pc = base;
         if (CheckCollisionPointRec(GetMousePosition(), select_jump_button) && IsMouseButtonPressed(0)){
             selected_move_active = true;
-        }
-
-        if (CheckCollisionPointRec(GetMousePosition(), input_address_jump_button) && IsMouseButtonPressed(0)) {
+        } else if (CheckCollisionPointRec(GetMousePosition(), input_address_jump_button) && IsMouseButtonPressed(0)) {
             auto val = std::stoul(u_input.s, nullptr, 16);
             selected_line_pc = (unsigned short)val;
             selected_move_active = true;
-        }
-
-        if (CheckCollisionPointRec(GetMousePosition(), ntjump_button) && IsMouseButtonPressed(0)) {
+        } else if (CheckCollisionPointRec(GetMousePosition(), ntjump_button) && IsMouseButtonPressed(0)) {
             next = true;
             auto val = std::stoul(u_input.s, nullptr, 16);
             selected_line_pc = (unsigned short)val;
             selected_move_active = true;
-        }
-
-        if (CheckCollisionPointRec(GetMousePosition(), frame_jump_button) && IsMouseButtonPressed(0))
+        } else if (CheckCollisionPointRec(GetMousePosition(), frame_jump_button) && IsMouseButtonPressed(0))
             is_frame_jump_active = true;
+        else if (CheckCollisionPointRec(GetMousePosition(), tile_jump_button) && IsMouseButtonPressed(0))
+            is_tile_line_jump_active = true;
+        else if (CheckCollisionPointRec(GetMousePosition(), line_jump_button) && IsMouseButtonPressed(0))
+            is_line_jump_active = true;
+        else if (CheckCollisionPointRec(GetMousePosition(), line_slide_button) && IsMouseButtonDown(0))
+            is_line_jump_active = true;
 
         for (int i = 0; i < 10; ++i){
             auto r = Rectangle{line_button.x, line_button.y + i * (line_button.height + 25.f), line_button.width, line_button.height};
@@ -327,7 +342,10 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         DW::draw_text_button(select_jump_button, " jmp", GREEN, 15.f);
         DW::draw_text_button(input_address_jump_button, " tjmp", GREEN, 15.f);
         DW::draw_text_button(ntjump_button, " ntjmp", GREEN, 15.f);
-        DW::draw_text_button(frame_jump_button, " fjmp", GREEN, 15.f);
+        DW::draw_text_button(frame_jump_button, "frame", GREEN, 15.f);
+        DW::draw_text_button(tile_jump_button, " tile", GREEN, 15.f);
+        DW::draw_text_button(line_jump_button, " line", GREEN, 15.f);
+        DW::draw_text_button(line_slide_button, " line_s", GREEN, 15.f);
         u_input.draw();
         ss.str("");
     }
@@ -402,6 +420,8 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  Bus VBLank:" << (unsigned)(bus.ppustatus.reg & 0x80) << '\n'
 #if UI_DEBUGGER
         << "  FramesCount:" << ppu.frames_count << '\n'
+        << "  LastLineX:" << ppu.last_line_x << '\n'
+        << "  CurrentLineX:" << std::dec << ppu.current_line_x << '\n' << std::hex
 #endif
         << std::dec << "  Cycles:" << ppu.current_cycle % 341
         << "  Scanline:" << ppu.current_y;

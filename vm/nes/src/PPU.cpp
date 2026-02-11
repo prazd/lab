@@ -174,20 +174,22 @@ void PPU::tick(Bus& bus) {
         if (!current_scanline_cycle){
 #if UI_DEBUGGER
             frame_start = false;
+            line_start = false;
 #endif
             ++current_scanline_cycle;
             return;}
 
         // 1-256 cycles
         if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && ppumask.enable_background_rendering) {
-            if (current_scanline_cycle & 1) {
+            if (!(current_scanline_cycle & 1)) {
                 unsigned char x_tile_n = (v & 0x1f);
                 unsigned char y_tile_n = ((v >> 5) & 0x1f);
                 update_base_nt(bus);
                 switch (current_step) {
                     // fetch nametable byte
                     // TODO: debug base_name_table_address
-                    case NT:  { nt_byte = mem.read(bus,  base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
+                    case NT:  {
+                        nt_byte = mem.read(bus,  base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
                     case AT:  {
                         auto val = mem.read(bus, base_attrib_address + y_tile_n/4 + x_tile_n/4);
                         // TODO: check
@@ -220,15 +222,31 @@ void PPU::tick(Bus& bus) {
 
                         attributes_low |= (attrib_value & 0x1) ? 0xf : 0;
                         attributes_high |= (attrib_value & 0x2) ? 0xf : 0;
-
+#if UI_DEBUGGER
+                update_shifts = true;
+#endif
                         current_step = NT;  break;}  // pattern table tile high
                 }
             }
+            unsigned char attrib_high_bit = (attributes_high >> 15) & 1;
+            unsigned char attrib_low_bit = (attributes_low >> 15) & 1;
+            unsigned char shift_reg_high_bit = (shift_register_high >> 15) & 1;
+            unsigned char shit_reg_low_bit = (shift_register_low >> 15) & 1;
 
-            unsigned char pixel_index =
-                    mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (4 * ((((attributes_high >> 15) & 1) << 1) | (attributes_low >> 15) & 1)) + ((shift_register_high >> (15-x)) & 1) | ((shift_register_low >> (15-x)) & 1));
+            unsigned char pixel_index = mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (
+                    (((attrib_high_bit << 1) | attrib_low_bit) << 2) |
+                    ((shift_reg_high_bit << 1) | shit_reg_low_bit) ));
+
             update_internal_display(palette[pixel_index]);
 
+#if UI_DEBUGGER
+    if (current_step == NT && !(current_scanline_cycle & 1)){
+        tile_start = false;
+    } else if (update_shifts) {
+        tile_start = true;
+        update_shifts = false;
+    }
+#endif
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
@@ -259,6 +277,10 @@ void PPU::tick(Bus& bus) {
         if (current_scanline_cycle++ % 341 == 0){
             ++current_y;
             current_scanline_cycle = 0;
+#if UI_DEBUGGER
+            last_line_x =  std::exchange(current_line_x, 0);
+            line_start = true;
+#endif
         }
     } else if (current_y >= 240 && current_y < 261){
         if (current_y == 241 && current_scanline_cycle % 341 == 2) {
@@ -321,6 +343,7 @@ void PPU::tick(Bus& bus) {
 #if UI_DEBUGGER
                 frame_start = true;
                 ++frames_count;
+                internal_display.fill(WHITE);
 #endif
             }
         }

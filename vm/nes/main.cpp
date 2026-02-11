@@ -161,7 +161,7 @@ struct NESVM {
             if (dis.next){
                 cpu.debug_run = true;
                 dis.next = false;
-            } else if (dis.is_frame_jump_active){
+            } else if (dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active){
                 cpu.debug_run = true;
             }
             int current_tick = 0;
@@ -176,20 +176,24 @@ struct NESVM {
                     cpu.tick(bus);
                     bus.open_bus_decay();
                     for (int j = 0; j < 3; ++j){
+                        ppu.tick(bus);
                         if (dis.is_frame_jump_active && ppu.frame_start){
                             dis.is_frame_jump_active = false;
+                        } else if (dis.is_tile_line_jump_active && ppu.tile_start) {
+                            dis.is_tile_line_jump_active = false;
+                        } else if (dis.is_line_jump_active && ppu.line_start){
+                            dis.is_line_jump_active = false;
                         }
-                        ppu.tick(bus);
                     }
                     ++current_tick;
                 }
 
                 if (dis.selected_move_active){
                     dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
-                } else if (dis.is_frame_jump_active) cpu.debug_run = true;
+                } else if (dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active) cpu.debug_run = true;
 
-            } while((dis.selected_move_active || dis.is_frame_jump_active) && current_tick < constants::CPU_FRAME_CYCLES);
-            if (!dis.selected_move_active && !dis.is_frame_jump_active) dis.handle(cpu);
+            } while((dis.selected_move_active || dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active) && current_tick < constants::CPU_FRAME_CYCLES);
+            if (!dis.selected_move_active && !dis.is_frame_jump_active && !dis.is_tile_line_jump_active && !dis.is_line_jump_active) dis.handle(cpu);
 #else
         if (cpu.stop_requested) return;
         for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
@@ -271,7 +275,14 @@ struct NESVM {
 #if DEBUG_MODE && UI_DEBUGGER
             dis.draw(cpu, bus);
 #endif
+
+#if UI_DEBUGGER
+            UpdateTexture(display_texture, ppu.internal_display.data());
+#else
             UpdateTexture(display_texture, ppu.display.data());
+#endif
+
+
             BeginDrawing();
             ClearBackground(WHITE);
 #if DEBUG_MODE
@@ -323,6 +334,6 @@ struct NESVM {
 
 int main(){
     // todo: continue debug (palette)
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes");
     nes.run();
 }

@@ -79,7 +79,12 @@ struct PPU {
 
 #if UI_DEBUGGER
     bool frame_start = false;
+    bool tile_start = false;
+    bool update_shifts = false;
+    bool line_start = false;
     size_t frames_count{};
+    size_t last_line_x{};
+    size_t current_line_x{};
 #endif
 
     enum FetchStep {
@@ -194,6 +199,9 @@ struct PPU {
     size_t current_y = 261;
     inline void update_internal_display(Color pixel){
         internal_display[current_x++] = pixel;
+#if UI_DEBUGGER
+        ++current_line_x;
+#endif
     }
     std::array<Color, 256 * 240> display{};
 
