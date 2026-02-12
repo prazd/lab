@@ -165,6 +165,7 @@ void PPU::tick(Bus& bus) {
     // TODO: continue debug
     update_state(bus);
 
+
     if (current_y < 240){
         static unsigned char nt_byte = 0;
         static unsigned char attrib_value = 0;
@@ -175,6 +176,8 @@ void PPU::tick(Bus& bus) {
 #if UI_DEBUGGER
             frame_start = false;
             line_start = false;
+            if (current_y == 0 && current_scanline_cycle == 0)
+                internal_display.fill(WHITE);
 #endif
             ++current_scanline_cycle;
             return;}
@@ -186,12 +189,10 @@ void PPU::tick(Bus& bus) {
                 unsigned char y_tile_n = ((v >> 5) & 0x1f);
                 update_base_nt(bus);
                 switch (current_step) {
-                    // fetch nametable byte
-                    // TODO: debug base_name_table_address
                     case NT:  {
                         nt_byte = mem.read(bus,  base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
                     case AT:  {
-                        auto val = mem.read(bus, base_attrib_address + y_tile_n/4 + x_tile_n/4);
+                        auto val = mem.read(bus,  base_name_table_address + 0x3C0 + (y_tile_n/4 * 8) + x_tile_n/4);
                         // TODO: check
                         //  3 3 2 2
                         //  3 3 2 2
@@ -217,8 +218,8 @@ void PPU::tick(Bus& bus) {
                         v &= 0xffe0;
                         v |= add_val;
 
-                        attributes_low &= 0xf0;
-                        attributes_high &= 0xf0;
+                        attributes_low &= 0xff00;
+                        attributes_high &= 0xff00;
 
                         attributes_low |= (attrib_value & 0x1) ? 0xf : 0;
                         attributes_high |= (attrib_value & 0x2) ? 0xf : 0;
@@ -230,8 +231,8 @@ void PPU::tick(Bus& bus) {
             }
             unsigned char attrib_high_bit = (attributes_high >> 15) & 1;
             unsigned char attrib_low_bit = (attributes_low >> 15) & 1;
-            unsigned char shift_reg_high_bit = (shift_register_high >> 15) & 1;
-            unsigned char shit_reg_low_bit = (shift_register_low >> 15) & 1;
+            unsigned char shift_reg_high_bit = (shift_register_high >> (15-x)) & 1;
+            unsigned char shit_reg_low_bit = (shift_register_low >> (15-x)) & 1;
 
             unsigned char pixel_index = mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (
                     (((attrib_high_bit << 1) | attrib_low_bit) << 2) |
@@ -240,9 +241,7 @@ void PPU::tick(Bus& bus) {
             update_internal_display(palette[pixel_index]);
 
 #if UI_DEBUGGER
-    if (current_step == NT && !(current_scanline_cycle & 1)){
-        tile_start = false;
-    } else if (update_shifts) {
+    if (update_shifts) {
         tile_start = true;
         update_shifts = false;
     }
@@ -258,8 +257,8 @@ void PPU::tick(Bus& bus) {
                 v |= y_fine_add_val << 12;
 
                 if (!y_fine_add_val){
-                    auto add_val = ((((v >> 5) & 0x1f) + 1) % 30);
-                    if (!add_val) v ^= 0x800;
+                    auto add_val = ((((v >> 5) & 0x1f) + 1) % 32);
+                    if (add_val == 29) v ^= 0x800;
                     v &= 0xfc1f;
                     v |= (add_val << 5);
                 }
@@ -271,7 +270,7 @@ void PPU::tick(Bus& bus) {
                 v &= 0xffe0;
                 v |= (t & 0x1f);
                 v &= 0xfbff;
-                v |= (t & (~0xfbff & 0xffff));
+                v |= (t & 0x400);
             }
         }
         if (current_scanline_cycle++ % 341 == 0){
@@ -311,7 +310,7 @@ void PPU::tick(Bus& bus) {
                     unsigned char x_tile_n = (v & 0x1f) + 1;
                     unsigned char y_tile_n = ((v >> 5) & 0x1f);
                     auto nt_byte = mem.read(bus,  constants::NAME_TABLE0_BEGIN + (y_tile_n * 32) + x_tile_n);
-                    auto val = mem.read(bus, base_attrib_address + y_tile_n/4 + x_tile_n/4);
+                    auto val = mem.read(bus, base_name_table_address + 0x3C0 + (y_tile_n/4 * 8) + x_tile_n/4);
                     auto shift_y = (y_tile_n/2) % 2;
                     auto shift_x = (x_tile_n/2) % 2;
                     auto attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
@@ -334,7 +333,7 @@ void PPU::tick(Bus& bus) {
 
                 auto l = get_next_shifts();
                 shift_register_low |= (l.first & 0xff);
-                shift_register_high |= ((l.first >> 8)& 0xff);
+                shift_register_high |= ((l.first >> 8) & 0xff);
                 attributes_low &= 0xff00;
                 attributes_high &= 0xff00;
                 attributes_low |= (h.second & 0x1) ? 0xff : 0;
@@ -343,7 +342,6 @@ void PPU::tick(Bus& bus) {
 #if UI_DEBUGGER
                 frame_start = true;
                 ++frames_count;
-                internal_display.fill(WHITE);
 #endif
             }
         }

@@ -19,6 +19,7 @@ namespace constants {
 
     constexpr size_t CPU_SPEED = 1790000;
     constexpr size_t CPU_FRAME_CYCLES = CPU_SPEED/60;
+    constexpr size_t PPU_FRAME_CYCLES = CPU_FRAME_CYCLES * 3;
 
     // CPU map
     constexpr unsigned short RAM_BEGIN = 0x0000;

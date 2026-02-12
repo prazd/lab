@@ -1,7 +1,6 @@
 #include "Constants.hpp"
 #include "Bus.hpp"
 #include "SmallString.h"
-
 struct CPU {
     struct Memory {
 // https://www.nesdev.org/wiki/CPU_memory_map
@@ -138,9 +137,9 @@ struct CPU {
         ADC, AND, ASL,BCC, BCS,	BEQ, BIT, BMI, BNE,	BPL, BRK, BVC, BVS,	CLC,
         CLD, CLI, CLV,CMP, CPX,	CPY, DEC, DEX, DEY,	EOR, INC, INX, INY,	JMP,
         JSR, LDA, LDX,LDY, LSR,	NOP, ORA, PHA, PHP,	PLA, PLP, ROL, ROR,	RTI,
-        RTS, SBC, SEC,SED, SEI,	STA, STX, STY, TAX,	TAY, TSX, TXA, TXS,	TYA,
+        RTS, SBC, SEC,SED, SEI,	STA, STX, STY, TAX,	TAY, TSX, TXA,
         //
-        DOP, AAC, ASR, ARR, ATX, AXS, SLO, RLA, SRE, RRA,AAX,LAX,DCP,ISC,
+        TXS, TYA,DOP, AAC, ASR, ARR, ATX, AXS, SLO, RLA, SRE, RRA,AAX,LAX,DCP,ISC,
         TOP, SYA, SXA
     };
 
@@ -187,6 +186,21 @@ struct CPU {
     inline AsmInfo disassemble(Bus& bus, unsigned short address) {
         auto di = decode(mem.unsafe_read(bus, address));
         switch (di.i) {
+            case SYA:
+            case SXA:
+            case ISC:
+            case DCP:
+            case LAX:
+            case AAX:
+            case RRA:
+            case RLA:
+            case SRE:
+            case SLO:
+            case AXS:
+            case ATX:
+            case ARR:
+            case AAC:
+            case ASR:
             case ADC:
             case AND:
             case ASL:
@@ -231,6 +245,10 @@ struct CPU {
                 return {instruction_str[di.i], arg.addr, arg.is_accumulator, false};
             }
 
+            case TOP:
+            case DOP:
+            case TXS:
+            case TYA:
             case BRK:
             case CLC:
             case CLD:
@@ -256,8 +274,6 @@ struct CPU {
             case TAY:
             case TSX:
             case TXA:
-            case TXS:
-            case TYA:
                 { return {instruction_str[di.i], 0, false, true}; }
             case JMP: {
                 if (di.addr_mode == Absolute) {
@@ -270,6 +286,9 @@ struct CPU {
                     return {instruction_str[di.i],(unsigned short)(l | (h << 8)), false , false};
                 }
             }
+
+            default:
+                { return {instruction_str[di.i], 0, false, true}; }
         }
     }
 };

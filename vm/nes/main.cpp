@@ -156,44 +156,67 @@ struct NESVM {
         bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
     }
 
+#if UI_DEBUGGER
+    void cpu_debug_exec() {
+        if (dis.next){
+            cpu.debug_run = true;
+            dis.next = false;
+        }
+        int current_tick = 0;
+        do {
+            if (cpu.reset_requested) {
+                cpu.reset();
+                ppu.reset();
+                cpu.debug_run = true;
+                cpu.reset_requested = false;
+            }
+            while (cpu.debug_run) {
+                cpu.tick(bus);
+                bus.open_bus_decay();
+                for (int j = 0; j < 3; ++j)
+                    ppu.tick(bus);
+                ++current_tick;
+            }
+
+            if (dis.selected_move_active) {
+                dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
+            }
+        } while((dis.selected_move_active) && current_tick < constants::CPU_FRAME_CYCLES);
+        if (!dis.selected_move_active) dis.handle(cpu);
+    }
+
+    void ppu_debug_exec(){
+        size_t current_tick = 0;
+        while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active) && current_tick < constants::PPU_FRAME_CYCLES) {
+            cpu.debug_run = true;
+            ppu.tick(bus);
+            if (dis.is_frame_jump_active && ppu.frame_start){
+                dis.is_frame_jump_active = false;
+            } else if (dis.is_tile_line_jump_active && ppu.tile_start) {
+                dis.is_tile_line_jump_active = false; ppu.tile_start = false;
+            } else if (dis.is_line_jump_active && ppu.line_start){
+                dis.is_line_jump_active = false;
+            }
+            if (current_tick % 3 == 2)
+                cpu.tick(bus);
+            ++current_tick;
+        }
+        if (!dis.selected_move_active && !dis.is_frame_jump_active && !dis.is_tile_line_jump_active && !dis.is_line_jump_active) dis.handle(cpu);
+    }
+#endif
+
     void frame_execute(){
 #if UI_DEBUGGER
-            if (dis.next){
-                cpu.debug_run = true;
-                dis.next = false;
-            } else if (dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active){
-                cpu.debug_run = true;
+            if (dis.should_sync) {
+                if (cpu.execute_in_progress) cpu_debug_exec();
+                dis.should_sync = cpu.execute_in_progress;
+            } else {
+                if (dis.run_mode == decltype(dis)::RunMode::CPU_M) {
+                    cpu_debug_exec();
+                } else {
+                    ppu_debug_exec();
+                }
             }
-            int current_tick = 0;
-            do {
-                if (cpu.reset_requested) {
-                    cpu.reset();
-                    ppu.reset();
-                    cpu.debug_run = true;
-                    cpu.reset_requested = false;
-                }
-                while (cpu.debug_run) {
-                    cpu.tick(bus);
-                    bus.open_bus_decay();
-                    for (int j = 0; j < 3; ++j){
-                        ppu.tick(bus);
-                        if (dis.is_frame_jump_active && ppu.frame_start){
-                            dis.is_frame_jump_active = false;
-                        } else if (dis.is_tile_line_jump_active && ppu.tile_start) {
-                            dis.is_tile_line_jump_active = false;
-                        } else if (dis.is_line_jump_active && ppu.line_start){
-                            dis.is_line_jump_active = false;
-                        }
-                    }
-                    ++current_tick;
-                }
-
-                if (dis.selected_move_active){
-                    dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
-                } else if (dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active) cpu.debug_run = true;
-
-            } while((dis.selected_move_active || dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active) && current_tick < constants::CPU_FRAME_CYCLES);
-            if (!dis.selected_move_active && !dis.is_frame_jump_active && !dis.is_tile_line_jump_active && !dis.is_line_jump_active) dis.handle(cpu);
 #else
         if (cpu.stop_requested) return;
         for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
@@ -321,6 +344,7 @@ struct NESVM {
 
 // PPU tests:
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes - todo (E224)
+// /Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes
 
 // Done:
 // CPU:
@@ -334,6 +358,6 @@ struct NESVM {
 
 int main(){
     // todo: continue debug (palette)
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes");
     nes.run();
 }
