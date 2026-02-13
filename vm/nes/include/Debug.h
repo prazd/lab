@@ -262,6 +262,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     bool is_frame_jump_active = false;
     bool is_tile_line_jump_active = false;
     bool is_line_jump_active = false;
+    bool is_one_tick_ppu_active = false;
 
     Rectangle line_button;
     UserInput<x, y - 30, w, 30> u_input;
@@ -271,6 +272,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle button3;
     Rectangle button4;
     Rectangle button5;
+    Rectangle button6;
+    Rectangle button7;
 
     Rectangle sync_button;
     Rectangle change_mode_button;
@@ -282,6 +285,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       button3{DW::rec.x + 40 * 2, DW::rec.y + h, 40, 40},
                                       button4{DW::rec.x + 40 * 3, DW::rec.y + h, 40, 40},
                                       button5{DW::rec.x + 40 * 4, DW::rec.y + h, 40, 40},
+                                      button6{DW::rec.x + 40 * 5, DW::rec.y + h, 40, 40},
+                                      button7{DW::rec.x + 40 * 6, DW::rec.y + h, 40, 40},
                                       sync_button{DW::rec.x, DW::rec.y + h + 40, 40, 40},
                                       change_mode_button{DW::rec.x + 40, DW::rec.y + h + 40, 40, 40}
                                       {}
@@ -298,6 +303,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         button3 = {DW::rec.x + 40 * 2, DW::rec.y + h, 40, 40};
         button4 = {DW::rec.x + 40 * 3, DW::rec.y + h, 40, 40};
         button5 = {DW::rec.x + 40 * 4, DW::rec.y + h, 40, 40};
+        button6 = {DW::rec.x + 40 * 5, DW::rec.y + h, 40, 40};
+        button7 = {DW::rec.x + 40 * 6, DW::rec.y + h, 40, 40};
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
 
         change_mode_button = {DW::rec.x + 40, DW::rec.y + h + 40, 40, 40};
@@ -325,6 +332,10 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             is_line_jump_active = true;
         else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == PPU_M && IsMouseButtonDown(0))
             is_frame_jump_active = true;
+        else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == PPU_M && IsMouseButtonDown(0))
+            is_one_tick_ppu_active = true;
+        else if (CheckCollisionPointRec(GetMousePosition(), button7) && run_mode == PPU_M && IsMouseButtonPressed(0))
+            is_one_tick_ppu_active = true;
         else if (CheckCollisionPointRec(GetMousePosition(), sync_button) && IsMouseButtonPressed(0))
             should_sync = true;
         else if (CheckCollisionPointRec(GetMousePosition(), change_mode_button) && IsMouseButtonPressed(0))
@@ -365,6 +376,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button3, " line", GREEN, 15.f);
             DW::draw_text_button(button4, " line_s", GREEN, 15.f);
             DW::draw_text_button(button5, " frame_s", GREEN, 15.f);
+            DW::draw_text_button(button6, " dot_s", GREEN, 15.f);
+            DW::draw_text_button(button7, " dot", GREEN, 15.f);
         }
         DW::draw_text_button(sync_button, " sync", GREEN, 15.f);
         DW::draw_text_button(change_mode_button, " mode", GREEN, 15.f);
@@ -441,9 +454,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  VBLank:" << (unsigned)(ppu.ppustatus.vblank_flag) << '\n'
         << "  Bus VBLank:" << (unsigned)(bus.ppustatus.reg & 0x80) << '\n'
 #if UI_DEBUGGER
-        << "  FramesCount:" << ppu.frames_count << '\n'
-        << "  LastLineX:" << ppu.last_line_x << '\n'
-        << "  CurrentLineX:" << std::dec << ppu.current_line_x << '\n' << std::hex
+
 #endif
         << std::dec << "  Cycles:" << ppu.current_cycle % 341
         << "  Scanline:" << ppu.current_y;
@@ -569,6 +580,27 @@ struct ColorsViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     }
 };
 
+template <size_t x, size_t y, size_t w, size_t h>
+struct PPUInfo: DebugWindowText<x, y, w, h> {
+    using DW = DebugWindowText<x, y, w, h>;
+    std::stringstream ss;
+
+    void handle(PPU& ppu){
+        ss << "PPU:\n"
+        << "  FramesCount:"    <<   std::dec << ppu.frames_count << '\n'
+        << "  LastLineX:"      <<   std::dec << ppu.last_line_x << '\n'
+        << "  CurrentLineX:"   <<   std::dec << ppu.current_line_x << '\n' << std::hex
+        << "  ShiftRegL:"      <<   std::bitset<16>(ppu.shift_register_low).to_string()  << '\n' << std::hex
+        << "  ShiftRegH:"      <<   std::bitset<16>(ppu.shift_register_high).to_string() << '\n' << std::hex
+        << "  AttributesRegL:" <<   std::bitset<16>(ppu.attributes_low).to_string()      << '\n' << std::hex
+        << "  AttributesRegH:" <<   std::bitset<16>(ppu.attributes_high).to_string()     << '\n' << std::hex;
+        auto s = ss.str();
+        DW::move();
+        DW::draw(s.c_str(), 13.f);
+        ss.str("");
+    }
+};
+
 template <size_t x, size_t y>
 struct DummyTilesGrid {
     void draw(float cell_w, float cell_h) {
@@ -584,5 +616,7 @@ struct DummyTilesGrid {
         }
     }
 };
+
+
 
 #endif //NES_DEBUG_H

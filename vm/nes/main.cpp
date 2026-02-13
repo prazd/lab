@@ -158,11 +158,11 @@ struct NESVM {
 
 #if UI_DEBUGGER
     void cpu_debug_exec() {
+        size_t current_tick = 0;
         if (dis.next){
             cpu.debug_run = true;
             dis.next = false;
         }
-        int current_tick = 0;
         do {
             if (cpu.reset_requested) {
                 cpu.reset();
@@ -187,7 +187,9 @@ struct NESVM {
 
     void ppu_debug_exec(){
         size_t current_tick = 0;
-        while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active) && current_tick < constants::PPU_FRAME_CYCLES) {
+        static size_t cpu_tick_count = 0;
+        while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active
+                || dis.is_line_jump_active || dis.is_one_tick_ppu_active) && current_tick < constants::PPU_FRAME_CYCLES) {
             cpu.debug_run = true;
             ppu.tick(bus);
             if (dis.is_frame_jump_active && ppu.frame_start){
@@ -196,12 +198,15 @@ struct NESVM {
                 dis.is_tile_line_jump_active = false; ppu.tile_start = false;
             } else if (dis.is_line_jump_active && ppu.line_start){
                 dis.is_line_jump_active = false;
+            } else if (dis.is_one_tick_ppu_active) {
+                dis.is_one_tick_ppu_active = false;
             }
-            if (current_tick % 3 == 2)
+            if (cpu_tick_count % 3 == 2)
                 cpu.tick(bus);
-            ++current_tick;
+            ++cpu_tick_count;
+            ++cpu_tick_count;
         }
-        if (!dis.selected_move_active && !dis.is_frame_jump_active && !dis.is_tile_line_jump_active && !dis.is_line_jump_active) dis.handle(cpu);
+        if (!dis.selected_move_active && !dis.is_frame_jump_active && !dis.is_tile_line_jump_active && !dis.is_line_jump_active && !dis.is_one_tick_ppu_active) dis.handle(cpu);
     }
 #endif
 
@@ -252,6 +257,8 @@ struct NESVM {
 
         NameTableView<1110,432,480,432> ntv{};
         ColorsViewer<1110,432,480,432> cv{};
+
+        PPUInfo<600, 700, 200,300> ppu_info;
 
         RegsInfo<30,30,180,425> reg_info{};
 
@@ -315,6 +322,7 @@ struct NESVM {
 
             handle_up_right_view();
             handle_down_left_view();
+            ppu_info.handle(ppu);
 
             if (CheckCollisionPointRec(GetMousePosition(), ptv.rec) && IsKeyPressed(KEY_M))
                 current_up_right_view = static_cast<UpRightView>((current_up_right_view + 1) % UpRightViewCount);

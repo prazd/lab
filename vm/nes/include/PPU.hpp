@@ -164,6 +164,16 @@ struct PPU {
         }
     } ppustatus;
 
+
+    unsigned short current_scanline_cycle = 0;
+    unsigned char nt_byte = 0;
+    unsigned char attrib_value = 0;
+    unsigned char pattern_table_l = 0;
+    unsigned char pattern_table_h = 0;
+
+    void fetch_tile_data_step(Bus& bus);
+    void fill_shift_registers(Bus& bus);
+
     unsigned short base_name_table_address{};
     unsigned short bg_pattern_table_address{};
     unsigned short base_attrib_address{};
