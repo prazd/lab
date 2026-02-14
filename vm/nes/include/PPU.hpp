@@ -5,6 +5,7 @@
 #include "Constants.hpp"
 #include "raylib.h"
 #include <tuple>
+#include "SimpleDeque.h"
 
 // TODO: https://www.nesdev.org/wiki/Mirroring + Attributes
 inline bool operator==(const Color& lhs, const Color& rhs){
@@ -94,22 +95,26 @@ struct PPU {
     void tick(Bus&);
 
     struct Sprite {
-        unsigned char coord{}; //  Stores the y-coordinate of the top left of the sprite minus 1
-        unsigned char index{}; //  Index number of the sprite in the pattern tables.
-        struct {
-            unsigned char color: 2{}; // Most significant two bits of the colour
-            unsigned char: 3;
-            unsigned char priority_flag:1{}; // Indicates whether this sprite has priority over the background
-            unsigned char flip_horizontally:1{};
-            unsigned char flip_vertically:1{};
-            inline void set(unsigned char val){
-                color = val & 0x3;
-                priority_flag = (val >> 5) & 1;
-                flip_horizontally = (val >> 6) & 1;
-                flip_vertically = (val >> 7) & 1;
-            };
-        } attrib;
+        unsigned char y_pos{};
+        unsigned char pt_index{}; //  Index number of the sprite in the pattern tables.
+//        struct {
+//            unsigned char color: 2{}; // Most significant two bits of the colour
+//            unsigned char: 3;
+//            unsigned char priority_flag:1{}; // Indicates whether this sprite has priority over the background
+//            unsigned char flip_horizontally:1{};
+//            unsigned char flip_vertically:1{};
+//            inline void set(unsigned char val){
+//                color = val & 0x3;
+//                priority_flag = (val >> 5) & 1;
+//                flip_horizontally = (val >> 6) & 1;
+//                flip_vertically = (val >> 7) & 1;
+//            };
+//        } attrib;
+        unsigned char attrib{};
+        unsigned char x_pos{};
     };
+
+    SimpleDeque<Sprite, 8> secondary_oam{};
 
     struct PPUCTRL {
         unsigned char base_name_table_addr: 2;
@@ -178,6 +183,22 @@ struct PPU {
     unsigned short bg_pattern_table_address{};
     unsigned short base_attrib_address{};
     unsigned short sprite_pattern_table_address8x8{};
+
+    enum SpriteEvaluationState {
+        SpriteReadY,
+        SpriteIncN,
+        SpriteCopy,
+        SpriteFinish
+    } current_sprite_evaluation_step = SpriteReadY;
+    bool is_sprite_on_line = false;
+    size_t copy_step_count = 0;
+    Sprite tmp_sprite;
+
+    size_t current_oam_index = 0;
+    size_t sprite_evaluation_index = 0;
+    void sprite_evaluate_tick(Bus& bus);
+
+    void bg_tick(Bus& bus);
 
     unsigned short shift_register_low{};
     unsigned short shift_register_high{};

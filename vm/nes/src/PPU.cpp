@@ -124,6 +124,151 @@ unsigned short PPU::to_pattern_addr(unsigned char y, unsigned char tile_n, bool 
     return y | (plane << 3) | (tile_n << 4) | (h << 12);
 }
 
+// https://www.nesdev.org/wiki/PPU_sprite_evaluation
+void PPU::sprite_evaluate_tick(Bus &bus) {
+    // TODO: finish
+    if (current_scanline_cycle <= 64){
+    // Secondary OAM (32-byte buffer for current sprites on scanline) is initialized to $FF
+    } else if (current_scanline_cycle >= 65 && current_scanline_cycle <= 256) {
+        switch (current_sprite_evaluation_step) {
+            case SpriteReadY: {
+                 current_oam_index =  4 * sprite_evaluation_index; // y_pos
+                 is_sprite_on_line = bus.oam[current_oam_index] == current_y;
+                 current_sprite_evaluation_step = SpriteIncN;
+                 break;
+            }
+            case SpriteIncN: {
+                if (!is_sprite_on_line) {
+                    sprite_evaluation_index = (sprite_evaluation_index + 1) % 64;
+                    current_sprite_evaluation_step = SpriteReadY;
+                    break;
+                }
+                current_sprite_evaluation_step = SpriteCopy;
+                break;
+            }
+            case SpriteCopy: {
+                switch (copy_step_count) {
+                    case 0: {tmp_sprite.y_pos =    bus.oam[current_oam_index]; break;}
+                    case 1: {tmp_sprite.pt_index = bus.oam[current_oam_index+1]; break;}
+                    case 2: {tmp_sprite.attrib =   bus.oam[current_oam_index+2]; break;}
+                    case 3: {tmp_sprite.x_pos =    bus.oam[current_oam_index+3]; break;}
+                }
+                ++copy_step_count;
+                if (copy_step_count == 4) {
+                    copy_step_count = 0;
+                    secondary_oam.push_back(tmp_sprite);
+                    if (secondary_oam.size() < 8){
+                        sprite_evaluation_index = (sprite_evaluation_index + 1) % 64;
+                        current_sprite_evaluation_step = SpriteReadY;
+                    } else {
+                        current_sprite_evaluation_step = SpriteFinish;
+                    }
+                    break;
+                }
+                case SpriteFinish: break;
+                default: break;
+            }
+        }
+
+    } else if (current_scanline_cycle >= 257 && current_scanline_cycle <= 320) {
+        //  Sprite fetches
+    }
+}
+
+void PPU::bg_tick(Bus &bus) {
+    ++current_cycle;
+    // TODO: continue debug
+    update_state(bus);
+
+    if (current_y < 240){
+        if (!current_scanline_cycle){
+#if UI_DEBUGGER
+            frame_start = false;
+            line_start = false;
+            if (current_y == 0 && current_scanline_cycle == 0)
+                internal_display.fill(WHITE);
+#endif
+            return;}
+
+        // 1-256 cycles
+        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && ppumask.enable_background_rendering) {
+            fetch_tile_data_step(bus);
+            unsigned char attrib_high_bit = (attributes_high >> (15-x)) & 1;
+            unsigned char attrib_low_bit = (attributes_low >> (15-x)) & 1;
+            unsigned char shift_reg_high_bit = (shift_register_high >> (15-x)) & 1;
+            unsigned char shit_reg_low_bit = (shift_register_low >> (15-x)) & 1;
+
+            unsigned char pixel_index = mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (
+                    (((attrib_high_bit << 1) | attrib_low_bit) << 2) |
+                    ((shift_reg_high_bit << 1) | shit_reg_low_bit) ));
+
+            update_internal_display(palette[pixel_index]);
+
+#if UI_DEBUGGER
+            if (update_shifts) {
+                tile_start = true;
+                update_shifts = false;
+            }
+#endif
+            shift_register_high <<= 1;
+            shift_register_low <<= 1;
+            attributes_low <<= 1;
+            attributes_high <<= 1;
+
+            if (current_scanline_cycle == 256){
+                unsigned char y_fine_add_val = ((((v >> 12) & 0x7) + 1) % 8);
+                v &= 0x8fff;
+                v |= y_fine_add_val << 12;
+
+                if (!y_fine_add_val){
+                    auto add_val = ((((v >> 5) & 0x1f) + 1) % 30);
+                    if (!add_val) v ^= 0x800;
+                    v &= 0xfc1f;
+                    v |= (add_val << 5);
+                }
+            }
+        } else if(current_scanline_cycle == 257 && ppumask.enable_background_rendering) {
+            // TODO: debug (oam_read test (v & 0x1f) == 2)
+            // set coarse x + update ntx bit
+            v &= 0xffe0;
+            v |= (t & 0x1f);
+            v &= 0xfbff;
+            v |= (t & 0x400);
+        } else if (current_scanline_cycle >= 321 && current_scanline_cycle < 337) {
+            if (ppumask.enable_background_rendering) fetch_tile_data_step(bus);
+        }
+        if (current_scanline_cycle == 341){
+#if UI_DEBUGGER
+            last_line_x =  std::exchange(current_line_x, 0);
+            line_start = true;
+#endif
+        }
+    } else if (current_y >= 240 && current_y < 261){
+        if (current_y == 241 && current_scanline_cycle == 2) {
+            ppustatus.vblank_flag = 1;
+            bus.ppustatus.reg |= 1 << 7;
+            bus.nmi_interrupt_flip_flop = true;
+        }
+    } else if (current_y == 261){
+        if (current_scanline_cycle == 341){
+            // update shift registers
+            ppustatus.vblank_flag = 0;
+            bus.ppustatus.reg &= 0x7f;
+            bus.nmi_interrupt_flip_flop = false; // todo: check
+            if (ppumask.enable_background_rendering){
+                std::copy(internal_display.begin(), internal_display.end(), display.begin());
+                v &= 0x841f;
+                v |= ((t & (~0x841f & 0xffff)));
+                fill_shift_registers(bus);
+#if UI_DEBUGGER
+                frame_start = true;
+                ++frames_count;
+#endif
+            }
+        }
+    }
+}
+
 void PPU::reset() {
     current_y = 261;
     current_x = 0;
@@ -166,9 +311,9 @@ void PPU::fetch_tile_data_step(Bus& bus) {
         update_base_nt(bus);
         switch (current_step) {
             case NT:  {
-                nt_byte = mem.read(bus,  base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
+                nt_byte = mem.read(bus,  constants::NAME_TABLE0_BEGIN + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
             case AT:  {
-                auto val = mem.read(bus,  base_name_table_address + 0x3C0 + (y_tile_n/4 * 8) + x_tile_n/4);
+                auto val = mem.read(bus,   constants::ATTRIBUTE_TABLE0_BEGIN + (y_tile_n/4 * 8) + x_tile_n/4);
                 // TODO: check
                 //  3 3 2 2
                 //  3 3 2 2
@@ -197,8 +342,8 @@ void PPU::fetch_tile_data_step(Bus& bus) {
                 attributes_low &= 0xff00;
                 attributes_high &= 0xff00;
 
-                attributes_low |= (attrib_value & 0x1) ? 0xf : 0;
-                attributes_high |= (attrib_value & 0x2) ? 0xf : 0;
+                attributes_low |= (attrib_value & 0x1) ? 0xff : 0;
+                attributes_high |= (attrib_value & 0x2) ? 0xff : 0;
 #if UI_DEBUGGER
                 update_shifts = true;
 #endif
@@ -212,7 +357,7 @@ void PPU::fill_shift_registers(Bus &bus) {
         unsigned char x_tile_n = (v & 0x1f);
         unsigned char y_tile_n = ((v >> 5) & 0x1f);
         auto nt_byte = mem.read(bus,  constants::NAME_TABLE0_BEGIN + (y_tile_n * 32) + x_tile_n);
-        auto val = mem.read(bus, base_name_table_address + 0x3C0 + (y_tile_n/4 * 8) + x_tile_n/4);
+        auto val = mem.read(bus, constants::ATTRIBUTE_TABLE0_BEGIN + 0x3C0 + (y_tile_n/4 * 8) + x_tile_n/4);
         auto shift_y = (y_tile_n/2) % 2;
         auto shift_x = (x_tile_n/2) % 2;
         auto attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
@@ -243,107 +388,11 @@ void PPU::fill_shift_registers(Bus &bus) {
 }
 
 void PPU::tick(Bus& bus) {
-    ++current_cycle;
-    // TODO: continue debug
-    update_state(bus);
-
-    if (current_y < 240){
-        if (!current_scanline_cycle){
-#if UI_DEBUGGER
-            frame_start = false;
-            line_start = false;
-            if (current_y == 0 && current_scanline_cycle == 0)
-                internal_display.fill(WHITE);
-#endif
-            ++current_scanline_cycle;
-            return;}
-
-        // 1-256 cycles
-        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && ppumask.enable_background_rendering) {
-            fetch_tile_data_step(bus);
-            unsigned char attrib_high_bit = (attributes_high >> (15-x)) & 1;
-            unsigned char attrib_low_bit = (attributes_low >> (15-x)) & 1;
-            unsigned char shift_reg_high_bit = (shift_register_high >> (15-x)) & 1;
-            unsigned char shit_reg_low_bit = (shift_register_low >> (15-x)) & 1;
-
-            unsigned char pixel_index = mem.read(bus, constants::IMAGE_PALETTE_BEGIN + (
-                    (((attrib_high_bit << 1) | attrib_low_bit) << 2) |
-                    ((shift_reg_high_bit << 1) | shit_reg_low_bit) ));
-
-            update_internal_display(palette[pixel_index]);
-
-#if UI_DEBUGGER
-    if (update_shifts) {
-        tile_start = true;
-        update_shifts = false;
-    }
-#endif
-            shift_register_high <<= 1;
-            shift_register_low <<= 1;
-            attributes_low <<= 1;
-            attributes_high <<= 1;
-
-            if (current_scanline_cycle == 256){
-                unsigned char y_fine_add_val = ((((v >> 12) & 0x7) + 1) % 8);
-                v &= 0x8fff;
-                v |= y_fine_add_val << 12;
-
-                if (!y_fine_add_val){
-                    auto add_val = ((((v >> 5) & 0x1f) + 1) % 32);
-                    if (add_val == 29) v ^= 0x800;
-                    v &= 0xfc1f;
-                    v |= (add_val << 5);
-                }
-            }
-        } else if(current_scanline_cycle == 257 && ppumask.enable_background_rendering) {
-                // TODO: debug (oam_read test (v & 0x1f) == 2)
-                // set coarse x + update ntx bit
-                v &= 0xffe0;
-                v |= (t & 0x1f);
-                v &= 0xfbff;
-                v |= (t & 0x400);
-        } else if (current_scanline_cycle >= 321 && current_scanline_cycle < 337) {
-            if (ppumask.enable_background_rendering) fetch_tile_data_step(bus);
-        }
-        if (current_scanline_cycle++ % 341 == 0){
-            ++current_y;
-            current_scanline_cycle = 0;
-#if UI_DEBUGGER
-            last_line_x =  std::exchange(current_line_x, 0);
-            line_start = true;
-#endif
-        }
-    } else if (current_y >= 240 && current_y < 261){
-        if (current_y == 241 && current_scanline_cycle % 341 == 2) {
-            ppustatus.vblank_flag = 1;
-            bus.ppustatus.reg |= 1 << 7;
-            bus.nmi_interrupt_flip_flop = true;
-        }
-        ++current_scanline_cycle;
-        if (current_scanline_cycle % 341 == 0){
-            ++current_y;
-            current_scanline_cycle = 0;
-        }
-    } else if (current_y == 261){
-        if (current_scanline_cycle++ % 341 == 0){
-            // update shift registers
-            ppustatus.vblank_flag = 0;
-            bus.ppustatus.reg &= 0x7f;
-            bus.nmi_interrupt_flip_flop = false; // todo: check
-
-            current_y = 0;
-            current_x = 0;
-            if (ppumask.enable_background_rendering){
-                std::copy(internal_display.begin(), internal_display.end(), display.begin());
-                v &= 0x841f;
-                v |= ((t & (~0x841f & 0xffff)));
-                fill_shift_registers(bus);
-                current_scanline_cycle = 0;
-#if UI_DEBUGGER
-                frame_start = true;
-                ++frames_count;
-#endif
-            }
-        }
+    bg_tick(bus);
+    sprite_evaluate_tick(bus);
+    ++current_scanline_cycle;
+    if (current_scanline_cycle == 342){
+        current_scanline_cycle = 0;
+        current_y = current_y == 261 ? (current_x = 0) : current_y + 1;
     }
 }

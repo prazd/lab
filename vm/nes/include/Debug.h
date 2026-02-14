@@ -456,7 +456,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
 #if UI_DEBUGGER
 
 #endif
-        << std::dec << "  Cycles:" << ppu.current_cycle % 341
+        << std::dec << "  Cycles:" << ppu.current_scanline_cycle
         << "  Scanline:" << ppu.current_y;
         ss << "\nScreenMirroring:";
         switch (bus.mapper.current_screen_mirroring) {
@@ -580,6 +580,7 @@ struct ColorsViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     }
 };
 
+
 template <size_t x, size_t y, size_t w, size_t h>
 struct PPUInfo: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
@@ -587,9 +588,11 @@ struct PPUInfo: DebugWindowText<x, y, w, h> {
 
     void handle(PPU& ppu){
         ss << "PPU:\n"
+#if UI_DEBUGGER
         << "  FramesCount:"    <<   std::dec << ppu.frames_count << '\n'
         << "  LastLineX:"      <<   std::dec << ppu.last_line_x << '\n'
         << "  CurrentLineX:"   <<   std::dec << ppu.current_line_x << '\n' << std::hex
+#endif
         << "  ShiftRegL:"      <<   std::bitset<16>(ppu.shift_register_low).to_string()  << '\n' << std::hex
         << "  ShiftRegH:"      <<   std::bitset<16>(ppu.shift_register_high).to_string() << '\n' << std::hex
         << "  AttributesRegL:" <<   std::bitset<16>(ppu.attributes_low).to_string()      << '\n' << std::hex
