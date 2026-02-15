@@ -114,7 +114,18 @@ struct PPU {
         unsigned char x_pos{};
     };
 
-    SimpleDeque<Sprite, 8> secondary_oam{};
+    struct SpriteData {
+        unsigned char shift_l{};
+        unsigned char shift_h{};
+        unsigned char x_count{};
+        unsigned char attrib{};
+    };
+
+    SimpleDeque<Sprite, 8> secondary_oam_buffer{};
+    SimpleDeque<SpriteData, 8> secondary_oam{};
+
+
+    void draw_pixel(Bus& bus);
 
     struct PPUCTRL {
         unsigned char base_name_table_addr: 2;
@@ -185,12 +196,16 @@ struct PPU {
     unsigned short sprite_pattern_table_address8x8{};
 
     enum SpriteEvaluationState {
-        SpriteReadY,
-        SpriteIncN,
         SpriteCopy,
+        SpriteIncrement,
+        SpriteOverflow,
         SpriteFinish
-    } current_sprite_evaluation_step = SpriteReadY;
+    } current_sprite_evaluation_step = SpriteCopy;
     bool is_sprite_on_line = false;
+    bool copy_in_progress = false;
+    bool is_overflow = false;
+    unsigned char tmp_oam_value = 0;
+
     size_t copy_step_count = 0;
     Sprite tmp_sprite;
 
@@ -228,6 +243,7 @@ struct PPU {
     std::array<Color, 256 * 240> internal_display{};
     size_t current_x = 0;
     size_t current_y = 261;
+
     inline void update_internal_display(Color pixel){
         internal_display[current_x++] = pixel;
 #if UI_DEBUGGER

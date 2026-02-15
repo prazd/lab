@@ -38,6 +38,10 @@ struct SimpleDeque {
     size_t size() const {
         return current_sz;
     }
+    void reset(){
+        for (int i = 0; i < current_sz; ++i) reinterpret_cast<T*>(buffer + i * sizeof(T))->~T();
+        current_sz = 0;
+    }
     ~SimpleDeque(){
         for (int i = 0; i < current_sz; ++i)  reinterpret_cast<T*>(buffer + i * sizeof(T))->~T();
     }
