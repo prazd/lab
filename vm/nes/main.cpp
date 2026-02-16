@@ -257,8 +257,10 @@ struct NESVM {
 
         NameTableView<1110,432,480,432> ntv{};
         ColorsViewer<1110,432,480,432> cv{};
+        SpriteTilesViewer<1110,432,480,432> stv{};
 
         PPUInfo<600, 700, 200,300> ppu_info;
+        SpriteInfo<800, 700, 200,200> sprite_info{};
 
         RegsInfo<30,30,180,425> reg_info{};
 
@@ -268,6 +270,7 @@ struct NESVM {
         enum DownLeftView {
             NameTableV,
             ColorsV,
+            SpriteTilesV,
             DownLeftViewCount
         } current_down_left_view = NameTableV;
 
@@ -275,6 +278,7 @@ struct NESVM {
             switch (current_down_left_view) {
                 case NameTableV: {ntv.handle(ppu, bus); break;}
                 case ColorsV:    {cv.handle(bus, ppu);  break;}
+                case SpriteTilesV:    {stv.handle(bus, ppu); break;}
             }
         };
 
@@ -323,6 +327,7 @@ struct NESVM {
             handle_up_right_view();
             handle_down_left_view();
             ppu_info.handle(ppu);
+            sprite_info.handle(bus, ppu);
 
             if (CheckCollisionPointRec(GetMousePosition(), ptv.rec) && IsKeyPressed(KEY_M))
                 current_up_right_view = static_cast<UpRightView>((current_up_right_view + 1) % UpRightViewCount);

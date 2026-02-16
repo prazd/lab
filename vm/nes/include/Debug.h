@@ -47,6 +47,15 @@ struct DebugWindow {
         DrawRectangle(rec.x, rec.y, rec.width, rec.height, c);
     }
 
+    using TileRow = std::array<Color, 8>;
+    static TileRow get_tile_row(unsigned char a, unsigned char b) {
+        std::array<Color, 8> res{};
+        for (int i = 0; i < 8; ++i){
+            res[i] = color_by_id((((a >> (7-i)) & 1) << 1) | ((b >> (7-i)) & 1));
+        }
+        return res;
+    }
+
 };
 
 template<size_t x, size_t y, size_t w, size_t h, size_t t_w, size_t t_h>
@@ -82,21 +91,12 @@ struct DebugWindowText: DebugWindow<x,y,w,h>{
 template <size_t x, size_t y, size_t w, size_t h, size_t t_w, size_t t_h>
 struct PatternTableView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w / 8), t_h + (t_h / 8)> {
     using DW = DebugWindowWithTexture<x, y, w, h, t_w + (t_w/8), t_h + (t_h/8)>;
-    using TileRow = std::array<Color, 8>;
 
     short base_index = 0;
     short current_index = 0;
 
     size_t tiles_w{};
     size_t tiles_h{};
-
-    TileRow get_tile_row(unsigned char a, unsigned char b) {
-        std::array<Color, 8> res{};
-        for (int i = 0; i < 8; ++i){
-            res[i] = color_by_id((((a >> (7-i)) & 1) << 1) | ((b >> (7-i)) & 1));
-        }
-        return res;
-    }
 
     PatternTableView(size_t tiles_w, size_t tiles_h):
     tiles_w(tiles_w),
@@ -131,7 +131,7 @@ struct PatternTableView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w / 8), t_h
                     for (int i = 0; i < t_w/8; ++i){
                         auto l_tile = *(it + i * 16);
                         auto h_tile = *(it + i * 16 + 8);
-                        auto tile_row = get_tile_row(h_tile, l_tile);
+                        auto tile_row = DW::get_tile_row(h_tile, l_tile);
                         for (int k = 0; k < 8; ++k){
                             DW::buffer[current++] = tile_row[k];
                         }
@@ -491,7 +491,7 @@ struct PaletteViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     std::stringstream ss;
 
     void handle(Bus& bus, PPU& ppu){
-        if (IsKeyPressed(KEY_ONE))
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) &&  IsKeyPressed(KEY_ONE))
             current_view = static_cast<View>((current_view + 1) % ViewCount);
         if (current_view == Num) {
             DW::buffer.fill(WHITE);
@@ -604,6 +604,80 @@ struct PPUInfo: DebugWindowText<x, y, w, h> {
     }
 };
 
+
+template <size_t x, size_t y, size_t w, size_t h>
+struct SpriteInfo: DebugWindowText<x, y, w, h> {
+    using DW = DebugWindowText<x, y, w, h>;
+    std::stringstream ss;
+    void handle(Bus& bus, PPU& ppu){
+        ss << "SpriteInfo:\n"
+            << " SpriteMode:" << (ppu.sprite_mode == PPU::SpriteMode::m8x8 ? 8 : 16) << '\n'
+           << "  SecondaryOAMSize:"    <<   std::dec << ppu.secondary_oam.size() << '\n'
+           << "  OAMBufferSize:"      <<   std::dec << ppu.secondary_oam_buffer.size() << '\n'
+            << " Y:" << '\n';
+        for (int i = 0; i < 64; ++i) {
+            ss << std::hex << (unsigned)bus.oam[(i * 4)] << ' ';
+            if (i % 8 == 7) ss << '\n';
+        }
+        auto s = ss.str();
+        DW::move();
+        DW::draw(s.c_str(), 13.f);
+        ss.str("");
+    }
+};
+
+template <size_t x, size_t y, size_t w, size_t h, size_t t_w = 8 * 8 + 8, size_t t_h = 8 * 8 + 8>
+struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
+    using DW = DebugWindowWithTexture<x, y, w, h, t_w, t_h>;
+    enum View {
+        Tile, Num, ViewCount
+    } current_view = Tile;
+    std::stringstream ss;
+    void handle(Bus& bus, PPU& ppu){
+        size_t buffer_index = 0;
+        size_t oam_index = 0;
+        size_t k = 0;
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
+            current_view = static_cast<View>((current_view + 1) % ViewCount);
+        if (current_view == Tile) {
+            for (int i = 0; i < t_h; ++i){
+                if (i % 9 == 8){
+                    for (int z = 0; z < t_w; z++){
+                        DW::buffer[buffer_index++] = RED;
+                    }
+                    k = 0;
+                    oam_index += 8;
+                } else {
+                    for (int j = 0; j < 8; ++j) {
+                        auto pt_index = *(bus.oam + ((oam_index + j) * 4) + 1);
+                        unsigned short addr_l = ppu.mem.read(bus,
+                                                             constants::PATTERN_TABLE0_BEGIN + (pt_index * 16) + k);
+                        unsigned short addr_h = ppu.mem.read(bus,
+                                                             constants::PATTERN_TABLE0_BEGIN + (pt_index * 16) + k + 8);
+                        auto current_tile = DW::get_tile_row(addr_l, addr_h);
+                        for (int l = 0; l < 8; ++l) {
+                            DW::buffer[buffer_index++] = current_tile[l];
+                        }
+                        DW::buffer[buffer_index++] = RED;
+                    }
+                    ++k;
+                }
+            }
+            DW::move();
+            DW::handle();
+        } else {
+            for (int i = 0; i < 64; ++i) {
+                ss <<  (unsigned)bus.oam[(i * 4) + 1] << " ";
+                if (i % 8 == 7) ss << '\n';
+            }
+            auto s = ss.str();
+            DrawText(s.c_str(), DW::rec.x, DW::rec.y, 12.3f, BLACK);
+            ss.str("");
+            DW::move();
+        }
+    }
+};
+
 template <size_t x, size_t y>
 struct DummyTilesGrid {
     void draw(float cell_w, float cell_h) {
@@ -619,7 +693,4 @@ struct DummyTilesGrid {
         }
     }
 };
-
-
-
 #endif //NES_DEBUG_H
