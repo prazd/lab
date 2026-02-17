@@ -608,16 +608,57 @@ struct PPUInfo: DebugWindowText<x, y, w, h> {
 template <size_t x, size_t y, size_t w, size_t h>
 struct SpriteInfo: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
+    std::array<unsigned char, 64> y_values{};
+
     std::stringstream ss;
+    enum ViewVersion {
+        Dec, Hex, ViewVersionCount
+    } view_version = Dec;
+
+    enum InfoVersion {
+        OAM_YV, SecondaryOAMV, FullOAMV, InfoVersionCount
+    } info_version = OAM_YV;
+
+    bool sorted = false;
     void handle(Bus& bus, PPU& ppu){
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
+            view_version = static_cast<ViewVersion>((view_version + 1) % ViewVersionCount);
+        else if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_S))
+            sorted = !sorted;
+        else if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
+            info_version = static_cast<InfoVersion>((info_version + 1) % InfoVersionCount);
+
         ss << "SpriteInfo:\n"
             << " SpriteMode:" << (ppu.sprite_mode == PPU::SpriteMode::m8x8 ? 8 : 16) << '\n'
            << "  SecondaryOAMSize:"    <<   std::dec << ppu.secondary_oam.size() << '\n'
            << "  OAMBufferSize:"      <<   std::dec << ppu.secondary_oam_buffer.size() << '\n'
-            << " Y:" << '\n';
-        for (int i = 0; i < 64; ++i) {
-            ss << std::hex << (unsigned)bus.oam[(i * 4)] << ' ';
-            if (i % 8 == 7) ss << '\n';
+        << (view_version == Dec ? std::dec : std::hex);
+
+        if (info_version == OAM_YV) {
+            ss << "OAM_Y:\n";
+            for (int i = 0; i < 64; ++i)
+                y_values[i] = bus.oam[(i * 4)];
+            if (sorted) std::sort(y_values.begin(), y_values.end());
+
+            for (int i = 0; i < 64; ++i) {
+                ss << (unsigned)y_values[i] << ' ';
+                if (i % 8 == 7) ss << '\n';
+            }
+        } else if (info_version == SecondaryOAMV) {
+            ss << "SecondaryOAMBuffer:\n";
+            for (int i = 0; i < 8; ++i){
+                ss
+                << (unsigned)ppu.secondary_oam_buffer[i].y_pos << ' '
+                << (unsigned)ppu.secondary_oam_buffer[i].pt_index << ' '
+                << (unsigned)ppu.secondary_oam_buffer[i].attrib << ' '
+                << (unsigned)ppu.secondary_oam_buffer[i].x_pos << '\n';
+            }
+        } else if (info_version == FullOAMV) {
+            ss << "OAM:\n";
+            for (int i = 0; i < 256; ++i){
+                ss << (unsigned)bus.oam[i] << ' ';
+                if (i % 16 == 15) ss << '\n';
+            }
         }
         auto s = ss.str();
         DW::move();
