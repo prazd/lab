@@ -420,9 +420,14 @@ void PPU::draw_pixel(Bus &bus) {
     unsigned char sprite_attrib = 0;
     bool is_sprite_prio = false;
     bool is_sprite = false;
+    bool is_horizontal_flip = false;
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
         if (secondary_oam[i].x_count == 0 && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
-            sprite_data = (((secondary_oam[i].shift_h >> 7) & 1) << 1)  | (secondary_oam[i].shift_l >> 7) & 1;
+            is_horizontal_flip = (secondary_oam[i].attrib >> 6) & 1;
+            sprite_data =
+                    is_horizontal_flip ?
+                    ((secondary_oam[i].shift_h & 1) << 1)  | (secondary_oam[i].shift_l  & 1)
+                    : (((secondary_oam[i].shift_h >> 7) & 1) << 1)  | (secondary_oam[i].shift_l >> 7) & 1;
             sprite_attrib = secondary_oam[i].attrib & 0x3;
             is_sprite_prio = (secondary_oam[i].attrib >> 5) & 1;
             break;
@@ -445,8 +450,7 @@ void PPU::draw_pixel(Bus &bus) {
 
     unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
 
-    unsigned char pixel_index = mem.read(bus, is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN + index);
-
+    unsigned char pixel_index = mem.read(bus, (is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN) + index);
 
     update_internal_display(palette[pixel_index]);
 
@@ -454,8 +458,13 @@ void PPU::draw_pixel(Bus &bus) {
         if (secondary_oam[i].x_count > 0) {
             --secondary_oam[i].x_count;
         } else {
-            secondary_oam[i].shift_l <<= 1;
-            secondary_oam[i].shift_h <<= 1;
+            if (is_horizontal_flip){
+                secondary_oam[i].shift_l >>= 1;
+                secondary_oam[i].shift_h >>= 1;
+            } else {
+                secondary_oam[i].shift_l <<= 1;
+                secondary_oam[i].shift_h <<= 1;
+            }
         }
     }
 
@@ -475,18 +484,21 @@ void PPU::tick(Bus& bus) {
         // 257-320
         secondary_oam.reset();
         for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
+            bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1;
             auto pt_base = (sprite_mode == m8x8 ?
-                            (!ppuctrl.bg_pattern_table_addr ? constants::PATTERN_TABLE0_BEGIN
+                            (!ppuctrl.pattern_table_addr8x8 ? constants::PATTERN_TABLE0_BEGIN
                                                             : constants::PATTERN_TABLE1_BEGIN) :
                             (secondary_oam_buffer[i].pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN
                                                                   : constants::PATTERN_TABLE0_BEGIN));
 
             auto pt_index = (sprite_mode == m8x8 ? secondary_oam_buffer[i].pt_index : secondary_oam_buffer[i].pt_index & 0xfe);
             secondary_oam.push_back(SpriteData{
-                    .shift_l =  mem.read(bus, pt_base +  pt_index +
+                    .shift_l =  mem.read(bus, pt_base + (pt_index * 16) +
                                               (current_y + 1 - secondary_oam_buffer[i].y_pos)),
-                    .shift_h =  mem.read(bus, pt_base + pt_index +
+//                                                      (is_vertical_flip ?  secondary_oam_buffer[i].y_pos + 8 : secondary_oam_buffer[i].y_pos))),
+                    .shift_h =  mem.read(bus, pt_base + (pt_index * 16) +
                                               (current_y + 1 - secondary_oam_buffer[i].y_pos + 8)),
+//                                                      (is_vertical_flip ?  secondary_oam_buffer[i].y_pos + 16 : secondary_oam_buffer[i].y_pos + 8))),
                     .x_count =  secondary_oam_buffer[i].x_pos,
                     .attrib  =  secondary_oam_buffer[i].attrib,
             });

@@ -40,6 +40,9 @@ struct SimpleDeque {
     }
     void reset(){
         for (int i = 0; i < current_sz; ++i) reinterpret_cast<T*>(buffer + i * sizeof(T))->~T();
+#if UI_DEBUGGER
+        std::memset(buffer, 0, sizeof(T) * sz);
+#endif
         current_sz = 0;
     }
     ~SimpleDeque(){

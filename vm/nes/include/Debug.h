@@ -667,12 +667,13 @@ struct SpriteInfo: DebugWindowText<x, y, w, h> {
     }
 };
 
-template <size_t x, size_t y, size_t w, size_t h, size_t t_w = 8 * 8 + 8, size_t t_h = 8 * 8 + 8>
+template <size_t x, size_t y, size_t w, size_t h, size_t t_w = 8 * 8 + 8, size_t t_h = (8 * 8 * 2) + 8>
 struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     using DW = DebugWindowWithTexture<x, y, w, h, t_w, t_h>;
     enum View {
         Tile, Num, ViewCount
     } current_view = Tile;
+
     std::stringstream ss;
     void handle(Bus& bus, PPU& ppu){
         size_t buffer_index = 0;
@@ -680,9 +681,10 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
         size_t k = 0;
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
             current_view = static_cast<View>((current_view + 1) % ViewCount);
+
         if (current_view == Tile) {
-            for (int i = 0; i < t_h; ++i){
-                if (i % 9 == 8){
+            for (int i = 0 ; i < t_h; ++i){
+                if (i % 17 == 16){
                     for (int z = 0; z < t_w; z++){
                         DW::buffer[buffer_index++] = RED;
                     }
@@ -691,17 +693,26 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                 } else {
                     for (int j = 0; j < 8; ++j) {
                         auto pt_index = *(bus.oam + ((oam_index + j) * 4) + 1);
+                        auto attrib = *(bus.oam + ((oam_index + j) * 4) + 2);
+                        auto pt_base =
+                                ppu.sprite_mode == PPU::SpriteMode::m8x8 ?
+                                       (ppu.ppuctrl.pattern_table_addr8x8 & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN) :
+                                (pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN);
+
                         unsigned short addr_l = ppu.mem.read(bus,
-                                                             constants::PATTERN_TABLE0_BEGIN + (pt_index * 16) + k);
+                                                             pt_base + ((ppu.sprite_mode == PPU::SpriteMode::m8x8 ? pt_index : (pt_index & 0xfe)) * 16) + k);
                         unsigned short addr_h = ppu.mem.read(bus,
-                                                             constants::PATTERN_TABLE0_BEGIN + (pt_index * 16) + k + 8);
+                                                             pt_base + ((ppu.sprite_mode == PPU::SpriteMode::m8x8 ? pt_index : (pt_index & 0xfe)) * 16) + k + 8);
+
                         auto current_tile = DW::get_tile_row(addr_l, addr_h);
+
+                        if ((attrib >> 6) & 1) std::reverse(current_tile.begin(), current_tile.end());
                         for (int l = 0; l < 8; ++l) {
                             DW::buffer[buffer_index++] = current_tile[l];
                         }
                         DW::buffer[buffer_index++] = RED;
                     }
-                    ++k;
+                    if ((ppu.sprite_mode == PPU::SpriteMode::m8x8 && i % 2 == 1) || ppu.sprite_mode  == PPU::SpriteMode::m8x16) ++k;
                 }
             }
             DW::move();
