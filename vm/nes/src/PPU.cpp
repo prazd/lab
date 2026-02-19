@@ -484,21 +484,20 @@ void PPU::tick(Bus& bus) {
         // 257-320
         secondary_oam.reset();
         for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
-            bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1;
+//            bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1; // todo
             auto pt_base = (sprite_mode == m8x8 ?
                             (!ppuctrl.pattern_table_addr8x8 ? constants::PATTERN_TABLE0_BEGIN
                                                             : constants::PATTERN_TABLE1_BEGIN) :
                             (secondary_oam_buffer[i].pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN
                                                                   : constants::PATTERN_TABLE0_BEGIN));
-
             auto pt_index = (sprite_mode == m8x8 ? secondary_oam_buffer[i].pt_index : secondary_oam_buffer[i].pt_index & 0xfe);
+            auto diff =  (current_y + 1 - secondary_oam_buffer[i].y_pos);
+            unsigned char current_index = diff >= 8 ? pt_index + 1 : pt_index;
             secondary_oam.push_back(SpriteData{
-                    .shift_l =  mem.read(bus, pt_base + (pt_index * 16) +
-                                              (current_y + 1 - secondary_oam_buffer[i].y_pos)),
-//                                                      (is_vertical_flip ?  secondary_oam_buffer[i].y_pos + 8 : secondary_oam_buffer[i].y_pos))),
-                    .shift_h =  mem.read(bus, pt_base + (pt_index * 16) +
-                                              (current_y + 1 - secondary_oam_buffer[i].y_pos + 8)),
-//                                                      (is_vertical_flip ?  secondary_oam_buffer[i].y_pos + 16 : secondary_oam_buffer[i].y_pos + 8))),
+                    .shift_l =  mem.read(bus, pt_base + (current_index * 16) +
+                                              (diff % 8)),
+                    .shift_h =  mem.read(bus, pt_base + (current_index * 16) +
+                                              (diff % 8) + 8),
                     .x_count =  secondary_oam_buffer[i].x_pos,
                     .attrib  =  secondary_oam_buffer[i].attrib,
             });

@@ -692,23 +692,41 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                     oam_index += 8;
                 } else {
                     for (int j = 0; j < 8; ++j) {
-                        auto pt_index = *(bus.oam + ((oam_index + j) * 4) + 1);
-                        auto attrib = *(bus.oam + ((oam_index + j) * 4) + 2);
+                        auto pt_index =  *(bus.oam + ((oam_index + j) * 4) + 1);
+                        auto attrib =    *(bus.oam + ((oam_index + j) * 4) + 2);
+
+                        unsigned char current_index = k < 8 ?
+                                (ppu.sprite_mode ==  PPU::SpriteMode::m8x8 ? pt_index : (pt_index & 0xfe)) :
+                                ((pt_index & 0xfe) + 1);
+
+                        bool is_horizontal_flip = ((attrib >> 6) & 1);
                         auto pt_base =
                                 ppu.sprite_mode == PPU::SpriteMode::m8x8 ?
                                        (ppu.ppuctrl.pattern_table_addr8x8 & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN) :
                                 (pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN);
 
-                        unsigned short addr_l = ppu.mem.read(bus,
-                                                             pt_base + ((ppu.sprite_mode == PPU::SpriteMode::m8x8 ? pt_index : (pt_index & 0xfe)) * 16) + k);
-                        unsigned short addr_h = ppu.mem.read(bus,
-                                                             pt_base + ((ppu.sprite_mode == PPU::SpriteMode::m8x8 ? pt_index : (pt_index & 0xfe)) * 16) + k + 8);
+                        unsigned char shift_l = ppu.mem.read(bus,
+                                                             pt_base + (current_index * 16) + (k % 8));
+                        unsigned char shift_h = ppu.mem.read(bus,
+                                                             pt_base + (current_index * 16) + (k % 8) + 8);
 
-                        auto current_tile = DW::get_tile_row(addr_l, addr_h);
-
-                        if ((attrib >> 6) & 1) std::reverse(current_tile.begin(), current_tile.end());
+                        unsigned char attrib_high_bit = (attrib >> 3) & 1;
+                        unsigned char attrib_low_bit = (attrib >> 2) & 1;
                         for (int l = 0; l < 8; ++l) {
-                            DW::buffer[buffer_index++] = current_tile[l];
+                            auto res =
+                                    is_horizontal_flip ?
+                                    ((shift_h & 1) << 1)  | (shift_l  & 1)
+                                                       : (((shift_h >> 7) & 1) << 1)  | (shift_l >> 7) & 1;
+                            unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
+                            unsigned char pixel_index = ppu.mem.read(bus, constants::SPRITE_PALETTE_BEGIN + index);
+                            DW::buffer[buffer_index++] = ppu.palette[pixel_index];
+                            if (is_horizontal_flip){
+                                shift_l >>= 1;
+                                shift_h >>= 1;
+                            } else {
+                                shift_l <<= 1;
+                                shift_h <<= 1;
+                            }
                         }
                         DW::buffer[buffer_index++] = RED;
                     }
