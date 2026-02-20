@@ -14,7 +14,7 @@ struct Controller {
     bool latch1 = false;
 
     KeyboardKey keys1[8] = {
-        KEY_Q,KEY_D,
+        KEY_Q,KEY_E,
         KEY_SPACE,KEY_ENTER,
         KEY_UP,KEY_DOWN,
         KEY_LEFT, KEY_RIGHT

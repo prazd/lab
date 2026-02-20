@@ -188,7 +188,6 @@ struct PPU {
     unsigned char pattern_table_h = 0;
 
     void fetch_tile_data_step(Bus& bus);
-    void fill_shift_registers(Bus& bus);
 
     unsigned short base_name_table_address{};
     unsigned short bg_pattern_table_address{};
@@ -229,6 +228,10 @@ struct PPU {
     } sprite_mode = m8x8;
     bool vblank_nmi_enable = false;
 
+
+#if DEBUG_MODE
+    bool is_sprite_off = false;
+#endif
     unsigned char x_scroll{};
     unsigned char y_scroll{};
 

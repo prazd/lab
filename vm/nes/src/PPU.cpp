@@ -141,7 +141,14 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                          current_oam_index = 4 * sprite_evaluation_index; // y_pos
                          tmp_oam_value = bus.oam[current_oam_index];
                          auto next_line = current_y + 1;
-                         copy_in_progress = (next_line >= tmp_oam_value  && next_line < tmp_oam_value + sprite_sz); // + sprite height
+                         copy_in_progress = ((next_line >= tmp_oam_value  && next_line < tmp_oam_value + sprite_sz)
+                                 && tmp_oam_value <= 239
+                                 &&
+                                 !(bus.oam[current_oam_index] == 0 &&
+                                 bus.oam[current_oam_index+1] == 0 &&
+                                 bus.oam[current_oam_index+2] == 0 &&
+                                 bus.oam[current_oam_index+3] == 0)
+                                 ); // + sprite height
                          if (!copy_in_progress) {
                              current_sprite_evaluation_step = SpriteIncrement;
                          } else {
@@ -262,8 +269,8 @@ void PPU::bg_tick(Bus &bus) {
             v |= (t & 0x1f);
             v &= 0xfbff;
             v |= (t & 0x400);
-        } else if (current_scanline_cycle >= 321 && current_scanline_cycle < 337) {
-            if (ppumask.enable_background_rendering) fetch_tile_data_step(bus);
+        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && ppumask.enable_background_rendering) {
+            fetch_tile_data_step(bus);
         }
         if (current_scanline_cycle == 341){
 #if UI_DEBUGGER
@@ -278,21 +285,25 @@ void PPU::bg_tick(Bus &bus) {
             bus.nmi_interrupt_flip_flop = true;
         }
     } else if (current_y == 261){
-        if (current_scanline_cycle == 341){
-            // update shift registers
+        if (current_scanline_cycle == 1 && ppumask.enable_background_rendering ){
+            std::copy(internal_display.begin(), internal_display.end(), display.begin());
             ppustatus.vblank_flag = 0;
             bus.ppustatus.reg &= 0x7f;
             bus.nmi_interrupt_flip_flop = false; // todo: check
-            if (ppumask.enable_background_rendering){
-                std::copy(internal_display.begin(), internal_display.end(), display.begin());
-                v &= 0x841f;
-                v |= ((t & (~0x841f & 0xffff)));
-                fill_shift_registers(bus);
+        } else if (current_scanline_cycle == 280 && ppumask.enable_background_rendering) {
+            v &= 0x841f;
+            v |= ((t & (~0x841f & 0xffff)));
+        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && ppumask.enable_background_rendering){
+            fetch_tile_data_step(bus);
+            shift_register_high <<= 1;
+            shift_register_low <<= 1;
+            attributes_low <<= 1;
+            attributes_high <<= 1;
+        } else if (current_scanline_cycle == 341 && ppumask.enable_background_rendering){
 #if UI_DEBUGGER
                 frame_start = true;
                 ++frames_count;
 #endif
-            }
         }
     }
 }
@@ -380,41 +391,6 @@ void PPU::fetch_tile_data_step(Bus& bus) {
     }
 }
 
-void PPU::fill_shift_registers(Bus &bus) {
-    auto get_next_shifts = [&]() -> std::pair<unsigned short, unsigned char>{
-        unsigned char x_tile_n = (v & 0x1f);
-        unsigned char y_tile_n = ((v >> 5) & 0x1f);
-        auto nt_byte = mem.read(bus,  constants::NAME_TABLE0_BEGIN + (y_tile_n * 32) + x_tile_n);
-        auto val = mem.read(bus, constants::ATTRIBUTE_TABLE0_BEGIN + 0x3C0 + (y_tile_n/4 * 8) + x_tile_n/4);
-        auto shift_y = (y_tile_n/2) % 2;
-        auto shift_x = (x_tile_n/2) % 2;
-        auto attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
-        auto pattern_table_l = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, false, ppuctrl.bg_pattern_table_addr));
-        auto pattern_table_h = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, true, ppuctrl.bg_pattern_table_addr));
-        unsigned char add_val = (((v & 0x1f) + 1) % 32);
-        if (!add_val)
-            v ^= 0x400;
-        v &= 0xffe0;
-        v |= add_val;
-        return {((pattern_table_h << 8) | pattern_table_l), attrib_value};
-    };
-    auto h = get_next_shifts();
-    shift_register_low |= (h.first & 0xff) << 8;
-    shift_register_high |= h.first & 0xff00;
-    attributes_low &= 0xff;
-    attributes_high &= 0xff;
-    attributes_low |= (h.second & 0x1) ? 0xff00 : 0;
-    attributes_high |= (h.second & 0x2) ? 0xff00 : 0;
-
-    auto l = get_next_shifts();
-    shift_register_low |= (l.first & 0xff);
-    shift_register_high |= ((l.first >> 8) & 0xff);
-    attributes_low &= 0xff00;
-    attributes_high &= 0xff00;
-    attributes_low |= (h.second & 0x1) ? 0xff : 0;
-    attributes_high |= (h.second & 0x2) ? 0xff : 0;
-}
-
 void PPU::draw_pixel(Bus &bus) {
     unsigned char sprite_data = 0;
     unsigned char sprite_attrib = 0;
@@ -477,30 +453,35 @@ void PPU::draw_pixel(Bus &bus) {
 void PPU::tick(Bus& bus) {
     // TODO: debug
     bg_tick(bus);
+#if DEBUG_MODE
+    if (!is_sprite_off)
+#endif
     sprite_evaluate_tick(bus);
     if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && ppumask.enable_background_rendering) {
         draw_pixel(bus);
     } else if (current_scanline_cycle == 257) {
         // 257-320
         secondary_oam.reset();
-        for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
+        if (ppumask.enable_background_rendering) {
+            for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
 //            bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1; // todo
-            auto pt_base = (sprite_mode == m8x8 ?
-                            (!ppuctrl.pattern_table_addr8x8 ? constants::PATTERN_TABLE0_BEGIN
-                                                            : constants::PATTERN_TABLE1_BEGIN) :
-                            (secondary_oam_buffer[i].pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN
-                                                                  : constants::PATTERN_TABLE0_BEGIN));
-            auto pt_index = (sprite_mode == m8x8 ? secondary_oam_buffer[i].pt_index : secondary_oam_buffer[i].pt_index & 0xfe);
-            auto diff =  (current_y + 1 - secondary_oam_buffer[i].y_pos);
-            unsigned char current_index = diff >= 8 ? pt_index + 1 : pt_index;
-            secondary_oam.push_back(SpriteData{
-                    .shift_l =  mem.read(bus, pt_base + (current_index * 16) +
-                                              (diff % 8)),
-                    .shift_h =  mem.read(bus, pt_base + (current_index * 16) +
-                                              (diff % 8) + 8),
-                    .x_count =  secondary_oam_buffer[i].x_pos,
-                    .attrib  =  secondary_oam_buffer[i].attrib,
-            });
+                auto pt_base = (sprite_mode == m8x8 ?
+                                (!ppuctrl.pattern_table_addr8x8 ? constants::PATTERN_TABLE0_BEGIN
+                                                                : constants::PATTERN_TABLE1_BEGIN) :
+                                (secondary_oam_buffer[i].pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN
+                                                                      : constants::PATTERN_TABLE0_BEGIN));
+                auto pt_index = (sprite_mode == m8x8 ? secondary_oam_buffer[i].pt_index : secondary_oam_buffer[i].pt_index & 0xfe);
+                auto diff =  (current_y + 1 - secondary_oam_buffer[i].y_pos);
+                unsigned char current_index = diff >= 8 ? pt_index + 1 : pt_index;
+                secondary_oam.push_back(SpriteData{
+                        .shift_l =  mem.read(bus, pt_base + (current_index * 16) +
+                                                  (diff % 8)),
+                        .shift_h =  mem.read(bus, pt_base + (current_index * 16) +
+                                                  (diff % 8) + 8),
+                        .x_count =  secondary_oam_buffer[i].x_pos,
+                        .attrib  =  secondary_oam_buffer[i].attrib,
+                });
+            }
         }
         secondary_oam_buffer.reset();
     }

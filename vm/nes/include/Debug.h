@@ -408,6 +408,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
             320.0f,
     };
     Rectangle mirroring_switch_button = {DW::rec.x-30, DW::rec.y+DW::rec.height-30, 30, 30};
+    Rectangle sprite_off_button = {DW::rec.x-30, DW::rec.y+DW::rec.height, 30, 30};
     std::stringstream ss;
     void update_reg(CPU& cpu, PPU& ppu, RegNum rn, unsigned short value){
         switch (rn) {
@@ -425,9 +426,13 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
     void handle(CPU& cpu, PPU& ppu, Bus& bus) {
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
         mirroring_switch_button = {DW::rec.x-30, DW::rec.y+DW::rec.height-30, 30, 30};
+        sprite_off_button = {DW::rec.x-30, DW::rec.y+DW::rec.height, 30, 30};
         if (CheckCollisionPointRec(GetMousePosition(), mirroring_switch_button) && IsMouseButtonPressed(0))
             bus.mapper.current_screen_mirroring =
                     static_cast<Mapper::ScreenMirroring>((bus.mapper.current_screen_mirroring + 1) % Mapper::ScreenMirroring::MirroringCount);
+        if (CheckCollisionPointRec(GetMousePosition(), sprite_off_button) && IsMouseButtonPressed(0))
+            ppu.is_sprite_off = !ppu.is_sprite_off;
+
 
         ss  << std::dec << " Cycles count:" << cpu.cycles_count << '\n'
         << " CPU:\n\n"
@@ -445,17 +450,14 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  Nf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::N)) << ' '
         << " \n PPU:\n\n"
         << "  V:" << (unsigned)(ppu.v) << '\n'
-        << " Coarse(X):" << (unsigned)(ppu.v & 0x1f) << '\n'
-        << " Coarse(Y):" << (unsigned)((ppu.v >> 5) & 0x1f) << '\n'
+        << " Coarse(X):" << (unsigned)(ppu.v & 0x1f) << " Fine(X):" <<  (unsigned)(ppu.x_scroll) << '\n'
+        << " Coarse(Y):" << (unsigned)((ppu.v >> 5) & 0x1f) << " Fine(Y):" <<  (unsigned)((ppu.v >> 12) & 0x7) << '\n'
         << "  NT:" << (unsigned)((ppu.v >> 10) & 0x3) << '\n'
         << "  X:" << (unsigned)(ppu.x) << '\n'
         << "  T:" << (unsigned)(ppu.t) << '\n'
         << "  W:" << (unsigned)(ppu.w) << '\n'
         << "  VBLank:" << (unsigned)(ppu.ppustatus.vblank_flag) << '\n'
         << "  Bus VBLank:" << (unsigned)(bus.ppustatus.reg & 0x80) << '\n'
-#if UI_DEBUGGER
-
-#endif
         << std::dec << "  Cycles:" << ppu.current_scanline_cycle
         << "  Scanline:" << ppu.current_y;
         ss << "\nScreenMirroring:";
@@ -474,6 +476,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         auto s = ss.str();
         DW::draw(s.c_str(), 15.f);
         DW::draw_text_button(mirroring_switch_button, "MS", BLACK);
+        DW::draw_text_button(sprite_off_button, "S_OFF", BLACK);
         ss.str("");
         DW::move();
         u_input.draw();
