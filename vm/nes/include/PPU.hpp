@@ -97,19 +97,6 @@ struct PPU {
     struct Sprite {
         unsigned char y_pos{};
         unsigned char pt_index{}; //  Index number of the sprite in the pattern tables.
-//        struct {
-//            unsigned char color: 2{}; // Most significant two bits of the colour
-//            unsigned char: 3;
-//            unsigned char priority_flag:1{}; // Indicates whether this sprite has priority over the background
-//            unsigned char flip_horizontally:1{};
-//            unsigned char flip_vertically:1{};
-//            inline void set(unsigned char val){
-//                color = val & 0x3;
-//                priority_flag = (val >> 5) & 1;
-//                flip_horizontally = (val >> 6) & 1;
-//                flip_vertically = (val >> 7) & 1;
-//            };
-//        } attrib;
         unsigned char attrib{};
         unsigned char x_pos{};
     };
@@ -124,7 +111,20 @@ struct PPU {
     SimpleDeque<Sprite, 8> secondary_oam_buffer{};
     SimpleDeque<SpriteData, 8> secondary_oam{};
 
-
+#if DEBUG_MODE
+    struct PixelMixingDebugView {
+        enum Mode: unsigned char {
+            Bg = 0,
+            Sp = 1,
+            BgSp = 2,
+            NBgSp = 3,
+        };
+        unsigned char data{};
+        inline void set(bool val, Mode m){ data &= ((~(1 << m)) & 0x7); data |= (val << m);}
+        inline void m_switch(Mode m){ data ^= (1 << m);}
+        inline bool get(Mode m){return (data >> m) & 1;}
+    } pixel_mixing_debug_view{};
+#endif
     void draw_pixel(Bus& bus);
 
     struct PPUCTRL {
@@ -231,6 +231,7 @@ struct PPU {
 
 #if DEBUG_MODE
     bool is_sprite_off = false;
+    bool run = false;
 #endif
     unsigned char x_scroll{};
     unsigned char y_scroll{};

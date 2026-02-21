@@ -274,6 +274,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle button5;
     Rectangle button6;
     Rectangle button7;
+    Rectangle button8;
 
     Rectangle sync_button;
     Rectangle change_mode_button;
@@ -287,6 +288,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       button5{DW::rec.x + 40 * 4, DW::rec.y + h, 40, 40},
                                       button6{DW::rec.x + 40 * 5, DW::rec.y + h, 40, 40},
                                       button7{DW::rec.x + 40 * 6, DW::rec.y + h, 40, 40},
+                                      button8{DW::rec.x + 40 * 7, DW::rec.y + h, 40, 40},
                                       sync_button{DW::rec.x, DW::rec.y + h + 40, 40, 40},
                                       change_mode_button{DW::rec.x + 40, DW::rec.y + h + 40, 40, 40}
                                       {}
@@ -296,7 +298,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         next = (CheckCollisionPointRec(GetMousePosition(), button1) && IsMouseButtonPressed(0));
     }
 
-    void draw(CPU& cpu, Bus& bus) {
+    void draw(CPU& cpu, PPU& ppu, Bus& bus) {
         line_button = {DW::rec.x - 20, DW::rec.y, 10, 10};
         button1 = {DW::rec.x, DW::rec.y + h, 40, 40};
         button2 = {DW::rec.x + 40, DW::rec.y + h, 40, 40};
@@ -305,6 +307,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         button5 = {DW::rec.x + 40 * 4, DW::rec.y + h, 40, 40};
         button6 = {DW::rec.x + 40 * 5, DW::rec.y + h, 40, 40};
         button7 = {DW::rec.x + 40 * 6, DW::rec.y + h, 40, 40};
+        button8 = {DW::rec.x + 40 * 7, DW::rec.y + h, 40, 40};
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
 
         change_mode_button = {DW::rec.x + 40, DW::rec.y + h + 40, 40, 40};
@@ -336,11 +339,12 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             is_one_tick_ppu_active = true;
         else if (CheckCollisionPointRec(GetMousePosition(), button7) && run_mode == PPU_M && IsMouseButtonPressed(0))
             is_one_tick_ppu_active = true;
+        else if (CheckCollisionPointRec(GetMousePosition(), button8) && run_mode == PPU_M && IsMouseButtonPressed(0))
+            ppu.run = !ppu.run;
         else if (CheckCollisionPointRec(GetMousePosition(), sync_button) && IsMouseButtonPressed(0))
             should_sync = true;
         else if (CheckCollisionPointRec(GetMousePosition(), change_mode_button) && IsMouseButtonPressed(0))
             run_mode = static_cast<RunMode>((run_mode + 1) % RunModeCount);
-
 
         for (int i = 0; i < 10; ++i){
             auto r = Rectangle{line_button.x, line_button.y + i * (line_button.height + 25.f), line_button.width, line_button.height};
@@ -378,6 +382,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button5, " frame_s", GREEN, 15.f);
             DW::draw_text_button(button6, " dot_s", GREEN, 15.f);
             DW::draw_text_button(button7, " dot", GREEN, 15.f);
+            DW::draw_text_button(button8, " run", GREEN, 15.f);
         }
         DW::draw_text_button(sync_button, " sync", GREEN, 15.f);
         DW::draw_text_button(change_mode_button, " mode", GREEN, 15.f);

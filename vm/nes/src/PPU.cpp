@@ -234,7 +234,7 @@ void PPU::bg_tick(Bus &bus) {
 #if UI_DEBUGGER
             frame_start = false;
             line_start = false;
-            if (current_y == 0 && current_scanline_cycle == 0)
+            if (current_y == 0 && current_scanline_cycle == 0 && !run)
                 internal_display.fill(WHITE);
 #endif
             return;}
@@ -294,14 +294,14 @@ void PPU::bg_tick(Bus &bus) {
             v &= 0x841f;
             v |= ((t & (~0x841f & 0xffff)));
         } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && ppumask.enable_background_rendering){
-            fetch_tile_data_step(bus);
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
             attributes_high <<= 1;
+            fetch_tile_data_step(bus);
         } else if (current_scanline_cycle == 341 && ppumask.enable_background_rendering){
 #if UI_DEBUGGER
-                frame_start = true;
+                    frame_start = true;
                 ++frames_count;
 #endif
         }
@@ -428,6 +428,17 @@ void PPU::draw_pixel(Bus &bus) {
 
     unsigned char pixel_index = mem.read(bus, (is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN) + index);
 
+#if DEBUG_MODE
+    if (bg_data == 0 && sprite_data != 0 && pixel_mixing_debug_view.get(PPU::PixelMixingDebugView::Mode::Bg))
+        update_internal_display(ORANGE);
+    else if  (bg_data != 0 && sprite_data == 0 && pixel_mixing_debug_view.get(PPU::PixelMixingDebugView::Mode::Sp))
+        update_internal_display(PURPLE);
+    else if  (bg_data != 0 && sprite_data != 0 && pixel_mixing_debug_view.get(PPU::PixelMixingDebugView::Mode::BgSp))
+        update_internal_display(BROWN);
+    else if (!bg_data  && !sprite_data && pixel_mixing_debug_view.get(PPU::PixelMixingDebugView::Mode::NBgSp))
+        update_internal_display(GREEN);
+    else
+#endif
     update_internal_display(palette[pixel_index]);
 
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
@@ -443,7 +454,6 @@ void PPU::draw_pixel(Bus &bus) {
             }
         }
     }
-
     shift_register_high <<= 1;
     shift_register_low <<= 1;
     attributes_low <<= 1;

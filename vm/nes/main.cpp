@@ -189,7 +189,7 @@ struct NESVM {
         size_t current_tick = 0;
         static size_t cpu_tick_count = 0;
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active
-                || dis.is_line_jump_active || dis.is_one_tick_ppu_active) && current_tick < constants::PPU_FRAME_CYCLES) {
+                || dis.is_line_jump_active || dis.is_one_tick_ppu_active || ppu.run) && current_tick++ < constants::PPU_FRAME_CYCLES) {
             cpu.debug_run = true;
             ppu.tick(bus);
             if (dis.is_frame_jump_active && ppu.frame_start){
@@ -201,12 +201,14 @@ struct NESVM {
             } else if (dis.is_one_tick_ppu_active) {
                 dis.is_one_tick_ppu_active = false;
             }
-            if (cpu_tick_count % 3 == 2)
-                cpu.tick(bus);
-            ++cpu_tick_count;
-            ++cpu_tick_count;
+            if (cpu_tick_count++ % 3 == 2) cpu.tick(bus);
         }
-        if (!dis.selected_move_active && !dis.is_frame_jump_active && !dis.is_tile_line_jump_active && !dis.is_line_jump_active && !dis.is_one_tick_ppu_active) dis.handle(cpu);
+        if (!dis.selected_move_active &&
+            !dis.is_frame_jump_active &&
+            !dis.is_tile_line_jump_active &&
+            !dis.is_line_jump_active &&
+            !dis.is_one_tick_ppu_active &&
+            !ppu.run) dis.handle(cpu);
     }
 #endif
 
@@ -301,13 +303,14 @@ struct NESVM {
 
         auto img = GenImageColor(constants::DISPLAY_PIXELS_WIDTH, constants::DISPLAY_PIXELS_HEIGHT, WHITE);
         auto display_texture = LoadTextureFromImage(img);
+        Rectangle display_rec = {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f};
         UnloadImage(img);
 
         SetTargetFPS(60);
         while(!WindowShouldClose()){
             frame_execute();
 #if DEBUG_MODE && UI_DEBUGGER
-            dis.draw(cpu, bus);
+            dis.draw(cpu, ppu, bus);
 #endif
 
 #if UI_DEBUGGER
@@ -320,8 +323,8 @@ struct NESVM {
             BeginDrawing();
             ClearBackground(WHITE);
 #if DEBUG_MODE
-            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, {0, 0},0, WHITE);
-            DrawRectangleLinesEx({320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f}, 1.f, BLACK);
+            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, display_rec, {0, 0},0, WHITE);
+            DrawRectangleLinesEx(display_rec, 1.f, BLACK);
             reg_info.handle(cpu, ppu, bus);
 
             handle_up_right_view();
@@ -334,17 +337,25 @@ struct NESVM {
             if (CheckCollisionPointRec(GetMousePosition(), ntv.rec) && IsKeyPressed(KEY_M))
                 current_down_left_view = static_cast<DownLeftView>((current_down_left_view + 1) % DownLeftViewCount);
 
-#endif
-
-            cpu.reset_requested = (IsKeyPressed(KEY_R));
-
-            if (IsKeyPressed(KEY_S))
-                cpu.stop_requested = !cpu.stop_requested;
-
-            if (IsKeyPressed(KEY_X))
-                grid_view_enable = !grid_view_enable;
+            if (CheckCollisionPointRec(GetMousePosition(),display_rec)){
+                if (IsKeyPressed(KEY_S))
+                    cpu.stop_requested = !cpu.stop_requested;
+                if (IsKeyPressed(KEY_X))
+                    grid_view_enable = !grid_view_enable;
+                if (IsKeyPressed(KEY_ONE))
+                    ppu.pixel_mixing_debug_view.m_switch(PPU::PixelMixingDebugView::Mode::Bg);
+                if (IsKeyPressed(KEY_TWO))
+                    ppu.pixel_mixing_debug_view.m_switch(PPU::PixelMixingDebugView::Mode::Sp);
+                if (IsKeyPressed(KEY_THREE))
+                    ppu.pixel_mixing_debug_view.m_switch(PPU::PixelMixingDebugView::Mode::BgSp);
+                if (IsKeyPressed(KEY_FOUR))
+                    ppu.pixel_mixing_debug_view.m_switch(PPU::PixelMixingDebugView::Mode::NBgSp);
+            }
 
             if (grid_view_enable) dtg.draw(22.4f,22.4f);
+#endif
+            cpu.reset_requested = (IsKeyPressed(KEY_R));
+
 
 
             EndDrawing();
