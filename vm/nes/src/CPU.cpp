@@ -504,6 +504,10 @@ void CPU::tick(Bus& bus){
                     } else if (!(--interrupt_handling_cycle)) {
                         handle_interrupt(bus, static_cast<Interrupt>(i));
                         interrupt_handling_in_progress = false;
+#if UI_DEBUGGER
+                        // TODO: check
+                        debug_run = false;
+#endif
                     }
                     break;
                 }

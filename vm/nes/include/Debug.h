@@ -1,9 +1,10 @@
 #ifndef NES_DEBUG_H
 #define NES_DEBUG_H
 #include <sstream>
+#include <iomanip>
 #include "raylib.h"
 #include "PPU.hpp"
-#include <iomanip>
+#include "Cartridge.h"
 
 template <size_t x, size_t y, size_t w, size_t h>
 struct DebugWindow {
@@ -155,8 +156,29 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     using DW = DebugWindowWithTexture<x, y, w, h, t_w, t_h>;
     using TileRow = std::array<Color, 8>;
     // 32 x 30
-    short base_pt_address = constants::PATTERN_TABLE0_BEGIN;
-    short base_nt_address = constants::NAME_TABLE0_BEGIN;
+    enum NameTable{
+        NT0,
+        NT1,
+        NT2,
+        NT3,
+        NameTableCount
+    } current_nt = NT0;
+
+    enum PatternTable{
+        PT0,
+        PT1,
+        PatternTableCount
+    } current_pt = PT0;
+
+    static constexpr std::array<unsigned short, 4> nt_addresses = {
+            constants::NAME_TABLE0_BEGIN,
+            constants::NAME_TABLE1_BEGIN,
+            constants::NAME_TABLE2_BEGIN,
+            constants::NAME_TABLE3_BEGIN,
+    };
+
+    short base_pt_address{};
+    short base_nt_address{};
 
     TileRow get_tile_row(unsigned char a, unsigned char b) {
         std::array<Color, 8> res{};
@@ -168,6 +190,13 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
 
     void handle(PPU& ppu, Bus& bus){
         size_t current = 0;
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
+            current_nt = static_cast<NameTable>((current_nt + 1) % NameTableCount);
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_TWO))
+            current_pt = static_cast<PatternTable>((current_pt + 1) % PatternTableCount);
+
+        base_pt_address = current_pt == PT0 ? constants::PATTERN_TABLE0_BEGIN : constants::PATTERN_TABLE1_BEGIN;
+        base_nt_address = nt_addresses[current_nt];
         if (!bus.mapper.chr.empty()) {
             for (int s = 0; s < 30; ++s){
                 for (int z = 0; z < 8; ++z) {
@@ -611,6 +640,26 @@ struct PPUInfo: DebugWindowText<x, y, w, h> {
         ss.str("");
     }
 };
+
+template <size_t x, size_t y, size_t w, size_t h>
+struct CartridgeInfo: DebugWindowText<x, y, w, h> {
+    using DW = DebugWindowText<x, y, w, h>;
+    std::stringstream ss;
+    void handle(Cartridge& c){
+        ss << "CartridgeInfo:\n"
+           << "  MapperNum:" << std::hex   << c.mapper_num << '\n'
+           << "  CHR_ROM_SZ:" << std::dec  << c.chr_rom_sz << '\n'
+           << "  PRG_ROM_SZ:" << std::dec  << c.prg_rom_sz << '\n'
+           << "  Battery:"  << c.is_battery << '\n'
+           << " Is alternative nt:" << c.is_alternative_nametable << '\n'
+           << " Is horizontal arrangement:" << c.is_horizontal_arrangement << '\n';
+        auto s = ss.str();
+        DW::move();
+        DW::draw(s.c_str(), 13.f);
+        ss.str("");
+    }
+};
+
 
 
 template <size_t x, size_t y, size_t w, size_t h>
