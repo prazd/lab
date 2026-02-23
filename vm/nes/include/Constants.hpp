@@ -84,5 +84,32 @@ namespace constants {
 
     constexpr unsigned short PALETTES_MIRROR_BEGIN = 0x3F20;
     constexpr unsigned short PALETTES_MIRROR_END = 0x3FFF;
+
+// APU
+    constexpr unsigned short PULSE1_DUTY_ENVELOPE = 0x4000;
+    constexpr unsigned short PULSE1_SWEEP = 0x4001;
+    constexpr unsigned short PULSE1_TIMER_LOW = 0x4002;
+    constexpr unsigned short PULSE1_TIMER_HIGH = 0x4003;
+
+    constexpr unsigned short PULSE2_DUTY_ENVELOPE = 0x4004;
+    constexpr unsigned short PULSE2_SWEEP = 0x4005;
+    constexpr unsigned short PULSE2_TIMER_LOW = 0x4006;
+    constexpr unsigned short PULSE2_TIMER_HIGH = 0x4007;
+
+    constexpr unsigned short TRIANGLE_CHAN_LINEAR_COUNTER = 0x4008;
+    constexpr unsigned short TRIANGLE_CHAN_TIMER_LOW = 0x400a;
+    constexpr unsigned short TRIANGLE_CHAN_TIMER_HIGH = 0x400b;
+
+    constexpr unsigned short NOISE_CHAN_ENVELOPE = 0x400c;
+    constexpr unsigned short NOISE_CHAN_LOOP = 0x400e;
+    constexpr unsigned short NOISE_CHAN_LENGTH_COUNTER = 0x400f;
+
+    constexpr unsigned short DMC_CHAN_FREQ = 0x4010;
+    constexpr unsigned short DMC_CHAN_DIRECT_LOAD = 0x4011;
+    constexpr unsigned short DMC_CHAN_SAMPLE_ADDRESS = 0x4012;
+    constexpr unsigned short DMC_CHAN_SAMPLE_LENGTH = 0x4013;
+
+    constexpr unsigned short APU_CONTROL = 0x4015;
+    constexpr unsigned short APU_FRAME_COUNTER = 0x4017;
 }
 #endif //NES_CONSTANTS_HPP
