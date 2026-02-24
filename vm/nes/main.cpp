@@ -156,6 +156,7 @@ struct NESVM {
         NameTableView<1110,432,480,432> ntv{};
         ColorsViewer<1110,432,480,432> cv{};
         SpriteTilesViewer<1110,432,480,432> stv{};
+        MemoryReader<1110,462,450,432> mem_reader{};
 
         PPUInfo<600, 700, 200,300> ppu_info;
         CartridgeInfo<400, 700, 200,300> cartridge_info{};
@@ -171,14 +172,16 @@ struct NESVM {
             NameTableV,
             ColorsV,
             SpriteTilesV,
+            MemoryReaderV,
             DownLeftViewCount
         } current_down_left_view = NameTableV;
 
         auto handle_down_left_view = [&]{
             switch (current_down_left_view) {
-                case NameTableV: {ntv.handle(ppu, bus); break;}
-                case ColorsV:    {cv.handle(bus, ppu);  break;}
-                case SpriteTilesV:    {stv.handle(bus, ppu); break;}
+                case NameTableV:      {ntv.handle(ppu, bus);                break;}
+                case ColorsV:         {cv.handle(bus, ppu);                 break;}
+                case SpriteTilesV:    {stv.handle(bus, ppu);                break;}
+                case MemoryReaderV:   {mem_reader.handle(bus, cpu, ppu); break;}
             }
         };
 

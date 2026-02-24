@@ -179,8 +179,10 @@ struct CPU {
     struct AsmInfo {
         std::string_view mnemonic{};
         unsigned short operand{};
+        unsigned short arg_addr{};
         bool is_accumulator{};
         bool no_operand{};
+        bool show_address{};
     };
 
     inline AsmInfo disassemble(Bus& bus, unsigned short address) {
@@ -219,7 +221,7 @@ struct CPU {
             case SBC:
             {
                 auto arg = get_arg_by_addr(bus, di.addr_mode, address);
-                return {instruction_str[di.i], mem.unsafe_read(bus, arg.addr), arg.is_accumulator, false};
+                return {instruction_str[di.i], mem.unsafe_read(bus, arg.addr), arg.addr, arg.is_accumulator, false, true};
             }
 
             case BCC:
@@ -232,8 +234,8 @@ struct CPU {
             case BVS:
             {
                 auto arg = get_arg_by_addr(bus, di.addr_mode, address);
-                return {instruction_str[di.i], (unsigned short)(address + (char)mem.unsafe_read(bus, arg.addr) + di.bytes), arg.is_accumulator,
-                        false};
+                return {instruction_str[di.i], (unsigned short)(address + (char)mem.unsafe_read(bus, arg.addr) + di.bytes), arg.addr, arg.is_accumulator,
+                        false, true};
             }
 
             case JSR:
@@ -242,7 +244,7 @@ struct CPU {
             case STY:
             {
                 auto arg = get_arg_by_addr(bus, di.addr_mode, address);
-                return {instruction_str[di.i], arg.addr, arg.is_accumulator, false};
+                return {instruction_str[di.i], arg.addr, arg.addr, arg.is_accumulator, false, true};
             }
 
             case TOP:
@@ -274,21 +276,21 @@ struct CPU {
             case TAY:
             case TSX:
             case TXA:
-                { return {instruction_str[di.i], 0, false, true}; }
+                { return {instruction_str[di.i], 0, 0, false, true, false}; }
             case JMP: {
                 if (di.addr_mode == Absolute) {
-                    return {instruction_str[di.i], (unsigned short)(mem.unsafe_read(bus, address + 1) | (mem.unsafe_read(bus, address + 2) << 8)), false,
-                            false};
+                    return {instruction_str[di.i], (unsigned short)(mem.unsafe_read(bus, address + 1) | (mem.unsafe_read(bus, address + 2) << 8)), 0, false,
+                            false, false};
                 } else { // Indirect
                     unsigned short arg_addr = (mem.unsafe_read(bus, address + 1) | (mem.unsafe_read(bus, address + 2) << 8));
                     unsigned char l = mem.unsafe_read(bus, arg_addr);
                     unsigned char h = mem.unsafe_read(bus, (arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
-                    return {instruction_str[di.i],(unsigned short)(l | (h << 8)), false , false};
+                    return {instruction_str[di.i],(unsigned short)(l | (h << 8)), 0, false , false, false};
                 }
             }
 
             default:
-                { return {instruction_str[di.i], 0, false, true}; }
+                { return {instruction_str[di.i], 0, 0, false, true, false}; }
         }
     }
 };

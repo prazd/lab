@@ -385,6 +385,9 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             auto asm_info = cpu.disassemble(bus, pc);
             ss << std::hex << "  "  << pc << " " << asm_info.mnemonic << " ";
             asm_info.is_accumulator ? (ss << "A") : (asm_info.no_operand ? ss : (ss << asm_info.operand));
+            if (asm_info.show_address){
+                ss << " [" << asm_info.arg_addr <<"] ";
+            }
             ss << "\n\n";
             pc += cpu.decode(cpu.mem.read(bus, pc)).bytes;
         }
@@ -660,7 +663,57 @@ struct CartridgeInfo: DebugWindowText<x, y, w, h> {
     }
 };
 
+template <size_t x, size_t y, size_t w, size_t h>
+struct MemoryReader: DebugWindowText<x, y, w, h> {
+    using DW = DebugWindowText<x, y, w, h>;
+    unsigned short target_address{};
+    std::stringstream ss;
+    Rectangle update_target_button;
+    Rectangle mode_button;
+    UserInput<x, y - 30, w, 30> u_input;
+    enum Mode {
+        CPUm, PPUm, ModeCount
+    } mode = CPUm;
+    MemoryReader():
+            update_target_button{DW::rec.x, DW::rec.y+DW::rec.height, 30,30},
+            mode_button{DW::rec.x+30, DW::rec.y+DW::rec.height, 30,30}
+            {}
+    void handle(Bus& bus, CPU& cpu, PPU& ppu){
+        update_target_button = {DW::rec.x, DW::rec.y+DW::rec.height, 30,30};
+        mode_button   = {DW::rec.x+30, DW::rec.y+DW::rec.height, 30,30};
+        u_input.rec   = {DW::rec.x, DW::rec.y-30, DW::rec.width,30};
+        auto mem_print = [](auto& bus, auto& ss, auto& r, unsigned short target_address){
+            auto start_address = target_address - (target_address % 16);
+            ss << "\n "<< start_address << " | ";
+            for (int i = 0; i < 32; ++i){
+                if (i == 16){ ss << "\n "; ss << start_address + i << " | ";}
+                if (start_address + i == target_address)
+                    ss << std::hex << " [ " << (unsigned)r.mem.read(bus, start_address + i) << " ] " << ' ';
+                else
+                    ss << std::hex  << (unsigned)r.mem.read(bus, start_address + i) << ' ';
+            }
+        };
+        if (CheckCollisionPointRec(GetMousePosition(), mode_button) && IsMouseButtonPressed(0))
+            mode = static_cast<Mode>((mode + 1) % ModeCount);
+        if (CheckCollisionPointRec(GetMousePosition(), update_target_button) && IsMouseButtonPressed(0))
+            target_address = std::stoul(u_input.s, nullptr, 16);
 
+        if (mode == CPUm)
+            mem_print(bus, ss, cpu, target_address);
+        else
+            mem_print(bus, ss, ppu, target_address);
+
+        ss << '\n';
+        ss << (mode == CPUm ? "CPU" : "PPU");
+        auto s = ss.str();
+        DW::move();
+        DW::draw(s.c_str(), 13.f);
+        DW::draw_text_button(update_target_button, "update", BLACK);
+        DW::draw_text_button(mode_button, "mode", BLACK);
+        u_input.draw();
+        ss.str("");
+    }
+};
 
 template <size_t x, size_t y, size_t w, size_t h>
 struct SpriteInfo: DebugWindowText<x, y, w, h> {
