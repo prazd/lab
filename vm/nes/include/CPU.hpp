@@ -21,6 +21,13 @@ struct CPU {
         void write(Bus&, unsigned short addr, unsigned char value);
 //        void unsafe_write(Bus&, unsigned short addr, unsigned char value);
         static void adjust_if_mirror(unsigned short&);
+#if DEBUG_MODE
+        std::vector<unsigned short> write_trigger_addresses{};
+        std::vector<unsigned short> read_trigger_addresses{};
+        mutable bool triggered_on_write = false;
+        mutable bool triggered_on_read = false;
+        unsigned long cycles_count = 0;
+#endif
     } mem;
 
 

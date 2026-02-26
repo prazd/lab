@@ -73,19 +73,20 @@ struct NESVM {
                     ppu.tick(bus);
                 ++current_tick;
             }
-
             if (dis.selected_move_active) {
                 dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
+            } else if (dis.trigger_search) {
+                dis.trigger_search = cpu.debug_run = !(cpu.mem.triggered_on_write || cpu.mem.triggered_on_read);
             }
-        } while((dis.selected_move_active) && current_tick < constants::CPU_FRAME_CYCLES);
-        if (!dis.selected_move_active) dis.handle(cpu);
+        } while((dis.selected_move_active || dis.trigger_search) && current_tick < constants::CPU_FRAME_CYCLES);
+        if (!dis.selected_move_active || !dis.trigger_search) dis.handle(cpu);
     }
 
     void ppu_debug_exec(){
         size_t current_tick = 0;
         static size_t cpu_tick_count = 0;
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active
-                || dis.is_line_jump_active || dis.is_one_tick_ppu_active || ppu.run) && current_tick++ < constants::PPU_FRAME_CYCLES) {
+                || dis.is_line_jump_active || dis.is_one_tick_ppu_active ||  ppu.run) && current_tick++ < constants::PPU_FRAME_CYCLES) {
             cpu.debug_run = true;
             ppu.tick(bus);
             if (dis.is_frame_jump_active && ppu.frame_start){

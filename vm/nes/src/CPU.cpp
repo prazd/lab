@@ -1,9 +1,14 @@
 #include <iostream>
+#include <algorithm>
 #include "CPU.hpp"
 #include "Constants.hpp"
 
 void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
     adjust_if_mirror(addr);
+#if DEBUG_MODE
+    if (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}))
+        triggered_on_write = true;
+#endif
     if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
     || addr >= 0x8000 && addr <= 0xffff){
         bus.write(addr, value);
@@ -14,6 +19,10 @@ void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
 
 unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) const {
     adjust_if_mirror(addr);
+#if DEBUG_MODE
+    if (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}))
+        triggered_on_read = false;
+#endif
     if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
         || addr >= 0x8000 && addr <= 0xffff){
         return bus.read_prg(addr);

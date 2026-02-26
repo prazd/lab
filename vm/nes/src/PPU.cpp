@@ -418,6 +418,8 @@ void PPU::draw_pixel(Bus &bus) {
     } else if (bg_data != 0 && sprite_data == 0)
         res = bg_data;
     else if (bg_data != 0 && sprite_data != 0) {
+        ppustatus.sprite_zero_hit_flag = true;
+        bus.ppustatus.reg |= (1 << 6);
         res = !is_sprite_prio ? (is_sprite = true, sprite_data) : bg_data;
     }
 
@@ -470,6 +472,8 @@ void PPU::tick(Bus& bus) {
     if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && ppumask.enable_background_rendering) {
         draw_pixel(bus);
     } else if (current_scanline_cycle == 257) {
+        ppustatus.sprite_zero_hit_flag = false;
+        bus.ppustatus.reg &= 0xbf;
         // 257-320
         secondary_oam.reset();
         if (ppumask.enable_background_rendering) {

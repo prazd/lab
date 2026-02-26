@@ -277,6 +277,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
 
     bool should_sync = false;
+    bool trigger_search = false;
     enum RunMode {
         CPU_M, PPU_M, RunModeCount
     } run_mode = CPU_M;
@@ -352,8 +353,19 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         } else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
             next = true;
             auto val = std::stoul(u_input.s, nullptr, 16);
-            selected_line_pc = (unsigned short)val;
+            selected_line_pc = (unsigned short) val;
             selected_move_active = true;
+        } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
+            cpu.mem.write_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
+        }   else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
+            cpu.mem.read_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
+        }   else if (CheckCollisionPointRec(GetMousePosition(), button7) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
+            cpu.mem.write_trigger_addresses.clear();
+            cpu.mem.read_trigger_addresses.clear();
+        } else if (CheckCollisionPointRec(GetMousePosition(), button8) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
+            trigger_search = true;
+            cpu.mem.triggered_on_write = false;
+            cpu.mem.triggered_on_read = false;
         } else if (CheckCollisionPointRec(GetMousePosition(), button1) && run_mode == PPU_M && IsMouseButtonPressed(0))
             is_frame_jump_active = true;
         else if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == PPU_M && IsMouseButtonPressed(0))
@@ -391,12 +403,20 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             ss << "\n\n";
             pc += cpu.decode(cpu.mem.read(bus, pc)).bytes;
         }
-        ss << "\n RunMode:";
+        ss << "RunMode:";
         if (run_mode == CPU_M)
             ss << "CPU";
         else
             ss << "PPU";
 
+        if (run_mode == CPU_M){
+            ss << "\nWriteTrigger:";
+            for (auto el: cpu.mem.write_trigger_addresses)
+                ss << std::hex << el << ',';
+            ss << "\nReadTrigger:";
+            for (auto el: cpu.mem.read_trigger_addresses)
+                ss << std::hex << el << ',';
+        }
 
         DW::move();
         auto str = ss.str();
@@ -406,6 +426,12 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button2, " jmp", GREEN, 15.f);
             DW::draw_text_button(button3, " tjmp", GREEN, 15.f);
             DW::draw_text_button(button4, " ntjmp", GREEN, 15.f);
+
+            DW::draw_text_button(button5, " wadd", GREEN, 15.f);
+            DW::draw_text_button(button6, " radd", GREEN, 15.f);
+            DW::draw_text_button(button7, " clear", GREEN, 15.f);
+            DW::draw_text_button(button8, " trun", GREEN, 15.f);
+
         } else {
             DW::draw_text_button(button1, "frame", GREEN, 15.f);
             DW::draw_text_button(button2, " tile", GREEN, 15.f);
