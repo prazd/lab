@@ -19,7 +19,7 @@ struct CPU {
         unsigned char read(Bus&, unsigned short addr) const;
         unsigned char unsafe_read(Bus&, unsigned short addr) const;
         void write(Bus&, unsigned short addr, unsigned char value);
-//        void unsafe_write(Bus&, unsigned short addr, unsigned char value);
+        void unsafe_write(Bus&, unsigned short addr, unsigned char value);
         static void adjust_if_mirror(unsigned short&);
 #if DEBUG_MODE
         std::vector<unsigned short> write_trigger_addresses{};

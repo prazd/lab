@@ -17,6 +17,16 @@ void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
     map[addr] = value;
 }
 
+void CPU::Memory::unsafe_write(Bus& bus, unsigned short addr, unsigned char value) {
+    adjust_if_mirror(addr);
+    if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
+        || addr >= 0x8000 && addr <= 0xffff){
+        bus.unsafe_write(addr, value);
+        return;
+    }
+    map[addr] = value;
+}
+
 unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) const {
     adjust_if_mirror(addr);
 #if DEBUG_MODE

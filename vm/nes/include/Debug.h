@@ -278,6 +278,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
 
     bool should_sync = false;
     bool trigger_search = false;
+
     enum RunMode {
         CPU_M, PPU_M, RunModeCount
     } run_mode = CPU_M;
@@ -305,6 +306,10 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle button6;
     Rectangle button7;
     Rectangle button8;
+    Rectangle button9;
+    Rectangle button10;
+    Rectangle button11;
+    Rectangle button12;
 
     Rectangle sync_button;
     Rectangle change_mode_button;
@@ -320,7 +325,11 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       button7{DW::rec.x + 40 * 6, DW::rec.y + h, 40, 40},
                                       button8{DW::rec.x + 40 * 7, DW::rec.y + h, 40, 40},
                                       sync_button{DW::rec.x, DW::rec.y + h + 40, 40, 40},
-                                      change_mode_button{DW::rec.x + 40, DW::rec.y + h + 40, 40, 40}
+                                      change_mode_button{DW::rec.x + 40, DW::rec.y + h + 40, 40, 40},
+                                      button9{DW::rec.x + 40*2, DW::rec.y + h + 40, 40, 40},
+                                      button10{DW::rec.x + 40*3, DW::rec.y + h + 40, 40, 40},
+                                      button11{DW::rec.x + 40*4, DW::rec.y + h + 40, 40, 40},
+                                      button12{DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40}
                                       {}
 
     void handle(CPU& cpu) {
@@ -338,6 +347,10 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         button6 = {DW::rec.x + 40 * 5, DW::rec.y + h, 40, 40};
         button7 = {DW::rec.x + 40 * 6, DW::rec.y + h, 40, 40};
         button8 = {DW::rec.x + 40 * 7, DW::rec.y + h, 40, 40};
+        button9 = {DW::rec.x + 40*2, DW::rec.y + h + 40, 40, 40};
+        button10 = {DW::rec.x + 40*3, DW::rec.y + h + 40, 40, 40};
+        button11 = {DW::rec.x + 40*4, DW::rec.y + h + 40, 40, 40};
+        button12 = {DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40};
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
 
         change_mode_button = {DW::rec.x + 40, DW::rec.y + h + 40, 40, 40};
@@ -355,6 +368,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             auto val = std::stoul(u_input.s, nullptr, 16);
             selected_line_pc = (unsigned short) val;
             selected_move_active = true;
+
+        // trigger search
         } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
             cpu.mem.write_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
         }   else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
@@ -366,6 +381,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             trigger_search = true;
             cpu.mem.triggered_on_write = false;
             cpu.mem.triggered_on_read = false;
+
+
         } else if (CheckCollisionPointRec(GetMousePosition(), button1) && run_mode == PPU_M && IsMouseButtonPressed(0))
             is_frame_jump_active = true;
         else if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == PPU_M && IsMouseButtonPressed(0))
@@ -382,6 +399,22 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             is_one_tick_ppu_active = true;
         else if (CheckCollisionPointRec(GetMousePosition(), button8) && run_mode == PPU_M && IsMouseButtonPressed(0))
             ppu.run = !ppu.run;
+
+        // trigger search
+        else if (CheckCollisionPointRec(GetMousePosition(), button9) && run_mode == PPU_M   && IsMouseButtonPressed(0)) {
+            ppu.mem.write_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
+        }   else if (CheckCollisionPointRec(GetMousePosition(), button10) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
+            ppu.mem.read_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
+        }   else if (CheckCollisionPointRec(GetMousePosition(), button11) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
+            ppu.mem.write_trigger_addresses.clear();
+            ppu.mem.read_trigger_addresses.clear();
+        } else if (CheckCollisionPointRec(GetMousePosition(), button12) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
+            trigger_search = true;
+            ppu.mem.triggered_on_write = false;
+            ppu.mem.triggered_on_read = false;
+        }
+
+
         else if (CheckCollisionPointRec(GetMousePosition(), sync_button) && IsMouseButtonPressed(0))
             should_sync = true;
         else if (CheckCollisionPointRec(GetMousePosition(), change_mode_button) && IsMouseButtonPressed(0))
@@ -409,14 +442,14 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         else
             ss << "PPU";
 
-        if (run_mode == CPU_M){
-            ss << "\nWriteTrigger:";
-            for (auto el: cpu.mem.write_trigger_addresses)
-                ss << std::hex << el << ',';
-            ss << "\nReadTrigger:";
-            for (auto el: cpu.mem.read_trigger_addresses)
-                ss << std::hex << el << ',';
-        }
+        const auto& write_trigger_address = run_mode == CPU_M ?  cpu.mem.write_trigger_addresses :  ppu.mem.write_trigger_addresses;
+        const auto& read_trigger_address =  run_mode == CPU_M ?  cpu.mem.read_trigger_addresses  :  ppu.mem.read_trigger_addresses;
+        ss << "\nWriteTrigger:";
+        for (auto el: write_trigger_address)
+            ss << std::hex << el << ',';
+        ss << "\nReadTrigger:";
+        for (auto el: read_trigger_address)
+            ss << std::hex << el << ',';
 
         DW::move();
         auto str = ss.str();
@@ -441,6 +474,11 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button6, " dot_s", GREEN, 15.f);
             DW::draw_text_button(button7, " dot", GREEN, 15.f);
             DW::draw_text_button(button8, " run", GREEN, 15.f);
+
+            DW::draw_text_button(button9, " wadd", GREEN, 15.f);
+            DW::draw_text_button(button10, " radd", GREEN, 15.f);
+            DW::draw_text_button(button11, " clear", GREEN, 15.f);
+            DW::draw_text_button(button12, " trun", GREEN, 15.f);
         }
         DW::draw_text_button(sync_button, " sync", GREEN, 15.f);
         DW::draw_text_button(change_mode_button, " mode", GREEN, 15.f);
@@ -690,19 +728,21 @@ struct CartridgeInfo: DebugWindowText<x, y, w, h> {
 };
 
 template <size_t x, size_t y, size_t w, size_t h>
-struct MemoryReader: DebugWindowText<x, y, w, h> {
+struct MemoryViewer: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
     unsigned short target_address{};
     std::stringstream ss;
     Rectangle update_target_button;
+    Rectangle write_button;
     Rectangle mode_button;
     UserInput<x, y - 30, w, 30> u_input;
     enum Mode {
         CPUm, PPUm, ModeCount
     } mode = CPUm;
-    MemoryReader():
+    MemoryViewer():
             update_target_button{DW::rec.x, DW::rec.y+DW::rec.height, 30,30},
-            mode_button{DW::rec.x+30, DW::rec.y+DW::rec.height, 30,30}
+            mode_button{DW::rec.x+30, DW::rec.y+DW::rec.height, 30,30},
+            write_button{DW::rec.x+30*2, DW::rec.y+DW::rec.height, 30,30}
             {}
     void handle(Bus& bus, CPU& cpu, PPU& ppu){
         update_target_button = {DW::rec.x, DW::rec.y+DW::rec.height, 30,30};
@@ -721,9 +761,14 @@ struct MemoryReader: DebugWindowText<x, y, w, h> {
         };
         if (CheckCollisionPointRec(GetMousePosition(), mode_button) && IsMouseButtonPressed(0))
             mode = static_cast<Mode>((mode + 1) % ModeCount);
-        if (CheckCollisionPointRec(GetMousePosition(), update_target_button) && IsMouseButtonPressed(0))
+        else if (CheckCollisionPointRec(GetMousePosition(), update_target_button) && IsMouseButtonPressed(0))
             target_address = std::stoul(u_input.s, nullptr, 16);
-
+        else if (CheckCollisionPointRec(GetMousePosition(), write_button) && IsMouseButtonPressed(0)){
+            if (mode == CPUm)
+                cpu.mem.unsafe_write(bus, target_address, std::stoul(u_input.s, nullptr, 16));
+            else
+                ppu.mem.write(bus, target_address, std::stoul(u_input.s, nullptr, 16));
+        }
         if (mode == CPUm)
             mem_print(bus, ss, cpu, target_address);
         else
@@ -736,6 +781,7 @@ struct MemoryReader: DebugWindowText<x, y, w, h> {
         DW::draw(s.c_str(), 13.f);
         DW::draw_text_button(update_target_button, "update", BLACK);
         DW::draw_text_button(mode_button, "mode", BLACK);
+        DW::draw_text_button(write_button, "write", BLACK);
         u_input.draw();
         ss.str("");
     }

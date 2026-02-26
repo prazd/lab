@@ -86,7 +86,7 @@ struct NESVM {
         size_t current_tick = 0;
         static size_t cpu_tick_count = 0;
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active
-                || dis.is_line_jump_active || dis.is_one_tick_ppu_active ||  ppu.run) && current_tick++ < constants::PPU_FRAME_CYCLES) {
+                || dis.is_line_jump_active || dis.is_one_tick_ppu_active || dis.trigger_search ||  ppu.run) && current_tick++ < constants::PPU_FRAME_CYCLES) {
             cpu.debug_run = true;
             ppu.tick(bus);
             if (dis.is_frame_jump_active && ppu.frame_start){
@@ -97,6 +97,8 @@ struct NESVM {
                 dis.is_line_jump_active = false;
             } else if (dis.is_one_tick_ppu_active) {
                 dis.is_one_tick_ppu_active = false;
+            } else if (dis.trigger_search) {
+                dis.trigger_search = !(ppu.mem.triggered_on_read || ppu.mem.triggered_on_write);
             }
             if (cpu_tick_count++ % 3 == 2) cpu.tick(bus);
         }
@@ -105,6 +107,7 @@ struct NESVM {
             !dis.is_tile_line_jump_active &&
             !dis.is_line_jump_active &&
             !dis.is_one_tick_ppu_active &&
+            !dis.trigger_search &&
             !ppu.run) dis.handle(cpu);
     }
 #endif
@@ -157,7 +160,7 @@ struct NESVM {
         NameTableView<1110,432,480,432> ntv{};
         ColorsViewer<1110,432,480,432> cv{};
         SpriteTilesViewer<1110,432,480,432> stv{};
-        MemoryReader<1110,462,450,432> mem_reader{};
+        MemoryViewer<1110,462,450,432> mem_reader{};
 
         PPUInfo<600, 700, 200,300> ppu_info;
         CartridgeInfo<400, 700, 200,300> cartridge_info{};

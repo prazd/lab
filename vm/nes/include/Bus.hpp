@@ -27,6 +27,7 @@ struct Bus {
     Controller c;
 
     void write(unsigned short addr, unsigned char val);
+    void unsafe_write(unsigned short addr, unsigned char val);
     unsigned char read_prg(unsigned short addr);
     unsigned char unsafe_read_prg(unsigned short addr);
     unsigned char read_chr(unsigned short addr);

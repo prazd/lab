@@ -33,6 +33,33 @@ void Bus::write(unsigned short addr, unsigned char value) {
     }
 }
 
+void Bus::unsafe_write(unsigned short addr, unsigned char value) {
+    if (addr >= 0x8000 && addr <= 0xffff){
+        mapper.handle(addr, value);
+        return;
+    }
+    switch (addr) {
+        case constants::PPUCTRL:   {
+            ppuctrl   =   {value, true};
+            break;}
+        case constants::PPUMASK:   {
+            ppumask   =   {value, true};
+            break;}
+        case constants::OAMADDR:   { oamaddr   =   {value, true}; break;}
+        case constants::OAMDATA:   { oamdata   =   {value, true}; oam[oamaddr.reg++] = value; break;}
+        case constants::PPUSCROLL: { ppuscroll =   {value, true}; break;}
+        case constants::PPUADDR:   { ppuaddr   =   {value, true}; break;}
+        case constants::PPUDATA:   { ppudata   =   {value, true}; break;}
+        case constants::OAMDMA : {
+            dma_address = value << 8;
+            dma_active = true;
+            dma_index = 0;
+            break;
+        }
+        case constants::CONTROLLER1: { if (value) c.latch1 = true; else c.update_status1();  break; }
+    }
+}
+
 // All regs for debug
 unsigned char Bus::read_prg(unsigned short addr) {
     if (addr >= 0x8000 && addr <= 0xffff){

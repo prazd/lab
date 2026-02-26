@@ -5,6 +5,10 @@
 
 void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
     adjust_if_mirror(addr);
+#if DEBUG_MODE
+    if (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}))
+        triggered_on_write = true;
+#endif
     if (addr >= 0x0000 && addr <= 0x1FFF) {
         bus.mapper.write_chr_ram(addr, value);
         return;
@@ -14,6 +18,10 @@ void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
 
 unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {
     adjust_if_mirror(addr);
+#if DEBUG_MODE
+    if (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}))
+        triggered_on_read = true;
+#endif
     if (addr >= 0x0000 && addr <= 0x1FFF){
         return bus.read_chr(addr);
     }
@@ -93,11 +101,7 @@ void PPU::update_state(Bus& bus) {
     if (bus.ppudata.was_written)    {
         unsigned short addr = v;
         Memory::adjust_if_mirror(addr);
-        if (addr >= 0x0 && addr <= 0x1FFF){
-            mem.write(bus, addr, bus.ppudata.reg);
-        } else {
-            mem.map[addr] = bus.ppudata.reg;
-        }
+        mem.write(bus, addr, bus.ppudata.reg);
         v = (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff;
         bus.ppudata.was_written = false;
     }
@@ -350,9 +354,9 @@ void PPU::fetch_tile_data_step(Bus& bus) {
         update_base_nt(bus);
         switch (current_step) {
             case NT:  {
-                nt_byte = mem.read(bus,  constants::NAME_TABLE0_BEGIN + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
+                nt_byte = mem.read(bus,  base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
             case AT:  {
-                auto val = mem.read(bus,   constants::ATTRIBUTE_TABLE0_BEGIN + (y_tile_n/4 * 8) + x_tile_n/4);
+                auto val = mem.read(bus,   base_name_table_address + 0x3c0 + (y_tile_n/4 * 8) + x_tile_n/4);
                 // TODO: check
                 //  3 3 2 2
                 //  3 3 2 2
