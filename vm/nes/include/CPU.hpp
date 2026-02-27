@@ -93,6 +93,11 @@ struct CPU {
 
     size_t additional_cycles = 0; // todo: check
 
+#if DEBUG_MODE
+    unsigned short pc_watch_address{};
+    size_t pc_watch_count{};
+#endif
+
     // request RESET interrupt on start (https://www.nesdev.org/NESDoc.pdf - page 13)
     bool interrupt_requests[3]{true,false,false};
     unsigned short interrupt_addresses[3] = {

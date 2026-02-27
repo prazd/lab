@@ -735,6 +735,7 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
     Rectangle update_target_button;
     Rectangle write_button;
     Rectangle mode_button;
+    Rectangle pc_watch_address_button{};
     UserInput<x, y - 30, w, 30> u_input;
     enum Mode {
         CPUm, PPUm, ModeCount
@@ -742,21 +743,25 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
     MemoryViewer():
             update_target_button{DW::rec.x, DW::rec.y+DW::rec.height, 30,30},
             mode_button{DW::rec.x+30, DW::rec.y+DW::rec.height, 30,30},
-            write_button{DW::rec.x+30*2, DW::rec.y+DW::rec.height, 30,30}
+            write_button{DW::rec.x+30*2, DW::rec.y+DW::rec.height, 30,30},
+            pc_watch_address_button{DW::rec.x+30*3, DW::rec.y+DW::rec.height, 30,30}
             {}
     void handle(Bus& bus, CPU& cpu, PPU& ppu){
         update_target_button = {DW::rec.x, DW::rec.y+DW::rec.height, 30,30};
         mode_button   = {DW::rec.x+30, DW::rec.y+DW::rec.height, 30,30};
+        write_button = {DW::rec.x+30*2, DW::rec.y+DW::rec.height, 30,30};
+        pc_watch_address_button = {DW::rec.x+30*3, DW::rec.y+DW::rec.height, 30,30};
         u_input.rec   = {DW::rec.x, DW::rec.y-30, DW::rec.width,30};
+
         auto mem_print = [](auto& bus, auto& ss, auto& r, unsigned short target_address){
             auto start_address = target_address - (target_address % 16);
-            ss << "\n "<< start_address << " | ";
+            ss << std::hex << "\n "<< start_address << " | ";
             for (int i = 0; i < 32; ++i){
                 if (i == 16){ ss << "\n "; ss << start_address + i << " | ";}
                 if (start_address + i == target_address)
-                    ss << std::hex << " [ " << (unsigned)r.mem.read(bus, start_address + i) << " ] " << ' ';
+                    ss << " [ " << (unsigned)r.mem.read(bus, start_address + i) << " ] " << ' ';
                 else
-                    ss << std::hex  << (unsigned)r.mem.read(bus, start_address + i) << ' ';
+                    ss  << (unsigned)r.mem.read(bus, start_address + i) << ' ';
             }
         };
         if (CheckCollisionPointRec(GetMousePosition(), mode_button) && IsMouseButtonPressed(0))
@@ -768,7 +773,12 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 cpu.mem.unsafe_write(bus, target_address, std::stoul(u_input.s, nullptr, 16));
             else
                 ppu.mem.write(bus, target_address, std::stoul(u_input.s, nullptr, 16));
+        } else if (CheckCollisionPointRec(GetMousePosition(), pc_watch_address_button) && IsMouseButtonPressed(0)){
+            cpu.pc_watch_address = std::stoul(u_input.s, nullptr, 16);
+            cpu.pc_watch_count = 0;
         }
+
+
         if (mode == CPUm)
             mem_print(bus, ss, cpu, target_address);
         else
@@ -776,12 +786,14 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
 
         ss << '\n';
         ss << (mode == CPUm ? "CPU" : "PPU");
+        ss << "\nPC watch address:" << cpu.pc_watch_address << " , count:"  << std::dec << cpu.pc_watch_count << '\n';
         auto s = ss.str();
         DW::move();
         DW::draw(s.c_str(), 13.f);
         DW::draw_text_button(update_target_button, "update", BLACK);
         DW::draw_text_button(mode_button, "mode", BLACK);
         DW::draw_text_button(write_button, "write", BLACK);
+        DW::draw_text_button(pc_watch_address_button, "pc_watch", BLACK);
         u_input.draw();
         ss.str("");
     }

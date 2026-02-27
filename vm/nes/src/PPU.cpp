@@ -30,11 +30,12 @@ unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {
 
 void PPU::Memory::adjust_if_mirror(unsigned short& addr) {
     // TODO: check palettes
-    if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END){
+    if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
         addr = constants::IMAGE_PALETTE_BEGIN + (addr % 32);
-    } else if (addr >= constants::TABLES_MIRROR_BEGIN && addr <= constants::TABLES_MIRROR_END){
+    else if (addr >= constants::TABLES_MIRROR_BEGIN && addr <= constants::TABLES_MIRROR_END)
         addr = constants::NAME_TABLE0_BEGIN + (addr - constants::TABLES_MIRROR_BEGIN);
-    }
+    else if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
+        addr -= 0x10;
 }
 
 void PPU::read_ppuctrl(Bus& bus) {
@@ -401,6 +402,7 @@ void PPU::draw_pixel(Bus &bus) {
     bool is_sprite_prio = false;
     bool is_sprite = false;
     bool is_horizontal_flip = false;
+    bool universal_background = false;
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
         if (secondary_oam[i].x_count == 0 && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
             is_horizontal_flip = (secondary_oam[i].attrib >> 6) & 1;
@@ -425,6 +427,8 @@ void PPU::draw_pixel(Bus &bus) {
         ppustatus.sprite_zero_hit_flag = true;
         bus.ppustatus.reg |= (1 << 6);
         res = !is_sprite_prio ? (is_sprite = true, sprite_data) : bg_data;
+    } else {
+        universal_background = true;
     }
 
     unsigned char attrib_high_bit = is_sprite ? ((sprite_attrib >> 1) & 1) :  (attributes_high >> (15-x)) & 1;
@@ -432,7 +436,9 @@ void PPU::draw_pixel(Bus &bus) {
 
     unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
 
-    unsigned char pixel_index = mem.read(bus, (is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN) + index);
+    
+    unsigned char pixel_index = mem.read(bus, universal_background ? constants::IMAGE_PALETTE_BEGIN : (
+                                         (is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN) + index));
 
 #if DEBUG_MODE
     if (bg_data == 0 && sprite_data != 0 && pixel_mixing_debug_view.get(PPU::PixelMixingDebugView::Mode::Bg))

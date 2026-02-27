@@ -536,6 +536,9 @@ void CPU::tick(Bus& bus){
         if (interrupt_handling_in_progress) return;
 
         di = decode(mem.read(bus, pc));
+#if DEBUG_MODE
+        pc_watch_count += (pc == pc_watch_address);
+#endif
         execute_in_progress = true;
         --di.cycles;
     }
