@@ -151,34 +151,17 @@ struct PatternTableView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w / 8), t_h
 };
 
 
-template <size_t x, size_t y, size_t w, size_t h, size_t t_w = 256, size_t t_h = 240>
+template <size_t x, size_t y, size_t w, size_t h, size_t t_w = (256 * 2) + 1, size_t t_h = (240 * 2) + 1>
 struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     using DW = DebugWindowWithTexture<x, y, w, h, t_w, t_h>;
     using TileRow = std::array<Color, 8>;
-    // 32 x 30
-    enum NameTable{
-        NT0,
-        NT1,
-        NT2,
-        NT3,
-        NameTableCount
-    } current_nt = NT0;
-
     enum PatternTable{
         PT0,
         PT1,
         PatternTableCount
     } current_pt = PT0;
 
-    static constexpr std::array<unsigned short, 4> nt_addresses = {
-            constants::NAME_TABLE0_BEGIN,
-            constants::NAME_TABLE1_BEGIN,
-            constants::NAME_TABLE2_BEGIN,
-            constants::NAME_TABLE3_BEGIN,
-    };
-
     short base_pt_address{};
-    short base_nt_address{};
 
     TileRow get_tile_row(unsigned char a, unsigned char b) {
         std::array<Color, 8> res{};
@@ -190,24 +173,39 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
 
     void handle(PPU& ppu, Bus& bus){
         size_t current = 0;
-        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
-            current_nt = static_cast<NameTable>((current_nt + 1) % NameTableCount);
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_TWO))
             current_pt = static_cast<PatternTable>((current_pt + 1) % PatternTableCount);
 
         base_pt_address = current_pt == PT0 ? constants::PATTERN_TABLE0_BEGIN : constants::PATTERN_TABLE1_BEGIN;
-        base_nt_address = nt_addresses[current_nt];
+
+        // todo: finish
+        size_t current_nt = 0;
         if (!bus.mapper.chr.empty()) {
-            for (int s = 0; s < 30; ++s){
-                for (int z = 0; z < 8; ++z) {
-                    for (int i = 0; i < 32; ++i){
-                        auto pt_addr = ((base_pt_address + (16 * *(ppu.mem.map + (base_nt_address + (s * 32) + i)))));
-                        auto l_tile = bus.read_chr(pt_addr + z);
-                        auto h_tile = bus.read_chr(pt_addr + z + 8);
-                        auto tile_row = get_tile_row(h_tile, l_tile);
+            for (int s = 0; s < 61; ++s){
+                if (s == 30){
+                    for (int i = 0; i < 64; ++i) {
                         for (int k = 0; k < 8; ++k){
-                            DW::buffer[current++] = tile_row[k];
+                            DW::buffer[current++] = RED;
                         }
+                    }
+                    current_nt += 2;
+                } else {
+                    for (int z = 0; z < 8; ++z) {
+                        for (int i = 0; i < 64; ++i){
+                            auto pt_addr = ((base_pt_address + (16 *
+                                    *(ppu.mem.map + (ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) + ((s % 30) * 32) + (i % 32))))));
+                            auto l_tile = bus.read_chr(pt_addr + z);
+                            auto h_tile = bus.read_chr(pt_addr + z + 8);
+                            auto tile_row = get_tile_row(h_tile, l_tile);
+                            for (int k = 0; k < 8; ++k){
+                                DW::buffer[current++] = tile_row[k];
+                            }
+                            if (i == 32) {
+                                DW::buffer[current++] = RED;
+                                ++current_nt;
+                            }
+                        }
+                        --current_nt;
                     }
                 }
             }
@@ -378,11 +376,10 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             cpu.mem.write_trigger_addresses.clear();
             cpu.mem.read_trigger_addresses.clear();
         } else if (CheckCollisionPointRec(GetMousePosition(), button8) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
-            trigger_search = true;
-            cpu.mem.triggered_on_write = false;
-            cpu.mem.triggered_on_read = false;
-
-
+            trigger_search = !trigger_search;
+            cpu.mem.triggered_on_write = !trigger_search;
+            cpu.mem.triggered_on_read = !trigger_search;
+            ppu.fill_white_background = !trigger_search;
         } else if (CheckCollisionPointRec(GetMousePosition(), button1) && run_mode == PPU_M && IsMouseButtonPressed(0))
             is_frame_jump_active = true;
         else if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == PPU_M && IsMouseButtonPressed(0))
@@ -397,9 +394,10 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             is_one_tick_ppu_active = true;
         else if (CheckCollisionPointRec(GetMousePosition(), button7) && run_mode == PPU_M && IsMouseButtonPressed(0))
             is_one_tick_ppu_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button8) && run_mode == PPU_M && IsMouseButtonPressed(0))
+        else if (CheckCollisionPointRec(GetMousePosition(), button8) && run_mode == PPU_M && IsMouseButtonPressed(0)){
             ppu.run = !ppu.run;
-
+            ppu.fill_white_background = !ppu.run;
+        }
         // trigger search
         else if (CheckCollisionPointRec(GetMousePosition(), button9) && run_mode == PPU_M   && IsMouseButtonPressed(0)) {
             ppu.mem.write_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
@@ -409,12 +407,11 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             ppu.mem.write_trigger_addresses.clear();
             ppu.mem.read_trigger_addresses.clear();
         } else if (CheckCollisionPointRec(GetMousePosition(), button12) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
-            trigger_search = true;
-            ppu.mem.triggered_on_write = false;
-            ppu.mem.triggered_on_read = false;
+            trigger_search = !trigger_search;
+            ppu.mem.triggered_on_write = !trigger_search;
+            ppu.mem.triggered_on_read = !trigger_search;
+            ppu.fill_white_background = !trigger_search;
         }
-
-
         else if (CheckCollisionPointRec(GetMousePosition(), sync_button) && IsMouseButtonPressed(0))
             should_sync = true;
         else if (CheckCollisionPointRec(GetMousePosition(), change_mode_button) && IsMouseButtonPressed(0))

@@ -79,14 +79,17 @@ struct NESVM {
                 dis.trigger_search = cpu.debug_run = !(cpu.mem.triggered_on_write || cpu.mem.triggered_on_read);
             }
         } while((dis.selected_move_active || dis.trigger_search) && current_tick < constants::CPU_FRAME_CYCLES);
-        if (!dis.selected_move_active || !dis.trigger_search) dis.handle(cpu);
+        if (!dis.selected_move_active || !dis.trigger_search) {
+            dis.handle(cpu);
+            ppu.fill_white_background = true;
+        }
     }
 
     void ppu_debug_exec(){
         size_t current_tick = 0;
         static size_t cpu_tick_count = 0;
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active
-                || dis.is_line_jump_active || dis.is_one_tick_ppu_active || dis.trigger_search ||  ppu.run) && current_tick++ < constants::PPU_FRAME_CYCLES) {
+                || dis.is_line_jump_active || dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run) && current_tick++ < constants::PPU_FRAME_CYCLES) {
             cpu.debug_run = true;
             ppu.tick(bus);
             if (dis.is_frame_jump_active && ppu.frame_start){
@@ -172,12 +175,12 @@ struct NESVM {
         DummyTilesGrid<320, 0> dtg;
         bool grid_view_enable = false;
 
-        enum DownLeftView {
+        enum DownRightView {
             NameTableV,
             ColorsV,
             SpriteTilesV,
             MemoryReaderV,
-            DownLeftViewCount
+            DownRightViewCount
         } current_down_left_view = NameTableV;
 
         auto handle_down_left_view = [&]{
@@ -241,7 +244,7 @@ struct NESVM {
             if (CheckCollisionPointRec(GetMousePosition(), ptv.rec) && IsKeyPressed(KEY_M))
                 current_up_right_view = static_cast<UpRightView>((current_up_right_view + 1) % UpRightViewCount);
             if (CheckCollisionPointRec(GetMousePosition(), ntv.rec) && IsKeyPressed(KEY_M))
-                current_down_left_view = static_cast<DownLeftView>((current_down_left_view + 1) % DownLeftViewCount);
+                current_down_left_view = static_cast<DownRightView>((current_down_left_view + 1) % DownRightViewCount);
 
             if (CheckCollisionPointRec(GetMousePosition(),display_rec)){
                 if (IsKeyPressed(KEY_S))

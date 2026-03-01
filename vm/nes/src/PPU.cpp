@@ -239,7 +239,7 @@ void PPU::bg_tick(Bus &bus) {
 #if UI_DEBUGGER
             frame_start = false;
             line_start = false;
-            if (current_y == 0 && current_scanline_cycle == 0 && !run)
+            if (current_y == 0 && current_scanline_cycle == 0 && (fill_white_background))
                 internal_display.fill(WHITE);
 #endif
             return;}
@@ -324,27 +324,18 @@ void PPU::reset() {
 }
 
 void PPU::update_base_nt(Bus& bus) {
+    base_name_table_address = get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, ((v >> 10) & 0x3));
+}
+
+unsigned short PPU::get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n) {
     using SM = Mapper::ScreenMirroring;
-    unsigned char current_nt_value = ((v >> 10) & 0x3);
-    switch (bus.mapper.current_screen_mirroring) {
-        case SM::Horizontal: {
-            if (current_nt_value == 0 || current_nt_value == 2)
-                base_name_table_address = constants::NAME_TABLE0_BEGIN;
-            else
-                base_name_table_address =  constants::NAME_TABLE1_BEGIN;
-            break;
-        }
-        case SM::Vertical: {
-            if (current_nt_value == 0 || current_nt_value == 1)
-                base_name_table_address = constants::NAME_TABLE0_BEGIN;
-            else
-                base_name_table_address = base_name_table_address = constants::NAME_TABLE1_BEGIN;
-            break;
-        }
-        case SM::SingleScreenLower: {base_name_table_address = constants::NAME_TABLE0_BEGIN; break;}
-        case SM::SingleScreenUpper: {base_name_table_address = constants::NAME_TABLE1_BEGIN; break;}
+    switch (sm) {
+        case SM::Horizontal: { return (n == 0 || n == 2) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
+        case SM::Vertical: { return (n == 0 || n == 1) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
+        case SM::SingleScreenLower: {return constants::NAME_TABLE0_BEGIN;}
+        case SM::SingleScreenUpper: {return constants::NAME_TABLE1_BEGIN;}
         default:
-            base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
+            return constants::NAME_TABLE0_BEGIN;
     }
 }
 

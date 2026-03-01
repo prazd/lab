@@ -239,6 +239,7 @@ struct PPU {
 #if DEBUG_MODE
     bool is_sprite_off = false;
     bool run = false;
+    bool fill_white_background = true;
 #endif
     unsigned char x_scroll{};
     unsigned char y_scroll{};
@@ -331,6 +332,7 @@ struct PPU {
     };
 
     void update_base_nt(Bus& bus);
+    unsigned short get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n);
 
 //  Pattern table
     template <typename = void>
