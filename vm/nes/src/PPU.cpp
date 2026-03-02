@@ -67,10 +67,9 @@ void PPU::read_ppuscroll(Bus& bus) {
     } else {
         // set y coarse + y fine
         t &= 0xfc1f;
-        t |= ((bus.ppuscroll.reg & 0xf8)) << 2;
-
+        t |= ((bus.ppuscroll.reg >> 3) & 0x1f) << 5;
         t &= 0x1fff;
-        t |= (t & 0x7) << 12;
+        t |= (bus.ppuscroll.reg & 0x7) << 12;
     }
     w = !w;
 }
@@ -256,13 +255,17 @@ void PPU::bg_tick(Bus &bus) {
 #endif
 
             if (current_scanline_cycle == 256){
+                unsigned char y_fine_add_prev = ((v >> 12) & 0x7);
                 unsigned char y_fine_add_val = ((((v >> 12) & 0x7) + 1) % 8);
                 v &= 0x8fff;
                 v |= y_fine_add_val << 12;
 
-                if (!y_fine_add_val){
+                if (y_fine_add_prev == 7){
+                    auto prev = ((v >> 5) & 0x1f);
+                    // todo: check prev == 31 case
                     auto add_val = ((((v >> 5) & 0x1f) + 1) % 30);
-                    if (!add_val) v ^= 0x800;
+                    if (prev == 29)
+                        v ^= 0x800;
                     v &= 0xfc1f;
                     v |= (add_val << 5);
                 }
@@ -330,8 +333,8 @@ void PPU::update_base_nt(Bus& bus) {
 unsigned short PPU::get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n) {
     using SM = Mapper::ScreenMirroring;
     switch (sm) {
-        case SM::Horizontal: { return (n == 0 || n == 2) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
-        case SM::Vertical: { return (n == 0 || n == 1) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
+        case SM::Vertical: { return (n == 0 || n == 2) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
+        case SM::Horizontal: { return (n == 0 || n == 1) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
         case SM::SingleScreenLower: {return constants::NAME_TABLE0_BEGIN;}
         case SM::SingleScreenUpper: {return constants::NAME_TABLE1_BEGIN;}
         default:
@@ -369,8 +372,10 @@ void PPU::fetch_tile_data_step(Bus& bus) {
                 shift_register_high &= 0xff00;
                 shift_register_high |= pattern_table_h;
 
+                unsigned char prev = (v & 0x1f);
                 unsigned char add_val = (((v & 0x1f) + 1) % 32);
-                if (!add_val) v ^= 0x400;
+                if (prev == 31)
+                    v ^= 0x400;
                 v &= 0xffe0;
                 v |= add_val;
 
@@ -479,20 +484,23 @@ void PPU::tick(Bus& bus) {
         secondary_oam.reset();
         if (ppumask.enable_background_rendering) {
             for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
-//            bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1; // todo
+                bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1; // todo
                 auto pt_base = (sprite_mode == m8x8 ?
                                 (!ppuctrl.pattern_table_addr8x8 ? constants::PATTERN_TABLE0_BEGIN
                                                                 : constants::PATTERN_TABLE1_BEGIN) :
                                 (secondary_oam_buffer[i].pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN
                                                                       : constants::PATTERN_TABLE0_BEGIN));
-                auto pt_index = (sprite_mode == m8x8 ? secondary_oam_buffer[i].pt_index : secondary_oam_buffer[i].pt_index & 0xfe);
+                auto pt_index = (sprite_mode == m8x8 ?
+                        secondary_oam_buffer[i].pt_index :
+                        secondary_oam_buffer[i].pt_index & 0xfe);
+                // todo: check
                 auto diff =  (current_y + 1 - secondary_oam_buffer[i].y_pos);
-                unsigned char current_index = diff >= 8 ? pt_index + 1 : pt_index;
+                unsigned char current_index = (diff >= 8 && !is_vertical_flip) ? pt_index + 1 : pt_index;
+                auto l = mem.read(bus, pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8)));
+                auto h = mem.read(bus, pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8)) + 8);
                 secondary_oam.push_back(SpriteData{
-                        .shift_l =  mem.read(bus, pt_base + (current_index * 16) +
-                                                  (diff % 8)),
-                        .shift_h =  mem.read(bus, pt_base + (current_index * 16) +
-                                                  (diff % 8) + 8),
+                        .shift_l =  l,
+                        .shift_h =  h,
                         .x_count =  secondary_oam_buffer[i].x_pos,
                         .attrib  =  secondary_oam_buffer[i].attrib,
                 });

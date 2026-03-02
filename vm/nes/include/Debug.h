@@ -193,7 +193,8 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                     for (int z = 0; z < 8; ++z) {
                         for (int i = 0; i < 64; ++i){
                             auto pt_addr = ((base_pt_address + (16 *
-                                    *(ppu.mem.map + (ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) + ((s % 30) * 32) + (i % 32))))));
+                                    *(ppu.mem.map + (ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) +
+                                    ((s > 30 ? ((s-1) % 30) : s % 30) * 32) + (i % 32))))));
                             auto l_tile = bus.read_chr(pt_addr + z);
                             auto h_tile = bus.read_chr(pt_addr + z + 8);
                             auto tile_row = get_tile_row(h_tile, l_tile);
