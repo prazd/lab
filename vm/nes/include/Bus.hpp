@@ -14,7 +14,8 @@ struct Bus {
     unsigned short last_ppu_address = 0;
     struct PPUREG {
         unsigned char reg{};
-        bool was_written{};
+        bool write_requested{};
+        bool read_requested{};
     };
     PPUREG ppuctrl{};
     PPUREG ppumask{};

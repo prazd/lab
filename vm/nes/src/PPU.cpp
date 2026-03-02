@@ -40,12 +40,9 @@ void PPU::Memory::adjust_if_mirror(unsigned short& addr) {
 
 void PPU::read_ppuctrl(Bus& bus) {
     ppuctrl.set(bus.ppuctrl.reg);
-    switch (ppuctrl.base_name_table_addr) {
-        case 0b00 : base_name_table_address = constants::NAME_TABLE0_BEGIN; break;
-        case 0b10 : base_name_table_address = constants::NAME_TABLE1_BEGIN; break;
-        case 0b01 : base_name_table_address = constants::NAME_TABLE2_BEGIN; break;
-        default:    base_name_table_address = constants::NAME_TABLE3_BEGIN; break;
-    }
+    t &= 0xf3ff;
+    t |= (ppuctrl.base_name_table_addr << 10);
+
     address_increment_on_read_ppudata = ppuctrl.addr_inc;
     sprite_pattern_table_address8x8 = ppuctrl.pattern_table_addr8x8 ? constants::PATTERN_TABLE0_BEGIN : constants::PATTERN_TABLE1_BEGIN;
     sprite_mode = ppuctrl.sprite_sz ?  m8x16 : m8x8;
@@ -90,20 +87,27 @@ void PPU::read_ppuaddr(Bus& bus) {
 }
 
 void PPU::update_state(Bus& bus) {
-    if (bus.ppustatus.was_written)  {
+    if (bus.ppustatus.write_requested)  {
         w = false;
-        bus.ppustatus.was_written = false;}
-    if (bus.ppuctrl.was_written)    {read_ppuctrl(bus); bus.ppuctrl.was_written = false;}
-    if (bus.ppumask.was_written)    {ppumask.set(bus.ppumask.reg); bus.ppumask.was_written = false;}
-    if (bus.ppuscroll.was_written)  {read_ppuscroll(bus); bus.ppuscroll.was_written = false;}
-    if (bus.ppuaddr.was_written)    {read_ppuaddr(bus); bus.ppuaddr.was_written = false;}
+        bus.ppustatus.write_requested = false;}
+    if (bus.ppuctrl.write_requested)    {read_ppuctrl(bus); bus.ppuctrl.write_requested = false;}
+    if (bus.ppumask.write_requested)    {ppumask.set(bus.ppumask.reg); bus.ppumask.write_requested = false;}
+    if (bus.ppuscroll.write_requested)  {read_ppuscroll(bus); bus.ppuscroll.write_requested = false;}
+    if (bus.ppuaddr.write_requested)    {read_ppuaddr(bus); bus.ppuaddr.write_requested = false;}
     // TODO: finish
-    if (bus.ppudata.was_written)    {
+    if (bus.ppudata.write_requested)   {
         unsigned short addr = v;
         Memory::adjust_if_mirror(addr);
         mem.write(bus, addr, bus.ppudata.reg);
         v = (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff;
-        bus.ppudata.was_written = false;
+        bus.ppudata.write_requested = false;
+    }
+    if (bus.ppudata.read_requested){
+        unsigned short addr = v;
+        Memory::adjust_if_mirror(addr);
+        bus.ppudata.reg = mem.read(bus, addr);
+        v = (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff;
+        bus.ppudata.read_requested = false;
     }
 }
 
@@ -484,7 +488,7 @@ void PPU::tick(Bus& bus) {
         secondary_oam.reset();
         if (ppumask.enable_background_rendering) {
             for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
-                bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1; // todo
+                bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1;
                 auto pt_base = (sprite_mode == m8x8 ?
                                 (!ppuctrl.pattern_table_addr8x8 ? constants::PATTERN_TABLE0_BEGIN
                                                                 : constants::PATTERN_TABLE1_BEGIN) :

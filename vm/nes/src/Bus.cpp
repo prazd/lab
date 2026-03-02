@@ -73,7 +73,7 @@ unsigned char Bus::read_prg(unsigned short addr) {
         case constants::PPUSTATUS: {
             unsigned char current = (ppustatus.reg & 0xe0) | open_bus_value;
             ppustatus.reg = 0;
-            ppustatus.was_written = true;
+            ppustatus.write_requested = true;
             return current;
         }
         case constants::OAMADDR:     return oamaddr.reg;
@@ -97,6 +97,7 @@ unsigned char Bus::read_prg(unsigned short addr) {
             if (last_ppu_address >= constants::IMAGE_PALETTE_BEGIN){
                 return (ppudata.reg & 0x3f) | ((open_bus_value & 0xc0) & 0xff);
             }
+            ppudata.read_requested = true;
             open_bus_value_cycles = 0;
             open_bus_value = ppudata.reg;
             return ppudata.reg;
