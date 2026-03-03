@@ -399,7 +399,7 @@ void PPU::fetch_tile_data_step(Bus& bus) {
 void PPU::draw_pixel(Bus &bus) {
     unsigned char sprite_data = 0;
     unsigned char sprite_attrib = 0;
-    bool is_sprite_prio = false;
+    bool is_bg_prio = false;
     bool is_sprite = false;
     bool is_horizontal_flip = false;
     bool universal_background = false;
@@ -411,7 +411,7 @@ void PPU::draw_pixel(Bus &bus) {
                     ((secondary_oam[i].shift_h & 1) << 1)  | (secondary_oam[i].shift_l  & 1)
                     : (((secondary_oam[i].shift_h >> 7) & 1) << 1)  | (secondary_oam[i].shift_l >> 7) & 1;
             sprite_attrib = secondary_oam[i].attrib & 0x3;
-            is_sprite_prio = (secondary_oam[i].attrib >> 5) & 1;
+            is_bg_prio = (secondary_oam[i].attrib >> 5) & 1;
             break;
         }
     }
@@ -426,7 +426,7 @@ void PPU::draw_pixel(Bus &bus) {
     else if (bg_data != 0 && sprite_data != 0) {
         ppustatus.sprite_zero_hit_flag = true;
         bus.ppustatus.reg |= (1 << 6);
-        res = !is_sprite_prio ? (is_sprite = true, sprite_data) : bg_data;
+        res = !is_bg_prio ? (is_sprite = true, sprite_data) : bg_data;
     } else {
         universal_background = true;
     }
@@ -457,7 +457,7 @@ void PPU::draw_pixel(Bus &bus) {
         if (secondary_oam[i].x_count > 0) {
             --secondary_oam[i].x_count;
         } else {
-            if (is_horizontal_flip){
+            if ((secondary_oam[i].attrib >> 6) & 1){
                 secondary_oam[i].shift_l >>= 1;
                 secondary_oam[i].shift_h >>= 1;
             } else {

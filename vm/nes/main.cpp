@@ -229,6 +229,7 @@ struct NESVM {
 
 
             BeginDrawing();
+            DrawFPS(0,0);
             ClearBackground(WHITE);
 #if DEBUG_MODE
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, display_rec, {0, 0},0, WHITE);

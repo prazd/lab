@@ -163,6 +163,12 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
 
     short base_pt_address{};
 
+    enum ViewMode {
+        ColorMode,
+        TBPPMode,
+        ViewModeCount,
+    } view_mode = TBPPMode;
+
     TileRow get_tile_row(unsigned char a, unsigned char b) {
         std::array<Color, 8> res{};
         for (int i = 0; i < 8; ++i){
@@ -171,45 +177,96 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
         return res;
     }
 
-    void handle(PPU& ppu, Bus& bus){
+    void draw_color(Bus& bus, PPU& ppu){
         size_t current = 0;
-        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_TWO))
-            current_pt = static_cast<PatternTable>((current_pt + 1) % PatternTableCount);
-
-        base_pt_address = current_pt == PT0 ? constants::PATTERN_TABLE0_BEGIN : constants::PATTERN_TABLE1_BEGIN;
-
-        // todo: finish
         size_t current_nt = 0;
-        if (!bus.mapper.chr.empty()) {
-            for (int s = 0; s < 61; ++s){
-                if (s == 30){
-                    for (int i = 0; i < 64; ++i) {
-                        for (int k = 0; k < 8; ++k){
-                            DW::buffer[current++] = RED;
-                        }
-                    }
-                    current_nt += 2;
-                } else {
-                    for (int z = 0; z < 8; ++z) {
-                        for (int i = 0; i < 64; ++i){
-                            auto pt_addr = ((base_pt_address + (16 *
-                                    *(ppu.mem.map + (ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) +
-                                    ((s > 30 ? ((s-1) % 30) : s % 30) * 32) + (i % 32))))));
-                            auto l_tile = bus.read_chr(pt_addr + z);
-                            auto h_tile = bus.read_chr(pt_addr + z + 8);
-                            auto tile_row = get_tile_row(h_tile, l_tile);
-                            for (int k = 0; k < 8; ++k){
-                                DW::buffer[current++] = tile_row[k];
-                            }
-                            if (i == 32) {
-                                DW::buffer[current++] = RED;
-                                ++current_nt;
-                            }
-                        }
-                        --current_nt;
+        for (int s = 0; s < 61; ++s){
+            if (s == 30){
+                for (int i = 0; i < 64; ++i) {
+                    for (int k = 0; k < 8; ++k){
+                        DW::buffer[current++] = RED;
                     }
                 }
+                current_nt += 2;
+            } else {
+                for (int z = 0; z < 8; ++z) {
+                    for (int i = 0; i < 64; ++i){
+                        auto nt =  ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt);
+                        auto x_tile_n = (i % 32);
+                        auto y_tile_n = (s > 30 ? ((s-1) % 30) : s % 30);
+                        auto pt_addr = ((base_pt_address + (16 * *(ppu.mem.map + nt + (y_tile_n * 32) + x_tile_n))));
+                        auto l_tile = bus.read_chr(pt_addr + z);
+                        auto h_tile = bus.read_chr(pt_addr + z + 8);
+                        auto val = ppu.mem.read(bus,   nt + 0x3c0 + (y_tile_n/4 * 8) + x_tile_n/4);
+                        auto shift_y = (y_tile_n/2) % 2;
+                        auto shift_x = (x_tile_n/2) % 2;
+                        auto attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
+                        for (int k = 0; k < 8; ++k){
+                            auto res = ((((h_tile >> 7) & 1) << 1) | (l_tile >> 7) & 1);
+                            h_tile <<= 1;
+                            l_tile <<= 1;
+                            auto attrib_high_bit = (attrib_value >> 1) & 1;
+                            auto attrib_low_bit = attrib_value & 1;
+                            unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
+                            auto pixel_index = ppu.mem.read(bus, res == 0 ? constants::IMAGE_PALETTE_BEGIN :  constants::IMAGE_PALETTE_BEGIN + index);
+                            DW::buffer[current++] = ppu.palette[pixel_index];
+                        }
+                        if (i == 32) {
+                            DW::buffer[current++] = RED;
+                            ++current_nt;
+                        }
+                    }
+                    --current_nt;
+                }
             }
+        }
+    }
+
+    void draw_tbpp(Bus& bus, PPU& ppu){
+        size_t current = 0;
+        size_t current_nt = 0;
+        for (int s = 0; s < 61; ++s){
+            if (s == 30){
+                for (int i = 0; i < 64; ++i) {
+                    for (int k = 0; k < 8; ++k){
+                        DW::buffer[current++] = RED;
+                    }
+                }
+                current_nt += 2;
+            } else {
+                for (int z = 0; z < 8; ++z) {
+                    for (int i = 0; i < 64; ++i){
+                        auto pt_addr = ((base_pt_address + (16 *
+                                                            *(ppu.mem.map + (ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) +
+                                                                             ((s > 30 ? ((s-1) % 30) : s % 30) * 32) + (i % 32))))));
+                        auto l_tile = bus.read_chr(pt_addr + z);
+                        auto h_tile = bus.read_chr(pt_addr + z + 8);
+                        auto tile_row = get_tile_row(h_tile, l_tile);
+                        for (int k = 0; k < 8; ++k){
+                            DW::buffer[current++] = tile_row[k];
+                        }
+                        if (i == 32) {
+                            DW::buffer[current++] = RED;
+                            ++current_nt;
+                        }
+                    }
+                    --current_nt;
+                }
+            }
+        }
+    }
+
+    void handle(PPU& ppu, Bus& bus){
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
+            view_mode = static_cast<ViewMode>((view_mode + 1) % ViewModeCount);
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_TWO))
+            current_pt = static_cast<PatternTable>((current_pt + 1) % PatternTableCount);
+        base_pt_address = current_pt == PT0 ? constants::PATTERN_TABLE0_BEGIN : constants::PATTERN_TABLE1_BEGIN;
+        if (!bus.mapper.chr.empty()){
+            if (view_mode == ColorMode)
+                draw_color(bus, ppu);
+            else
+                draw_tbpp(bus, ppu);
         }
         DW::handle();
     }
@@ -275,6 +332,7 @@ template<size_t x, size_t y, size_t w, size_t h>
 struct Disassembler: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
 
+    bool pressed_mode = true;
     bool should_sync = false;
     bool trigger_search = false;
 
@@ -356,51 +414,51 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         sync_button = {DW::rec.x, DW::rec.y + h + 40, 40, 40};
 
         pc = base;
-        if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == CPU_M && IsMouseButtonPressed(0)){
+
+        auto mouse_button_pred = [](bool pressed_mode){
+            return pressed_mode ?  IsMouseButtonPressed(0) :  IsMouseButtonDown(0);
+        };
+
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
+            pressed_mode = !pressed_mode;
+        else if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == CPU_M && mouse_button_pred(pressed_mode)){
             selected_move_active = true;
-        } else if (CheckCollisionPointRec(GetMousePosition(), button3)  && run_mode == CPU_M && IsMouseButtonPressed(0)) {
+        } else if (CheckCollisionPointRec(GetMousePosition(), button3)  && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             auto val = std::stoul(u_input.s, nullptr, 16);
             selected_line_pc = (unsigned short)val;
             selected_move_active = true;
-        } else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
+        } else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             next = true;
             auto val = std::stoul(u_input.s, nullptr, 16);
             selected_line_pc = (unsigned short) val;
             selected_move_active = true;
-
         // trigger search
-        } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
+        } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             cpu.mem.write_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
-        }   else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
+        }   else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             cpu.mem.read_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
-        }   else if (CheckCollisionPointRec(GetMousePosition(), button7) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
+        }   else if (CheckCollisionPointRec(GetMousePosition(), button7) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             cpu.mem.write_trigger_addresses.clear();
             cpu.mem.read_trigger_addresses.clear();
-        } else if (CheckCollisionPointRec(GetMousePosition(), button8) && run_mode == CPU_M && IsMouseButtonPressed(0)) {
+        } else if (CheckCollisionPointRec(GetMousePosition(), button8) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             trigger_search = !trigger_search;
             cpu.mem.triggered_on_write = !trigger_search;
             cpu.mem.triggered_on_read = !trigger_search;
             ppu.fill_white_background = !trigger_search;
-        } else if (CheckCollisionPointRec(GetMousePosition(), button1) && run_mode == PPU_M && IsMouseButtonPressed(0))
+        } else if (CheckCollisionPointRec(GetMousePosition(), button1) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
             is_frame_jump_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == PPU_M && IsMouseButtonPressed(0))
+        else if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
             is_tile_line_jump_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button3) && run_mode == PPU_M && IsMouseButtonPressed(0))
+        else if (CheckCollisionPointRec(GetMousePosition(), button3) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
             is_line_jump_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == PPU_M && IsMouseButtonDown(0))
-            is_line_jump_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == PPU_M && IsMouseButtonDown(0))
-            is_frame_jump_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == PPU_M && IsMouseButtonDown(0))
+        else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
             is_one_tick_ppu_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button7) && run_mode == PPU_M && IsMouseButtonPressed(0))
-            is_one_tick_ppu_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button8) && run_mode == PPU_M && IsMouseButtonPressed(0)){
+        else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == PPU_M && IsMouseButtonPressed(0)){
             ppu.run = !ppu.run;
             ppu.fill_white_background = !ppu.run;
         }
         // trigger search
-        else if (CheckCollisionPointRec(GetMousePosition(), button9) && run_mode == PPU_M   && IsMouseButtonPressed(0)) {
+        else if (CheckCollisionPointRec(GetMousePosition(), button9) && run_mode == PPU_M  && IsMouseButtonPressed(0)) {
             ppu.mem.write_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
         }   else if (CheckCollisionPointRec(GetMousePosition(), button10) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
             ppu.mem.read_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
@@ -439,6 +497,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             ss << "CPU";
         else
             ss << "PPU";
+        ss << ' ' << (pressed_mode ? "PressedMode" : "DownMode");
 
         const auto& write_trigger_address = run_mode == CPU_M ?  cpu.mem.write_trigger_addresses :  ppu.mem.write_trigger_addresses;
         const auto& read_trigger_address =  run_mode == CPU_M ?  cpu.mem.read_trigger_addresses  :  ppu.mem.read_trigger_addresses;
@@ -467,11 +526,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button1, "frame", GREEN, 15.f);
             DW::draw_text_button(button2, " tile", GREEN, 15.f);
             DW::draw_text_button(button3, " line", GREEN, 15.f);
-            DW::draw_text_button(button4, " line_s", GREEN, 15.f);
-            DW::draw_text_button(button5, " frame_s", GREEN, 15.f);
-            DW::draw_text_button(button6, " dot_s", GREEN, 15.f);
-            DW::draw_text_button(button7, " dot", GREEN, 15.f);
-            DW::draw_text_button(button8, " run", GREEN, 15.f);
+            DW::draw_text_button(button4, " dot", GREEN, 15.f);
+            DW::draw_text_button(button5, " run", GREEN, 15.f);
 
             DW::draw_text_button(button9, " wadd", GREEN, 15.f);
             DW::draw_text_button(button10, " radd", GREEN, 15.f);
@@ -736,7 +792,7 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
     Rectangle pc_watch_address_button{};
     UserInput<x, y - 30, w, 30> u_input;
     enum Mode {
-        CPUm, PPUm, ModeCount
+        CPUm, PPUm, OAMm, ModeCount
     } mode = CPUm;
     MemoryViewer():
             update_target_button{DW::rec.x, DW::rec.y+DW::rec.height, 30,30},
@@ -776,14 +832,21 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
             cpu.pc_watch_count = 0;
         }
 
-
-        if (mode == CPUm)
-            mem_print(bus, ss, cpu, target_address);
-        else
-            mem_print(bus, ss, ppu, target_address);
-
+        switch (mode){
+            case CPUm: mem_print(bus, ss, cpu, target_address); ss << "\nCPU"; break;
+            case PPUm: mem_print(bus, ss, ppu, target_address); ss << "\nPPU"; break;
+            case OAMm: {
+                auto i = target_address * 4;
+                auto e = i + (16 * 4);
+                ss << "\n Start :" << target_address << " " << " End:" << target_address + 16 << '\n';
+                ss << " Y    PT   AT   X\n";
+                for (; i != e; i+=4)
+                    ss << (int)bus.oam[i] << ' ' << (int)bus.oam[i+1] << ' ' << (int)bus.oam[i+2] << ' ' << (int)bus.oam[i+3] << '\n';
+                ss << "OAM";
+                break;
+            }
+        }
         ss << '\n';
-        ss << (mode == CPUm ? "CPU" : "PPU");
         ss << "\nPC watch address:" << cpu.pc_watch_address << " , count:"  << std::dec << cpu.pc_watch_count << '\n';
         auto s = ss.str();
         DW::move();
