@@ -85,7 +85,7 @@ struct PPU {
 
     size_t current_cycle{};
 
-#if UI_DEBUGGER
+#if DEBUG_MODE
     bool frame_start = false;
     bool tile_start = false;
     bool update_shifts = false;
@@ -258,7 +258,7 @@ struct PPU {
 
     inline void update_internal_display(Color pixel){
         internal_display[current_x++] = pixel;
-#if UI_DEBUGGER
+#if DEBUG_MODE
         ++current_line_x;
 #endif
     }

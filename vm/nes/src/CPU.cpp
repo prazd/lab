@@ -496,7 +496,7 @@ void CPU::tick(Bus& bus){
 #if DEBUG_MODE
     ++cycles_count;
 #endif
-#if UI_DEBUGGER
+#if DEBUG_MODE
     if (!debug_run) return;
 #endif
     if (!execute_in_progress) {
@@ -523,7 +523,7 @@ void CPU::tick(Bus& bus){
                     } else if (!(--interrupt_handling_cycle)) {
                         handle_interrupt(bus, static_cast<Interrupt>(i));
                         interrupt_handling_in_progress = false;
-#if UI_DEBUGGER
+#if DEBUG_MODE
                         // TODO: check
                         debug_run = false;
 #endif
@@ -555,7 +555,7 @@ void CPU::tick(Bus& bus){
         }
         execute_in_progress = false;
         instruction_execute_done = false;
-#if UI_DEBUGGER
+#if DEBUG_MODE
         debug_run = false;
 #endif
         return;
@@ -1199,7 +1199,7 @@ void CPU::tick(Bus& bus){
     if (!additional_cycles) {
         execute_in_progress = false;
         instruction_execute_done = false;
-#if UI_DEBUGGER
+#if DEBUG_MODE
         debug_run = false;
 #endif
     }

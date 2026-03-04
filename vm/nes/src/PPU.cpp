@@ -239,7 +239,7 @@ void PPU::bg_tick(Bus &bus) {
 
     if (current_y < 240){
         if (!current_scanline_cycle){
-#if UI_DEBUGGER
+#if DEBUG_MODE
             frame_start = false;
             line_start = false;
             if (current_y == 0 && current_scanline_cycle == 0 && (fill_white_background))
@@ -251,7 +251,7 @@ void PPU::bg_tick(Bus &bus) {
         if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && ppumask.enable_background_rendering) {
             fetch_tile_data_step(bus);
 
-#if UI_DEBUGGER
+#if DEBUG_MODE
             if (update_shifts) {
                 tile_start = true;
                 update_shifts = false;
@@ -282,10 +282,14 @@ void PPU::bg_tick(Bus &bus) {
             v &= 0xfbff;
             v |= (t & 0x400);
         } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && ppumask.enable_background_rendering) {
+            shift_register_high <<= 1;
+            shift_register_low <<= 1;
+            attributes_low <<= 1;
+            attributes_high <<= 1;
             fetch_tile_data_step(bus);
         }
         if (current_scanline_cycle == 341){
-#if UI_DEBUGGER
+#if DEBUG_MODE
             last_line_x =  std::exchange(current_line_x, 0);
             line_start = true;
 #endif
@@ -312,7 +316,7 @@ void PPU::bg_tick(Bus &bus) {
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
         } else if (current_scanline_cycle == 341 && ppumask.enable_background_rendering){
-#if UI_DEBUGGER
+#if DEBUG_MODE
                     frame_start = true;
                 ++frames_count;
 #endif
@@ -388,7 +392,7 @@ void PPU::fetch_tile_data_step(Bus& bus) {
 
                 attributes_low |= (attrib_value & 0x1) ? 0xff : 0;
                 attributes_high |= (attrib_value & 0x2) ? 0xff : 0;
-#if UI_DEBUGGER
+#if DEBUG_MODE
                 update_shifts = true;
 #endif
                 current_step = NT;  break;}  // pattern table tile high
@@ -418,7 +422,7 @@ void PPU::draw_pixel(Bus &bus) {
     unsigned char bg_data = (((shift_register_high >> (15-x)) & 1) << 1) | (shift_register_low >> (15-x)) & 1;
     unsigned char res{};
 
-    if (bg_data == 0 && sprite_data != 0){
+    if (bg_data == 0 && (sprite_data != 0 && ppumask.enable_sprite_rendering)){
         is_sprite = true;
         res = sprite_data;
     } else if (bg_data != 0 && sprite_data == 0)
@@ -426,7 +430,7 @@ void PPU::draw_pixel(Bus &bus) {
     else if (bg_data != 0 && sprite_data != 0) {
         ppustatus.sprite_zero_hit_flag = true;
         bus.ppustatus.reg |= (1 << 6);
-        res = !is_bg_prio ? (is_sprite = true, sprite_data) : bg_data;
+        res = (!is_bg_prio && ppumask.enable_sprite_rendering) ? (is_sprite = true, sprite_data) : bg_data;
     } else {
         universal_background = true;
     }

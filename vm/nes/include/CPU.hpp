@@ -184,7 +184,7 @@ struct CPU {
     void handle_interrupt(Bus&, Interrupt);
     DecodedInstruction di{};
 
-#if UI_DEBUGGER
+#if DEBUG_MODE
     bool debug_run = true;
 #endif
 

@@ -11,12 +11,12 @@ struct NESVM {
     CPU cpu{};
     PPU ppu{};
     Cartridge cartridge;
-#if UI_DEBUGGER
+#if DEBUG_MODE
     Disassembler<30,520,200,400> dis;
 #endif
 
     NESVM(std::string_view rom_path): cartridge(rom_path)
-#if UI_DEBUGGER
+#if DEBUG_MODE
     ,dis(cpu, bus)
 #endif
 
@@ -52,7 +52,7 @@ struct NESVM {
         bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
     }
 
-#if UI_DEBUGGER
+#if DEBUG_MODE
     void cpu_debug_exec() {
         size_t current_tick = 0;
         if (dis.next){
@@ -116,7 +116,7 @@ struct NESVM {
 #endif
 
     void frame_execute(){
-#if UI_DEBUGGER
+#if DEBUG_MODE
             if (dis.should_sync) {
                 if (cpu.execute_in_progress) cpu_debug_exec();
                 dis.should_sync = cpu.execute_in_progress;
@@ -138,17 +138,6 @@ struct NESVM {
     }
 
     void run(){
-        auto gen_tile = [&] (int offset){
-            std::array<unsigned char, 8> f{};
-            for (int i = 0; i < 8; ++i)
-                f[i] = *(ppu.mem.map + i + 16 * offset);
-            std::array<unsigned char, 8> s{};
-            for (int i = 8; i < 16; ++i)
-                s[i-8] = *(ppu.mem.map + i + 16 * offset);
-            return ppu.pattern_table(f, s);
-        };
-        int current_offset = 0;
-
 #if DEBUG_MODE
         InitWindow(constants::DEBUG_WIDTH, constants::DEBUG_HEIGHT, "NES");
 #else
@@ -217,11 +206,11 @@ struct NESVM {
         SetTargetFPS(60);
         while(!WindowShouldClose()){
             frame_execute();
-#if DEBUG_MODE && UI_DEBUGGER
+#if DEBUG_MODE
             dis.draw(cpu, ppu, bus);
 #endif
 
-#if UI_DEBUGGER
+#if DEBUG_MODE
             UpdateTexture(display_texture, ppu.internal_display.data());
 #else
             UpdateTexture(display_texture, ppu.display.data());
@@ -263,6 +252,8 @@ struct NESVM {
             }
 
             if (grid_view_enable) dtg.draw(22.4f,22.4f);
+#else
+            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,constants::WIDTH, constants::HEIGHT}, {0, 0},0, WHITE);
 #endif
             cpu.reset_requested = (IsKeyPressed(KEY_R));
 

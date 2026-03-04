@@ -6,6 +6,8 @@
 #include "PPU.hpp"
 #include "Cartridge.h"
 
+#if DEBUG_MODE
+
 template <size_t x, size_t y, size_t w, size_t h>
 struct DebugWindow {
     Rectangle rec;
@@ -191,6 +193,10 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
             } else {
                 for (int z = 0; z < 8; ++z) {
                     for (int i = 0; i < 64; ++i){
+                        if (i == 32) {
+                            DW::buffer[current++] = RED;
+                            ++current_nt;
+                        }
                         auto nt =  ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt);
                         auto x_tile_n = (i % 32);
                         auto y_tile_n = (s > 30 ? ((s-1) % 30) : s % 30);
@@ -210,10 +216,6 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                             unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
                             auto pixel_index = ppu.mem.read(bus, res == 0 ? constants::IMAGE_PALETTE_BEGIN :  constants::IMAGE_PALETTE_BEGIN + index);
                             DW::buffer[current++] = ppu.palette[pixel_index];
-                        }
-                        if (i == 32) {
-                            DW::buffer[current++] = RED;
-                            ++current_nt;
                         }
                     }
                     --current_nt;
@@ -236,6 +238,10 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
             } else {
                 for (int z = 0; z < 8; ++z) {
                     for (int i = 0; i < 64; ++i){
+                        if (i == 32) {
+                            DW::buffer[current++] = RED;
+                            ++current_nt;
+                        }
                         auto pt_addr = ((base_pt_address + (16 *
                                                             *(ppu.mem.map + (ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) +
                                                                              ((s > 30 ? ((s-1) % 30) : s % 30) * 32) + (i % 32))))));
@@ -244,10 +250,6 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                         auto tile_row = get_tile_row(h_tile, l_tile);
                         for (int k = 0; k < 8; ++k){
                             DW::buffer[current++] = tile_row[k];
-                        }
-                        if (i == 32) {
-                            DW::buffer[current++] = RED;
-                            ++current_nt;
                         }
                     }
                     --current_nt;
@@ -746,11 +748,9 @@ struct PPUInfo: DebugWindowText<x, y, w, h> {
 
     void handle(PPU& ppu){
         ss << "PPU:\n"
-#if UI_DEBUGGER
         << "  FramesCount:"    <<   std::dec << ppu.frames_count << '\n'
         << "  LastLineX:"      <<   std::dec << ppu.last_line_x << '\n'
         << "  CurrentLineX:"   <<   std::dec << ppu.current_line_x << '\n' << std::hex
-#endif
         << "  ShiftRegL:"      <<   std::bitset<16>(ppu.shift_register_low).to_string()  << '\n' << std::hex
         << "  ShiftRegH:"      <<   std::bitset<16>(ppu.shift_register_high).to_string() << '\n' << std::hex
         << "  AttributesRegL:" <<   std::bitset<16>(ppu.attributes_low).to_string()      << '\n' << std::hex
@@ -1018,4 +1018,5 @@ struct DummyTilesGrid {
         }
     }
 };
+#endif
 #endif //NES_DEBUG_H
