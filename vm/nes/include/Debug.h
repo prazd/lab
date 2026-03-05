@@ -552,6 +552,52 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         A, CPU_X, Y, PC, SP, Flags,
         V, PPU_X, T, W,  RegsNumCount
     };
+    enum Mode {
+        Set, Watch , ModeCount
+    } mode = Set;
+    unsigned short watch_status{};
+    void watch_status_switch(RegNum rn) {
+        watch_status ^= (1 << rn);
+    }
+    bool get_watch_status(RegNum rn){
+        return (watch_status >> rn) & 1;
+    }
+    bool is_cpu_watching(){
+        return watch_status & 0x3f;
+    }
+    bool is_ppu_watching(){
+        return watch_status & 0x03c0;
+    }
+
+    void watch_update_check(CPU& cpu, PPU& ppu){
+        for (int i = 0; i < 10; ++i){
+            auto rn = static_cast<RegNum>(i);
+            if ((get_watch_status(rn) && get_reg_value(rn, ppu, cpu) != previous_reg_values[i])){
+                watch_status = 0;
+                ppu.fill_white_background = true;
+                break;
+            }
+        }
+    }
+
+    std::array<unsigned char, RegsNumCount> previous_reg_values = {};
+
+    unsigned char get_reg_value(RegNum rn, PPU& ppu, CPU& cpu){
+        switch (rn) {
+            case A: return cpu.a;
+            case CPU_X: return cpu.x;
+            case Y: return cpu.y;
+            case PC: return cpu.pc;
+            case SP: return cpu.sp;
+            case Flags: return cpu.sr.reg;
+            case V: return ppu.v;
+            case PPU_X: return ppu.x;
+            case T: return ppu.t;
+            default: return ppu.w;
+        }
+    }
+
+
     std::array<float, RegsNumCount> set_button_coords_offset = {
             55.0f,
             70.0f,
@@ -584,12 +630,15 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
         mirroring_switch_button = {DW::rec.x-30, DW::rec.y+DW::rec.height-30, 30, 30};
         sprite_off_button = {DW::rec.x-30, DW::rec.y+DW::rec.height, 30, 30};
+        if (watch_status) watch_update_check(cpu, ppu);
+
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
+            mode = static_cast<Mode>((mode + 1) % ModeCount);
         if (CheckCollisionPointRec(GetMousePosition(), mirroring_switch_button) && IsMouseButtonPressed(0))
             bus.mapper.current_screen_mirroring =
                     static_cast<Mapper::ScreenMirroring>((bus.mapper.current_screen_mirroring + 1) % Mapper::ScreenMirroring::MirroringCount);
         if (CheckCollisionPointRec(GetMousePosition(), sprite_off_button) && IsMouseButtonPressed(0))
             ppu.is_sprite_off = !ppu.is_sprite_off;
-
 
         ss  << std::dec << " Cycles count:" << cpu.cycles_count << '\n'
         << " CPU:\n\n"
@@ -625,10 +674,22 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
             case Mapper::ScreenMirroring::SingleScreenUpper: ss << "SingleScreenUpper"; break;
         }
         for (int i = 0; i < RegsNumCount; ++i){
+            auto rn = static_cast<RegNum>(i);
             auto current_button_rec = Rectangle{DW::rec.x-20,DW::rec.y+set_button_coords_offset[i], 20, 10};
-            DW::draw_text_button(current_button_rec, "set", BLACK);
-            if (CheckCollisionPointRec(GetMousePosition(), current_button_rec) && IsMouseButtonPressed(0) && !u_input.s.empty())
-                update_reg(cpu, ppu, static_cast<RegNum>(i), std::stoul(u_input.s, nullptr, 16));
+            if (mode == Set)
+                DW::draw_text_button(current_button_rec,  "set", BLACK);
+            else
+                DW::draw_button(current_button_rec,   get_watch_status(rn) ? GREEN : RED);
+
+            if (CheckCollisionPointRec(GetMousePosition(), current_button_rec) && mode == Set && IsMouseButtonPressed(0) && !u_input.s.empty())
+                update_reg(cpu, ppu, rn, std::stoul(u_input.s, nullptr, 16));
+            else if (CheckCollisionPointRec(GetMousePosition(), current_button_rec) && mode == Watch && IsMouseButtonPressed(0)){
+                watch_status_switch(rn);
+                if (get_watch_status(rn)){
+                    previous_reg_values[i] = get_reg_value(rn, ppu, cpu);
+                    ppu.fill_white_background = false;
+                }
+            }
         }
         auto s = ss.str();
         DW::draw(s.c_str(), 15.f);

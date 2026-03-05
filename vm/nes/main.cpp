@@ -13,6 +13,7 @@ struct NESVM {
     Cartridge cartridge;
 #if DEBUG_MODE
     Disassembler<30,520,200,400> dis;
+    RegsInfo<30,30,180,425> reg_info{};
 #endif
 
     NESVM(std::string_view rom_path): cartridge(rom_path)
@@ -77,9 +78,11 @@ struct NESVM {
                 dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
             } else if (dis.trigger_search) {
                 dis.trigger_search = cpu.debug_run = !(cpu.mem.triggered_on_write || cpu.mem.triggered_on_read);
+            } else if (reg_info.is_cpu_watching()){
+                cpu.debug_run = true;
             }
-        } while((dis.selected_move_active || dis.trigger_search) && current_tick < constants::CPU_FRAME_CYCLES);
-        if (!dis.selected_move_active || !dis.trigger_search) {
+        } while((dis.selected_move_active || dis.trigger_search || reg_info.is_cpu_watching()) && current_tick < constants::CPU_FRAME_CYCLES);
+        if (!dis.selected_move_active || !dis.trigger_search || !reg_info.is_cpu_watching()) {
             dis.handle(cpu);
             ppu.fill_white_background = true;
         }
@@ -89,7 +92,7 @@ struct NESVM {
         size_t current_tick = 0;
         static size_t cpu_tick_count = 0;
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active
-                || dis.is_line_jump_active || dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run) && current_tick++ < constants::PPU_FRAME_CYCLES) {
+                || dis.is_line_jump_active || dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLES) {
             cpu.debug_run = true;
             ppu.tick(bus);
             if (dis.is_frame_jump_active && ppu.frame_start){
@@ -111,6 +114,7 @@ struct NESVM {
             !dis.is_line_jump_active &&
             !dis.is_one_tick_ppu_active &&
             !dis.trigger_search &&
+            !reg_info.is_ppu_watching() &&
             !ppu.run) dis.handle(cpu);
     }
 #endif
@@ -145,7 +149,7 @@ struct NESVM {
 #endif
 
 #if DEBUG_MODE
-        PatternTableView<1110,0,480,432,128,128> ptv(128, 128);
+        PatternTableView<1110,0,480,432,128,128> ptv{128, 128};
         NameTableNumView<1110,0,480,432> ntnv{};
         PaletteViewer<1110,0,300,300> pv{};
 
@@ -154,12 +158,10 @@ struct NESVM {
         SpriteTilesViewer<1110,432,480,432> stv{};
         MemoryViewer<1110,462,450,432> mem_reader{};
 
-        PPUInfo<600, 700, 200,300> ppu_info;
+        PPUInfo<600, 700, 200,300> ppu_info{};
         CartridgeInfo<400, 700, 200,300> cartridge_info{};
 
         SpriteInfo<800, 700, 200,200> sprite_info{};
-
-        RegsInfo<30,30,180,425> reg_info{};
 
         DummyTilesGrid<320, 0> dtg;
         bool grid_view_enable = false;
@@ -284,6 +286,6 @@ int main(){
     // /Users/prazd/Desktop/dev/DonkeyKong.nes
     // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: 0x8082/0x80e4/0x80c3/0x8eb6
     // todo: continue debug (palette)
-    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes"); //
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes"); //
     nes.run();
 }
