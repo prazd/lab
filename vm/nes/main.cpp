@@ -158,8 +158,7 @@ struct NESVM {
         SpriteTilesViewer<1110,432,480,432> stv{};
         MemoryViewer<1110,462,450,432> mem_reader{};
 
-        PPUInfo<600, 700, 200,300> ppu_info{};
-        CartridgeInfo<400, 700, 200,300> cartridge_info{};
+        GeneralInfo<600, 700, 200,300> general_info{};
 
         SpriteInfo<800, 700, 200,200> sprite_info{};
 
@@ -229,8 +228,7 @@ struct NESVM {
 
             handle_up_right_view();
             handle_down_left_view();
-            ppu_info.handle(ppu);
-            cartridge_info.handle(cartridge);
+            general_info.handle(bus, cartridge, ppu);
             sprite_info.handle(bus, ppu);
 
             if (CheckCollisionPointRec(GetMousePosition(), ptv.rec) && IsKeyPressed(KEY_M))

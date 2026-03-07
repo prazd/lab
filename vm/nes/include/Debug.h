@@ -391,9 +391,13 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       button12{DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40}
                                       {}
 
+    bool mouse_button_pred(bool pm){
+        return pm ?  IsMouseButtonPressed(0) :  IsMouseButtonDown(0);
+    }
+
     void handle(CPU& cpu) {
         base = cpu.pc;
-        next = (CheckCollisionPointRec(GetMousePosition(), button1) && IsMouseButtonPressed(0));
+        next = (CheckCollisionPointRec(GetMousePosition(), button1) && mouse_button_pred(pressed_mode));
     }
 
     void draw(CPU& cpu, PPU& ppu, Bus& bus) {
@@ -416,10 +420,6 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         sync_button = {DW::rec.x, DW::rec.y + h + 40, 40, 40};
 
         pc = base;
-
-        auto mouse_button_pred = [](bool pressed_mode){
-            return pressed_mode ?  IsMouseButtonPressed(0) :  IsMouseButtonDown(0);
-        };
 
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
             pressed_mode = !pressed_mode;
@@ -801,40 +801,55 @@ struct ColorsViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     }
 };
 
-
 template <size_t x, size_t y, size_t w, size_t h>
-struct PPUInfo: DebugWindowText<x, y, w, h> {
+struct GeneralInfo: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
-    std::stringstream ss;
+    enum Mode {
+        CartridgeM,
+        PPUM,
+        MMIORegsM,
+        ModeCount
+    } mode = CartridgeM;
 
-    void handle(PPU& ppu){
-        ss << "PPU:\n"
-        << "  FramesCount:"    <<   std::dec << ppu.frames_count << '\n'
-        << "  LastLineX:"      <<   std::dec << ppu.last_line_x << '\n'
-        << "  CurrentLineX:"   <<   std::dec << ppu.current_line_x << '\n' << std::hex
-        << "  ShiftRegL:"      <<   std::bitset<16>(ppu.shift_register_low).to_string()  << '\n' << std::hex
-        << "  ShiftRegH:"      <<   std::bitset<16>(ppu.shift_register_high).to_string() << '\n' << std::hex
-        << "  AttributesRegL:" <<   std::bitset<16>(ppu.attributes_low).to_string()      << '\n' << std::hex
-        << "  AttributesRegH:" <<   std::bitset<16>(ppu.attributes_high).to_string()     << '\n' << std::hex;
-        auto s = ss.str();
-        DW::move();
-        DW::draw(s.c_str(), 13.f);
-        ss.str("");
-    }
-};
-
-template <size_t x, size_t y, size_t w, size_t h>
-struct CartridgeInfo: DebugWindowText<x, y, w, h> {
-    using DW = DebugWindowText<x, y, w, h>;
     std::stringstream ss;
-    void handle(Cartridge& c){
-        ss << "CartridgeInfo:\n"
-           << "  MapperNum:" << std::hex   << c.mapper_num << '\n'
-           << "  CHR_ROM_SZ:" << std::dec  << c.chr_rom_sz << '\n'
-           << "  PRG_ROM_SZ:" << std::dec  << c.prg_rom_sz << '\n'
-           << "  Battery:"  << c.is_battery << '\n'
-           << " Is alternative nt:" << c.is_alternative_nametable << '\n'
-           << " Is horizontal arrangement:" << c.is_horizontal_arrangement << '\n';
+    void handle(Bus& bus, Cartridge& c, PPU& ppu){
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
+            mode = static_cast<Mode>((mode + 1) % ModeCount);
+        switch (mode) {
+            case CartridgeM: {
+                ss << "CartridgeInfo:\n"
+                   << "  MapperNum:" << std::hex   << c.mapper_num << '\n'
+                   << "  CHR_ROM_SZ:" << std::dec  << c.chr_rom_sz << '\n'
+                   << "  PRG_ROM_SZ:" << std::dec  << c.prg_rom_sz << '\n'
+                   << "  Battery:"  << c.is_battery << '\n'
+                   << " Is alternative nt:" << c.is_alternative_nametable << '\n'
+                   << " Is horizontal arrangement:" << c.is_horizontal_arrangement << '\n';
+                break;
+            }
+            case PPUM: {
+                ss << "PPU:\n"
+                   << "  FramesCount:"    <<   std::dec << ppu.frames_count << '\n'
+                   << "  LastLineX:"      <<   std::dec << ppu.last_line_x << '\n'
+                   << "  CurrentLineX:"   <<   std::dec << ppu.current_line_x << '\n' << std::hex
+                   << "  ShiftRegL:"      <<   std::bitset<16>(ppu.shift_register_low).to_string()  << '\n' << std::hex
+                   << "  ShiftRegH:"      <<   std::bitset<16>(ppu.shift_register_high).to_string() << '\n' << std::hex
+                   << "  AttributesRegL:" <<   std::bitset<16>(ppu.attributes_low).to_string()      << '\n' << std::hex
+                   << "  AttributesRegH:" <<   std::bitset<16>(ppu.attributes_high).to_string()     << '\n' << std::hex;
+                break;
+            }
+            case MMIORegsM: {
+                ss << "MMIO:\n"
+                   << "  PPUCTRL(0x2000):"       <<  std::bitset<8>(bus.unsafe_read_prg(constants::PPUCTRL)).to_string()  << '\n'
+                   << "  PPUMASK(0x2001):"      <<   std::bitset<8>(bus.unsafe_read_prg(constants::PPUMASK)).to_string()<< '\n'
+                   << "  PPUSTATUS(0x2002):"   <<    std::bitset<8>(bus.unsafe_read_prg(constants::PPUSTATUS)).to_string() << '\n'
+                   << "  OAMADDR(0x2003):"      <<   std::bitset<8>(bus.unsafe_read_prg(constants::OAMADDR)).to_string() << '\n'
+                   << "  OAMDATA(0x2004):"      <<   std::bitset<8>(bus.unsafe_read_prg(constants::OAMDATA)).to_string() << '\n'
+                   << "  PPUSCROLL(0x2005):" <<      std::bitset<8>(bus.unsafe_read_prg(constants::PPUSCROLL)).to_string() << '\n'
+                   << "  PPUADDR(0x2006):" <<        std::bitset<8>(bus.unsafe_read_prg(constants::PPUADDR)).to_string()<< '\n'
+                   << "  PPUDATA(0x2007):" <<        std::bitset<8>(bus.unsafe_read_prg(constants::PPUDATA)).to_string()<< '\n';
+                break;
+            }
+        }
         auto s = ss.str();
         DW::move();
         DW::draw(s.c_str(), 13.f);

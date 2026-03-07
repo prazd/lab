@@ -58,14 +58,13 @@ void PPU::read_ppuctrl(Bus& bus) {
 void PPU::read_ppuscroll(Bus& bus) {
     if (!w){
         // set x coarse + x
-        t &= 0xffe0;
+        t &= 0x7fe0;
         t |= ((bus.ppuscroll.reg >> 3) & 0x1f);
         x = bus.ppuscroll.reg & 0x7;
     } else {
         // set y coarse + y fine
-        t &= 0xfc1f;
+        t &= 0xc1f;
         t |= ((bus.ppuscroll.reg >> 3) & 0x1f) << 5;
-        t &= 0x1fff;
         t |= (bus.ppuscroll.reg & 0x7) << 12;
     }
     w = !w;
@@ -73,7 +72,7 @@ void PPU::read_ppuscroll(Bus& bus) {
 
 void PPU::read_ppuaddr(Bus& bus) {
     if (w){
-        t &= 0xff00;
+        t &= 0x7f00;
         t |= bus.ppuaddr.reg;
     } else {
         t &= 0xff;
@@ -148,8 +147,7 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                      if (!copy_in_progress) {
                          current_oam_index = 4 * sprite_evaluation_index; // y_pos
                          tmp_oam_value = bus.oam[current_oam_index];
-                         auto next_line = current_y + 1;
-                         copy_in_progress = ((next_line >= tmp_oam_value  && next_line < tmp_oam_value + sprite_sz)
+                         copy_in_progress = ((current_y >= tmp_oam_value  && current_y < tmp_oam_value + sprite_sz)
                                  && tmp_oam_value <= 239
                                  &&
                                  !(bus.oam[current_oam_index] == 0 &&
@@ -199,8 +197,7 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                 if (current_scanline_cycle & 1){
                     if (!copy_in_progress) {
                         current_oam_index =  4 * sprite_evaluation_index; // y_pos
-                        auto next_line = current_y + 1;
-                        copy_in_progress = (next_line >= tmp_oam_value  && next_line < tmp_oam_value + sprite_sz); // + sprite height
+                        copy_in_progress = (current_y >= tmp_oam_value  && current_y < tmp_oam_value + sprite_sz); // + sprite height
                         if (copy_in_progress) {
                             ppustatus.sprite_overflow_flag = true;
                             bus.ppustatus.reg |= 1 << 5;
@@ -486,8 +483,6 @@ void PPU::tick(Bus& bus) {
     if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && ppumask.enable_background_rendering) {
         draw_pixel(bus);
     } else if (current_scanline_cycle == 257) {
-        ppustatus.sprite_zero_hit_flag = false;
-        bus.ppustatus.reg &= 0xbf;
         // 257-320
         secondary_oam.reset();
         if (ppumask.enable_background_rendering) {
@@ -502,7 +497,7 @@ void PPU::tick(Bus& bus) {
                         secondary_oam_buffer[i].pt_index :
                         secondary_oam_buffer[i].pt_index & 0xfe);
                 // todo: check
-                auto diff =  (current_y + 1 - secondary_oam_buffer[i].y_pos);
+                auto diff =  (current_y - secondary_oam_buffer[i].y_pos);
                 unsigned char current_index = (diff >= 8 && !is_vertical_flip) ? pt_index + 1 : pt_index;
                 auto l = mem.read(bus, pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8)));
                 auto h = mem.read(bus, pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8)) + 8);
@@ -521,6 +516,11 @@ void PPU::tick(Bus& bus) {
         current_sprite_evaluation_step = SpriteCopy;
         current_scanline_cycle = 0;
         sprite_evaluation_index = 0;
+        if (current_y == 261){
+            ppustatus.sprite_zero_hit_flag = false;
+            bus.ppustatus.reg &= 0xbf;
+        }
         current_y = current_y == 261 ? (current_x = 0) : current_y + 1;
+
     }
 }

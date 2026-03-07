@@ -113,22 +113,14 @@ unsigned char Bus::unsafe_read_prg(unsigned short addr) {
     }
     switch (addr) {
         case constants::PPUCTRL:
-            return open_bus_value;
+            return ppuctrl.reg;
         case constants::PPUMASK:
-            return open_bus_value;
+            return ppumask.reg;
         case constants::PPUSTATUS: {
             return ppustatus.reg;
         }
         case constants::OAMADDR:     return oamaddr.reg;
         case constants::OAMDATA: {
-            if (oamaddr.reg == 0x2) {
-                open_bus_value = 0;
-                open_bus_value_cycles = 0;
-            }
-            // 3 X
-            // 2 Attrib
-            // 1 Tile index
-            // 0 Y
             return oam[oamaddr.reg];
         }
         case constants::PPUSCROLL:   return ppuscroll.reg;
