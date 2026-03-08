@@ -191,6 +191,7 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                 }
                 current_nt += 2;
             } else {
+                auto current_nt_y = s - (s > 30);
                 for (int z = 0; z < 8; ++z) {
                     for (int i = 0; i < 64; ++i){
                         if (i == 32) {
@@ -199,11 +200,11 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                         }
                         auto nt =  ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt);
                         auto x_tile_n = (i % 32);
-                        auto y_tile_n = (s > 30 ? ((s-1) % 30) : s % 30);
+                        auto y_tile_n = current_nt_y % 30;
                         auto pt_addr = ((base_pt_address + (16 * *(ppu.mem.map + nt + (y_tile_n * 32) + x_tile_n))));
                         auto l_tile = bus.read_chr(pt_addr + z);
                         auto h_tile = bus.read_chr(pt_addr + z + 8);
-                        auto val = ppu.mem.read(bus,   nt + 0x3c0 + (y_tile_n/4 * 8) + x_tile_n/4);
+                        auto val = ppu.mem.map[nt + 0x3c0 + (y_tile_n/4 * 8) + x_tile_n/4];
                         auto shift_y = (y_tile_n/2) % 2;
                         auto shift_x = (x_tile_n/2) % 2;
                         auto attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
@@ -214,7 +215,9 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                             auto attrib_high_bit = (attrib_value >> 1) & 1;
                             auto attrib_low_bit = attrib_value & 1;
                             unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
-                            auto pixel_index = ppu.mem.read(bus, res == 0 ? constants::IMAGE_PALETTE_BEGIN :  constants::IMAGE_PALETTE_BEGIN + index);
+                            unsigned short r_index =  constants::IMAGE_PALETTE_BEGIN;
+                            r_index += ((res != 0) * index);
+                            auto pixel_index = ppu.mem.map[r_index];
                             DW::buffer[current++] = ppu.palette[pixel_index];
                         }
                     }
@@ -236,6 +239,7 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                 }
                 current_nt += 2;
             } else {
+                auto current_nt_y = s - (s > 30);
                 for (int z = 0; z < 8; ++z) {
                     for (int i = 0; i < 64; ++i){
                         if (i == 32) {
@@ -244,7 +248,7 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                         }
                         auto pt_addr = ((base_pt_address + (16 *
                                                             *(ppu.mem.map + (ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) +
-                                                                             ((s > 30 ? ((s-1) % 30) : s % 30) * 32) + (i % 32))))));
+                                                                             ((current_nt_y % 30) * 32) + (i % 32))))));
                         auto l_tile = bus.read_chr(pt_addr + z);
                         auto h_tile = bus.read_chr(pt_addr + z + 8);
                         auto tile_row = get_tile_row(h_tile, l_tile);

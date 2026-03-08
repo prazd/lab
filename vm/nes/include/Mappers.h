@@ -1,7 +1,84 @@
 #ifndef NES_MAPPERS_H
 #define NES_MAPPERS_H
 #include <vector>
+#include <array>
 namespace mappers {
+
+    struct MMC3 {
+        enum Regs {
+            R0, R1, R2, R3, R4,R5,R6,R7,RegsCount
+        } selected_bank = R0;
+        bool a12_inversion = true;
+        bool prg_banks_mode = true;
+        // todo: debug + finish
+        std::array<unsigned char, RegsCount> regs_bank_value{};
+        inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
+            if (!prg_banks_mode){
+                if (addr >= 0x8000 && addr <= 0x9fff){
+                    return rom[(regs_bank_value[R6] * 16384) + (addr - 0x8000)];
+                } else if (addr >= 0xa000 && addr <= 0xbfff){
+                    return rom[(regs_bank_value[R7] * 16384) + (addr - 0xa000)];
+                } else if (addr >= 0xc000 && addr <= 0xdfff){
+                    return rom[((rom.size()/16384) - 2) * 16384 + (addr - 0xc000)];
+                } else if (addr >= 0xe000 && addr <= 0xffff){
+                    return rom[((rom.size()/16384) - 1) * 16384 + (addr - 0xe000)];
+                }
+            } else {
+                if (addr >= 0x8000 && addr <= 0x9fff){
+                    return rom[((rom.size()/16384) - 2) * 16384 + (addr - 0x8000)];
+                } else if (addr >= 0xa000 && addr <= 0xbfff){
+                    return rom[(regs_bank_value[R7] * 16384) + (addr - 0xa000)];
+                } else if (addr >= 0xc000 && addr <= 0xdfff){
+                    return rom[(regs_bank_value[R6] * 16384) + (addr - 0xc000)];
+                } else if (addr >= 0xe000 && addr <= 0xffff){
+                    return rom[((rom.size()/16384) - 1) * 16384 + (addr - 0xe000)];
+                }
+            }
+            return 0;
+        }
+        inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
+            if (!a12_inversion) {
+                if (addr >= 0x0000 && addr <= 0x07ff){
+                    return rom[(regs_bank_value[R0] * 8192) + addr];
+                } else if (addr >= 0x800 && addr <= 0xfff) {
+                    return rom[(regs_bank_value[R1] * 8192) + (addr - 0x800)];
+                } else if (addr >= 0x1000 && addr <= 0x13ff){
+                    return rom[(regs_bank_value[R2] * 8192) + (addr - 0x1000)];
+                } else if (addr >= 0x1400 && addr <= 0x17ff){
+                    return rom[(regs_bank_value[R3] * 8192) + (addr - 0x1400)];
+                } else if (addr >= 0x1800 && addr <= 0x1bff) {
+                    return rom[(regs_bank_value[R4] * 8192) + (addr - 0x1800)];
+                } else if (addr >= 0x1c00 && addr <= 0x1fff) {
+                    return rom[(regs_bank_value[R5] * 8192) + (addr - 0x1c00)];
+                }
+            } else {
+                if (addr >= 0x1000 && addr <= 0x17ff){
+                    return rom[(regs_bank_value[R0] * 8192) + (addr-0x1000)];
+                } else if (addr >= 0x1800 && addr <= 0x1fff){
+                    return rom[(regs_bank_value[R1] * 8192) + (addr-0x1800)];
+                } else if (addr >= 0x0000 && addr <= 0x3fff) {
+                    return rom[(regs_bank_value[R2] * 8192) + addr];
+                } else if (addr >= 0x400 && addr <= 0x7ff){
+                    return rom[(regs_bank_value[R3] * 8192) + (addr-0x400)];
+                } else if (addr >= 0x800 && addr <= 0xbff) {
+                    return rom[(regs_bank_value[R4] * 8192) + (addr-0x800)];
+                } else if (addr >= 0xc00 && addr <= 0xfff) {
+                    return rom[(regs_bank_value[R5] * 8192) + (addr-0xc00)];
+                }
+            }
+            return 0;
+        }
+        inline void handle(unsigned short addr, unsigned char value){
+            if (addr & 1){ // update bank
+                regs_bank_value[selected_bank] = value;
+            } else { // select bank
+                selected_bank = static_cast<Regs>(value & 0x7);
+                a12_inversion = (value >> 7) & 1;
+                prg_banks_mode = (value >> 6) & 1;
+            }
+        }
+    };
+
     struct NROM {
         inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
             return rom[addr-0x8000];
@@ -117,7 +194,8 @@ struct Mapper {
         NROM = 0x0,
         MMC1 = 0x1,
         UxROM = 0x2,
-        CNROM = 0x3
+        CNROM = 0x3,
+        MMC3 = 0x4
     } mtype = MMC1;
 
     enum ScreenMirroring {
@@ -137,6 +215,7 @@ struct Mapper {
     mappers::MMC1 mmc1;
     mappers::CNROM cnrom;
     mappers::UXROM uxrom;
+    mappers::MMC3 mmc3;
 
     inline unsigned char update_screen_mirroring(bool is_horizontal_arrangement, bool is_alternative_nametable) {
         switch (mtype) {
@@ -164,6 +243,7 @@ struct Mapper {
             case MMC1: return mmc1.read_prg_rom(prg, addr);
             case UxROM: return uxrom.read_prg_rom(prg, addr);
             case CNROM: return cnrom.read_prg_rom(prg, addr);
+            case MMC3: return mmc3.read_prg_rom(prg, addr);
             default: return 0xff;
         }
     }
@@ -174,6 +254,7 @@ struct Mapper {
             case MMC1: { return mmc1.read_chr_rom(chr, addr);}
             case UxROM: { return uxrom.read_chr_rom(chr, addr);}
             case CNROM:  return cnrom.read_chr_rom(chr, addr);
+            case MMC3: return mmc3.read_chr_rom(chr,addr);
             default: return 0xff;
         }
     }
@@ -190,6 +271,7 @@ struct Mapper {
             case UxROM:
                 uxrom.handle(addr, value); break;
             case CNROM: {cnrom.handle(addr, value); break;}
+            case MMC3:  {mmc3.handle(addr, value); break;}
             default: return;
         }
     }

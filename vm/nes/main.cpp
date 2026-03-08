@@ -47,7 +47,7 @@ struct NESVM {
         tiles_index_start += 16384 * cartridge.prg_rom_sz;
         size_t chr_sz = cartridge.chr_rom_sz == 0 ?
                         8000 : // CHR_RAM
-                        16384 * cartridge.chr_rom_sz;
+                        8192 * cartridge.chr_rom_sz;
         bus.mapper.chr.resize(chr_sz);
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + chr_sz, bus.mapper.chr.begin());
         bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
@@ -203,8 +203,6 @@ struct NESVM {
         auto display_texture = LoadTextureFromImage(img);
         Rectangle display_rec = {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f};
         UnloadImage(img);
-
-        SetTargetFPS(60);
         while(!WindowShouldClose()){
             frame_execute();
 #if DEBUG_MODE
@@ -219,13 +217,9 @@ struct NESVM {
 
 
             BeginDrawing();
-            DrawFPS(0,0);
             ClearBackground(WHITE);
 #if DEBUG_MODE
-            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, display_rec, {0, 0},0, WHITE);
-            DrawRectangleLinesEx(display_rec, 1.f, BLACK);
             reg_info.handle(cpu, ppu, bus);
-
             handle_up_right_view();
             handle_down_left_view();
             general_info.handle(bus, cartridge, ppu);
@@ -252,13 +246,15 @@ struct NESVM {
             }
 
             if (grid_view_enable) dtg.draw(22.4f,22.4f);
+
+            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, display_rec, {0, 0},0, WHITE);
+            DrawRectangleLinesEx(display_rec, 1.f, BLACK);
 #else
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,constants::WIDTH, constants::HEIGHT}, {0, 0},0, WHITE);
 #endif
             cpu.reset_requested = (IsKeyPressed(KEY_R));
 
-
-
+            DrawFPS(0,0);
             EndDrawing();
         }
         CloseWindow();
@@ -284,6 +280,6 @@ int main(){
     // /Users/prazd/Desktop/dev/DonkeyKong.nes
     // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: 0x8082/0x80e4/0x80c3/0x8eb6
     // todo: continue debug (palette)
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes"); //
+    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros3.nes"); //
     nes.run();
 }
