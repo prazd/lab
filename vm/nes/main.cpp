@@ -219,6 +219,9 @@ struct NESVM {
             BeginDrawing();
             ClearBackground(WHITE);
 #if DEBUG_MODE
+            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, display_rec, {0, 0},0, WHITE);
+            DrawRectangleLinesEx(display_rec, 1.f, BLACK);
+
             reg_info.handle(cpu, ppu, bus);
             handle_up_right_view();
             handle_down_left_view();
@@ -246,9 +249,6 @@ struct NESVM {
             }
 
             if (grid_view_enable) dtg.draw(22.4f,22.4f);
-
-            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, display_rec, {0, 0},0, WHITE);
-            DrawRectangleLinesEx(display_rec, 1.f, BLACK);
 #else
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,constants::WIDTH, constants::HEIGHT}, {0, 0},0, WHITE);
 #endif

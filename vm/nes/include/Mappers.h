@@ -10,71 +10,98 @@ namespace mappers {
         } selected_bank = R0;
         bool a12_inversion = true;
         bool prg_banks_mode = true;
+
+        bool irq_requested = false;
+
+        unsigned char irq_latch {};
+        unsigned char irq_counter{};
+        unsigned short last_address{};
+        bool irq_enable {};
+
+        bool is_vertical = false;
+
         // todo: debug + finish
         std::array<unsigned char, RegsCount> regs_bank_value{};
         inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
             if (!prg_banks_mode){
                 if (addr >= 0x8000 && addr <= 0x9fff){
-                    return rom[(regs_bank_value[R6] * 16384) + (addr - 0x8000)];
+                    return rom[(regs_bank_value[R6] * 8192) + (addr - 0x8000)];
                 } else if (addr >= 0xa000 && addr <= 0xbfff){
-                    return rom[(regs_bank_value[R7] * 16384) + (addr - 0xa000)];
+                    return rom[(regs_bank_value[R7] * 8192) + (addr - 0xa000)];
                 } else if (addr >= 0xc000 && addr <= 0xdfff){
-                    return rom[((rom.size()/16384) - 2) * 16384 + (addr - 0xc000)];
+                    return rom[((rom.size()/8192) - 2) * 8192 + (addr - 0xc000)];
                 } else if (addr >= 0xe000 && addr <= 0xffff){
-                    return rom[((rom.size()/16384) - 1) * 16384 + (addr - 0xe000)];
+                    return rom[((rom.size()/8192) - 1) * 8192 + (addr - 0xe000)];
                 }
             } else {
                 if (addr >= 0x8000 && addr <= 0x9fff){
-                    return rom[((rom.size()/16384) - 2) * 16384 + (addr - 0x8000)];
+                    return rom[((rom.size()/8192) - 2) * 8192 + (addr - 0x8000)];
                 } else if (addr >= 0xa000 && addr <= 0xbfff){
-                    return rom[(regs_bank_value[R7] * 16384) + (addr - 0xa000)];
+                    return rom[(regs_bank_value[R7] * 8192) + (addr - 0xa000)];
                 } else if (addr >= 0xc000 && addr <= 0xdfff){
-                    return rom[(regs_bank_value[R6] * 16384) + (addr - 0xc000)];
+                    return rom[(regs_bank_value[R6] * 8192) + (addr - 0xc000)];
                 } else if (addr >= 0xe000 && addr <= 0xffff){
-                    return rom[((rom.size()/16384) - 1) * 16384 + (addr - 0xe000)];
+                    return rom[((rom.size()/8192) - 1) * 8192 + (addr - 0xe000)];
                 }
             }
             return 0;
         }
         inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
+            if ((addr >> 12) & 1 && !((last_address >> 12) & 1)){
+                if (!irq_counter) {irq_requested = true; irq_counter = irq_latch;}
+                --irq_counter;
+            }
+            last_address = addr;
             if (!a12_inversion) {
                 if (addr >= 0x0000 && addr <= 0x07ff){
-                    return rom[(regs_bank_value[R0] * 8192) + addr];
+                    return rom[((regs_bank_value[R0] & 0xfe) * 1024) + addr];
                 } else if (addr >= 0x800 && addr <= 0xfff) {
-                    return rom[(regs_bank_value[R1] * 8192) + (addr - 0x800)];
+                    return rom[((regs_bank_value[R1] & 0xfe) * 1024) + (addr - 0x800)];
                 } else if (addr >= 0x1000 && addr <= 0x13ff){
-                    return rom[(regs_bank_value[R2] * 8192) + (addr - 0x1000)];
+                    return rom[(regs_bank_value[R2] * 1024) + (addr - 0x1000)];
                 } else if (addr >= 0x1400 && addr <= 0x17ff){
-                    return rom[(regs_bank_value[R3] * 8192) + (addr - 0x1400)];
+                    return rom[(regs_bank_value[R3] * 1024) + (addr - 0x1400)];
                 } else if (addr >= 0x1800 && addr <= 0x1bff) {
-                    return rom[(regs_bank_value[R4] * 8192) + (addr - 0x1800)];
+                    return rom[(regs_bank_value[R4] * 1024) + (addr - 0x1800)];
                 } else if (addr >= 0x1c00 && addr <= 0x1fff) {
-                    return rom[(regs_bank_value[R5] * 8192) + (addr - 0x1c00)];
+                    return rom[(regs_bank_value[R5] * 1024) + (addr - 0x1c00)];
                 }
             } else {
                 if (addr >= 0x1000 && addr <= 0x17ff){
-                    return rom[(regs_bank_value[R0] * 8192) + (addr-0x1000)];
+                    return rom[((regs_bank_value[R0] & 0xfe) * 1024) + (addr-0x1000)];
                 } else if (addr >= 0x1800 && addr <= 0x1fff){
-                    return rom[(regs_bank_value[R1] * 8192) + (addr-0x1800)];
-                } else if (addr >= 0x0000 && addr <= 0x3fff) {
-                    return rom[(regs_bank_value[R2] * 8192) + addr];
+                    return rom[((regs_bank_value[R1] & 0xfe) * 1024) + (addr-0x1800)];
+                } else if (addr >= 0x0000 && addr <= 0x3ff) {
+                    return rom[(regs_bank_value[R2] * 1024) + addr];
                 } else if (addr >= 0x400 && addr <= 0x7ff){
-                    return rom[(regs_bank_value[R3] * 8192) + (addr-0x400)];
+                    return rom[(regs_bank_value[R3] * 1024) + (addr-0x400)];
                 } else if (addr >= 0x800 && addr <= 0xbff) {
-                    return rom[(regs_bank_value[R4] * 8192) + (addr-0x800)];
+                    return rom[(regs_bank_value[R4] * 1024) + (addr-0x800)];
                 } else if (addr >= 0xc00 && addr <= 0xfff) {
-                    return rom[(regs_bank_value[R5] * 8192) + (addr-0xc00)];
+                    return rom[(regs_bank_value[R5] * 1024) + (addr-0xc00)];
                 }
             }
             return 0;
         }
         inline void handle(unsigned short addr, unsigned char value){
-            if (addr & 1){ // update bank
-                regs_bank_value[selected_bank] = value;
-            } else { // select bank
-                selected_bank = static_cast<Regs>(value & 0x7);
-                a12_inversion = (value >> 7) & 1;
-                prg_banks_mode = (value >> 6) & 1;
+            if (addr >= 0x8000 && addr <= 0x9FFF){
+                if (addr & 1){ // update bank
+                    regs_bank_value[selected_bank] = value;
+                } else { // select bank
+                    selected_bank = static_cast<Regs>(value & 0x7);
+                    a12_inversion = (value >> 7) & 1;
+                    prg_banks_mode = (value >> 6) & 1;
+                }
+            } else if (addr >= 0xa000 && addr <= 0xbffe) {
+                is_vertical = value & 1;
+            } else if (addr >= 0xc000 && addr <= 0xDFFF) {
+                if (addr & 1){
+                    irq_counter = irq_latch;
+                } else {
+                    irq_latch = value;
+                }
+            } else if (addr >= 0xe000 && addr <= 0xffff) {
+                irq_enable = addr & 1;
             }
         }
     };
@@ -228,11 +255,13 @@ struct Mapper {
                 }
                 break;
             }
+            case MMC3: {
+                current_screen_mirroring = mmc3.is_vertical ? Vertical: Horizontal;
+                break;
+            }
             default: {
-                if (is_horizontal_arrangement)
-                    current_screen_mirroring = Horizontal;
-                else
-                    current_screen_mirroring = Vertical;
+                current_screen_mirroring = is_horizontal_arrangement ? Horizontal : Vertical;
+                break;
             }
         }
     }
@@ -259,6 +288,13 @@ struct Mapper {
         }
     }
 
+    inline bool is_irq_requested() {
+        if (mtype == MMC3){
+            return std::exchange(mmc3.irq_requested, false);
+        }
+        return false;
+    }
+
     inline void write_chr_ram(unsigned short addr, unsigned char value){
         // todo: check
         chr[addr] = value;
@@ -270,8 +306,8 @@ struct Mapper {
                 if (mmc1.handle(addr, value)) update_screen_mirroring(false,false); break;}
             case UxROM:
                 uxrom.handle(addr, value); break;
-            case CNROM: {cnrom.handle(addr, value); break;}
-            case MMC3:  {mmc3.handle(addr, value); break;}
+            case CNROM: {cnrom.handle(addr, value);  break;}
+            case MMC3:  {mmc3.handle(addr, value); update_screen_mirroring(false, false); break;}
             default: return;
         }
     }

@@ -1029,21 +1029,28 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                     for (int j = 0; j < 8; ++j) {
                         auto pt_index =  *(bus.oam + ((oam_index + j) * 4) + 1);
                         auto attrib =    *(bus.oam + ((oam_index + j) * 4) + 2);
-
-                        unsigned char current_index = k < 8 ?
-                                (ppu.sprite_mode ==  PPU::SpriteMode::m8x8 ? pt_index : (pt_index & 0xfe)) :
-                                ((pt_index & 0xfe) + 1);
-
+                        bool is_vertical_flip = (attrib >> 7) & 1;
                         bool is_horizontal_flip = ((attrib >> 6) & 1);
+
+                        unsigned char updated_pt_index =
+                                ppu.sprite_mode ==  PPU::SpriteMode::m8x8 ? pt_index : (pt_index & 0xfe);
+
+                        unsigned char current_index = updated_pt_index;
+                        if (k < 8){
+                            current_index += (ppu.sprite_mode == PPU::SpriteMode::m8x16 && is_vertical_flip);
+                        } else {
+                            current_index += (!is_vertical_flip);
+                        }
+
                         auto pt_base =
                                 ppu.sprite_mode == PPU::SpriteMode::m8x8 ?
                                        (ppu.ppuctrl.pattern_table_addr8x8 & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN) :
                                 (pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN);
 
                         unsigned char shift_l = ppu.mem.read(bus,
-                                                             pt_base + (current_index * 16) + (k % 8));
+                                                             pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (k % 8)) : (k % 8)));
                         unsigned char shift_h = ppu.mem.read(bus,
-                                                             pt_base + (current_index * 16) + (k % 8) + 8);
+                                                             pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (k % 8)) : (k % 8)) + 8);
 
                         unsigned char attrib_high_bit = (attrib >> 3) & 1;
                         unsigned char attrib_low_bit = (attrib >> 2) & 1;

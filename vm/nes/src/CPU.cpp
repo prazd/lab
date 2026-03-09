@@ -505,6 +505,11 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::I, false);
             bus.nmi_interrupt_flip_flop = false;
         }
+        if (bus.ppustatus.reg & 0x80 && bus.ppuctrl.reg & 0x80 && bus.irq_interrupt_flip_flop){
+            interrupt_requests[IRQ] = true;
+            sr.set(StatusReg::I, false);
+            bus.irq_interrupt_flip_flop = false;
+        }
         if (bus.dma_active){
             // Every cpu cycle
             bus.dma_tick(mem.read(bus, bus.dma_address + bus.dma_index));

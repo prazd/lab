@@ -296,6 +296,9 @@ void PPU::bg_tick(Bus &bus) {
             ppustatus.vblank_flag = 1;
             bus.ppustatus.reg |= 1 << 7;
             bus.nmi_interrupt_flip_flop = true;
+            if (bus.mapper.is_irq_requested()){
+                bus.irq_interrupt_flip_flop = true;
+            }
         }
     } else if (current_y == 261){
         if (current_scanline_cycle == 1 && ppumask.enable_background_rendering ){
@@ -496,9 +499,13 @@ void PPU::tick(Bus& bus) {
                 auto pt_index = (sprite_mode == m8x8 ?
                         secondary_oam_buffer[i].pt_index :
                         secondary_oam_buffer[i].pt_index & 0xfe);
-                // todo: check
                 auto diff =  (current_y - secondary_oam_buffer[i].y_pos);
-                unsigned char current_index = (diff >= 8 && !is_vertical_flip) ? pt_index + 1 : pt_index;
+                unsigned char current_index = pt_index;
+                if (diff < 8){
+                    current_index += (sprite_mode == PPU::SpriteMode::m8x16 && is_vertical_flip);
+                } else {
+                    current_index += (!is_vertical_flip);
+                }
                 auto l = mem.read(bus, pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8)));
                 auto h = mem.read(bus, pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8)) + 8);
                 secondary_oam.push_back(SpriteData{

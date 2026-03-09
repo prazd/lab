@@ -9,6 +9,7 @@ struct Bus {
     bool dma_active = false;
     unsigned dma_index = 0;
     bool nmi_interrupt_flip_flop = false;
+    bool irq_interrupt_flip_flop = false;
     size_t open_bus_value_cycles = 0;
     unsigned char open_bus_value {};
     unsigned short last_ppu_address = 0;
