@@ -6,60 +6,58 @@ constexpr size_t WIDTH = 8;
 
 unsigned int field[HEIGHT * WIDTH] = {
     1,1,1,1,1,1,1,1,
-    1,0,0,1,1,0,0,1,
-    1,0,0,0,0,0,0,1,
+    1,1,1,0,0,1,0,1,
+    1,1,0,0,1,0,0,1,
     1,0,0,1,1,0,0,1,
     1,0,0,1,1,0,0,1,
     1,1,1,1,1,1,1,1
 };
 
-template <size_t height, size_t width>
+template <int height, int width>
 void flood_fill_scanline(int x, int y, auto& arr){
     if (arr[(y * width) + x]) return;
 
     struct RangeInfo {
         int line{};
-        size_t begin{};
-        size_t end{};
+        int begin{};
+        int end{};
     };
 
     auto find_span = [](RangeInfo ri, auto& res, auto& arr){
-        if (ri.line <= -1 || ri.line >= height) return; 
-        size_t s = ri.begin;
-        bool in_progress = !arr[(ri.line * width) + s];
-        for (size_t i = ri.begin; i != ri.end + 1; ++i){
-            if (arr[(ri.line * width) + i]){
-                if (in_progress){
-                    res.push({ri.line, s, i});
-                    in_progress = false;
+        if (ri.line <= -1 || ri.line >= height) return;
+        int point = ri.begin;
+        bool start_span = !arr[(ri.line * width) + point];
+        while(true){
+            if (start_span) {
+                int i1 = (ri.line * width) + point;
+                int i2 = i1;
+                while((((i1 % width) != 0 && !arr[i1]) || ((i2 % width) != width - 1 && !arr[i2]))){
+                    i1 -= (!arr[i1]);
+                    i2 += (!arr[i2]);
                 }
+                res.push({ri.line, (i1 % width) + 1, (i2 % width)});
+                start_span = false;
+                point = (i2 % width);
             } else {
-                if (!in_progress) {s = i; in_progress = true;}
-            } 
-
-            if (i + 1 == ri.end + 1 && in_progress){
-                res.push({ri.line, s, ri.end});
+                if ((point % width) == width - 1 ||
+                        (point % width >= ri.end) && arr[(ri.line * width) + (point % width)]) {
+                            break;
+                        }
+                else {
+                    ++point;
+                    if (!(arr[(ri.line * width) + point]))
+                        start_span = true;
+                }
             }
         }
-      
     };
 
     auto fill_color = [](RangeInfo ri, auto& arr){
         for (int i = ri.begin; i != ri.end; ++i)
-            arr[(ri.line * width) + i] = 2;
+            arr[(ri.line * width) + i] = 8;
     };
-
     std::stack<RangeInfo> span_ranges{};
-
-    int i1 = (y * width) + x - 1;
-    int i2 = (y * width) + x + 1;
-
-    while((!arr[i1] || !arr[i2])){
-        if (!arr[i1])  {--i1;}
-        if (!arr[i2])  {++i2;}
-    }
-    span_ranges.push({y, (i1 % width) + 1, (i2 % width)});
-
+    find_span({y, x, x},  span_ranges, arr);
     while(!span_ranges.empty()){
         auto cur_val = span_ranges.top(); span_ranges.pop();
         fill_color(cur_val, arr);
@@ -80,6 +78,6 @@ void print_field(){
 int main(){
     print_field();
     std::cout << "\n\n";
-    flood_fill_scanline<HEIGHT, WIDTH>(5,2, field);
+    flood_fill_scanline<HEIGHT, WIDTH>(3,1, field);
     print_field();
 }
