@@ -96,17 +96,28 @@ void PPU::update_state(Bus& bus) {
     // TODO: finish
     if (bus.ppudata.write_requested)   {
         unsigned short addr = v;
-        Memory::adjust_if_mirror(addr);
+        adjust_nt_mirroring(bus, addr);
         mem.write(bus, addr, bus.ppudata.reg);
         v = (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff;
         bus.ppudata.write_requested = false;
     }
     if (bus.ppudata.read_requested){
         unsigned short addr = v;
-        Memory::adjust_if_mirror(addr);
+        adjust_nt_mirroring(bus, addr);
         bus.ppudata.reg = mem.read(bus, addr);
         v = (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff;
         bus.ppudata.read_requested = false;
+    }
+}
+
+void PPU::adjust_nt_mirroring(Bus& bus, unsigned short& address) {
+    for (int i = 0; i < 4; ++i){
+        auto current_nt = constants::NAME_TABLE0_BEGIN + (i * 0x400);
+        if (address >= current_nt  && address <= current_nt  + 0x3bf){
+            auto r = get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, i);
+            address = r + (address - current_nt);
+            return;
+        }
     }
 }
 
@@ -230,6 +241,9 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
 }
 
 void PPU::bg_tick(Bus &bus) {
+    if (bus.mapper.is_irq_requested()){
+        bus.irq_interrupt_flip_flop = true;
+    }
     ++current_cycle;
     // TODO: continue debug
     update_state(bus);
@@ -296,9 +310,6 @@ void PPU::bg_tick(Bus &bus) {
             ppustatus.vblank_flag = 1;
             bus.ppustatus.reg |= 1 << 7;
             bus.nmi_interrupt_flip_flop = true;
-            if (bus.mapper.is_irq_requested()){
-                bus.irq_interrupt_flip_flop = true;
-            }
         }
     } else if (current_y == 261){
         if (current_scanline_cycle == 1 && ppumask.enable_background_rendering ){
@@ -487,8 +498,13 @@ void PPU::tick(Bus& bus) {
         draw_pixel(bus);
     } else if (current_scanline_cycle == 257) {
         // 257-320
+        static unsigned short last_address = constants::PATTERN_TABLE1_BEGIN;
         secondary_oam.reset();
         if (ppumask.enable_background_rendering) {
+            if (!secondary_oam_buffer.size()){
+                // dummy read for IRQ
+                mem.read(bus, last_address);
+            }
             for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
                 bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1;
                 auto pt_base = (sprite_mode == m8x8 ?
@@ -506,8 +522,11 @@ void PPU::tick(Bus& bus) {
                 } else {
                     current_index += (!is_vertical_flip);
                 }
-                auto l = mem.read(bus, pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8)));
-                auto h = mem.read(bus, pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8)) + 8);
+                auto addr =  pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8));
+                auto l = mem.read(bus, addr);
+                auto h = mem.read(bus, addr + 8);
+                last_address = addr;
+
                 secondary_oam.push_back(SpriteData{
                         .shift_l =  l,
                         .shift_h =  h,

@@ -280,6 +280,6 @@ int main(){
     // /Users/prazd/Desktop/dev/DonkeyKong.nes
     // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: 0x8082/0x80e4/0x80c3/0x8eb6
     // todo: continue debug (palette)
-    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros3.nes"); //
+    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros3.nes"); // A90D ; PPU - 3B20
     nes.run();
 }

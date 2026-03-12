@@ -2,15 +2,14 @@
 #define NES_MAPPERS_H
 #include <vector>
 #include <array>
+#include "Constants.hpp"
 namespace mappers {
-
     struct MMC3 {
         enum Regs {
             R0, R1, R2, R3, R4,R5,R6,R7,RegsCount
         } selected_bank = R0;
         bool a12_inversion = true;
         bool prg_banks_mode = true;
-
         bool irq_requested = false;
 
         unsigned char irq_latch {};
@@ -47,8 +46,12 @@ namespace mappers {
             return 0;
         }
         inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
-            if ((addr >> 12) & 1 && !((last_address >> 12) & 1)){
-                if (!irq_counter) {irq_requested = true; irq_counter = irq_latch;}
+            if ((addr >> 12) & 1 && !((last_address >> 12) & 1)){ // maybe add 8 ppu-cycles filter
+                if (!irq_counter) {
+                    if (irq_enable)
+                        irq_requested = true;
+                    irq_counter = irq_latch;
+                }
                 --irq_counter;
             }
             last_address = addr;

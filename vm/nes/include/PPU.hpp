@@ -68,6 +68,8 @@ struct PPU {
 #endif
     } mem;
 
+    void adjust_nt_mirroring(Bus& bus, unsigned short& address);
+
     // Current VRAM address (15 bits)
     //  yyy NN YYYYY XXXXX
     //  ||| || ||||| +++++-- coarse X (NT)

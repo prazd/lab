@@ -827,7 +827,13 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
                    << "  PRG_ROM_SZ:" << std::dec  << c.prg_rom_sz << '\n'
                    << "  Battery:"  << c.is_battery << '\n'
                    << " Is alternative nt:" << c.is_alternative_nametable << '\n'
-                   << " Is horizontal arrangement:" << c.is_horizontal_arrangement << '\n';
+                   << " Is horizontal arrangement:" << c.is_horizontal_arrangement << '\n'
+                   ;
+                if (bus.mapper.mtype == Mapper::MMC3){
+                    ss << "MMC3:\n" <<
+                    "IRQ counter:" << (int)bus.mapper.mmc3.irq_counter << '\n' <<
+                    "IRQ latch:" << (int)bus.mapper.mmc3.irq_latch << '\n';
+                }
                 break;
             }
             case PPUM: {
