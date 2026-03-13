@@ -86,9 +86,9 @@ void PPU::read_ppuaddr(Bus& bus) {
 }
 
 void PPU::update_state(Bus& bus) {
-    if (bus.ppustatus.write_requested)  {
+    if (bus.ppustatus.read_requested)  {
         w = false;
-        bus.ppustatus.write_requested = false;}
+        bus.ppustatus.read_requested = false;}
     if (bus.ppuctrl.write_requested)    {read_ppuctrl(bus); bus.ppuctrl.write_requested = false;}
     if (bus.ppumask.write_requested)    {ppumask.set(bus.ppumask.reg); bus.ppumask.write_requested = false;}
     if (bus.ppuscroll.write_requested)  {read_ppuscroll(bus); bus.ppuscroll.write_requested = false;}

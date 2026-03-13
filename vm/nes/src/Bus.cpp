@@ -71,9 +71,9 @@ unsigned char Bus::read_prg(unsigned short addr) {
         case constants::PPUMASK:
             return open_bus_value;
         case constants::PPUSTATUS: {
-            unsigned char current = (ppustatus.reg & 0xe0) | open_bus_value;
+            unsigned char current = (ppustatus.reg & 0xe0) | (open_bus_value & 0x1f);
             ppustatus.reg = 0;
-            ppustatus.write_requested = true;
+            ppustatus.read_requested = true;
             return current;
         }
         case constants::OAMADDR:     return oamaddr.reg;

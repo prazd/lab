@@ -1096,6 +1096,103 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     }
 };
 
+template <size_t x, size_t y, size_t w, size_t h>
+struct InstructionFinder: DebugWindowText<x, y, w, h> {
+    using DW = DebugWindowText<x, y, w, h>;
+    std::stringstream ss;
+    size_t begin = 0;
+    size_t end = 0;
+    unsigned short target_addr = 0;
+    unsigned char target_val = 0;
+    enum Mode {
+        Addr,
+        Val,
+        ModeCount,
+    } mode = Val;
+    struct AsmInfo {
+        unsigned short pc{};
+        std::string_view mnemonic{};
+        unsigned short operand{};
+        unsigned short arg_addr{};
+    };
+    static constexpr size_t view_count = 16;
+    UserInput<x, y - 30, w, 30> u_input;
+    Rectangle search_button{DW::rec.x, DW::rec.y + h, 30, 30};
+    Rectangle clear_button{DW::rec.x + 30, DW::rec.y + h, 30, 30};
+    Rectangle next_button{DW::rec.x + 30 * 2, DW::rec.y + h, 30, 30};
+    Rectangle prev_button{DW::rec.x + 30 * 3, DW::rec.y + h, 30, 30};
+    std::vector<AsmInfo> instructions{};
+
+    void handle(Bus& bus, CPU& cpu){
+        u_input.rec =   {DW::rec.x, DW::rec.y - 30, w, 30};
+        search_button = {DW::rec.x, DW::rec.y + h, 30, 30};
+        clear_button =  {DW::rec.x + 30, DW::rec.y + h, 30, 30};
+        next_button = {DW::rec.x + 30 * 2, DW::rec.y + h, 30, 30};
+        prev_button = {DW::rec.x + 30 * 3, DW::rec.y + h, 30, 30};
+
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
+            mode = static_cast<Mode>((mode + 1) % ModeCount);
+
+        if (CheckCollisionPointRec(GetMousePosition(), clear_button) &&  IsMouseButtonPressed(0)){
+            instructions.clear();
+            begin = 0;
+            end = 0;
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), next_button) && IsMouseButtonPressed(0)){
+            if (begin + view_count < instructions.size()){
+                begin += view_count;
+                end = std::min(end + view_count, instructions.size());
+            }
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), prev_button) && IsMouseButtonPressed(0)){
+            if (begin >= view_count){
+                begin -= view_count;
+                end = std::min(begin + view_count, instructions.size());;
+            }
+        }
+
+        if (CheckCollisionPointRec(GetMousePosition(), search_button) && IsMouseButtonPressed(0)){
+            if (mode == Val){
+                instructions.clear();
+                target_addr = std::stoul(u_input.s, 0, 16);
+                unsigned short pc = 0x8000;
+                bool overflow = false;
+                while (!overflow){
+                    auto cur = pc;
+                    auto opcode = cpu.mem.read(bus, pc);
+                    if (opcode == 0) {++pc; continue;}
+                    auto d = cpu.decode(opcode);
+                    auto asm_info = cpu.disassemble(bus, pc);
+                    if (asm_info.arg_addr == target_addr) instructions.push_back(
+                                {pc, asm_info.mnemonic, asm_info.operand, asm_info.arg_addr});
+                    pc += d.bytes ? d.bytes : 1;
+                    overflow = pc < cur;
+                }
+                begin = 0;
+                end = std::min(instructions.size(), view_count);
+            }
+        }
+
+        for (size_t i = begin ; i != end; ++i){
+            ss  << std::hex << ' ' << instructions[i].pc << ' ' <<  instructions[i].mnemonic << '\n';
+        }
+
+        u_input.draw();
+        ss << "Res:" << instructions.size() << '\n';
+        auto s = ss.str();
+        DrawText(s.c_str(), DW::rec.x, DW::rec.y, 13.f, BLACK);
+        DW::draw_text_button(search_button, "search", BLACK);
+        DW::draw_text_button(clear_button, " clear", BLACK);
+        DW::draw_text_button(next_button, " next", BLACK);
+        DW::draw_text_button(prev_button, " prev", BLACK);
+        ss.str("");
+        DW::draw_win();
+        DW::move();
+    }
+};
+
 template <size_t x, size_t y>
 struct DummyTilesGrid {
     void draw(float cell_w, float cell_h) {
