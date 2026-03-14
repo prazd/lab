@@ -108,6 +108,8 @@ struct PPU {
         unsigned char pt_index{}; //  Index number of the sprite in the pattern tables.
         unsigned char attrib{};
         unsigned char x_pos{};
+        // internal
+        unsigned char sprite_index{};
     };
 
     struct SpriteData {
@@ -115,6 +117,7 @@ struct PPU {
         unsigned char shift_h{};
         unsigned char x_count{};
         unsigned char attrib{};
+        unsigned char oam_index{};
     };
 
     SimpleDeque<Sprite, 8> secondary_oam_buffer{};

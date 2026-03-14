@@ -184,6 +184,7 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                          }
                          ++copy_step_count;
                          if (copy_step_count == 4){
+                             tmp_sprite.sprite_index = sprite_evaluation_index;
                              secondary_oam_buffer.push_back(tmp_sprite);
                              copy_step_count = 0;
                              copy_in_progress = false;
@@ -412,14 +413,29 @@ void PPU::fetch_tile_data_step(Bus& bus) {
 }
 
 void PPU::draw_pixel(Bus &bus) {
+    for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
+        if (secondary_oam[i].x_count > 0) {
+            --secondary_oam[i].x_count;
+        } else {
+            if ((secondary_oam[i].attrib >> 6) & 1){
+                secondary_oam[i].shift_l >>= 1;
+                secondary_oam[i].shift_h >>= 1;
+            } else {
+                secondary_oam[i].shift_l <<= 1;
+                secondary_oam[i].shift_h <<= 1;
+            }
+        }
+    }
     unsigned char sprite_data = 0;
     unsigned char sprite_attrib = 0;
     bool is_bg_prio = false;
     bool is_sprite = false;
     bool is_horizontal_flip = false;
     bool universal_background = false;
+    unsigned char oam_index{};
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
         if (secondary_oam[i].x_count == 0 && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
+            oam_index = secondary_oam[i].oam_index;
             is_horizontal_flip = (secondary_oam[i].attrib >> 6) & 1;
             sprite_data =
                     is_horizontal_flip ?
@@ -439,8 +455,10 @@ void PPU::draw_pixel(Bus &bus) {
     } else if (bg_data != 0 && sprite_data == 0)
         res = bg_data;
     else if (bg_data != 0 && sprite_data != 0) {
-        ppustatus.sprite_zero_hit_flag = true;
-        bus.ppustatus.reg |= (1 << 6);
+        if (oam_index == 0){
+            ppustatus.sprite_zero_hit_flag = true;
+            bus.ppustatus.reg |= (1 << 6);
+        }
         res = (!is_bg_prio && ppumask.enable_sprite_rendering) ? (is_sprite = true, sprite_data) : bg_data;
     } else {
         universal_background = true;
@@ -468,19 +486,6 @@ void PPU::draw_pixel(Bus &bus) {
 #endif
     update_internal_display(palette[pixel_index]);
 
-    for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
-        if (secondary_oam[i].x_count > 0) {
-            --secondary_oam[i].x_count;
-        } else {
-            if ((secondary_oam[i].attrib >> 6) & 1){
-                secondary_oam[i].shift_l >>= 1;
-                secondary_oam[i].shift_h >>= 1;
-            } else {
-                secondary_oam[i].shift_l <<= 1;
-                secondary_oam[i].shift_h <<= 1;
-            }
-        }
-    }
     shift_register_high <<= 1;
     shift_register_low <<= 1;
     attributes_low <<= 1;
@@ -532,6 +537,7 @@ void PPU::tick(Bus& bus) {
                         .shift_h =  h,
                         .x_count =  secondary_oam_buffer[i].x_pos,
                         .attrib  =  secondary_oam_buffer[i].attrib,
+                        .oam_index =  secondary_oam_buffer[i].sprite_index,
                 });
             }
         }

@@ -202,6 +202,7 @@ struct NESVM {
 
 #endif
 
+        SetTargetFPS(60);
         auto img = GenImageColor(constants::DISPLAY_PIXELS_WIDTH, constants::DISPLAY_PIXELS_HEIGHT, WHITE);
         auto display_texture = LoadTextureFromImage(img);
         Rectangle display_rec = {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f};
@@ -283,6 +284,6 @@ int main(){
     // /Users/prazd/Desktop/dev/DonkeyKong.nes
     // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: 0x8082/0x80e4/0x80c3/0x8eb6
     // todo: continue debug (palette)
-    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros3.nes"); // A90D ; PPU - 3B20
+    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes"); // A90D ; PPU - 3B20
     nes.run();
 }

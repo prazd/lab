@@ -96,7 +96,7 @@ namespace mappers {
                     prg_banks_mode = (value >> 6) & 1;
                 }
             } else if (addr >= 0xa000 && addr <= 0xbffe) {
-                is_vertical = value & 1;
+                is_vertical = !(value & 1);
             } else if (addr >= 0xc000 && addr <= 0xDFFF) {
                 if (addr & 1){
                     irq_counter = irq_latch;
@@ -247,7 +247,7 @@ struct Mapper {
     mappers::UXROM uxrom;
     mappers::MMC3 mmc3;
 
-    inline unsigned char update_screen_mirroring(bool is_horizontal_arrangement, bool is_alternative_nametable) {
+    inline void update_screen_mirroring(bool is_horizontal_arrangement, bool is_alternative_nametable) {
         switch (mtype) {
             case MMC1: {
                 switch (mmc1.get_screen_mirroring_value()) {
