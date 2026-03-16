@@ -2,9 +2,12 @@
 #include "raylib.h"
 #include <bitset>
 
-constexpr size_t WIDTH = 300;
-constexpr size_t HEIGHT = 300;
+constexpr size_t DISPLAY_WIDTH = 300;
+constexpr size_t DISPLAY_HEIGHT = 300;
+constexpr size_t FIELD_WIDTH = 21;
+constexpr size_t FIELD_HEIGHT = 21;
 
+std::array<Color, FIELD_WIDTH * FIELD_HEIGHT> field{};
 
 enum QRMode {
     Numeric = 0b0001,
@@ -12,6 +15,14 @@ enum QRMode {
     Byte = 0b0100,
     Kanji = 0b1000
 };
+
+enum ECC {
+    M = 0b00, // 16 bytes
+    L = 0b01, // 19 bytes
+    H = 0b10, // 9 bytes
+    Q = 0b11  // 13 bytes  
+};
+
 // ByteMode 
 constexpr unsigned char first_add_byte = 0b11101100;
 constexpr unsigned char second_add_byte = 0b00010001;
@@ -90,18 +101,89 @@ auto add_gf_to_bitstream(auto& bitstream) {
     return res;
 }
 
+void draw_finder_7x7(size_t x, size_t y, auto& arr){
+    static constexpr std::array<std::string_view, 7> finder_sv{
+        "1111111",
+        "1000001",
+        "1011101",
+        "1011101",
+        "1011101",
+        "1000001",
+        "1111111",
+    };
+    for (int i = 0; i < 7; ++i){
+        for (int j = 0; j < 7; ++j)
+            arr[((y + i) * FIELD_WIDTH) + x + j] = finder_sv[i][j] == '1' ? BLACK : WHITE;
+    }
+}
+
+void draw_timing_patterns(auto& arr){
+    for (int i = 0; i < 5;++i){
+        arr[(6 * FIELD_WIDTH) + i + 8] = !(i & 1) ? BLACK : WHITE;
+        arr[((i + 8) * FIELD_WIDTH) + 6] = !(i & 1) ? BLACK : WHITE;
+    }
+}
+
+void draw_format_bits(auto& arr){
+    // mask0
+    unsigned long val = 0b000 | (L << 3);
+    // bch correction
+    val <<= 10;
+    auto get_h_b = [](unsigned long val, int sz){
+        while(sz--){
+            if ((val >> sz) & 1) break;
+        }
+        return sz;
+    };
+    auto gen = 0x537;
+    auto shift = get_h_b(val, 15);
+    while(shift >= 10){
+        auto diff = shift - 10;
+        val ^= gen << diff;
+        shift = get_h_b(val, 15);
+    }
+    val ^= 0x5412;
+    // 
+    for (int i = 0; i < 8; ++i){
+        arr[(i * FIELD_WIDTH) + 8] = (val >> i) & 1 ? BLACK : WHITE;
+        arr[(8 * FIELD_WIDTH) + 20 - i] = (val >> i) & 1 ? BLACK : WHITE;
+    }
+
+    for (int i = 0; i < 7; ++i) {
+        arr[(8 * FIELD_WIDTH) + i] = ((val >> 8) >> i) & 1 ? BLACK : WHITE;
+        arr[((20 - i) * FIELD_WIDTH) + 8] = ((val >> 8) >> i) & 1 ? BLACK : WHITE;
+    }
+}
+
+void draw_data(auto& arr, const auto& data){
+    // todo
+}
+
 
 int main(){
-    InitWindow(WIDTH,HEIGHT,"QR");
+    InitWindow(DISPLAY_WIDTH,DISPLAY_HEIGHT,"QR");
+    auto img = GenImageColor(21, 21, WHITE);
+    auto texture = LoadTextureFromImage(img);
+    UnloadImage(img);
+
     auto r = gen_bitstream_bytemode(1, "Hello");
     auto gfr = add_gf_to_bitstream(r);
-    for (int i = 0; i < 208; ++i){
-        std::cout << (int)((gfr[i/8] >> (i % 8)) & 1);
-    }
-    std::cout << std::endl;
+    // for (int i = 0; i < 208; ++i){
+    //     std::cout << (int)((gfr[i/8] >> (i % 8)) & 1);
+    // }
+    // std::cout << std::endl;
+    draw_finder_7x7(0,0,field);
+    draw_finder_7x7(0,14,field);
+    draw_finder_7x7(14,0,field);
+    draw_timing_patterns(field);
+    field[(8 * FIELD_WIDTH) + 13] = BLACK; // Dark module
+    draw_format_bits(field);
+    UpdateTexture(texture, field.data());
+
     while(!WindowShouldClose()){
         BeginDrawing();
         ClearBackground(WHITE);
+        DrawTexturePro(texture, {0, 0, FIELD_WIDTH, FIELD_HEIGHT}, {0,0, DISPLAY_WIDTH, DISPLAY_HEIGHT},{0,0}, 0, WHITE);
         EndDrawing();
     }
     CloseWindow();
