@@ -27,24 +27,25 @@ enum ECC {
 constexpr unsigned char first_add_byte = 0b11101100;
 constexpr unsigned char second_add_byte = 0b00010001;
 constexpr unsigned char reed_solomon_coeffs[7] = {
-    87,229,146,149,238,102,21
+    0x01, 0x11, 0xEF, 0x36, 0xD4, 0x78, 0xCA
 };
 
 struct GF256 {
     unsigned char exp_t[256]{};
-    unsigned char log_t[512]{};
+    unsigned char log_t[256]{};
     consteval GF256(){
         unsigned char x = 1;
-        for (int i = 0; i < 255; ++i){ 
+        log_t[0] = 0xff;
+        exp_t[0] = 1;
+        for (int i = 1; i < 255; ++i){ 
+            x = ((x << 1) ^ ((x & 0x80) ? 0x11d : 0));
             exp_t[i] = x; 
             log_t[x] = i; 
-            x = x * 2; 
-            if (x & 0x100) x ^= 0x11d;
         }
     }
     constexpr unsigned char mul(unsigned char a, unsigned char b){
         if (a == 0 || b == 0) return 0;
-        return exp_t[log_t[a] + log_t[b]];
+        return exp_t[(log_t[a] + log_t[b]) & 0xff];
     }
 } gf;
 
@@ -60,16 +61,17 @@ auto gen_bitstream_bytemode(unsigned char sz, std::string_view str){
     std::array<unsigned char, 19> res{}; // 152 bit
     size_t pos = 0;
     auto write = [](auto& arr, auto& pos_value, unsigned char value, int sz){
+        auto s_sz = sz;
         while(sz--){
             auto cur_byte_pos = pos_value / 8;
             auto cur_bit_pos = pos_value % 8;
-            arr[cur_byte_pos] |= (value & 1) << cur_bit_pos;
-            value >>= 1;
+            arr[cur_byte_pos] |= ((value >> (s_sz - 1)) & 1) << (7 - cur_bit_pos);
+            value <<= 1;
             ++pos_value;
         }
     };
     write(res, pos, Byte, 4);
-    write(res, pos, str.size(), length_bitsz(Byte)); // length
+    write(res, pos, str.size(), 8);
     for (int i = 0, e = str.size(); i != e; ++i)
         write(res, pos, str[i], 8);
     // add terminator
@@ -91,12 +93,12 @@ auto gen_bitstream_bytemode(unsigned char sz, std::string_view str){
 
 auto add_gf_to_bitstream(auto& bitstream) {
     std::array<unsigned char, 26> res{};
-    std::copy(std::begin(bitstream), std::end(bitstream),res.begin());
-    for (int i = 0; i < 19; ++i){
+    std::copy(std::begin(bitstream), std::end(bitstream), res.begin() + 7);
+    for (int i = 7; i < 26; ++i){
         auto factor = res[i];
         if (!factor) continue;
         for (int j = 0; j < 7; ++j)
-            res[i + j + 1] ^= gf.mul(reed_solomon_coeffs[j], factor);
+            res[(i-7)+j] ^= gf.mul(reed_solomon_coeffs[j], factor);
     }
     return res;
 }
@@ -128,7 +130,7 @@ void draw_format_bits(auto& arr){
     // mask0
     unsigned long val = 0b000 | (L << 3);
     // bch correction
-    val <<= 10;
+    
     auto get_h_b = [](unsigned long val, int sz){
         while(sz--){
             if ((val >> sz) & 1) break;
@@ -155,8 +157,65 @@ void draw_format_bits(auto& arr){
     }
 }
 
+void use_simple_mask(auto& arr){
+    for (int y = 0; y < 21; ++y){
+        for (int x = 0; x < 21; ++x){
+            if (!((x == 8 && y == 13) || 
+            (y < 7 && ((x >= 0 && x <= 8) || (x >= 13 && x <= 20))) ||
+            (y >= 14 && (x >= 0 && x <= 8)) || 
+            (y == 6 && (x >= 8 && x <= 12)) || 
+            ((y >= 8 && y <= 12) && x == 6) ||
+            (y == 8 && ((x >= 0 && x <= 5) || (x >= 7 && x <= 8) || (x >= 13 && x <= 20))) ||
+             (x == 8 && ((y >= 0 && y <= 5) || (y >= 7 && y <= 8) || (y >= 13 && y <= 20)))
+            )){
+                if ((x + y) % 2 == 0){
+                    if (arr[(y * FIELD_WIDTH) + x].r == 255)
+                        arr[(y * FIELD_WIDTH) + x] = BLACK;
+                    else
+                        arr[(y * FIELD_WIDTH) + x] = WHITE;
+                }
+        } 
+        }
+    }
+}
+
 void draw_data(auto& arr, const auto& data){
-    // todo
+    size_t current = 0;
+    int x = 20;
+    int y = 20;
+    bool up = true;
+    bool right = true;
+    while(current != 208){
+        if (!((x == 8 && y == 13) || 
+            (y < 7 && ((x >= 0 && x <= 8) || (x >= 13 && x <= 20))) ||
+            (y >= 14 && (x >= 0 && x <= 8)) || 
+            (y == 6 && (x >= 8 && x <= 12)) || 
+            ((y >= 8 && y <= 12) && x == 6) ||
+            (y == 8 && ((x >= 0 && x <= 5) || (x >= 7 && x <= 8) || (x >= 13 && x <= 20))) ||
+            (x == 8 && ((y >= 0 && y <= 5) || (y >= 7 && y <= 8) || (y >= 13 && y <= 20)))
+        ) 
+        ) {
+            arr[(y * FIELD_WIDTH) + x] = ((data[current/8] >> (7-((current++)%8))) & 1) ? BLACK : WHITE;
+        }
+        if (up && y == 0) {
+            up = false;
+            x-=2;
+            right = true;
+        } else if (!up && y == 20){
+            up = true;
+            x-=2;
+            right = true;
+        } else if (right) {
+            x-=1;
+            if (x == 6) --x;
+            right = false;
+        } else {
+            x += 1;
+            if (x==6) ++x;
+            right = true;
+            y += up ? -1 : 1;
+        }
+    }
 }
 
 
@@ -165,18 +224,25 @@ int main(){
     auto img = GenImageColor(21, 21, WHITE);
     auto texture = LoadTextureFromImage(img);
     UnloadImage(img);
-
     auto r = gen_bitstream_bytemode(1, "Hello");
+    for (int i = 0; i<19; ++i){
+        for (int j = 0; j < 8; ++j){
+            std::cout << (int)((r[i] >> (7 - j)) & 1);
+        }
+    }
+    std::cout << std::endl;
     auto gfr = add_gf_to_bitstream(r);
-    // for (int i = 0; i < 208; ++i){
-    //     std::cout << (int)((gfr[i/8] >> (i % 8)) & 1);
-    // }
-    // std::cout << std::endl;
+    for (auto el : gfr){
+        std::cout << std::hex << "0x"<< (int)el << '\n';
+    }
+    std::cout << std::endl;
     draw_finder_7x7(0,0,field);
     draw_finder_7x7(0,14,field);
     draw_finder_7x7(14,0,field);
     draw_timing_patterns(field);
-    field[(8 * FIELD_WIDTH) + 13] = BLACK; // Dark module
+    field[(13 * FIELD_WIDTH) + 8] = BLACK; // Dark module
+    draw_data(field, gfr);
+    use_simple_mask(field);
     draw_format_bits(field);
     UpdateTexture(texture, field.data());
 
