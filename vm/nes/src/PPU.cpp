@@ -433,17 +433,27 @@ void PPU::draw_pixel(Bus &bus) {
     bool is_horizontal_flip = false;
     bool universal_background = false;
     unsigned char oam_index{};
+    unsigned char cur_oam_index = secondary_oam.size() > 0 ? secondary_oam[0].oam_index : 0;
+    bool cur_above_background = secondary_oam.size() > 0 ? !((secondary_oam[0].attrib >> 5) & 1) : false;
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
         if (secondary_oam[i].x_count == 0 && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
-            oam_index = secondary_oam[i].oam_index;
-            is_horizontal_flip = (secondary_oam[i].attrib >> 6) & 1;
-            sprite_data =
-                    is_horizontal_flip ?
-                    ((secondary_oam[i].shift_h & 1) << 1)  | (secondary_oam[i].shift_l  & 1)
-                    : (((secondary_oam[i].shift_h >> 7) & 1) << 1)  | (secondary_oam[i].shift_l >> 7) & 1;
-            sprite_attrib = secondary_oam[i].attrib & 0x3;
-            is_bg_prio = (secondary_oam[i].attrib >> 5) & 1;
-            break;
+                is_horizontal_flip = (secondary_oam[i].attrib >> 6) & 1;
+                auto l_sprite_data =
+                        is_horizontal_flip ?
+                        ((secondary_oam[i].shift_h & 1) << 1)  | (secondary_oam[i].shift_l  & 1)
+                                           : (((secondary_oam[i].shift_h >> 7) & 1) << 1)  | (secondary_oam[i].shift_l >> 7) & 1;
+                if (!l_sprite_data) continue;
+                if (cur_above_background && ((secondary_oam[i].attrib >> 5) & 1)) continue;
+                if (cur_oam_index > (secondary_oam[i].oam_index)) continue;
+                oam_index = secondary_oam[i].oam_index;
+                sprite_data = l_sprite_data;
+
+                sprite_attrib = secondary_oam[i].attrib & 0x3;
+                is_bg_prio = (secondary_oam[i].attrib >> 5) & 1;
+
+                cur_oam_index = oam_index;
+                cur_above_background = !((secondary_oam[i].attrib >> 5) & 1);
+                break;
         }
     }
     unsigned char bg_data = (((shift_register_high >> (15-x)) & 1) << 1) | (shift_register_low >> (15-x)) & 1;

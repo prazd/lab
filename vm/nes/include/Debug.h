@@ -1208,5 +1208,55 @@ struct DummyTilesGrid {
         }
     }
 };
+
+template <size_t x, size_t y, size_t w, size_t h>
+struct CustomController: DebugWindowText<x,y,w,h> {
+    using DW = DebugWindowText<x,y,w,h>;
+    const char* dir_buttons_text[4]={" u"," d", " l", " r"};
+    const char* select_buttons_text[4]={" q"," e", " s", " e"};
+    std::stringstream ss;
+
+    enum Mode {
+        Pressed, Down, ModeCount
+    } mode = Down;
+
+    Rectangle direction_buttons{DW::rec.x, DW::rec.y-30,30,30};
+    Rectangle select_buttons{DW::rec.x, DW::rec.y+h,30,30};
+
+    void handle(Controller& c){
+        direction_buttons = {DW::rec.x, DW::rec.y-30,30,30};
+        select_buttons    = {DW::rec.x, DW::rec.y+h,30,30};
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M)){
+            mode = static_cast<Mode>((mode + 1) % ModeCount);
+        }
+
+        auto key_handle = [](const Rectangle& rec, Controller& c, int i,  bool dir, Mode mode) {
+            if (CheckCollisionPointRec(GetMousePosition(), rec)){
+                if (mode == Pressed && IsMouseButtonPressed(0)){
+                    c.cs_switch(c, i, dir);
+                } else if (mode == Down) {
+                    c.cs_set(c, i, dir, IsMouseButtonDown(0));
+                }
+            }
+        };
+
+        for (int i = 0; i < 4; ++i){
+            auto d = Rectangle{direction_buttons.x + (i * direction_buttons.width), direction_buttons.y, direction_buttons.width, direction_buttons.height};
+            key_handle(d, c, i, true, mode);
+            DW::draw_text_button(d, dir_buttons_text[i], c.cs_read(c, i, true) ? GREEN : RED);
+
+            auto s = Rectangle{select_buttons.x + (i * direction_buttons.width), select_buttons.y, select_buttons.width, select_buttons.height};
+            key_handle(s, c, i, false, mode);
+            DW::draw_text_button(s, select_buttons_text[i], c.cs_read(c, i, false) ? GREEN : RED);
+        }
+        ss << "Mode:" << (mode == Down ? "Down": "Pressed");
+        auto s = ss.str();
+        DrawText(s.c_str(), DW::rec.x, DW::rec.y, 12.f, BLACK);
+        ss.str("");
+        DW::move();
+        DW::draw_win();
+    }
+};
+
 #endif
 #endif //NES_DEBUG_H

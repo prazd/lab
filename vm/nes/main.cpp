@@ -161,6 +161,8 @@ struct NESVM {
 
         GeneralInfo<600, 700, 200,300> general_info{};
 
+        CustomController<400, 700, 100,30> cc{};
+
         SpriteInfo<800, 700, 200,200> sprite_info{};
 
         DummyTilesGrid<320, 0> dtg;
@@ -230,6 +232,7 @@ struct NESVM {
             handle_up_right_view();
             handle_down_left_view();
             general_info.handle(bus, cartridge, ppu);
+            cc.handle(bus.c);
             sprite_info.handle(bus, ppu);
 
             if (CheckCollisionPointRec(GetMousePosition(), ptv.rec) && IsKeyPressed(KEY_M))
@@ -284,6 +287,6 @@ int main(){
     // /Users/prazd/Desktop/dev/DonkeyKong.nes
     // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: 0x8082/0x80e4/0x80c3/0x8eb6
     // todo: continue debug (palette)
-    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes"); // A90D ; PPU - 3B20
+    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes"); // - 82D8
     nes.run();
 }
