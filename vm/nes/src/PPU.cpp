@@ -198,6 +198,8 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                 ++sprite_evaluation_index;
                 if (secondary_oam_buffer.size() == 8 && sprite_evaluation_index != 64) {
                     current_sprite_evaluation_step = SpriteOverflow;
+                    ppustatus.sprite_overflow_flag = true; // todo: check
+                    bus.ppustatus.reg |= 1 << 5;
                 } else if (secondary_oam_buffer.size() <= 8 && sprite_evaluation_index == 64) {
                     current_sprite_evaluation_step = SpriteFinish;
                 } else {
@@ -210,10 +212,6 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                     if (!copy_in_progress) {
                         current_oam_index =  4 * sprite_evaluation_index; // y_pos
                         copy_in_progress = (current_y >= tmp_oam_value  && current_y < tmp_oam_value + sprite_sz); // + sprite height
-                        if (copy_in_progress) {
-                            ppustatus.sprite_overflow_flag = true;
-                            bus.ppustatus.reg |= 1 << 5;
-                        }
                     }
                 } else {
                     if (copy_in_progress) {
@@ -237,7 +235,6 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
 
     } else if (current_scanline_cycle >= 257 && current_scanline_cycle <= 320) {
         //  Sprite fetches
-
     }
 }
 
@@ -434,7 +431,8 @@ void PPU::draw_pixel(Bus &bus) {
     bool universal_background = false;
     unsigned char oam_index{};
     unsigned char cur_oam_index = secondary_oam.size() > 0 ? secondary_oam[0].oam_index : 0;
-    bool cur_above_background = secondary_oam.size() > 0 ? !((secondary_oam[0].attrib >> 5) & 1) : false;
+    bool cur_above_background {};
+    bool init_cur_above = false;
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
         if (secondary_oam[i].x_count == 0 && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
                 is_horizontal_flip = (secondary_oam[i].attrib >> 6) & 1;
@@ -443,7 +441,7 @@ void PPU::draw_pixel(Bus &bus) {
                         ((secondary_oam[i].shift_h & 1) << 1)  | (secondary_oam[i].shift_l  & 1)
                                            : (((secondary_oam[i].shift_h >> 7) & 1) << 1)  | (secondary_oam[i].shift_l >> 7) & 1;
                 if (!l_sprite_data) continue;
-                if (cur_above_background && ((secondary_oam[i].attrib >> 5) & 1)) continue;
+                if (init_cur_above && cur_above_background && ((secondary_oam[i].attrib >> 5) & 1)) continue;
                 if (cur_oam_index > (secondary_oam[i].oam_index)) continue;
                 oam_index = secondary_oam[i].oam_index;
                 sprite_data = l_sprite_data;
@@ -453,7 +451,9 @@ void PPU::draw_pixel(Bus &bus) {
 
                 cur_oam_index = oam_index;
                 cur_above_background = !((secondary_oam[i].attrib >> 5) & 1);
-                break;
+                if (!init_cur_above){
+                    init_cur_above = true;
+                }
         }
     }
     unsigned char bg_data = (((shift_register_high >> (15-x)) & 1) << 1) | (shift_register_low >> (15-x)) & 1;
@@ -561,6 +561,8 @@ void PPU::tick(Bus& bus) {
         if (current_y == 261){
             ppustatus.sprite_zero_hit_flag = false;
             bus.ppustatus.reg &= 0xbf;
+            ppustatus.sprite_overflow_flag = false;
+            bus.ppustatus.reg &= ((~(1 << 5)) & 0xff);
         }
         current_y = current_y == 261 ? (current_x = 0) : current_y + 1;
 

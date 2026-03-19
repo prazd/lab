@@ -30,6 +30,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
             break;
         }
         case constants::CONTROLLER1: { if (value) c.latch1 = true; else c.update_status1();  break; }
+        case constants::CONTROLLER2: { break; }
     }
 }
 
@@ -67,9 +68,10 @@ unsigned char Bus::read_prg(unsigned short addr) {
     }
     switch (addr) {
         case constants::PPUCTRL:
-            return open_bus_value;
         case constants::PPUMASK:
-            return open_bus_value;
+        case constants::PPUSCROLL:
+        case constants::PPUADDR:  return open_bus_value;
+
         case constants::PPUSTATUS: {
             unsigned char current = (ppustatus.reg & 0xe0) | (open_bus_value & 0x1f);
             ppustatus.reg = 0;
@@ -91,8 +93,7 @@ unsigned char Bus::read_prg(unsigned short addr) {
             }
             return oam[oamaddr.reg];
         }
-        case constants::PPUSCROLL:   return open_bus_value;
-        case constants::PPUADDR:     return open_bus_value;
+
         case constants::PPUDATA:     {
             if (last_ppu_address >= constants::IMAGE_PALETTE_BEGIN){
                 return (ppudata.reg & 0x3f) | ((open_bus_value & 0xc0) & 0xff);
@@ -103,6 +104,9 @@ unsigned char Bus::read_prg(unsigned short addr) {
             return ppudata.reg;
         }
         case constants::CONTROLLER1: return c.read_status1();
+        case constants::CONTROLLER2:
+            return 0; //
+
         default: return 0xff; // dummy
     }
 }
