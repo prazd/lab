@@ -81,6 +81,7 @@ void PPU::read_ppuaddr(Bus& bus) {
     if (w){
         v = t;
         bus.last_ppu_address = v;
+        bus.mapper.update_state(v);
     }
     w = !w;
 }
@@ -341,6 +342,31 @@ void PPU::reset() {
     t = 0;
     x = 0;
     w = false;
+    internal_display.fill(WHITE);
+    display.fill(WHITE);
+    secondary_oam_buffer.reset();
+    secondary_oam.reset();
+    current_scanline_cycle = 0;
+    nt_byte = 0;
+    attrib_value = 0;
+    pattern_table_l = 0;
+    pattern_table_h = 0;
+    copy_in_progress = false;
+    tmp_oam_value = 0;
+    base_name_table_address = 0;
+    bg_pattern_table_address = 0;
+    base_attrib_address = 0;
+    sprite_pattern_table_address8x8 = 0;
+    shift_register_low = 0;
+    shift_register_high = 0;
+    attributes_low = 0;
+    attributes_high = 0;
+    ppuctrl.reset();
+    ppumask.reset();
+    ppustatus.reset();
+#if DEBUG_MODE
+    run = false;
+#endif
 }
 
 void PPU::update_base_nt(Bus& bus) {

@@ -88,6 +88,13 @@ void CPU::reset() {
     x = 0;
     y = 0;
     interrupt_requests[CPU::RESET] = true;
+    sr.set(StatusReg::I, false);
+    stop_requested = false;
+    execute_in_progress = false;
+    instruction_execute_done = false;
+    interrupt_handling_in_progress = false;
+    interrupt_handling_cycle = 0;
+    std::memset(mem.map, 0, 0x2000);
 }
 
 

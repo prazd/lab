@@ -35,5 +35,6 @@ struct Bus {
     unsigned char read_chr(unsigned short addr);
     void dma_tick(unsigned char val);
     void open_bus_decay();
+    void reset();
 };
 #endif //NES_BUS_HPP

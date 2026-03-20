@@ -45,7 +45,8 @@ namespace mappers {
             }
             return 0;
         }
-        inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
+
+        inline void tick_irq(unsigned short addr){
             if ((addr >> 12) & 1 && !((last_address >> 12) & 1)){ // maybe add 8 ppu-cycles filter
                 if (!irq_counter) {
                     if (irq_enable)
@@ -55,6 +56,19 @@ namespace mappers {
                 --irq_counter;
             }
             last_address = addr;
+        }
+
+        inline void reset() {
+            last_address = 0;
+            irq_counter = 0;
+            irq_requested = false;
+            a12_inversion = true;
+            prg_banks_mode = true;
+            irq_requested = false;
+            is_vertical = false;
+        }
+
+        inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
             if (!a12_inversion) {
                 if (addr >= 0x0000 && addr <= 0x07ff){
                     return rom[((regs_bank_value[R0] & 0xfe) * 1024) + addr];
@@ -310,8 +324,18 @@ struct Mapper {
             case UxROM:
                 uxrom.handle(addr, value); break;
             case CNROM: {cnrom.handle(addr, value);  break;}
-            case MMC3:  {mmc3.handle(addr, value); update_screen_mirroring(false, false); break;}
+            case MMC3:  {mmc3.tick_irq(addr); mmc3.handle(addr, value); update_screen_mirroring(false, false); break;}
             default: return;
+        }
+    }
+    inline void update_state(unsigned short last_v){
+        if (mtype == MMC3){
+            mmc3.tick_irq(last_v);
+        }
+    }
+    inline void reset(){
+        if (mtype == MMC3){
+            mmc3.reset();
         }
     }
 };

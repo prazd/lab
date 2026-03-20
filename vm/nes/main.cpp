@@ -53,6 +53,13 @@ struct NESVM {
         bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
     }
 
+    void reset(){
+        cpu.reset();
+        ppu.reset();
+        bus.reset();
+        dis.reset(cpu);
+    }
+
 #if DEBUG_MODE
     void cpu_debug_exec() {
         size_t current_tick = 0;
@@ -61,12 +68,6 @@ struct NESVM {
             dis.next = false;
         }
         do {
-            if (cpu.reset_requested) {
-                cpu.reset();
-                ppu.reset();
-                cpu.debug_run = true;
-                cpu.reset_requested = false;
-            }
             while (cpu.debug_run) {
                 cpu.tick(bus);
                 bus.open_bus_decay();
@@ -256,11 +257,10 @@ struct NESVM {
             }
 
             if (grid_view_enable) dtg.draw(22.4f,22.4f);
+            if (IsKeyPressed(KEY_R)) reset();
 #else
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,constants::WIDTH, constants::HEIGHT}, {0, 0},0, WHITE);
 #endif
-            cpu.reset_requested = (IsKeyPressed(KEY_R));
-
             DrawFPS(0,0);
             EndDrawing();
         }
@@ -286,7 +286,8 @@ struct NESVM {
 int main(){
     // /Users/prazd/Desktop/dev/DonkeyKong.nes
     // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: 0x8082/0x80e4/0x80c3/0x8eb6
-    // todo: continue debug (palette)
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes"); // - 82D8
+    // palette_ram.nes
+    // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes"); // - 82D8
     nes.run();
 }

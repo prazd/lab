@@ -156,6 +156,15 @@ struct PPU {
             master_slave_select = (val >> 6) & 1;
             vblank_nmi_enable = (val >> 7) & 1;
         };
+        inline void reset(){
+            base_name_table_addr = 0;
+            addr_inc = 0;
+            pattern_table_addr8x8 = 0;
+            bg_pattern_table_addr = 0;
+            sprite_sz = 0;
+            master_slave_select = 0;
+            vblank_nmi_enable = 0;
+        }
     } ppuctrl;
 
     struct PPUMASK{
@@ -177,6 +186,16 @@ struct PPU {
             emphasize_green = (val >> 6) & 1;
             emphasize_blue = (val >> 7) & 1;
         };
+        inline void reset(){
+            greyscale = 0;
+            show_bg_leftmost_8_pixels = 0;
+            show_sprite_leftmost_8_pixels = 0;
+            enable_background_rendering = 0;
+            enable_sprite_rendering = 0;
+            emphasize_red = 0;
+            emphasize_green = 0;
+            emphasize_blue = 0;
+        }
     } ppumask;
 
     struct PPUSTATUS{
@@ -189,6 +208,12 @@ struct PPU {
             sprite_overflow_flag = (val >> 5) & 1;
             sprite_zero_hit_flag = (val >> 6) & 1;
             vblank_flag = (val >> 7) & 1;
+        }
+        inline void reset(){
+            ppu_identifier = 0;
+            sprite_overflow_flag = 0;
+            sprite_zero_hit_flag = 0;
+            vblank_flag = 0;
         }
     } ppustatus;
 
@@ -212,9 +237,7 @@ struct PPU {
         SpriteOverflow,
         SpriteFinish
     } current_sprite_evaluation_step = SpriteCopy;
-    bool is_sprite_on_line = false;
     bool copy_in_progress = false;
-    bool is_overflow = false;
     unsigned char tmp_oam_value = 0;
 
     size_t copy_step_count = 0;
@@ -246,9 +269,6 @@ struct PPU {
     bool run = false;
     bool fill_white_background = true;
 #endif
-    unsigned char x_scroll{};
-    unsigned char y_scroll{};
-
     void reset();
 
 // REGS

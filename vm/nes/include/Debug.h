@@ -395,6 +395,17 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       button12{DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40}
                                       {}
 
+    void reset(CPU& cpu){
+        selected_move_active = false;
+        is_frame_jump_active = false;
+        is_tile_line_jump_active = false;
+        is_line_jump_active  = false;
+        is_one_tick_ppu_active = false;
+        should_sync = false;
+        trigger_search = false;
+        next = true;
+    }
+
     bool mouse_button_pred(bool pm){
         return pm ?  IsMouseButtonPressed(0) :  IsMouseButtonDown(0);
     }
@@ -660,7 +671,6 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  Nf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::N)) << ' '
         << " \n PPU:\n\n"
         << "  V:" << (unsigned)(ppu.v) << '\n'
-        << " Coarse(X):" << (unsigned)(ppu.v & 0x1f) << " Fine(X):" <<  (unsigned)(ppu.x_scroll) << '\n'
         << " Coarse(Y):" << (unsigned)((ppu.v >> 5) & 0x1f) << " Fine(Y):" <<  (unsigned)((ppu.v >> 12) & 0x7) << '\n'
         << "  NT:" << (unsigned)((ppu.v >> 10) & 0x3) << '\n'
         << "  X:" << (unsigned)(ppu.x) << '\n'

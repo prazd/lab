@@ -152,3 +152,24 @@ void Bus::open_bus_decay() {
         open_bus_value = 0;
     }
 }
+
+void Bus::reset(){
+    ppuctrl.reg = 0;
+    ppuctrl.reg = 0;
+    ppumask.reg = 0;
+    ppustatus.reg = 0;
+    oamaddr.reg = 0;
+    oamdata.reg = 0;
+    ppuscroll.reg = 0;
+    ppuaddr.reg = 0;
+    ppudata.reg = 0;
+    open_bus_value = 0;
+    dma_active = false;
+    dma_index = 0;
+    dma_address = 0;
+    nmi_interrupt_flip_flop = false;
+    irq_interrupt_flip_flop = false;
+    open_bus_value_cycles = 0;
+    last_ppu_address = 0;
+    mapper.reset();
+}
