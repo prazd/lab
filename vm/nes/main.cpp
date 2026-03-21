@@ -12,15 +12,14 @@ struct NESVM {
     PPU ppu{};
     Cartridge cartridge;
 #if DEBUG_MODE
+    std::string_view rom_path;
     Disassembler<30,520,200,400> dis;
     RegsInfo<30,30,180,425> reg_info{};
 #endif
-
-    NESVM(std::string_view rom_path): cartridge(rom_path)
+    NESVM(std::string_view rom_path): rom_path(rom_path), cartridge(rom_path)
 #if DEBUG_MODE
     ,dis(cpu, bus)
 #endif
-
     {
         std::cout << "MapperNum:" << cartridge.mapper_num << '\n';
         std::cout << "CHR_SZ:" << cartridge.chr_rom_sz << '\n';
@@ -49,15 +48,17 @@ struct NESVM {
                         8000 : // CHR_RAM
                         8192 * cartridge.chr_rom_sz;
         bus.mapper.chr.resize(chr_sz);
-        std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.begin() + tiles_index_start + chr_sz, bus.mapper.chr.begin());
+        std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.end(), bus.mapper.chr.begin());
         bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
     }
 
     void reset(){
-        cpu.reset();
-        ppu.reset();
-        bus.reset();
-        dis.reset(cpu);
+        *this = NESVM(rom_path);
+        // TODO: debug
+        // dis.reset();
+        // cpu.reset();
+        // ppu.reset();
+        // bus.reset();
     }
 
 #if DEBUG_MODE
@@ -213,18 +214,17 @@ struct NESVM {
         while(!WindowShouldClose()){
             frame_execute();
 #if DEBUG_MODE
-            dis.draw(cpu, ppu, bus);
-#endif
-
-#if DEBUG_MODE
             UpdateTexture(display_texture, ppu.internal_display.data());
 #else
             UpdateTexture(display_texture, ppu.display.data());
 #endif
 
-
             BeginDrawing();
             ClearBackground(WHITE);
+#if DEBUG_MODE
+            dis.draw(cpu, ppu, bus);
+#endif
+
 #if DEBUG_MODE
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, display_rec, {0, 0},0, WHITE);
             DrawRectangleLinesEx(display_rec, 1.f, BLACK);

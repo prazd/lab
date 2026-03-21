@@ -94,7 +94,12 @@ void CPU::reset() {
     instruction_execute_done = false;
     interrupt_handling_in_progress = false;
     interrupt_handling_cycle = 0;
-    std::memset(mem.map, 0, 0x2000);
+    additional_cycles = 0;
+    pc = 0;
+#if DEBUG_MODE
+    cycles_count = 0;
+#endif
+    std::memset(mem.map, 0, 0x10000);
 }
 
 
@@ -510,9 +515,8 @@ void CPU::tick(Bus& bus){
             sr.set(StatusReg::I, false);
             bus.nmi_interrupt_flip_flop = false;
         }
-        if (bus.irq_interrupt_flip_flop){
+        if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)){
             interrupt_requests[IRQ] = true;
-            sr.set(StatusReg::I, false);
             bus.irq_interrupt_flip_flop = false;
         }
         if (bus.dma_active){

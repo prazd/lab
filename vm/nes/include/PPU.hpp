@@ -95,6 +95,24 @@ struct PPU {
     size_t frames_count{};
     size_t last_line_x{};
     size_t current_line_x{};
+    bool is_sprite_off = false;
+    bool run = false;
+    bool fill_white_background = true;
+
+
+    struct PixelMixingDebugView {
+        enum Mode: unsigned char {
+            Bg = 0,
+            Sp = 1,
+            BgSp = 2,
+            NBgSp = 3,
+        };
+        unsigned char data{};
+        inline void set(bool val, Mode m){ data &= ((~(1 << m)) & 0x7); data |= (val << m);}
+        inline void m_switch(Mode m){ data ^= (1 << m);}
+        inline bool get(Mode m){return (data >> m) & 1;}
+    } pixel_mixing_debug_view{};
+
 #endif
 
     enum FetchStep {
@@ -123,20 +141,6 @@ struct PPU {
     SimpleDeque<Sprite, 8> secondary_oam_buffer{};
     SimpleDeque<SpriteData, 8> secondary_oam{};
 
-#if DEBUG_MODE
-    struct PixelMixingDebugView {
-        enum Mode: unsigned char {
-            Bg = 0,
-            Sp = 1,
-            BgSp = 2,
-            NBgSp = 3,
-        };
-        unsigned char data{};
-        inline void set(bool val, Mode m){ data &= ((~(1 << m)) & 0x7); data |= (val << m);}
-        inline void m_switch(Mode m){ data ^= (1 << m);}
-        inline bool get(Mode m){return (data >> m) & 1;}
-    } pixel_mixing_debug_view{};
-#endif
     void draw_pixel(Bus& bus);
 
     struct PPUCTRL {
@@ -263,12 +267,6 @@ struct PPU {
     } sprite_mode = m8x8;
     bool vblank_nmi_enable = false;
 
-
-#if DEBUG_MODE
-    bool is_sprite_off = false;
-    bool run = false;
-    bool fill_white_background = true;
-#endif
     void reset();
 
 // REGS

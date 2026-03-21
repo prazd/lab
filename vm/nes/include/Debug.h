@@ -394,8 +394,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       button11{DW::rec.x + 40*4, DW::rec.y + h + 40, 40, 40},
                                       button12{DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40}
                                       {}
-
-    void reset(CPU& cpu){
+    void reset(){
         selected_move_active = false;
         is_frame_jump_active = false;
         is_tile_line_jump_active = false;
@@ -403,6 +402,10 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         is_one_tick_ppu_active = false;
         should_sync = false;
         trigger_search = false;
+        selected_line_pc = 0;
+        pressed_mode = true;
+        should_sync = false;
+        run_mode = CPU_M;
         next = true;
     }
 
@@ -841,8 +844,11 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
                    ;
                 if (bus.mapper.mtype == Mapper::MMC3){
                     ss << "MMC3:\n" <<
+                    "IRQ enable:" << (int)bus.mapper.mmc3.irq_enable << '\n' <<
                     "IRQ counter:" << (int)bus.mapper.mmc3.irq_counter << '\n' <<
-                    "IRQ latch:" << (int)bus.mapper.mmc3.irq_latch << '\n';
+                    "IRQ latch:" << (int)bus.mapper.mmc3.irq_latch << '\n' <<
+                    "IRQ requested:" << (int)bus.mapper.mmc3.irq_requested << '\n' <<
+                    "Reload flag:" << (int)bus.mapper.mmc3.reload_flag;
                 }
                 break;
             }

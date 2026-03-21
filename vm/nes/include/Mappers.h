@@ -12,10 +12,12 @@ namespace mappers {
         bool prg_banks_mode = true;
         bool irq_requested = false;
 
-        unsigned char irq_latch {};
+        unsigned char irq_latch{};
         unsigned char irq_counter{};
+        bool reload_flag = false;
         unsigned short last_address{};
         bool irq_enable {};
+        size_t last_write_cycles = 0;
 
         bool is_vertical = false;
 
@@ -47,25 +49,52 @@ namespace mappers {
         }
 
         inline void tick_irq(unsigned short addr){
-            if ((addr >> 12) & 1 && !((last_address >> 12) & 1)){ // maybe add 8 ppu-cycles filter
-                if (!irq_counter) {
-                    if (irq_enable)
-                        irq_requested = true;
-                    irq_counter = irq_latch;
+                if ((addr >> 12) & 1 && !((last_address >> 12) & 1) && last_write_cycles >= 8){ // maybe add 8 ppu-cycles filter
+                    if (irq_counter) --irq_counter;
+                    if (!irq_counter) {
+                        if (reload_flag) {
+                            irq_counter = irq_latch;
+                            reload_flag = false;
+                        } else {
+                            if (irq_enable)
+                            irq_requested = true;
+                            irq_counter = irq_latch;
+                        }
+                    }
                 }
-                --irq_counter;
+                last_write_cycles = 0;
+                last_address = addr;
+        }
+
+        inline void tick_irq(unsigned short addr, unsigned short prev_addr){
+            if ((addr >> 12) & 1 && !((prev_addr >> 12) & 1) && last_write_cycles >= 8){ // maybe add 8 ppu-cycles filter
+                if (irq_counter) --irq_counter;
+                if (!irq_counter) {
+                    if (reload_flag) {
+                        irq_counter = irq_latch;
+                        reload_flag = false;
+                    } else {
+                        if (irq_enable)
+                            irq_requested = true;
+                        irq_counter = irq_latch;
+                    }
+                }
             }
+            last_write_cycles = 0;
             last_address = addr;
         }
 
         inline void reset() {
             last_address = 0;
             irq_counter = 0;
+            irq_latch = 0;
             irq_requested = false;
             a12_inversion = true;
             prg_banks_mode = true;
             irq_requested = false;
             is_vertical = false;
+            selected_bank = R0;
+            regs_bank_value = {};
         }
 
         inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
@@ -113,11 +142,12 @@ namespace mappers {
                 is_vertical = !(value & 1);
             } else if (addr >= 0xc000 && addr <= 0xDFFF) {
                 if (addr & 1){
-                    irq_counter = irq_latch;
+                    reload_flag = true;
                 } else {
                     irq_latch = value;
                 }
             } else if (addr >= 0xe000 && addr <= 0xffff) {
+                irq_requested = false;
                 irq_enable = addr & 1;
             }
         }
@@ -306,10 +336,7 @@ struct Mapper {
     }
 
     inline bool is_irq_requested() {
-        if (mtype == MMC3){
-            return std::exchange(mmc3.irq_requested, false);
-        }
-        return false;
+        return mmc3.irq_requested;
     }
 
     inline void write_chr_ram(unsigned short addr, unsigned char value){
@@ -328,14 +355,19 @@ struct Mapper {
             default: return;
         }
     }
-    inline void update_state(unsigned short last_v){
+    inline void update_state(unsigned short last_v, unsigned short prev_v){
         if (mtype == MMC3){
-            mmc3.tick_irq(last_v);
+            mmc3.tick_irq(last_v, prev_v);
         }
     }
     inline void reset(){
         if (mtype == MMC3){
             mmc3.reset();
+        }
+    }
+    inline void tick(){
+        if (mtype == MMC3) {
+            ++mmc3.last_write_cycles;
         }
     }
 };

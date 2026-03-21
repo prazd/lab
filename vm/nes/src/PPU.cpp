@@ -79,9 +79,10 @@ void PPU::read_ppuaddr(Bus& bus) {
         t |= (((bus.ppuaddr.reg & 0x7f) << 8));
     }
     if (w){
+        bus.mapper.update_state(t, v);
         v = t;
         bus.last_ppu_address = v;
-        bus.mapper.update_state(v);
+
     }
     w = !w;
 }
@@ -240,9 +241,7 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
 }
 
 void PPU::bg_tick(Bus &bus) {
-    if (bus.mapper.is_irq_requested()){
-        bus.irq_interrupt_flip_flop = true;
-    }
+    bus.irq_interrupt_flip_flop = bus.mapper.is_irq_requested();
     ++current_cycle;
     // TODO: continue debug
     update_state(bus);
@@ -361,6 +360,7 @@ void PPU::reset() {
     shift_register_high = 0;
     attributes_low = 0;
     attributes_high = 0;
+    current_step = NT;
     ppuctrl.reset();
     ppumask.reset();
     ppustatus.reset();
@@ -531,6 +531,7 @@ void PPU::draw_pixel(Bus &bus) {
 void PPU::tick(Bus& bus) {
     // TODO: debug
     bg_tick(bus);
+    bus.mapper.tick();
 #if DEBUG_MODE
     if (!is_sprite_off)
 #endif

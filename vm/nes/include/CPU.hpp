@@ -98,6 +98,8 @@ struct CPU {
 #if DEBUG_MODE
     unsigned short pc_watch_address{};
     size_t pc_watch_count{};
+    unsigned long cycles_count = 0;
+    bool debug_run = true;
 #endif
 
     // request RESET interrupt on start (https://www.nesdev.org/NESDoc.pdf - page 13)
@@ -128,10 +130,6 @@ struct CPU {
         IndirectIndexed,
     };
 
-
-#if DEBUG_MODE
-    unsigned long cycles_count = 0;
-#endif
 
     struct AddressingResult {
         unsigned short addr{};
@@ -184,10 +182,6 @@ struct CPU {
     int interrupt_handling_cycle = 0;
     void handle_interrupt(Bus&, Interrupt);
     DecodedInstruction di{};
-
-#if DEBUG_MODE
-    bool debug_run = true;
-#endif
 
     struct AsmInfo {
         std::string_view mnemonic{};
