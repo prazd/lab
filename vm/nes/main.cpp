@@ -16,16 +16,21 @@ struct NESVM {
     Disassembler<30,520,200,400> dis;
     RegsInfo<30,30,180,425> reg_info{};
 #endif
-    NESVM(std::string_view rom_path): rom_path(rom_path), cartridge(rom_path)
+    NESVM(std::string_view rom_path): rom_path(rom_path)
 #if DEBUG_MODE
     ,dis(cpu, bus)
 #endif
     {
-        std::cout << "MapperNum:" << cartridge.mapper_num << '\n';
-        std::cout << "CHR_SZ:" << cartridge.chr_rom_sz << '\n';
-        std::cout << "PRG_SZ:" << cartridge.prg_rom_sz << '\n';
-        std::cout << "Trainer presents:" <<  cartridge.trainer_present << '\n';
+#if GAME_GENIE_MODE
+        cartridge.read("/Users/prazd/Desktop/books/cpp/cpp/vm/nes/rom/GameGenie.nes");
+        read_cartridge_data();
+#else
+        cartridge.read(rom_path);
+        read_cartridge_data();
+#endif
+    }
 
+    void read_cartridge_data(){
         bus.mapper.mtype = static_cast<Mapper::MapperType>(cartridge.mapper_num);
 
         // for test
@@ -52,8 +57,8 @@ struct NESVM {
         bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
     }
 
-    void reset(){
-        *this = NESVM(rom_path);
+    void reset(std::string_view path){
+        *this = NESVM(path);
         // TODO: debug
         // dis.reset();
         // cpu.reset();
@@ -219,6 +224,17 @@ struct NESVM {
             UpdateTexture(display_texture, ppu.display.data());
 #endif
 
+#if GAME_GENIE_MODE
+            if (bus.gg.game_mode && !bus.gg.started){
+                // todo: finish
+                auto cp = bus.gg;
+                reset(rom_path);
+                cartridge.read(rom_path);
+                read_cartridge_data();
+                bus.gg = cp;
+                bus.gg.started = true;
+            }
+#endif
             BeginDrawing();
             ClearBackground(WHITE);
 #if DEBUG_MODE
@@ -257,7 +273,7 @@ struct NESVM {
             }
 
             if (grid_view_enable) dtg.draw(22.4f,22.4f);
-            if (IsKeyPressed(KEY_R)) reset();
+            if (IsKeyPressed(KEY_R)) reset(rom_path);
 #else
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,constants::WIDTH, constants::HEIGHT}, {0, 0},0, WHITE);
 #endif
@@ -288,6 +304,7 @@ int main(){
     // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: 0x8082/0x80e4/0x80c3/0x8eb6
     // palette_ram.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes"); // - 82D8
+    // /Users/prazd/Desktop/dev/GameGenie.nes
+    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes"); // - 82D8
     nes.run();
 }

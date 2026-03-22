@@ -95,7 +95,7 @@ struct Cartridge {
         }
     }
 
-    inline Cartridge(std::string_view rom_path) {
+    void read(std::string_view rom_path){
         auto sz = std::filesystem::file_size(rom_path);
         buffer.resize(sz);
         auto fs = std::ifstream(rom_path, std::ios::binary);

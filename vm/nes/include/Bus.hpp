@@ -2,8 +2,10 @@
 #define NES_BUS_HPP
 #include "Controller.hpp"
 #include "Mappers.h"
+#include "GameGenie.h"
 struct Bus {
     Mapper mapper;
+    GameGenie gg;
     unsigned char oam[0x100]{};
     unsigned short dma_address{};
     bool dma_active = false;

@@ -53,13 +53,12 @@ namespace mappers {
                     if (irq_counter) --irq_counter;
                     if (!irq_counter) {
                         if (reload_flag) {
-                            irq_counter = irq_latch;
                             reload_flag = false;
                         } else {
                             if (irq_enable)
-                            irq_requested = true;
-                            irq_counter = irq_latch;
+                                irq_requested = true;
                         }
+                        irq_counter = irq_latch;
                     }
                 }
                 last_write_cycles = 0;
@@ -71,13 +70,12 @@ namespace mappers {
                 if (irq_counter) --irq_counter;
                 if (!irq_counter) {
                     if (reload_flag) {
-                        irq_counter = irq_latch;
                         reload_flag = false;
                     } else {
                         if (irq_enable)
                             irq_requested = true;
-                        irq_counter = irq_latch;
                     }
+                    irq_counter = irq_latch;
                 }
             }
             last_write_cycles = 0;

@@ -8,6 +8,12 @@ void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
 #if DEBUG_MODE
     triggered_on_write = (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}));
 #endif
+#if GAME_GENIE_MODE
+    if (addr >= 0x8000 && addr <= 0x800b){
+        bus.gg.handle(addr, value);
+        return;
+    }
+#endif
     if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
     || addr >= 0x8000 && addr <= 0xffff){
         bus.write(addr, value);
@@ -31,11 +37,24 @@ unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) const {
 #if DEBUG_MODE
     triggered_on_read = (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}));
 #endif
+#if GAME_GENIE_MODE
+    unsigned char value = 0;
+    if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
+        || addr >= 0x8000 && addr <= 0xffff){
+        value =  bus.read_prg(addr);
+    } else {
+        value = map[addr];
+    }
+    if (auto i = bus.gg.find_index(addr); i != -1)
+        return bus.gg.get(i, value);
+    return value;
+#else
     if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
         || addr >= 0x8000 && addr <= 0xffff){
         return bus.read_prg(addr);
     }
     return map[addr];
+#endif
 }
 
 unsigned char CPU::Memory::unsafe_read(Bus& bus, unsigned short addr) const {
