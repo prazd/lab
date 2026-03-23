@@ -66,7 +66,28 @@ struct GameGenie {
             data[2].active = !((value >> 6) & 1);
             data[2].compare = ((value >> 3) & 1);
         }
+
+    }
+    // todo: finish
+    enum Syms {
+        A, P, Z, L, G, I, T, Y, E, O, X, U, K, S, V, N
     };
+    // https://github.com/qalle2/nes-gg-disassembly/blob/main/prg.asm#L2692
+    inline void custom_decode(){
+        std::array<int, 8> arr{};
+        int tmp = 0;
+        bool carry = false;
+        auto sz = std::size(arr);
+        for (auto& el: arr){
+            el -= 3;
+            el &= 0xf;
+            carry = el & 1;
+            el >>= 1;
+            el |= tmp;
+            tmp = 0;
+            tmp |= (carry << 3);
+        }
+    }
 };
 #endif
 #endif //NES_GAMEGENIE_H

@@ -11,8 +11,8 @@ struct NESVM {
     CPU cpu{};
     PPU ppu{};
     Cartridge cartridge;
-#if DEBUG_MODE
     std::string_view rom_path;
+#if DEBUG_MODE
     Disassembler<30,520,200,400> dis;
     RegsInfo<30,30,180,425> reg_info{};
 #endif
@@ -226,12 +226,14 @@ struct NESVM {
 
 #if GAME_GENIE_MODE
             if (bus.gg.game_mode && !bus.gg.started){
-                // todo: finish
-                auto cp = bus.gg;
-                reset(rom_path);
+                cpu.reset();
+                ppu.reset();
+                bus.reset();
+#if DEBUG_MODE
+                dis.reset();
+#endif
                 cartridge.read(rom_path);
                 read_cartridge_data();
-                bus.gg = cp;
                 bus.gg.started = true;
             }
 #endif

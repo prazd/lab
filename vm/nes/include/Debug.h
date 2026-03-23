@@ -373,6 +373,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle button10;
     Rectangle button11;
     Rectangle button12;
+    Rectangle button13;
 
     Rectangle sync_button;
     Rectangle change_mode_button;
@@ -392,7 +393,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       button9{DW::rec.x + 40*2, DW::rec.y + h + 40, 40, 40},
                                       button10{DW::rec.x + 40*3, DW::rec.y + h + 40, 40, 40},
                                       button11{DW::rec.x + 40*4, DW::rec.y + h + 40, 40, 40},
-                                      button12{DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40}
+                                      button12{DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40},
+                                      button13{DW::rec.x + w, DW::rec.y + 40, 40, 40}
                                       {}
     void reset(){
         selected_move_active = false;
@@ -432,6 +434,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         button10 = {DW::rec.x + 40*3, DW::rec.y + h + 40, 40, 40};
         button11 = {DW::rec.x + 40*4, DW::rec.y + h + 40, 40, 40};
         button12 = {DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40};
+        button13 = {DW::rec.x + w, DW::rec.y + 40, 40, 40};
+
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
 
         change_mode_button = {DW::rec.x + 40, DW::rec.y + h + 40, 40, 40};
@@ -495,7 +499,47 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             should_sync = true;
         else if (CheckCollisionPointRec(GetMousePosition(), change_mode_button) && IsMouseButtonPressed(0))
             run_mode = static_cast<RunMode>((run_mode + 1) % RunModeCount);
+        else if (CheckCollisionPointRec(GetMousePosition(), button13) && IsMouseButtonPressed(0)){
+            unsigned l_pc = 0x8000;
+            std::stringstream lss;
+            std::vector<unsigned short> subroutines_addresses{};
+            while(l_pc < 0xffff) {
+                auto decoded = cpu.decode(cpu.mem.read(bus, l_pc));
+                if (!decoded.bytes) {++l_pc; continue;}
+                auto asm_info = cpu.disassemble(bus, l_pc);
+                if (decoded.i == CPU::JSR)
+                    subroutines_addresses.push_back(asm_info.arg_addr);
+                l_pc += decoded.bytes;
+            }
 
+            l_pc = 0x8000;
+            while(l_pc < 0xffff) {
+                auto decoded = cpu.decode(cpu.mem.read(bus, l_pc));
+                if (!decoded.bytes) {++l_pc; continue;}
+                if (std::any_of(subroutines_addresses.begin(), subroutines_addresses.end(), [l_pc](auto el){return el == l_pc;}))
+                    lss << "-------------------------BEGIN-----------------------------\n";
+
+                auto asm_info = cpu.disassemble(bus, l_pc);
+                lss << std::hex << l_pc << ' ';
+                lss << asm_info.mnemonic << ' ';
+                asm_info.is_accumulator ? (lss << "A") : (asm_info.no_operand ? lss : lss << asm_info.operand);
+                if (asm_info.show_address)
+                    lss << std::hex << ' ' << '[' << asm_info.arg_addr << ']';
+                lss << '\n';
+
+                if (decoded.i == CPU::RTS)
+                    lss << "-------------------------END-----------------------------\n";
+                l_pc += decoded.bytes;
+            }
+
+            auto s = lss.str();
+            std::string path = "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/";
+            path += u_input.s;
+            std::ofstream f(path);
+            if (!f.is_open()) {std::abort();};
+            f.write(s.c_str(), (long)s.size());
+            f.close();
+        }
         for (int i = 0; i < 10; ++i){
             auto r = Rectangle{line_button.x, line_button.y + i * (line_button.height + 25.f), line_button.width, line_button.height};
             if (CheckCollisionPointRec(GetMousePosition(), r) && IsMouseButtonPressed(0)){
@@ -554,6 +598,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button11, " clear", GREEN, 15.f);
             DW::draw_text_button(button12, " trun", GREEN, 15.f);
         }
+        DW::draw_text_button(button13, " dump", GREEN, 15.f);
         DW::draw_text_button(sync_button, " sync", GREEN, 15.f);
         DW::draw_text_button(change_mode_button, " mode", GREEN, 15.f);
         u_input.draw();
