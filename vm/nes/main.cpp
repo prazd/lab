@@ -186,11 +186,11 @@ struct NESVM {
 
         auto handle_down_left_view = [&]{
             switch (current_down_left_view) {
-                case NameTableV:       {ntv.handle(ppu, bus);                break;}
-                case ColorsV:          {cv.handle(bus, ppu);                 break;}
-                case SpriteTilesV:     {stv.handle(bus, ppu);                break;}
-                case MemoryReaderV:    {mem_reader.handle(bus, cpu, ppu); break;}
-                case InstructionFinder: {instr_finder.handle(bus, cpu);       break;}
+                case NameTableV:        {ntv.handle(ppu, bus);                 break;}
+                case ColorsV:           {cv.handle(bus, ppu);                  break;}
+                case SpriteTilesV:      {stv.handle(bus, ppu);                 break;}
+                case MemoryReaderV:     {mem_reader.handle(bus, cpu, ppu);  break;}
+                case InstructionFinder: {instr_finder.handle(bus, cpu);        break;}
             }
         };
 
@@ -302,6 +302,7 @@ struct NESVM {
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes
 
 int main(){
+    // /Users/prazd/Desktop/dev/BattleCity.nes - TODO: https://www.nesdev.org/wiki/Vs._System
     // /Users/prazd/Desktop/dev/DonkeyKong.nes
     // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: 0x8082/0x80e4/0x80c3/0x8eb6
     // palette_ram.nes
@@ -309,4 +310,19 @@ int main(){
     // /Users/prazd/Desktop/dev/GameGenie.nes
     auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes"); // - 82D8
     nes.run();
+
+// -- FDC9
+//    GameGenie gg;
+//// 0B 03 0C 05 05 07 09 03
+//    auto arr = std::array<unsigned char, 8>{
+//
+//        GameGenie::Syms::G, GameGenie::Syms::A,GameGenie::Syms::K,GameGenie::Syms::P, GameGenie::Syms::P, GameGenie::Syms::Z, GameGenie::Syms::L, GameGenie::Syms::A
+//        GameGenie::Syms::A, GameGenie::Syms::E,GameGenie::Syms::P,GameGenie::Syms::O,
+//};
+//    auto res = gg.custom_decode(arr);
+//    std::cout  << std::hex << (int)(res.address | 0x8000) << '\n';
+//    std::cout  << std::hex << (int)res.value << '\n';
+//    std::cout  << std::hex << (int)res.compare << '\n';
+
+// 9241/4/3
 }

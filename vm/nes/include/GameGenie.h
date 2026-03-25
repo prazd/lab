@@ -69,15 +69,23 @@ struct GameGenie {
 
     }
     // todo: finish
-    enum Syms {
-        A, P, Z, L, G, I, T, Y, E, O, X, U, K, S, V, N
+    enum Syms: unsigned char {
+        A = 0x3, E, P, O, Z, X, L, U,
+        G, K, I, S , T, V, Y, N
     };
+
     // https://github.com/qalle2/nes-gg-disassembly/blob/main/prg.asm#L2692
-    inline void custom_decode(){
-        std::array<int, 8> arr{};
-        int tmp = 0;
+    inline Entry custom_decode(auto& arr){
+        static constexpr int code_keys[] = {3, 5, 2, 4, 1, 0, 7, 6};
+
+        unsigned char tmp = 0;
         bool carry = false;
-        auto sz = std::size(arr);
+//        ; Phase 1/2 of decoding: modify the letters of one code:
+//        ; - if 0 (no letter), exit loop
+//        ; - subtract 3 to get a 4-bit value
+//        ; - shift right once
+//        ; - copy least significant bit of previous letter to bit 3 of
+//        ;   this letter
         for (auto& el: arr){
             el -= 3;
             el &= 0xf;
@@ -87,6 +95,27 @@ struct GameGenie {
             tmp = 0;
             tmp |= (carry << 3);
         }
+//        ; copy the bit that was shifted out from the last value,
+//        ; to bit 3 of 1st value; thus, the values will have been
+//        ; rotated instead of shifted (temp2 = LSB of previous letter)
+        arr[0] = (arr[0] & 0x7) | tmp;
+
+// ; Phase 2/2 of decoding: copy 8 nybbles from one semi-decoded
+// ; code to 4 bytes in decoded_code according to code_key.
+        unsigned char z[4]{};
+        int nybble_offset = 0;
+        tmp = 0;
+        for (int i = 0; i < 8; i+=2){
+            z[(i>>1)] = ((arr[code_keys[i]] << 4) | arr[code_keys[i+1]]);
+        }
+        z[0] &= 0x7f;
+
+        return Entry{
+            .address = (unsigned short)((z[1] << 8) | z[0]),
+            .value = z[2],
+            .compare_value = z[3],
+            .active = true
+        };
     }
 };
 #endif

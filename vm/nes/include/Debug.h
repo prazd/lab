@@ -1,12 +1,12 @@
 #ifndef NES_DEBUG_H
 #define NES_DEBUG_H
+#if DEBUG_MODE
 #include <sstream>
 #include <iomanip>
 #include "raylib.h"
 #include "PPU.hpp"
 #include "Cartridge.h"
-
-#if DEBUG_MODE
+#include "SimpleDeque.h"
 
 template <size_t x, size_t y, size_t w, size_t h>
 struct DebugWindow {
@@ -48,6 +48,19 @@ struct DebugWindow {
 
     static void draw_button(Rectangle rec, Color c){
         DrawRectangle(rec.x, rec.y, rec.width, rec.height, c);
+    }
+
+    template <typename PredF, typename HandlerF, typename ... Args>
+    static void cpu_search(Bus& bus, CPU& cpu, PredF pred_f, HandlerF handler_f, Args&&... args) {
+        unsigned l_pc = 0x8000;
+        while(l_pc < 0xffff) {
+            auto decoded = cpu.decode(cpu.mem.read(bus, l_pc));
+            if (!decoded.bytes) {++l_pc; continue;}
+            auto asm_info = cpu.disassemble(bus, l_pc);
+            if (pred_f(l_pc, decoded, asm_info))
+                handler_f(l_pc, decoded, asm_info, std::forward<Args>(args)...);
+            l_pc += decoded.bytes;
+        }
     }
 
     using TileRow = std::array<Color, 8>;
@@ -500,37 +513,35 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         else if (CheckCollisionPointRec(GetMousePosition(), change_mode_button) && IsMouseButtonPressed(0))
             run_mode = static_cast<RunMode>((run_mode + 1) % RunModeCount);
         else if (CheckCollisionPointRec(GetMousePosition(), button13) && IsMouseButtonPressed(0)){
-            unsigned l_pc = 0x8000;
-            std::stringstream lss;
             std::vector<unsigned short> subroutines_addresses{};
-            while(l_pc < 0xffff) {
-                auto decoded = cpu.decode(cpu.mem.read(bus, l_pc));
-                if (!decoded.bytes) {++l_pc; continue;}
-                auto asm_info = cpu.disassemble(bus, l_pc);
-                if (decoded.i == CPU::JSR)
-                    subroutines_addresses.push_back(asm_info.arg_addr);
-                l_pc += decoded.bytes;
-            }
+            DW::cpu_search(bus, cpu,
+            [](auto lpc, auto& decoded, auto& asm_info){
+                return decoded.i == CPU::JSR;
+            },
+            [](auto lpc, auto& decoded, auto& asm_info, auto& subroutines_addresses){
+                subroutines_addresses.push_back(asm_info.arg_addr);
+            },
+            subroutines_addresses
+            );
 
-            l_pc = 0x8000;
-            while(l_pc < 0xffff) {
-                auto decoded = cpu.decode(cpu.mem.read(bus, l_pc));
-                if (!decoded.bytes) {++l_pc; continue;}
-                if (std::any_of(subroutines_addresses.begin(), subroutines_addresses.end(), [l_pc](auto el){return el == l_pc;}))
-                    lss << "-------------------------BEGIN-----------------------------\n";
+            std::stringstream lss;
+            DW::cpu_search(bus, cpu,
+                           [](auto&&...){return true;},
+                           [](auto l_pc, auto& decoded, auto& asm_info, auto& lss, const auto& subroutines_addresses){
+                               if (std::any_of(subroutines_addresses.begin(), subroutines_addresses.end(), [l_pc](auto el){return el == l_pc;}))
+                                   lss << "-------------------------BEGIN-----------------------------\n";
+                               lss << std::hex << l_pc << ' ';
+                               lss << asm_info.mnemonic << ' ';
+                               asm_info.is_accumulator ? (lss << "A") : (asm_info.no_operand ? lss : lss << asm_info.operand);
+                               if (asm_info.show_address)
+                                   lss << std::hex << ' ' << '[' << asm_info.arg_addr << ']';
+                               lss << '\n';
 
-                auto asm_info = cpu.disassemble(bus, l_pc);
-                lss << std::hex << l_pc << ' ';
-                lss << asm_info.mnemonic << ' ';
-                asm_info.is_accumulator ? (lss << "A") : (asm_info.no_operand ? lss : lss << asm_info.operand);
-                if (asm_info.show_address)
-                    lss << std::hex << ' ' << '[' << asm_info.arg_addr << ']';
-                lss << '\n';
-
-                if (decoded.i == CPU::RTS)
-                    lss << "-------------------------END-----------------------------\n";
-                l_pc += decoded.bytes;
-            }
+                               if (decoded.i == CPU::RTS)
+                                   lss << "-------------------------END-----------------------------\n";
+                           },
+                           lss, subroutines_addresses
+            );
 
             auto s = lss.str();
             std::string path = "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/";
@@ -870,6 +881,9 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
         CartridgeM,
         PPUM,
         MMIORegsM,
+#if GAME_GENIE_MODE
+        GameGenieM,
+#endif
         ModeCount
     } mode = CartridgeM;
 
@@ -880,32 +894,31 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
         switch (mode) {
             case CartridgeM: {
                 ss << "CartridgeInfo:\n"
-                   << "  MapperNum:" << std::hex   << c.mapper_num << '\n'
-                   << "  CHR_ROM_SZ:" << std::dec  << c.chr_rom_sz << '\n'
-                   << "  PRG_ROM_SZ:" << std::dec  << c.prg_rom_sz << '\n'
-                   << "  Battery:"  << c.is_battery << '\n'
+                   << "  MapperNum:" << std::dec << c.mapper_num << '\n'
+                   << "  CHR_ROM_SZ:" << std::dec << c.chr_rom_sz << '\n'
+                   << "  PRG_ROM_SZ:" << std::dec << c.prg_rom_sz << '\n'
+                   << "  Battery:" << c.is_battery << '\n'
                    << " Is alternative nt:" << c.is_alternative_nametable << '\n'
-                   << " Is horizontal arrangement:" << c.is_horizontal_arrangement << '\n'
-                   ;
-                if (bus.mapper.mtype == Mapper::MMC3){
+                   << " Is horizontal arrangement:" << c.is_horizontal_arrangement << '\n';
+                if (bus.mapper.mtype == Mapper::MMC3) {
                     ss << "MMC3:\n" <<
-                    "IRQ enable:" << (int)bus.mapper.mmc3.irq_enable << '\n' <<
-                    "IRQ counter:" << (int)bus.mapper.mmc3.irq_counter << '\n' <<
-                    "IRQ latch:" << (int)bus.mapper.mmc3.irq_latch << '\n' <<
-                    "IRQ requested:" << (int)bus.mapper.mmc3.irq_requested << '\n' <<
-                    "Reload flag:" << (int)bus.mapper.mmc3.reload_flag;
+                       "IRQ enable:" << (int) bus.mapper.mmc3.irq_enable << '\n' <<
+                       "IRQ counter:" << (int) bus.mapper.mmc3.irq_counter << '\n' <<
+                       "IRQ latch:" << (int) bus.mapper.mmc3.irq_latch << '\n' <<
+                       "IRQ requested:" << (int) bus.mapper.mmc3.irq_requested << '\n' <<
+                       "Reload flag:" << (int) bus.mapper.mmc3.reload_flag;
                 }
                 break;
             }
             case PPUM: {
                 ss << "PPU:\n"
-                   << "  FramesCount:"    <<   std::dec << ppu.frames_count << '\n'
-                   << "  LastLineX:"      <<   std::dec << ppu.last_line_x << '\n'
-                   << "  CurrentLineX:"   <<   std::dec << ppu.current_line_x << '\n' << std::hex
-                   << "  ShiftRegL:"      <<   std::bitset<16>(ppu.shift_register_low).to_string()  << '\n' << std::hex
-                   << "  ShiftRegH:"      <<   std::bitset<16>(ppu.shift_register_high).to_string() << '\n' << std::hex
-                   << "  AttributesRegL:" <<   std::bitset<16>(ppu.attributes_low).to_string()      << '\n' << std::hex
-                   << "  AttributesRegH:" <<   std::bitset<16>(ppu.attributes_high).to_string()     << '\n' << std::hex;
+                   << "  FramesCount:" << std::dec << ppu.frames_count << '\n'
+                   << "  LastLineX:" << std::dec << ppu.last_line_x << '\n'
+                   << "  CurrentLineX:" << std::dec << ppu.current_line_x << '\n' << std::hex
+                   << "  ShiftRegL:" << std::bitset<16>(ppu.shift_register_low).to_string() << '\n' << std::hex
+                   << "  ShiftRegH:" << std::bitset<16>(ppu.shift_register_high).to_string() << '\n' << std::hex
+                   << "  AttributesRegL:" << std::bitset<16>(ppu.attributes_low).to_string() << '\n' << std::hex
+                   << "  AttributesRegH:" << std::bitset<16>(ppu.attributes_high).to_string() << '\n' << std::hex;
                 break;
             }
             case MMIORegsM: {
@@ -920,8 +933,22 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
                    << "  PPUDATA(0x2007):" <<        std::bitset<8>(bus.unsafe_read_prg(constants::PPUDATA)).to_string()<< '\n';
                 break;
             }
+#if GAME_GENIE_MODE
+            case GameGenieM: {
+                ss << "GameGenieInfo:\n";
+                for (int i = 0; i < 3; ++i){
+                    if (!bus.gg.data[i].active) continue;
+                    ss << "I:" << i << '\n'
+                       << "  Address:"    <<  std::hex  <<   int(bus.gg.data[i].address) << '\n'
+                       << "  Value:"      <<  std::hex  <<   int(bus.gg.data[i].value) << '\n';
+                    if (bus.gg.data[i].compare)
+                        ss << "  Compare:"      <<  std::hex  <<  int(bus.gg.data[i].compare_value) << '\n';
+                }
+                break;
+            }
+#endif
         }
-        auto s = ss.str();
+                auto s = ss.str();
         DW::move();
         DW::draw(s.c_str(), 13.f);
         ss.str("");
@@ -1165,11 +1192,14 @@ struct InstructionFinder: DebugWindowText<x, y, w, h> {
     size_t end = 0;
     unsigned short target_addr = 0;
     unsigned char target_val = 0;
+    SimpleDeque<CPU::Instruction, 10> instr_search_list;
+    inline static unsigned short instr_search_address = 0;
     enum Mode {
-        Addr,
-        Val,
+        Instruction,
+        Value,
         ModeCount,
-    } mode = Val;
+    } mode = Value;
+
     struct AsmInfo {
         unsigned short pc{};
         std::string_view mnemonic{};
@@ -1181,7 +1211,10 @@ struct InstructionFinder: DebugWindowText<x, y, w, h> {
     Rectangle search_button{DW::rec.x, DW::rec.y + h, 30, 30};
     Rectangle clear_button{DW::rec.x + 30, DW::rec.y + h, 30, 30};
     Rectangle next_button{DW::rec.x + 30 * 2, DW::rec.y + h, 30, 30};
+
     Rectangle prev_button{DW::rec.x + 30 * 3, DW::rec.y + h, 30, 30};
+    Rectangle add_instr_button{DW::rec.x, DW::rec.y + h + 30, 30, 30};
+    Rectangle clear_instr_button{DW::rec.x + 30, DW::rec.y + h + 30, 30, 30};
     std::vector<AsmInfo> instructions{};
 
     void handle(Bus& bus, CPU& cpu){
@@ -1190,8 +1223,10 @@ struct InstructionFinder: DebugWindowText<x, y, w, h> {
         clear_button =  {DW::rec.x + 30, DW::rec.y + h, 30, 30};
         next_button = {DW::rec.x + 30 * 2, DW::rec.y + h, 30, 30};
         prev_button = {DW::rec.x + 30 * 3, DW::rec.y + h, 30, 30};
+        add_instr_button = {DW::rec.x, DW::rec.y + h + 30, 30, 30};
+        clear_instr_button = {DW::rec.x + 30, DW::rec.y + h + 30, 30, 30};
 
-        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
             mode = static_cast<Mode>((mode + 1) % ModeCount);
 
         if (CheckCollisionPointRec(GetMousePosition(), clear_button) &&  IsMouseButtonPressed(0)){
@@ -1214,30 +1249,64 @@ struct InstructionFinder: DebugWindowText<x, y, w, h> {
             }
         }
 
-        if (CheckCollisionPointRec(GetMousePosition(), search_button) && IsMouseButtonPressed(0)){
-            if (mode == Val){
-                instructions.clear();
-                target_addr = std::stoul(u_input.s, 0, 16);
-                unsigned short pc = 0x8000;
-                bool overflow = false;
-                while (!overflow){
-                    auto cur = pc;
-                    auto opcode = cpu.mem.read(bus, pc);
-                    if (opcode == 0) {++pc; continue;}
-                    auto d = cpu.decode(opcode);
-                    auto asm_info = cpu.disassemble(bus, pc);
-                    if (asm_info.arg_addr == target_addr) instructions.push_back(
-                                {pc, asm_info.mnemonic, asm_info.operand, asm_info.arg_addr});
-                    pc += d.bytes ? d.bytes : 1;
-                    overflow = pc < cur;
+        if (mode == Instruction) {
+            if (CheckCollisionPointRec(GetMousePosition(), add_instr_button) && IsMouseButtonPressed(0)){
+                for (size_t i = 0, e = std::size(CPU::instruction_str); i < e; ++i){
+                    if (u_input.s == CPU::instruction_str[i]){
+                        instr_search_list.push_back(static_cast<CPU::Instruction>(i));
+                        break;
+                    }
                 }
-                begin = 0;
-                end = std::min(instructions.size(), view_count);
+            } else if (CheckCollisionPointRec(GetMousePosition(), clear_instr_button) && IsMouseButtonPressed(0)) {
+                instr_search_list.reset();
             }
         }
 
+        if (CheckCollisionPointRec(GetMousePosition(), search_button) && IsMouseButtonPressed(0)){
+            if (mode == Value){
+                instructions.clear();
+                target_addr = std::stoul(u_input.s, 0, 16);
+                DW::cpu_search(bus, cpu, [target_addr=target_addr](auto lpc, auto& decoded, auto& asm_info){
+                    return asm_info.arg_addr == target_addr;
+                },
+        [](auto lpc, auto& decoded, auto& asm_info, auto& instructions){
+                instructions.push_back(
+                    {(unsigned short)lpc, asm_info.mnemonic, asm_info.operand, asm_info.arg_addr});
+                },
+                instructions);
+            } else if (mode == Instruction){
+                DW::cpu_search(bus, cpu, [instr_search_list=instr_search_list](auto lpc, auto& decoded, auto& asm_info){
+                       static int current_ins = 0;
+                       if (decoded.i == instr_search_list[current_ins]){
+                            if (current_ins == 0) instr_search_address = lpc;
+                           ++current_ins;
+                       } else {
+                           current_ins = 0;
+                           instr_search_address = 0;
+                       }
+                       return current_ins >= instr_search_list.size();
+                   },
+                   [](auto lpc, auto& decoded, auto& asm_info, auto& instructions){
+                       instructions.push_back(
+                               {(unsigned short)instr_search_address, asm_info.mnemonic, asm_info.operand, asm_info.arg_addr});
+                   },
+                   instructions);
+
+            }
+            begin = 0;
+            end = std::min(instructions.size(), view_count);
+        }
+
         for (size_t i = begin ; i != end; ++i){
-            ss  << std::hex << ' ' << instructions[i].pc << ' ' <<  instructions[i].mnemonic << '\n';
+            ss  << std::hex << ' ' << instructions[i].pc;
+            if (mode == Value) ss << ' ' <<  instructions[i].mnemonic;
+            ss <<'\n';
+        }
+
+        if (mode == Instruction) {
+            for (size_t i = 0, e = instr_search_list.size(); i < e; ++i)
+                ss << CPU::instruction_str[instr_search_list[i]] << ',';
+            ss << '\n';
         }
 
         u_input.draw();
@@ -1248,6 +1317,10 @@ struct InstructionFinder: DebugWindowText<x, y, w, h> {
         DW::draw_text_button(clear_button, " clear", BLACK);
         DW::draw_text_button(next_button, " next", BLACK);
         DW::draw_text_button(prev_button, " prev", BLACK);
+        if (mode == Instruction) {
+            DW::draw_text_button(add_instr_button, " addi", BLACK);
+            DW::draw_text_button(clear_instr_button, " cleari", BLACK);
+        }
         ss.str("");
         DW::draw_win();
         DW::move();

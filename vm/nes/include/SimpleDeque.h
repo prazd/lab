@@ -35,6 +35,9 @@ struct SimpleDeque {
     T& operator[](size_t index){
         return  *reinterpret_cast<T*>(buffer + index * sizeof(T));
     }
+    const T& operator[](size_t index)const{
+        return  *reinterpret_cast<const T*>(buffer + index * sizeof(T));
+    }
     size_t size() const {
         return current_sz;
     }
