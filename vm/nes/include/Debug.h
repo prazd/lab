@@ -1392,5 +1392,75 @@ struct CustomController: DebugWindowText<x,y,w,h> {
     }
 };
 
+
+template <size_t x, size_t y, size_t w, size_t h>
+struct CustomGameGenie: DebugWindowText<x, y, w, h> {
+    using DW = DebugWindowText<x, y, w, h>;
+    std::stringstream ss;
+    static constexpr size_t cheat_sz = 3;
+    UserInput<x, y - 30, w, 30> u_input;
+
+    std::array<int, 6> cheat_6_arr;
+    std::array<int, 8> cheat_8_arr;
+
+    Rectangle add_button{DW::rec.x, DW::rec.y + h, 30, 30};
+    Rectangle clear_button{DW::rec.x , DW::rec.y, 30, 30};
+
+    void handle(Bus& bus){
+        u_input.rec  =   {DW::rec.x, DW::rec.y - 30, w, 30};
+        clear_button =   {DW::rec.x, DW::rec.y+5, 30, 30};
+        add_button   =   {DW::rec.x, DW::rec.y + h, 30, 30};
+
+        if (CheckCollisionPointRec(GetMousePosition(), add_button) && IsMouseButtonPressed(0)){
+                if(bus.gg.data.size() < cheat_sz) {
+                    if (u_input.s.size() == 6){
+                        for (int j = 0; j < 6; ++j){
+                            if (auto s = GameGenie::get_syms_by_str(u_input.s[j]); s != GameGenie::Unknown){
+                                cheat_6_arr[j] = s;
+                            } else {
+                                break;
+                            }
+                        }
+                        auto r = bus.gg.custom_decode(cheat_6_arr);
+                        r.str = u_input.s;
+                        bus.gg.data.push_back(r);
+                    } else {
+                        for (int j = 0; j < 8; ++j){
+                            if (auto s = GameGenie::get_syms_by_str(u_input.s[j]); s != GameGenie::Unknown){
+                                cheat_8_arr[j] = s;
+                            } else {
+                                break;
+                            }
+                        }
+                        auto r = bus.gg.custom_decode(cheat_8_arr);
+                        r.str = u_input.s;
+                        bus.gg.data.push_back(r);
+                    }
+            }
+        }
+
+        ss << '\n';
+        for (int i = 0, e = bus.gg.data.size();i < e; ++i){
+            auto r = Rectangle{clear_button.x-30, clear_button.y + (i * 42), 30,30};
+            DW::draw_text_button(r, "del", RED);
+            ss << std::hex << ' ' << bus.gg.data[i].str << " Address: " << bus.gg.data[i].address << " Value:" << (int)bus.gg.data[i].value;
+            (bus.gg.data[i].compare ? (ss << " Compare:" << (int)bus.gg.data[i].compare_value) : ss);
+            ss << "\n\n\n";
+            if (CheckCollisionPointRec(GetMousePosition(), r) && IsMouseButtonPressed(0)){
+                auto t = std::remove(bus.gg.data.begin(),  bus.gg.data.end(), bus.gg.data[i]);
+                bus.gg.data.erase(t, bus.gg.data.end());
+            }
+        }
+
+        DW::draw_text_button(add_button, "add", BLACK);
+        auto s = ss.str();
+        DrawText(s.c_str(), DW::rec.x, DW::rec.y, 12.f, BLACK);
+        u_input.draw();
+        ss.str("");
+        DW::draw_win();
+        DW::move();
+    }
+};
+
 #endif
 #endif //NES_DEBUG_H

@@ -2,6 +2,7 @@
 #define NES_GAMEGENIE_H
 #include "Constants.hpp"
 #if GAME_GENIE_MODE
+#include "SimpleDeque.h"
 
 //https://www.nesdev.org/wiki/Game_Genie
 struct GameGenie {
@@ -11,8 +12,12 @@ struct GameGenie {
         bool active = false;
         bool compare = false;
         unsigned char compare_value{};
+        std::string str;
+        inline bool operator==(const Entry& rhs){
+            return (address == rhs.address || (!str.empty() && !rhs.str.empty() && str == rhs.str));
+        }
     };
-    Entry data[3]{};
+    SimpleDeque<Entry,3> data{};
 
     inline unsigned char index_by_address(unsigned short address) {
         if (address >= 0x8001 && address <= 0x8004)
@@ -28,7 +33,7 @@ struct GameGenie {
 
     inline int find_index(unsigned short address){
         int index = -1;
-        for (int i = 0; i < 3; ++i){
+        for (int i = 0, e = data.size(); i != e; ++i){
             if (data[i].address == address && data[i].active){
                 index = i;
                 break;
@@ -42,6 +47,7 @@ struct GameGenie {
         return data[i].value;
     };
     inline void handle(unsigned short address, unsigned char value){
+        if (data.size() < 3) for (int i = 0; i < 3; ++i) data.push_back(Entry{});
         if (address == 0x8002 || address == 0x8006 || address == 0x800a) {
             auto i = index_by_address(address);
             data[i].address &= 0xff00;
@@ -59,6 +65,7 @@ struct GameGenie {
         } else if (address == 0x8000){
             if (game_mode) return;
             game_mode = value & 1;
+
             data[0].active =  !((value >> 4) & 1);
             data[0].compare = ((value >> 1) & 1);
             data[1].active = !((value >> 5) & 1);
@@ -71,13 +78,25 @@ struct GameGenie {
     // todo: finish
     enum Syms: unsigned char {
         A = 0x3, E, P, O, Z, X, L, U,
-        G, K, I, S , T, V, Y, N
+        G, K, I, S , T, V, Y, N, Unknown
     };
+
+    static constexpr char syms_str[] = {
+            'A', 'E', 'P', 'O', 'Z', 'X', 'L', 'U',
+            'G', 'K', 'I', 'S' , 'T', 'V', 'Y', 'N'
+    };
+
+    static Syms get_syms_by_str(char str) {
+        for (int i = 0, e = std::size(syms_str); i != e; ++i){
+            if (str == syms_str[i]) return static_cast<Syms>(i + 3);
+        }
+        return Unknown;
+    }
 
     // https://github.com/qalle2/nes-gg-disassembly/blob/main/prg.asm#L2692
     inline Entry custom_decode(auto& arr){
         static constexpr int code_keys[] = {3, 5, 2, 4, 1, 0, 7, 6};
-
+        size_t sz = std::size(arr);
         unsigned char tmp = 0;
         bool carry = false;
 //        ; Phase 1/2 of decoding: modify the letters of one code:
@@ -105,16 +124,17 @@ struct GameGenie {
         unsigned char z[4]{};
         int nybble_offset = 0;
         tmp = 0;
-        for (int i = 0; i < 8; i+=2){
+        for (int i = 0; i < sz; i+=2){
             z[(i>>1)] = ((arr[code_keys[i]] << 4) | arr[code_keys[i+1]]);
         }
         z[0] &= 0x7f;
 
         return Entry{
-            .address = (unsigned short)((z[1] << 8) | z[0]),
+            .address = (unsigned short)(0x8000 | ((z[0] << 8) | z[1])),
             .value = z[2],
+            .active = true,
+            .compare = sz == 8,
             .compare_value = z[3],
-            .active = true
         };
     }
 };

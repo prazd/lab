@@ -165,6 +165,7 @@ struct NESVM {
         SpriteTilesViewer<1110,432,480,432> stv{};
         MemoryViewer<1110,462,450,432> mem_reader{};
         InstructionFinder<1110,462,450,432> instr_finder{};
+        CustomGameGenie<1110,462,450,432> cgg{};
 
         GeneralInfo<600, 700, 200,300> general_info{};
 
@@ -181,6 +182,9 @@ struct NESVM {
             SpriteTilesV,
             MemoryReaderV,
             InstructionFinder,
+#if GAME_GENIE_MODE
+            CustomGameGenieV,
+#endif
             DownRightViewCount
         } current_down_left_view = NameTableV;
 
@@ -191,6 +195,9 @@ struct NESVM {
                 case SpriteTilesV:      {stv.handle(bus, ppu);                 break;}
                 case MemoryReaderV:     {mem_reader.handle(bus, cpu, ppu);  break;}
                 case InstructionFinder: {instr_finder.handle(bus, cpu);        break;}
+#if GAME_GENIE_MODE
+                case CustomGameGenieV:   {cgg.handle(bus); break;}
+#endif
             }
         };
 
@@ -310,19 +317,4 @@ int main(){
     // /Users/prazd/Desktop/dev/GameGenie.nes
     auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes"); // - 82D8
     nes.run();
-
-// -- FDC9
-//    GameGenie gg;
-//// 0B 03 0C 05 05 07 09 03
-//    auto arr = std::array<unsigned char, 8>{
-//
-//        GameGenie::Syms::G, GameGenie::Syms::A,GameGenie::Syms::K,GameGenie::Syms::P, GameGenie::Syms::P, GameGenie::Syms::Z, GameGenie::Syms::L, GameGenie::Syms::A
-//        GameGenie::Syms::A, GameGenie::Syms::E,GameGenie::Syms::P,GameGenie::Syms::O,
-//};
-//    auto res = gg.custom_decode(arr);
-//    std::cout  << std::hex << (int)(res.address | 0x8000) << '\n';
-//    std::cout  << std::hex << (int)res.value << '\n';
-//    std::cout  << std::hex << (int)res.compare << '\n';
-
-// 9241/4/3
 }
