@@ -7,6 +7,7 @@
 #include "PPU.hpp"
 #include "Cartridge.h"
 #include "SimpleDeque.h"
+#include <algorithm>
 
 template <size_t x, size_t y, size_t w, size_t h>
 struct DebugWindow {
@@ -738,7 +739,9 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  VBLank:" << (unsigned)(ppu.ppustatus.vblank_flag) << '\n'
         << "  Bus VBLank:" << (unsigned)(bus.ppustatus.reg & 0x80) << '\n'
         << std::dec << "  Cycles:" << ppu.current_scanline_cycle
-        << "  Scanline:" << ppu.current_y;
+        << "  Scanline:" << ppu.current_y << '\n'
+        << " DrawX:" << ppu.current_x%256 << '\n'
+        << " DrawY:" << ppu.current_y << '\n';
         ss << "\nScreenMirroring:";
         switch (bus.mapper.current_screen_mirroring) {
             case Mapper::ScreenMirroring::Horizontal: ss << "Horizontal"; break;
@@ -1392,7 +1395,7 @@ struct CustomController: DebugWindowText<x,y,w,h> {
     }
 };
 
-
+#if GAME_GENIE_MODE
 template <size_t x, size_t y, size_t w, size_t h>
 struct CustomGameGenie: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
@@ -1456,6 +1459,81 @@ struct CustomGameGenie: DebugWindowText<x, y, w, h> {
         auto s = ss.str();
         DrawText(s.c_str(), DW::rec.x, DW::rec.y, 12.f, BLACK);
         u_input.draw();
+        ss.str("");
+        DW::draw_win();
+        DW::move();
+    }
+};
+#endif
+
+template <size_t x, size_t y, size_t w, size_t h>
+struct DiffSnapshot: DebugWindowText<x, y, w, h> {
+    using DW = DebugWindowText<x, y, w, h>;
+
+    enum SnapValue {
+        CPU_X, CPU_Y, CPU_A,
+        CPU_FLAG, PPU_V, PPU_T, PPU_X,
+        PPU_SHIFT_L,
+        PPU_SHIFT_H,
+        PPU_CTRL_REG,
+        PPU_STATUS_REG,
+        SnapValuesCount
+    };
+
+    static constexpr std::string_view snap_values_str[SnapValuesCount] = {
+        "CPU_X", "CPU_Y", "CPU_A",
+        "CPU_FLAG", "PPU_V", "PPU_T", "PPU_X",
+        "PPU_SHIFT_L", "PPU_SHIFT_H",
+        "PPU_CTRL",
+        "PPU_STATUS",
+    };
+
+    unsigned short s1[SnapValuesCount]{};
+    unsigned short s2[SnapValuesCount]{};
+
+    std::stringstream ss;
+    bool first = true;
+    Rectangle take_snapshot{DW::rec.x, DW::rec.y + h, 30, 30};
+    Rectangle clear_s{DW::rec.x + 30, DW::rec.y + h, 30, 30};
+
+    void handle(Bus& bus, CPU& cpu, PPU& ppu){
+        take_snapshot =   {DW::rec.x, DW::rec.y + h, 30, 30};
+        clear_s = {DW::rec.x + 30, DW::rec.y + h, 30, 30};
+
+        if (CheckCollisionPointRec(GetMousePosition(), take_snapshot) && IsMouseButtonPressed(0)){
+            auto& s = (std::exchange(first, !first)) ? s1 : s2;
+            s[CPU_X] = cpu.x;
+            s[CPU_Y] = cpu.y;
+            s[CPU_A] = cpu.a;
+            s[CPU_FLAG] = cpu.sr.reg;
+            s[PPU_V] = ppu.v;
+            s[PPU_T]=  ppu.t;
+            s[PPU_X] = ppu.x;
+            s[PPU_SHIFT_L] = ppu.shift_register_low;
+            s[PPU_SHIFT_H] = ppu.shift_register_high;
+            s[PPU_CTRL_REG] = ppu.ppuctrl.get();
+            s[PPU_STATUS_REG] = ppu.ppustatus.get();
+        } else if (CheckCollisionPointRec(GetMousePosition(), clear_s) && IsMouseButtonPressed(0)){
+            std::memset(s1, 0 , sizeof(s1));
+            std::memset(s2, 0 , sizeof(s2));
+            first = true;
+        }
+
+        auto draw_diff = [](auto& ss, auto text, auto a, auto b, int rx, int ry){
+            ss << ' ' << text << ':' << a << "         " << text << ':' << b;
+            auto s = ss.str();
+            DrawText(s.c_str(), rx, ry,12.f, a == b ? BLACK : RED);
+            ss.str("");
+        };
+
+        for (int i = 0; i < SnapValuesCount; ++i)
+            draw_diff(ss,snap_values_str[i], s1[i], s2[i], DW::rec.x, DW::rec.y  + (15 * i));
+
+
+        DW::draw_text_button(take_snapshot, "snap", BLACK);
+        DW::draw_text_button(clear_s, "clear1", BLACK);
+        auto s = ss.str();
+        DrawText(s.c_str(), DW::rec.x, DW::rec.y  + (15 * SnapValuesCount), 12.f, BLACK);
         ss.str("");
         DW::draw_win();
         DW::move();

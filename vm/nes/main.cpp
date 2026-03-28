@@ -165,7 +165,10 @@ struct NESVM {
         SpriteTilesViewer<1110,432,480,432> stv{};
         MemoryViewer<1110,462,450,432> mem_reader{};
         InstructionFinder<1110,462,450,432> instr_finder{};
+        DiffSnapshot<1110,462,450,432> ds{};
+#if GAME_GENIE_MODE
         CustomGameGenie<1110,462,450,432> cgg{};
+#endif
 
         GeneralInfo<600, 700, 200,300> general_info{};
 
@@ -182,6 +185,7 @@ struct NESVM {
             SpriteTilesV,
             MemoryReaderV,
             InstructionFinder,
+            DiffSnapshotV,
 #if GAME_GENIE_MODE
             CustomGameGenieV,
 #endif
@@ -195,6 +199,7 @@ struct NESVM {
                 case SpriteTilesV:      {stv.handle(bus, ppu);                 break;}
                 case MemoryReaderV:     {mem_reader.handle(bus, cpu, ppu);  break;}
                 case InstructionFinder: {instr_finder.handle(bus, cpu);        break;}
+                case DiffSnapshotV:     {ds.handle(bus, cpu, ppu);          break;}
 #if GAME_GENIE_MODE
                 case CustomGameGenieV:   {cgg.handle(bus); break;}
 #endif
@@ -315,6 +320,6 @@ int main(){
     // palette_ram.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
     // /Users/prazd/Desktop/dev/GameGenie.nes
-    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes"); // - 82D8
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes"); // - 82D8
     nes.run();
 }

@@ -160,6 +160,17 @@ struct PPU {
             master_slave_select = (val >> 6) & 1;
             vblank_nmi_enable = (val >> 7) & 1;
         };
+        inline unsigned char get() const{
+            unsigned char res{};
+            res |= base_name_table_addr;
+            res |= (addr_inc << 2);
+            res |= (pattern_table_addr8x8 << 3);
+            res |= (bg_pattern_table_addr << 4);
+            res |= (sprite_sz << 5);
+            res |= (master_slave_select << 6);
+            res |= (vblank_nmi_enable << 7);
+            return res;
+        };
         inline void reset(){
             base_name_table_addr = 0;
             addr_inc = 0;
@@ -213,12 +224,21 @@ struct PPU {
             sprite_zero_hit_flag = (val >> 6) & 1;
             vblank_flag = (val >> 7) & 1;
         }
+        inline unsigned char get() const {
+            unsigned char res{};
+            res |= ppu_identifier;
+            res |= (sprite_overflow_flag << 5);
+            res |= (sprite_zero_hit_flag << 6);
+            res |= (vblank_flag << 7);
+            return res;
+        }
         inline void reset(){
             ppu_identifier = 0;
             sprite_overflow_flag = 0;
             sprite_zero_hit_flag = 0;
             vblank_flag = 0;
         }
+
     } ppustatus;
 
 

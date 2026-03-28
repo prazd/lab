@@ -1,5 +1,6 @@
 #include "PPU.hpp"
 #include "Constants.hpp"
+#include <algorithm>
 #include <bitset>
 #include <cassert>
 

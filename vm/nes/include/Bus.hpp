@@ -5,7 +5,9 @@
 #include "GameGenie.h"
 struct Bus {
     Mapper mapper;
+#if GAME_GENIE_MODE
     GameGenie gg;
+#endif
     unsigned char oam[0x100]{};
     unsigned short dma_address{};
     bool dma_active = false;
