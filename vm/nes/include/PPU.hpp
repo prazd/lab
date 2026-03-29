@@ -295,7 +295,7 @@ struct PPU {
     void read_ppuaddr(Bus& mem);
     void update_state(Bus& mem);
 
-    std::array<Color, 256 * 240> internal_display{};
+    static inline std::array<Color, 256 * 240> internal_display{};
     size_t current_x = 0;
     size_t current_y = 261;
 
@@ -305,7 +305,7 @@ struct PPU {
         ++current_line_x;
 #endif
     }
-    std::array<Color, 256 * 240> display{};
+    static inline std::array<Color, 256 * 240> display{};
 
     std::array<Color, 64> palette{
         Color{0x75, 0x75,  0x75, 0xFF},

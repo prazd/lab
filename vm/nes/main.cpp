@@ -165,7 +165,7 @@ struct NESVM {
         SpriteTilesViewer<1110,432,480,432> stv{};
         MemoryViewer<1110,462,450,432> mem_reader{};
         InstructionFinder<1110,462,450,432> instr_finder{};
-        DiffSnapshot<1110,462,450,432> ds{};
+        Snapshot<1110,462,450,432> ds{};
 #if GAME_GENIE_MODE
         CustomGameGenie<1110,462,450,432> cgg{};
 #endif

@@ -73,6 +73,12 @@ struct DebugWindow {
         return res;
     }
 
+    static void save_data_to_file(const std::string& filename, const char* ptr, long sz){
+        std::ofstream f(std::string("/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/") + filename);
+        if (!f.is_open()) {std::abort();};
+        f.write(ptr, sz);
+        f.close();
+    }
 };
 
 template<size_t x, size_t y, size_t w, size_t h, size_t t_w, size_t t_h>
@@ -545,12 +551,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             );
 
             auto s = lss.str();
-            std::string path = "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/";
-            path += u_input.s;
-            std::ofstream f(path);
-            if (!f.is_open()) {std::abort();};
-            f.write(s.c_str(), (long)s.size());
-            f.close();
+            DW::save_data_to_file(u_input.s, (char*)s.c_str(), (long)s.size());
         }
         for (int i = 0; i < 10; ++i){
             auto r = Rectangle{line_button.x, line_button.y + i * (line_button.height + 25.f), line_button.width, line_button.height};
@@ -1467,7 +1468,7 @@ struct CustomGameGenie: DebugWindowText<x, y, w, h> {
 #endif
 
 template <size_t x, size_t y, size_t w, size_t h>
-struct DiffSnapshot: DebugWindowText<x, y, w, h> {
+struct Snapshot: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
 
     enum SnapValue {
@@ -1491,16 +1492,31 @@ struct DiffSnapshot: DebugWindowText<x, y, w, h> {
     unsigned short s1[SnapValuesCount]{};
     unsigned short s2[SnapValuesCount]{};
 
+    CPU cpu_s;
+    PPU ppu_s;
+
+    std::chrono::system_clock::time_point cpu_saved_time;
+    std::chrono::system_clock::time_point ppu_saved_time;
+
     std::stringstream ss;
     bool first = true;
-    Rectangle take_snapshot{DW::rec.x, DW::rec.y + h, 30, 30};
+
+    Rectangle take_fast_snapshot{DW::rec.x, DW::rec.y + h, 30, 30};
     Rectangle clear_s{DW::rec.x + 30, DW::rec.y + h, 30, 30};
+    Rectangle cpu_snap{DW::rec.x + 30 * 2, DW::rec.y + h, 30, 30};
+    Rectangle cpu_restore{DW::rec.x + 30 * 3, DW::rec.y + h, 30, 30};
+    Rectangle ppu_snap{DW::rec.x + 30 * 4, DW::rec.y + h, 30, 30};
+    Rectangle ppu_restore{DW::rec.x + 30 * 5, DW::rec.y + h, 30, 30};
 
     void handle(Bus& bus, CPU& cpu, PPU& ppu){
-        take_snapshot =   {DW::rec.x, DW::rec.y + h, 30, 30};
-        clear_s = {DW::rec.x + 30, DW::rec.y + h, 30, 30};
+        take_fast_snapshot =   {DW::rec.x, DW::rec.y + h, 30, 30};
+        clear_s     =  {DW::rec.x + 30, DW::rec.y + h, 30, 30};
+        cpu_snap    =  {DW::rec.x + 30 * 2, DW::rec.y + h, 30, 30};
+        cpu_restore =  {DW::rec.x + 30 * 3, DW::rec.y + h, 30, 30};
+        ppu_snap    =  {DW::rec.x + 30 * 4, DW::rec.y + h, 30, 30};
+        ppu_restore =  {DW::rec.x + 30 * 5, DW::rec.y + h, 30, 30};
 
-        if (CheckCollisionPointRec(GetMousePosition(), take_snapshot) && IsMouseButtonPressed(0)){
+        if (CheckCollisionPointRec(GetMousePosition(), take_fast_snapshot) && IsMouseButtonPressed(0)){
             auto& s = (std::exchange(first, !first)) ? s1 : s2;
             s[CPU_X] = cpu.x;
             s[CPU_Y] = cpu.y;
@@ -1517,6 +1533,23 @@ struct DiffSnapshot: DebugWindowText<x, y, w, h> {
             std::memset(s1, 0 , sizeof(s1));
             std::memset(s2, 0 , sizeof(s2));
             first = true;
+        } else if (CheckCollisionPointRec(GetMousePosition(), cpu_snap) && IsMouseButtonPressed(0)){
+            cpu_s = cpu;
+            cpu_saved_time = std::chrono::system_clock::now();
+        } else if (CheckCollisionPointRec(GetMousePosition(), cpu_restore) && IsMouseButtonPressed(0)){
+            cpu = cpu_s;
+        } else if (CheckCollisionPointRec(GetMousePosition(), ppu_snap) && IsMouseButtonPressed(0)){
+            ppu_s = ppu;
+// debug
+//            memcpy(ppu_s.mem.map + 0x2000, ppu.mem.map + 0x2000, 0x400);
+//            memcpy(ppu_s.mem.map + 0x3f00, ppu.mem.map + 0x3f00, 0xff);
+//            ppu_s.run = ppu.run;
+//            ppu_s.fill_white_background = ppu.fill_white_background;
+//            static bool f = true;
+//            DW::save_data_to_file(f ?  (f = false, "dump") : (f = true, "dump2"), (char*)(ppu.mem.map + 0x2000), 1024);
+            ppu_saved_time = std::chrono::system_clock::now();
+        } else if (CheckCollisionPointRec(GetMousePosition(), ppu_restore) && IsMouseButtonPressed(0)){
+            ppu = ppu_s;
         }
 
         auto draw_diff = [](auto& ss, auto text, auto a, auto b, int rx, int ry){
@@ -1529,9 +1562,16 @@ struct DiffSnapshot: DebugWindowText<x, y, w, h> {
         for (int i = 0; i < SnapValuesCount; ++i)
             draw_diff(ss,snap_values_str[i], s1[i], s2[i], DW::rec.x, DW::rec.y  + (15 * i));
 
-
-        DW::draw_text_button(take_snapshot, "snap", BLACK);
+        DW::draw_text_button(take_fast_snapshot, "snap", BLACK);
         DW::draw_text_button(clear_s, "clear1", BLACK);
+        DW::draw_text_button(cpu_snap, "cpu_s", BLACK);
+        DW::draw_text_button(cpu_restore, "cpu_r", BLACK);
+        DW::draw_text_button(ppu_snap, "ppu_s", BLACK);
+        DW::draw_text_button(ppu_restore, "ppu_r", BLACK);
+
+        ss << "CPU saved:" << cpu_saved_time.time_since_epoch().count() << '\n';
+        ss << "PPU saved:" << ppu_saved_time.time_since_epoch().count() << '\n';
+
         auto s = ss.str();
         DrawText(s.c_str(), DW::rec.x, DW::rec.y  + (15 * SnapValuesCount), 12.f, BLACK);
         ss.str("");
