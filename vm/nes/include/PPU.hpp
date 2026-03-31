@@ -86,13 +86,13 @@ struct PPU {
     bool w{};
 
     size_t current_cycle{};
+    size_t frames_count{};
 
 #if DEBUG_MODE
     bool frame_start = false;
     bool tile_start = false;
     bool update_shifts = false;
     bool line_start = false;
-    size_t frames_count{};
     size_t last_line_x{};
     size_t current_line_x{};
     bool is_sprite_off = false;

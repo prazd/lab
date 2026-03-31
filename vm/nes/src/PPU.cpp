@@ -10,7 +10,7 @@ void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
     if (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}))
         triggered_on_write = true;
 #endif
-    if (addr >= 0x0000 && addr <= 0x1FFF) {
+    if (addr >= 0x0000 && addr <= 0x1FFF && ((bus.ppustatus.reg >> 7) & 1 || !((bus.ppumask.reg >> 3) & 1) || !((bus.ppumask.reg >> 4) & 1))) {
         bus.mapper.write_chr_ram(addr, value);
         return;
     }
@@ -243,7 +243,6 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
 
 void PPU::bg_tick(Bus &bus) {
     bus.irq_interrupt_flip_flop = bus.mapper.is_irq_requested();
-    ++current_cycle;
     // TODO: continue debug
     update_state(bus);
 
@@ -305,7 +304,7 @@ void PPU::bg_tick(Bus &bus) {
 #endif
         }
     } else if (current_y >= 240 && current_y < 261){
-        if (current_y == 241 && current_scanline_cycle == 2) {
+        if (current_y == 241 && current_scanline_cycle == 1) {
             ppustatus.vblank_flag = 1;
             bus.ppustatus.reg |= 1 << 7;
             bus.nmi_interrupt_flip_flop = true;
@@ -326,9 +325,10 @@ void PPU::bg_tick(Bus &bus) {
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
         } else if (current_scanline_cycle == 341 && ppumask.enable_background_rendering){
+            ++frames_count;
 #if DEBUG_MODE
                     frame_start = true;
-                ++frames_count;
+
 #endif
         }
     }
@@ -530,9 +530,10 @@ void PPU::draw_pixel(Bus &bus) {
 }
 
 void PPU::tick(Bus& bus) {
-    // TODO: debug
+    ++current_cycle;
     bg_tick(bus);
     bus.mapper.tick();
+    current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && ppumask.enable_background_rendering && !(frames_count & 1));
 #if DEBUG_MODE
     if (!is_sprite_off)
 #endif

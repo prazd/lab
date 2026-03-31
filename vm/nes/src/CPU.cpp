@@ -471,8 +471,8 @@ CPU::AddressingResult CPU::get_arg_pc(Bus& bus, AddressingMode am, bool cross_ch
 }
 
 CPU::AddressingResult CPU::get_arg_by_addr(Bus &bus, CPU::AddressingMode am, unsigned short pc_addr) {
-    auto arg1 = mem.read(bus,pc_addr + 1);
-    auto arg2 = mem.read(bus,pc_addr + 2);
+    auto arg1 = mem.unsafe_read(bus,pc_addr + 1);
+    auto arg2 = mem.unsafe_read(bus,pc_addr + 2);
     unsigned short args_as_addr = ((arg1) | arg2 << 8);
     switch(am){
         case ZeroPageX: return {(unsigned short)((arg1 + x) % 256), false, false};
@@ -486,10 +486,10 @@ CPU::AddressingResult CPU::get_arg_by_addr(Bus &bus, CPU::AddressingMode am, uns
             return {addr, false, false};
         }
         case IndexedIndirectX: return
-                    {(unsigned short)(mem.read(bus,(arg1 + x) % 256) + mem.read(bus,(arg1 + x + 1) % 256)* 256), false, false};
+                    {(unsigned short)(mem.unsafe_read(bus,(arg1 + x) % 256) + mem.unsafe_read(bus,(arg1 + x + 1) % 256)* 256), false, false};
         case IndexedIndirectY: {
-            unsigned char l = mem.read(bus,arg1);
-            unsigned char h = mem.read(bus,(arg1 + 1) % 256);
+            unsigned char l = mem.unsafe_read(bus,arg1);
+            unsigned char h = mem.unsafe_read(bus,(arg1 + 1) % 256);
             unsigned short addr = (l | (h << 8));
             unsigned short res_addr = addr + y;
             return {res_addr, false, false};
@@ -524,10 +524,22 @@ CPU::AddressingResult CPU::dummy_read(Bus& bus, AddressingResult arg) {
 void CPU::tick(Bus& bus){
 #if DEBUG_MODE
     ++cycles_count;
-#endif
-#if DEBUG_MODE
     if (!debug_run) return;
 #endif
+
+    if (instruction_execute_done) {
+        --additional_cycles;
+        if (additional_cycles) {
+            return;
+        }
+        execute_in_progress = false;
+        instruction_execute_done = false;
+#if DEBUG_MODE
+        debug_run = false;
+#endif
+        return;
+    }
+
     if (!execute_in_progress) {
         if (bus.ppustatus.reg & 0x80 && bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop){
             interrupt_requests[NMI] = true;
@@ -559,6 +571,7 @@ void CPU::tick(Bus& bus){
 #if DEBUG_MODE
                         // TODO: check
                         debug_run = false;
+                        return;
 #endif
                     }
                     break;
@@ -573,33 +586,15 @@ void CPU::tick(Bus& bus){
         pc_watch_count += (pc == pc_watch_address);
 #endif
         execute_in_progress = true;
-        --di.cycles;
     }
 
-    if (di.cycles){
-        --di.cycles;
-        return;
-    }
-
-    if (instruction_execute_done) {
-        --additional_cycles;
-        if (additional_cycles){
-            return;
-        }
-        execute_in_progress = false;
-        instruction_execute_done = false;
-#if DEBUG_MODE
-        debug_run = false;
-#endif
-        return;
-    }
+    if (--di.cycles) return;
 
 #if DEBUG_MODE
     if (di.i == CPU::Instruction::RTI){
         di.bytes += 0;
     }
 #endif
-
 
     switch(di.i) {
         case ADC: {

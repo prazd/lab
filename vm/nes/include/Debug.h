@@ -55,6 +55,10 @@ struct DebugWindow {
     static void cpu_search(Bus& bus, CPU& cpu, PredF pred_f, HandlerF handler_f, Args&&... args) {
         unsigned l_pc = 0x8000;
         while(l_pc < 0xffff) {
+            if (cpu.mem.read(bus, l_pc) == 0xff){ // also skip ISC (0xff)
+                while(cpu.mem.read(bus, ++l_pc) == 0xff);
+                continue;
+            }
             auto decoded = cpu.decode(cpu.mem.read(bus, l_pc));
             if (!decoded.bytes) {++l_pc; continue;}
             auto asm_info = cpu.disassemble(bus, l_pc);
@@ -567,7 +571,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                 ss << " [" << asm_info.arg_addr <<"] ";
             }
             ss << "\n\n";
-            pc += cpu.decode(cpu.mem.read(bus, pc)).bytes;
+            pc += cpu.decode(cpu.mem.unsafe_read(bus, pc)).bytes;
         }
         ss << "RunMode:";
         if (run_mode == CPU_M)
@@ -716,8 +720,8 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         if (CheckCollisionPointRec(GetMousePosition(), sprite_off_button) && IsMouseButtonPressed(0))
             ppu.is_sprite_off = !ppu.is_sprite_off;
 
-        ss  << std::dec << " Cycles count:" << cpu.cycles_count << '\n'
-        << " CPU:\n\n"
+        ss  << std::dec << " CPU Cycles count:" << cpu.cycles_count <<  "\n PPU cycles count:" << ppu.current_cycle % 341 << '\n'
+        << " CPU:\n"
         << std::hex << " A:" << (unsigned)cpu.a << '\n'
         << " X:" << (unsigned)cpu.x << '\n'
         << " Y:" << (unsigned)cpu.y << '\n'
@@ -730,7 +734,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  Df:" << (unsigned)(cpu.sr.get(CPU::StatusReg::D)) << ' '
         << "  Vf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::V)) << ' '
         << "  Nf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::N)) << ' '
-        << " \n PPU:\n\n"
+        << " \n\n PPU:\n"
         << "  V:" << (unsigned)(ppu.v) << '\n'
         << " Coarse(Y):" << (unsigned)((ppu.v >> 5) & 0x1f) << " Fine(Y):" <<  (unsigned)((ppu.v >> 12) & 0x7) << '\n'
         << "  NT:" << (unsigned)((ppu.v >> 10) & 0x3) << '\n'
@@ -1508,6 +1512,9 @@ struct Snapshot: DebugWindowText<x, y, w, h> {
     Rectangle ppu_snap{DW::rec.x + 30 * 4, DW::rec.y + h, 30, 30};
     Rectangle ppu_restore{DW::rec.x + 30 * 5, DW::rec.y + h, 30, 30};
 
+    Rectangle both_snap{DW::rec.x + 30 * 6, DW::rec.y + h, 30, 30};
+    Rectangle both_restore{DW::rec.x + 30 * 7, DW::rec.y + h, 30, 30};
+
     void handle(Bus& bus, CPU& cpu, PPU& ppu){
         take_fast_snapshot =   {DW::rec.x, DW::rec.y + h, 30, 30};
         clear_s     =  {DW::rec.x + 30, DW::rec.y + h, 30, 30};
@@ -1515,6 +1522,8 @@ struct Snapshot: DebugWindowText<x, y, w, h> {
         cpu_restore =  {DW::rec.x + 30 * 3, DW::rec.y + h, 30, 30};
         ppu_snap    =  {DW::rec.x + 30 * 4, DW::rec.y + h, 30, 30};
         ppu_restore =  {DW::rec.x + 30 * 5, DW::rec.y + h, 30, 30};
+        both_snap = {DW::rec.x + 30 * 6, DW::rec.y + h, 30, 30};
+        both_restore = {DW::rec.x + 30 * 7, DW::rec.y + h, 30, 30};
 
         if (CheckCollisionPointRec(GetMousePosition(), take_fast_snapshot) && IsMouseButtonPressed(0)){
             auto& s = (std::exchange(first, !first)) ? s1 : s2;
@@ -1541,14 +1550,26 @@ struct Snapshot: DebugWindowText<x, y, w, h> {
         } else if (CheckCollisionPointRec(GetMousePosition(), ppu_snap) && IsMouseButtonPressed(0)){
             ppu_s = ppu;
 // debug
-//            memcpy(ppu_s.mem.map + 0x2000, ppu.mem.map + 0x2000, 0x400);
+
+//            std::vector<char> res;
+//            res.resize(bus.mapper.chr.size());
+//            memcpy(res.data(), bus.mapper.chr.data(), 0x2000);
+//            auto res = bus.mapper.chr;
 //            memcpy(ppu_s.mem.map + 0x3f00, ppu.mem.map + 0x3f00, 0xff);
 //            ppu_s.run = ppu.run;
 //            ppu_s.fill_white_background = ppu.fill_white_background;
 //            static bool f = true;
-//            DW::save_data_to_file(f ?  (f = false, "dump") : (f = true, "dump2"), (char*)(ppu.mem.map + 0x2000), 1024);
+//            DW::save_data_to_file(f ?  (f = false, "dump") : (f = true, "dump2"), (char*)(res.data()), res.size());
             ppu_saved_time = std::chrono::system_clock::now();
         } else if (CheckCollisionPointRec(GetMousePosition(), ppu_restore) && IsMouseButtonPressed(0)){
+            ppu = ppu_s;
+        } else if (CheckCollisionPointRec(GetMousePosition(), both_snap) && IsMouseButtonPressed(0)){
+            cpu_s = cpu;
+            cpu_saved_time = std::chrono::system_clock::now();
+            ppu_s = ppu;
+            ppu_saved_time = std::chrono::system_clock::now();
+        } else if (CheckCollisionPointRec(GetMousePosition(), both_restore) && IsMouseButtonPressed(0)){
+            cpu = cpu_s;
             ppu = ppu_s;
         }
 
@@ -1568,6 +1589,8 @@ struct Snapshot: DebugWindowText<x, y, w, h> {
         DW::draw_text_button(cpu_restore, "cpu_r", BLACK);
         DW::draw_text_button(ppu_snap, "ppu_s", BLACK);
         DW::draw_text_button(ppu_restore, "ppu_r", BLACK);
+        DW::draw_text_button(both_snap, "both_s", BLACK);
+        DW::draw_text_button(both_restore, "both_r", BLACK);
 
         ss << "CPU saved:" << cpu_saved_time.time_since_epoch().count() << '\n';
         ss << "PPU saved:" << ppu_saved_time.time_since_epoch().count() << '\n';

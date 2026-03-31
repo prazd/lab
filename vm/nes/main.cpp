@@ -113,7 +113,7 @@ struct NESVM {
             } else if (dis.trigger_search) {
                 dis.trigger_search = !(ppu.mem.triggered_on_read || ppu.mem.triggered_on_write);
             }
-            if (cpu_tick_count++ % 3 == 2) cpu.tick(bus);
+            if (cpu_tick_count++ % 3 == 2) {cpu.tick(bus); bus.open_bus_decay();}
         }
         if (!dis.selected_move_active &&
             !dis.is_frame_jump_active &&
@@ -308,7 +308,7 @@ struct NESVM {
 // CPU:
 // - /Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes
 // - /Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes
-// - /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
+// - /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes -- check
 
 // PPU:
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes
@@ -320,6 +320,8 @@ int main(){
     // palette_ram.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
     // /Users/prazd/Desktop/dev/GameGenie.nes
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes"); // - 82D8
+
+    //  todo: /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes");
     nes.run();
 }
