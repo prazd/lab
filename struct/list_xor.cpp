@@ -17,7 +17,7 @@ class ListXOR {
     NodePtr first{};
     NodePtr last{};
     static NodePtr xaddress(NodePtr lhs, NodePtr rhs) {
-        return (NodePtr)(((unsigned long)lhs) ^ ((unsigned long)rhs));
+        return (NodePtr)(((std::uintptr_t)lhs) ^ ((std::uintptr_t)rhs));  
     }
 
     void push(NodePtr addr, T&& value){
