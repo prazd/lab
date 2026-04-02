@@ -297,7 +297,7 @@ void PPU::bg_tick(Bus &bus) {
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
         }
-        if (current_scanline_cycle == 341){
+        if (current_scanline_cycle == 340){
 #if DEBUG_MODE
             last_line_x =  std::exchange(current_line_x, 0);
             line_start = true;
@@ -324,7 +324,7 @@ void PPU::bg_tick(Bus &bus) {
             attributes_low <<= 1;
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
-        } else if (current_scanline_cycle == 341 && ppumask.enable_background_rendering){
+        } else if (current_scanline_cycle == 340 && ppumask.enable_background_rendering){
             ++frames_count;
 #if DEBUG_MODE
                     frame_start = true;
@@ -458,7 +458,7 @@ void PPU::draw_pixel(Bus &bus) {
     bool universal_background = false;
     unsigned char oam_index{};
     unsigned char cur_oam_index = secondary_oam.size() > 0 ? secondary_oam[0].oam_index : 0;
-    bool cur_above_background {};
+//    bool cur_above_background {};
     bool init_cur_above = false;
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
         if (secondary_oam[i].x_count == 0 && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
@@ -468,19 +468,14 @@ void PPU::draw_pixel(Bus &bus) {
                         ((secondary_oam[i].shift_h & 1) << 1)  | (secondary_oam[i].shift_l  & 1)
                                            : (((secondary_oam[i].shift_h >> 7) & 1) << 1)  | (secondary_oam[i].shift_l >> 7) & 1;
                 if (!l_sprite_data) continue;
-                if (init_cur_above && cur_above_background && ((secondary_oam[i].attrib >> 5) & 1)) continue;
                 if (cur_oam_index > (secondary_oam[i].oam_index)) continue;
                 oam_index = secondary_oam[i].oam_index;
                 sprite_data = l_sprite_data;
 
                 sprite_attrib = secondary_oam[i].attrib & 0x3;
                 is_bg_prio = (secondary_oam[i].attrib >> 5) & 1;
-
                 cur_oam_index = oam_index;
-                cur_above_background = !((secondary_oam[i].attrib >> 5) & 1);
-                if (!init_cur_above){
-                    init_cur_above = true;
-                }
+                break;
         }
     }
     unsigned char bg_data = (((shift_register_high >> (15-x)) & 1) << 1) | (shift_register_low >> (15-x)) & 1;
@@ -533,7 +528,7 @@ void PPU::tick(Bus& bus) {
     ++current_cycle;
     bg_tick(bus);
     bus.mapper.tick();
-    current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && ppumask.enable_background_rendering && !(frames_count & 1));
+    current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && ppumask.enable_background_rendering && (frames_count & 1));
 #if DEBUG_MODE
     if (!is_sprite_off)
 #endif
@@ -583,7 +578,7 @@ void PPU::tick(Bus& bus) {
         secondary_oam_buffer.reset();
     }
     ++current_scanline_cycle;
-    if (current_scanline_cycle == 342){
+    if (current_scanline_cycle == 341){
         current_sprite_evaluation_step = SpriteCopy;
         current_scanline_cycle = 0;
         sprite_evaluation_index = 0;

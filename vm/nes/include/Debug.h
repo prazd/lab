@@ -720,7 +720,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         if (CheckCollisionPointRec(GetMousePosition(), sprite_off_button) && IsMouseButtonPressed(0))
             ppu.is_sprite_off = !ppu.is_sprite_off;
 
-        ss  << std::dec << " CPU Cycles count:" << cpu.cycles_count <<  "\n PPU cycles count:" << ppu.current_cycle % 341 << '\n'
+        ss  << std::dec << " CPU Cycles count:" << cpu.cycles_count << '\n'
         << " CPU:\n"
         << std::hex << " A:" << (unsigned)cpu.a << '\n'
         << " X:" << (unsigned)cpu.x << '\n'
@@ -1088,7 +1088,8 @@ struct SpriteInfo: DebugWindowText<x, y, w, h> {
                 << (unsigned)ppu.secondary_oam_buffer[i].y_pos << ' '
                 << (unsigned)ppu.secondary_oam_buffer[i].pt_index << ' '
                 << (unsigned)ppu.secondary_oam_buffer[i].attrib << ' '
-                << (unsigned)ppu.secondary_oam_buffer[i].x_pos << '\n';
+                << (unsigned)ppu.secondary_oam_buffer[i].x_pos << ' '
+                << (unsigned)ppu.secondary_oam_buffer[i].sprite_index << '\n';
             }
         } else if (info_version == FullOAMV) {
             ss << "OAM:\n";

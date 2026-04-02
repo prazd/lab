@@ -57,8 +57,15 @@ struct NESVM {
         bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
     }
 
+    // todo: check
+    void ppu_init(){
+        for (int i = 0; i < 4; ++i)
+            ppu.tick(bus);
+    }
+
     void reset(std::string_view path){
         *this = NESVM(path);
+        ppu_init();
         // TODO: debug
         // dis.reset();
         // cpu.reset();
@@ -75,10 +82,10 @@ struct NESVM {
         }
         do {
             while (cpu.debug_run) {
-                cpu.tick(bus);
-                bus.open_bus_decay();
                 for (int j = 0; j < 3; ++j)
                     ppu.tick(bus);
+                cpu.tick(bus);
+                bus.open_bus_decay();
                 ++current_tick;
             }
             if (dis.selected_move_active) {
@@ -228,6 +235,8 @@ struct NESVM {
         auto display_texture = LoadTextureFromImage(img);
         Rectangle display_rec = {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f};
         UnloadImage(img);
+
+        ppu_init();
         while(!WindowShouldClose()){
             frame_execute();
 #if DEBUG_MODE
@@ -308,7 +317,7 @@ struct NESVM {
 // CPU:
 // - /Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes
 // - /Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes
-// - /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes -- check
+// - /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
 
 // PPU:
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes
@@ -320,8 +329,7 @@ int main(){
     // palette_ram.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
     // /Users/prazd/Desktop/dev/GameGenie.nes
-
-    //  todo: /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes");
+    // /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
+    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes");
     nes.run();
 }
