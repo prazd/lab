@@ -17,21 +17,25 @@ struct Bus {
     size_t open_bus_value_cycles = 0;
     unsigned char open_bus_value {};
     unsigned short last_ppu_address = 0;
-    struct PPUREG {
+    struct REG {
         unsigned char reg{};
         bool write_requested{};
         bool read_requested{};
     };
-    PPUREG ppuctrl{};
-    PPUREG ppumask{};
-    PPUREG ppustatus{};
-    PPUREG oamaddr{};
-    PPUREG oamdata{};
-    PPUREG ppuscroll{};
-    PPUREG ppuaddr{};
-    PPUREG ppudata{};
+    REG ppuctrl{};
+    REG ppumask{};
+    REG ppustatus{};
+    REG oamaddr{};
+    REG oamdata{};
+    REG ppuscroll{};
+    REG ppuaddr{};
+    REG ppudata{};
+
+    REG apufc{};
+
     Controller c;
 
+    void tick();
     void write(unsigned short addr, unsigned char val);
     void unsafe_write(unsigned short addr, unsigned char val);
     unsigned char read_prg(unsigned short addr);

@@ -85,7 +85,7 @@ struct NESVM {
                 for (int j = 0; j < 3; ++j)
                     ppu.tick(bus);
                 cpu.tick(bus);
-                bus.open_bus_decay();
+                bus.tick();
                 ++current_tick;
             }
             if (dis.selected_move_active) {
@@ -120,7 +120,7 @@ struct NESVM {
             } else if (dis.trigger_search) {
                 dis.trigger_search = !(ppu.mem.triggered_on_read || ppu.mem.triggered_on_write);
             }
-            if (cpu_tick_count++ % 3 == 2) {cpu.tick(bus); bus.open_bus_decay();}
+            if (cpu_tick_count++ % 3 == 2) {cpu.tick(bus); bus.tick();}
         }
         if (!dis.selected_move_active &&
             !dis.is_frame_jump_active &&
@@ -330,6 +330,6 @@ int main(){
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
     // /Users/prazd/Desktop/dev/GameGenie.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
-    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes");
     nes.run();
 }

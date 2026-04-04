@@ -310,7 +310,7 @@ void PPU::bg_tick(Bus &bus) {
             bus.nmi_interrupt_flip_flop = true;
         }
     } else if (current_y == 261){
-        if (current_scanline_cycle == 1 && ppumask.enable_background_rendering ){
+        if (current_scanline_cycle == 1){
             std::copy(internal_display.begin(), internal_display.end(), display.begin());
             ppustatus.vblank_flag = 0;
             bus.ppustatus.reg &= 0x7f;

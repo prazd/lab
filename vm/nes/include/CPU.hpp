@@ -43,7 +43,7 @@ struct CPU {
             constants::PPUDATA,
             constants::OAMDMA,
             constants::CONTROLLER1,
-            constants::CONTROLLER2
+            constants::CONTROLLER2_AND_APU_FC,
     };
 
     inline static unsigned short read_mmio_addr[] = {
@@ -57,7 +57,7 @@ struct CPU {
             constants::PPUDATA,
             constants::OAMDMA,
             constants::CONTROLLER1,
-            constants::CONTROLLER2
+            constants::CONTROLLER2_AND_APU_FC,
     };
 
     // https://www.nesdev.org/NESDoc.pdf (page 12-13)

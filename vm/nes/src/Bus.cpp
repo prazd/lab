@@ -30,7 +30,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
             break;
         }
         case constants::CONTROLLER1: { if (value) c.latch1 = true; else c.update_status1();  break; }
-        case constants::CONTROLLER2: { break; }
+        case constants::CONTROLLER2_AND_APU_FC: { apufc = {value, true};  break; }
     }
 }
 
@@ -58,6 +58,7 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
             break;
         }
         case constants::CONTROLLER1: { if (value) c.latch1 = true; else c.update_status1();  break; }
+        case constants::CONTROLLER2_AND_APU_FC: { apufc = {value, true}; break; }
     }
 }
 
@@ -104,9 +105,7 @@ unsigned char Bus::read_prg(unsigned short addr) {
             return ppudata.reg;
         }
         case constants::CONTROLLER1: return c.read_status1();
-        case constants::CONTROLLER2:
-            return 0; //
-
+        case constants::CONTROLLER2_AND_APU_FC: return 0;
         default: return 0xff; // dummy
     }
 }
@@ -144,6 +143,10 @@ void Bus::dma_tick(unsigned char val) {
         oam[dma_index++] = val;
         dma_active = (dma_index != 256);
     }
+}
+
+void Bus::tick() {
+    open_bus_decay();
 }
 
 void Bus::open_bus_decay() {

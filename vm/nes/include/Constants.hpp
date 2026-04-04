@@ -14,7 +14,10 @@ namespace constants {
     constexpr size_t DISPLAY_PIXELS_HEIGHT = 240;
 
     constexpr unsigned short CONTROLLER1 = 0x4016;
-    constexpr unsigned short CONTROLLER2 = 0x4017;
+
+    // - read after latch (4016 write) - controller 2
+    // - write - apu frame counter
+    constexpr unsigned short CONTROLLER2_AND_APU_FC = 0x4017;
 
     constexpr size_t CPU_SPEED = 1790000;
     constexpr size_t CPU_FRAME_CYCLES = CPU_SPEED/60;

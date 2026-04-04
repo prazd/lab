@@ -51,13 +51,16 @@ struct APU {
     DMCChan dmc_ch{};
 
     size_t cycle_counter{};
+    bool irq_inhibit = false;
 
     enum FrameCounterMode {
-        Step4 = 4, Step5 = 5
+        Step4, Step5
     } frame_counter_mode = Step4;
 
     void tick(Bus& bus, CPU& cpu);
-    void frame_counter_step(Bus& bus, CPU& cpu);
+    void handle_frame_counter_update(Bus& bus, CPU& cpu);
+    void frame_counter_step4(Bus& bus, CPU& cpu);
+    void frame_counter_step5(Bus& bus, CPU& cpu);
     void frame_counter_quarter_update(Bus& bus, CPU& cpu);
     void frame_counter_half_update(Bus& bus, CPU& cpu);
 };
