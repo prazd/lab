@@ -61,5 +61,7 @@ void APU::tick(Bus& bus, CPU& cpu) {
         frame_counter_step4(bus, cpu);
     else
         frame_counter_step5(bus, cpu);
+    pulse_ch1.tick_timer(bus, cpu);
+    pulse_ch2.tick_timer(bus, cpu);
     // todo
 }

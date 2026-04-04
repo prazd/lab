@@ -74,6 +74,12 @@ unsigned char Bus::read_prg(unsigned short addr) {
         case constants::PPUADDR:  return open_bus_value;
 
         case constants::PPUSTATUS: {
+//            if (ppustatus.reg & 0x80 && !was_read_status) {
+//                was_read_status = true;
+//                auto tmp = ppustatus.reg & 0x7f;
+//                ppustatus.reg = 0;
+//                return tmp;
+//            }
             unsigned char current = (ppustatus.reg & 0xe0) | (open_bus_value & 0x1f);
             ppustatus.reg = 0;
             ppustatus.read_requested = true;
@@ -146,6 +152,13 @@ void Bus::dma_tick(unsigned char val) {
 }
 
 void Bus::tick() {
+//    if (ppustatus.reg & 0x80 && !was_read_status) {
+//        ++current_nmi_cycle;
+//        if (current_nmi_cycle == 4){
+//            nmi_interrupt_flip_flop = true;
+//            was_read_status = true;
+//        }
+//    }
     open_bus_decay();
 }
 

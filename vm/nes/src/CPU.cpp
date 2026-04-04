@@ -428,6 +428,86 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
     return {};
 }
 
+void CPU::addressing_tick(Bus& bus, CPU& cpu, SimpleDeque<CPU::AddressingStep, 6>& sd, CPU::AddressingState& as) {
+    auto current = sd[sd.size()-1]; sd.pop_back();
+    switch (current) {
+        case LowByte: {
+            as.arg1 = cpu.mem.read(bus, pc + 1); break;
+        }
+        case HighByte:{
+            as.arg2 = cpu.mem.read(bus, pc + 2); break;
+        }
+        case AddrPlusX: {
+            as.result = (unsigned short)((as.arg1 + x) % 256); break;
+        }
+        case AddrPlusY: {
+            as.result = (unsigned short)((as.arg1 + y) % 256); break;
+        }
+        case AbsX: {
+            unsigned short args_as_addr = ((as.arg1) | as.arg2 << 8);
+            unsigned short addr = args_as_addr + x;
+            if (as.cross_check && (as.arg2 != ((addr >> 8) & 0xff))){
+                as.result = args_as_addr;
+                as.addr_to_add = x;
+                sd.push_front(PageCross);
+            } else {
+                as.result = addr;
+                as.addr_to_add = 0;
+            }
+            break;
+        }
+        case AbsY: {
+            unsigned short args_as_addr = ((as.arg1) | as.arg2 << 8);
+            unsigned short addr = args_as_addr + y;
+            if (as.cross_check && (as.arg2 != ((addr >> 8) & 0xff))){
+                as.result = args_as_addr;
+                as.addr_to_add = y;
+                sd.push_front(PageCross);
+            } else {
+                as.result = addr;
+                as.addr_to_add = 0;
+            }
+            break;
+        }
+        case IndXReadLow: {
+            as.ind_low = mem.read(bus,(as.arg1 + x) % 256);
+            break;
+        }
+        case IndXReadHigh: {
+            auto ind_high =  mem.read(bus,(as.arg1 + x + 1) % 256)* 256;
+            as.result = as.ind_low = ind_high;
+            break;
+        }
+        case IndYReadLow: {
+            as.ind_low = mem.read(bus,(as.arg1));
+            break;
+        }
+        case IndYReadHigh: {
+            unsigned char h = mem.read(bus,(as.arg1 + 1) % 256);
+            unsigned short addr = (as.ind_low | (h << 8));
+            unsigned short res_addr = addr + y;
+            if (as.cross_check && (h != ((res_addr >> 8) & 0xff))){
+                as.result = addr;
+                as.addr_to_add = y;
+                sd.push_front(PageCross);
+            } else {
+                as.result = res_addr;
+                as.addr_to_add = 0;
+            }
+        }
+        case Abs: {
+            as.result = ((as.arg1) | as.arg2 << 8); break;
+        }
+        case Zp: {
+            as.result = as.arg1; break;
+        }
+        case PageCross: {
+            break;
+        }
+    }
+    as.fetching = sd.size() == 0;
+}
+
 CPU::AddressingResult CPU::get_arg_pc(Bus& bus, AddressingMode am, bool cross_check) {
     auto arg1 = mem.read(bus,pc + 1);
     auto arg2 = mem.read(bus,pc + 2);

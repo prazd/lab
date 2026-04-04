@@ -19,15 +19,31 @@ struct Channel {
     }
 };
 
+template <unsigned short timer_l,
+          unsigned short timer_h,
+          unsigned short duty_envelope>
 struct PulseChan : Channel {
     unsigned char current_duty_step{};
-    inline unsigned char get_duty_cycle(unsigned char val){
-        switch((val >> 6) & 0x3){
+    inline void tick_timer(Bus& bus, CPU& cpu){
+        --timer;
+        if (!timer){
+            current_duty_step = (current_duty_step + 1) % 8;
+            update_timer(cpu.mem.unsafe_read(bus, timer_l), cpu.mem.unsafe_read(bus, timer_h));
+        }
+    }
+    inline unsigned char get_duty_cycle(Bus& bus, CPU& cpu) const {
+        switch((cpu.mem.unsafe_read(bus, duty_envelope) >> 6) & 0x3){
             case 0:  return  0b0100'0000; // 12.5%
             case 1:  return  0b0110'0000; // 25%
             case 2:  return  0b0111'1000; // 50%
             default: return  0b1001'1111; // 25% (negated)
         }
+    }
+    inline unsigned char get_duty_value(Bus& bus, CPU& cpu) const {
+        return (get_duty_cycle(bus, cpu) >> current_duty_step) & 1;
+    }
+    inline unsigned char get_dac(Bus& bus, CPU& cpu) const {
+        return get_duty_value(bus, cpu) ? envelope & 0xf : 0;
     }
 };
 
@@ -44,8 +60,14 @@ struct DMCChan : Channel {
 };
 
 struct APU {
-    PulseChan pulse_ch1{};
-    PulseChan pulse_ch2{};
+    PulseChan<constants::PULSE1_TIMER_LOW,
+            constants::PULSE1_TIMER_HIGH,
+            constants::PULSE1_DUTY_ENVELOPE> pulse_ch1{};
+
+    PulseChan<constants::PULSE2_TIMER_LOW,
+            constants::PULSE2_TIMER_HIGH,
+            constants::PULSE2_DUTY_ENVELOPE> pulse_ch2{};
+
     TriangleChan triangle_ch{};
     NoiseChan noise_ch{};
     DMCChan dmc_ch{};

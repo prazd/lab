@@ -13,6 +13,8 @@ struct Bus {
     bool dma_active = false;
     unsigned dma_index = 0;
     bool nmi_interrupt_flip_flop = false;
+    unsigned char current_nmi_cycle = 0;
+    bool was_read_status = false;
     bool irq_interrupt_flip_flop = false;
     size_t open_bus_value_cycles = 0;
     unsigned char open_bus_value {};

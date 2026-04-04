@@ -1,6 +1,7 @@
 #include "Constants.hpp"
 #include "Bus.hpp"
 #include "SmallString.h"
+#include "SimpleDeque.h"
 struct CPU {
     struct Memory {
 // https://www.nesdev.org/wiki/CPU_memory_map
@@ -130,6 +131,42 @@ struct CPU {
         IndirectIndexed,
     };
 
+
+// todo: finish
+    enum Operation {
+        ReadAddr,
+        MemRead,
+        MemWrite,
+        Exec
+    };
+
+    struct OperationCycle {
+        Operation op{};
+        unsigned char cycle{};
+    };
+
+    enum AddressingStep {
+        LowByte, HighByte,
+        Abs, Zp,
+        AddrPlusX, AddrPlusY,
+        AbsX, AbsY, PageCross,
+        IndXReadLow, IndXReadHigh,
+        IndYReadLow, IndYReadHigh
+    };
+
+    struct AddressingState {
+        bool cross_check{};
+        bool fetching{};
+        unsigned char ind_low{};
+        unsigned short addr_to_add{};
+        unsigned short pc{};
+        unsigned char arg1{};
+        unsigned char arg2{};
+        unsigned short result{};
+    };
+
+    void addressing_tick(Bus& bus, CPU& cpu, SimpleDeque<AddressingStep, 6>& sd, AddressingState& as);
+//
 
     struct AddressingResult {
         unsigned short addr{};
