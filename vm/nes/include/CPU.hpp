@@ -112,7 +112,7 @@ struct CPU {
     };
 
     // https://www.nesdev.org/wiki/CPU_addressing_modes
-    enum AddressingMode {
+    enum AddressingMode: unsigned char{
         ZeroPage,
         ZeroPageX,
         ZeroPageY,
@@ -131,49 +131,12 @@ struct CPU {
         IndirectIndexed,
     };
 
-
-// todo: finish
-    enum Operation {
-        ReadAddr,
-        MemRead,
-        MemWrite,
-        Exec
-    };
-
-    struct OperationCycle {
-        Operation op{};
-        unsigned char cycle{};
-    };
-
-    enum AddressingStep {
-        LowByte, HighByte,
-        Abs, Zp,
-        AddrPlusX, AddrPlusY,
-        AbsX, AbsY, PageCross,
-        IndXReadLow, IndXReadHigh,
-        IndYReadLow, IndYReadHigh
-    };
-
-    struct AddressingState {
-        bool cross_check{};
-        bool fetching{};
-        unsigned char ind_low{};
-        unsigned short addr_to_add{};
-        unsigned short pc{};
-        unsigned char arg1{};
-        unsigned char arg2{};
-        unsigned short result{};
-    };
-
-    void addressing_tick(Bus& bus, CPU& cpu, SimpleDeque<AddressingStep, 6>& sd, AddressingState& as);
-//
-
     struct AddressingResult {
         unsigned short addr{};
         bool page_crossed{};
         bool is_accumulator = false;
         unsigned char add_to_addr{};
-    };
+    } arg;
 
     unsigned char read(Bus& bus, AddressingResult ar);
     void write(Bus& bus, AddressingResult ar, unsigned char value);
@@ -210,8 +173,50 @@ struct CPU {
         unsigned char cycles;
     };
 
+    // todo: finish
+    enum Operation {
+        ReadAddr,
+        MemRead,
+        MemWrite,
+        Exec
+    };
+
+    struct OperationCycle {
+        Operation op{};
+        unsigned char cycle{};
+    };
+
+    enum AddressingStep {
+        LowByte, HighByte,
+        Abs, Zp,
+        AddrPlusX, AddrPlusY,
+        AbsX, AbsY, PageCross,
+        IndXReadLow, IndXReadHigh,
+        IndYReadLow, IndYReadHigh,
+        PCPlusOne,
+    };
+
+    struct InstructionState {
+        bool cross_check{};
+        bool fetching{};
+        bool execute{};
+        bool write = false;
+        unsigned char write_value{};
+        unsigned char ind_low{};
+        unsigned char addr_to_add{};
+        unsigned short pc{};
+        unsigned char arg1{};
+        unsigned char arg2{};
+        unsigned short result{};
+    } as;
+
+    void addressing_tick(Bus& bus);
+    void exec(Bus& bus);
+    void fill_address_cmd();
+
     DecodedInstruction decode(unsigned char v);
     void tick(Bus& mem);
+    void tick_step(Bus& mem);
     bool stop_requested = false;
     bool execute_in_progress = false;
     bool instruction_execute_done = false;
@@ -219,7 +224,9 @@ struct CPU {
     int interrupt_handling_cycle = 0;
     void handle_interrupt(Bus&, Interrupt);
     DecodedInstruction di{};
+    SimpleDeque<AddressingStep, 6> address_cmd{};
 
+//
     struct AsmInfo {
         std::string_view mnemonic{};
         unsigned short operand{};
