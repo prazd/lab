@@ -511,14 +511,12 @@ void CPU::addressing_tick(Bus& bus) {
         case PCPlusOne:
             {as.result = pc + 1; break;}
     }
-    as.fetching = address_cmd.size() > 0;
-    as.execute = !as.fetching;
 }
 
 
-void CPU::fill_address_cmd() {
+void CPU::fill_address_ops() {
     static constexpr Instruction cmds[] = {
-            JMP, BRK,
+            BRK,
             CLC, CLD, CLI, CLV, DEX, DEY, INX, INY, NOP, DOP, TOP,
             PHA,  PHP, PLA, PLP, RTI, RTS, SEC, SEI, SED,
             TAX,
@@ -542,6 +540,832 @@ void CPU::fill_address_cmd() {
         case Immediate:
         case Relative:  {address_cmd.push_front(PCPlusOne); break;}
         case Accumulator: {break;}
+    }
+}
+
+void CPU::fill_exec_ops(Bus& bus) {
+    arg = AddressingResult{
+            .addr = as.result,
+            .page_crossed = as.cross_check,
+            .is_accumulator = di.addr_mode == Accumulator,
+            .add_to_addr = as.addr_to_add,
+    };
+    switch(di.i) {
+        case ADC: {
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                unsigned char val = cpu.read(bus, cpu.arg);
+                unsigned short res = cpu.a + val + cpu.sr.get(StatusReg::C);
+                cpu.sr.set(StatusReg::C, res > 0xff);
+                cpu.sr.set(StatusReg::Z, (res & 0xff) == 0);
+                cpu.sr.set(StatusReg::V, (res ^ cpu.a) & (res ^ val) & 0x80);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.a = res & 0xff;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case AND:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                unsigned char val =  cpu.read(bus, cpu.arg);
+                cpu.a &= val;
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case ASL:{
+            if (arg.is_accumulator){
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    unsigned char val =  cpu.read(bus, cpu.arg);
+                    unsigned char res = val << 1;
+                    cpu.sr.set(StatusReg::C, val & 0x80);
+                    cpu.sr.set(StatusReg::Z, res == 0);
+                    cpu.sr.set(StatusReg::N, res & 0x80);
+                    cpu.write(bus, cpu.arg, res & 0xff);
+                    cpu.pc += cpu.di.bytes;
+                });
+            } else {
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    unsigned char val =  cpu.read(bus, cpu.arg);
+                    unsigned char res = val << 1;
+                    cpu.sr.set(StatusReg::C, val & 0x80);
+                    cpu.sr.set(StatusReg::Z, res == 0);
+                    cpu.sr.set(StatusReg::N, res & 0x80);
+                    cpu.as.write_value = res & 0xff;
+                });
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    cpu.write(bus, cpu.arg, cpu.as.write_value);
+                    cpu.pc += cpu.di.bytes;
+                });
+            }
+            break;
+        }
+        case SLO:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val =  cpu.read(bus, cpu.arg);
+                unsigned char res = val << 1;
+                cpu.a |= res;
+                cpu.sr.set(StatusReg::C, val & 0x80);
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.as.write_value = res & 0xff;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case RLA:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val = cpu.read(bus, cpu.arg);
+                unsigned char res = (val << 1) | cpu.sr.get(StatusReg::C);
+                cpu.a &= res;
+                cpu.sr.set(StatusReg::C, val & 0x80);
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.as.write_value = res & 0xff;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case SRE:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val =  cpu.read(bus, cpu.arg);
+                unsigned char res = val >> 1;
+                cpu.a ^= res;
+                cpu.sr.set(StatusReg::C, val & 0x1);
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.as.write_value = res & 0xff;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case RRA:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val = cpu.read(bus, cpu.arg);
+                unsigned char ror_res = (val >> 1) | (cpu.sr.get(StatusReg::C) << 7);
+                cpu.sr.set(StatusReg::C, val & 0x1);
+                cpu.sr.set(StatusReg::Z, ror_res == 0);
+                cpu.sr.set(StatusReg::N, ror_res & 0x80);
+                cpu.as.write_value = ror_res;
+                val = ror_res;
+                unsigned short res = (cpu.a + val + cpu.sr.get(StatusReg::C));
+                cpu.sr.set(StatusReg::C, res > 0xff);
+                cpu.sr.set(StatusReg::Z, (res & 0xff) == 0);
+                cpu.sr.set(StatusReg::V, (res ^ cpu.a) & (res ^ val) & 0x80);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.a = res & 0xff;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case AAX:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.write(bus, cpu.arg, cpu.a & cpu.x);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case LAX:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val = cpu.read(bus, cpu.arg);
+                cpu.a = val;
+                cpu.x = val;
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case DCP:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val = cpu.read(bus, cpu.arg);
+                unsigned char res = val - 1;
+                cpu.sr.set(StatusReg::C, cpu.a >= res);
+                cpu.sr.set(StatusReg::Z, cpu.a == res);
+                cpu.sr.set(StatusReg::N, (cpu.a - res) & 0x80);
+                cpu.as.write_value = res & 0xff;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case ISC:{
+            // todo: check
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val = cpu.read(bus, cpu.arg);
+                val += 1;
+                cpu.as.write_value = val;
+                int res = cpu.a - val - (1 - cpu.sr.get(StatusReg::C));
+                cpu.sr.set(StatusReg::C, res >= 0);
+                cpu.sr.set(StatusReg::Z, (res & 0xff) == 0);
+                cpu.sr.set(StatusReg::V, (((res & 0xff) ^ cpu.a) & ((res & 0xff) ^ (~val))) & 0x80);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.a = res & 0xff;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case SYA:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char res = cpu.y & (((cpu.arg.addr >> 8) & 0xff) + 1);
+                if (res > 0){
+                     cpu.as.write_value = res & 0xff;
+                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                         cpu.write(bus, cpu.arg, cpu.as.write_value);
+                         cpu.pc += cpu.di.bytes;
+                     });
+                } else {
+                    cpu.pc += cpu.di.bytes;
+                }
+            });
+            break;
+        }
+        case SXA:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char res = cpu.x & (((cpu.arg.addr >> 8) & 0xff) + 1);
+                if (res > 0){
+                    cpu.as.write_value = res & 0xff;
+                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        cpu.write(bus, cpu.arg, cpu.as.write_value);
+                        cpu.pc += cpu.di.bytes;
+                    });
+                } else {
+                    cpu.pc += cpu.di.bytes;
+                }
+            });
+            break;
+        }
+        case BCC:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc += cpu.di.bytes;
+                if (!cpu.sr.get(StatusReg::C)){
+                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        cpu.arg.addr += cpu.arg.add_to_addr;
+                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
+                    });
+                }
+            });
+            break;
+        }
+        case BCS:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc += cpu.di.bytes;
+                if (cpu.sr.get(StatusReg::C)){
+                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        cpu.arg.addr += cpu.arg.add_to_addr;
+                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
+                    });
+                }
+            });
+            break;
+        }
+        case BEQ:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc += cpu.di.bytes;
+                if (cpu.sr.get(StatusReg::Z)){
+                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        cpu.arg.addr += cpu.arg.add_to_addr;
+                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
+                    });
+                }
+            });
+            break;
+        }
+        case BMI: {
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc += cpu.di.bytes;
+                if (cpu.sr.get(StatusReg::N)){
+                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        cpu.arg.addr += cpu.arg.add_to_addr;
+                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
+                    });
+                }
+            });
+            break;
+        }
+        case BNE:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc += cpu.di.bytes;
+                if (!cpu.sr.get(StatusReg::Z)){
+                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        cpu.arg.addr += cpu.arg.add_to_addr;
+                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
+                    });
+                }
+            });
+            break;
+        }
+        case BPL:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc += cpu.di.bytes;
+                if (!cpu.sr.get(StatusReg::N)){
+                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        cpu.arg.addr += cpu.arg.add_to_addr;
+                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
+                    });
+                }
+            });
+            break;
+        }
+        case BVC:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc += cpu.di.bytes;
+                if (!cpu.sr.get(StatusReg::V)){
+                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        cpu.arg.addr += cpu.arg.add_to_addr;
+                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
+                    });
+                }
+            });
+            break;
+        }
+        case BVS:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc += cpu.di.bytes;
+                if (cpu.sr.get(StatusReg::V)){
+                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        cpu.arg.addr += cpu.arg.add_to_addr;
+                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
+                    });
+                }
+            });
+            break;
+        }
+        case BIT:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                unsigned char val = cpu.read(bus, cpu.arg);
+                unsigned char res = cpu.a & val;
+                cpu.sr.set(StatusReg::Z, res == 0);
+                cpu.sr.set(StatusReg::V, val & 0x40);
+                cpu.sr.set(StatusReg::N, val & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case BRK:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (!cpu.interrupt_requests[IRQ]){
+                    cpu.sr.set(StatusReg::I, false);
+                    cpu.interrupt_requests[IRQ] = true;
+                }
+            });
+            break;}
+        case CLC:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::C, 0); cpu.pc+=1; }); break;}
+        case CLD:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::D, 0); cpu.pc+=1; }); break;}
+        case CLI:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::I, 0); cpu.pc+=1; }); break;}
+        case CLV:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::V, 0); cpu.pc+=1; }); break;}
+        case CMP:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) { cpu.arg = cpu.dummy_read(bus, cpu.arg);}
+                unsigned char val =  cpu.read(bus, cpu.arg);
+                unsigned char res = cpu.a - val;
+                cpu.sr.set(StatusReg::C, cpu.a >= val);
+                cpu.sr.set(StatusReg::Z, cpu.a == val);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case CPX:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val =  cpu.read(bus, cpu.arg);
+                unsigned char res = cpu.x - val;
+                cpu.sr.set(StatusReg::C, cpu.x >= val);
+                cpu.sr.set(StatusReg::Z, cpu.x == val);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case CPY:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val =  cpu.read(bus, cpu.arg);
+                unsigned char res = cpu.y - val;
+                cpu.sr.set(StatusReg::C, cpu.y >= val);
+                cpu.sr.set(StatusReg::Z, cpu.y == val);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case DEC:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val =  cpu.read(bus, cpu.arg);
+                unsigned char res = val - 1;
+                cpu.sr.set(StatusReg::Z, res == 0);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.as.write_value = res & 0xff;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case DEX:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char res = cpu.x - 1;
+                cpu.sr.set(StatusReg::Z, res == 0);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.x = res;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case DEY:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char res = cpu.y - 1;
+                cpu.sr.set(StatusReg::Z, res == 0);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.y = res;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case EOR:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                unsigned char val =  cpu.read(bus, cpu.arg);
+                unsigned char res = cpu.a ^ val;
+                cpu.sr.set(StatusReg::Z, res == 0);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.a = res;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case INC:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                unsigned char val =  cpu.read(bus, cpu.arg);
+                unsigned char res = val + 1;
+                cpu.sr.set(StatusReg::Z, res == 0);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.as.write_value = res & 0xff;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case INX:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char res = cpu.x + 1;
+                cpu.sr.set(StatusReg::Z, res == 0);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.x = res;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case INY:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char res = cpu.y + 1;
+                cpu.sr.set(StatusReg::Z, res == 0);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.y = res;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case JMP:{
+            // todo
+            if (di.addr_mode == Absolute){
+                iop.push_front([](Bus& bus, CPU& cpu){
+                     cpu.pc = (cpu.mem.read(bus, cpu.pc + 1) | ( cpu.mem.read(bus, cpu.pc + 2) << 8));
+                });
+            } else { // Indirect
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    unsigned short arg_addr = (cpu.mem.read(bus,cpu.pc + 1) | (cpu.mem.read(bus,cpu.pc + 2) << 8));
+                    unsigned char l = cpu.mem.read(bus,arg_addr);
+                    unsigned char h = cpu.mem.read(bus,(arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
+                    cpu.pc = l | (h << 8);
+                });
+            }
+            break;
+        }
+        case JSR:{
+            // TODO: maybe check
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.mem.write(bus,0x100 + cpu.sp, ((cpu.pc + 2) >> 8) & 0xff); --cpu.sp;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.mem.write(bus,0x100 + cpu.sp, (cpu.pc + 2) & 0xff); --cpu.sp;
+                cpu.pc = cpu.arg.addr;
+            });
+            break;
+        }
+        case LDA:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) {cpu.arg = cpu.dummy_read(bus, cpu.arg);}
+                cpu.a = cpu.read(bus, cpu.arg);
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case LDX:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                cpu.x = cpu.read(bus, cpu.arg);
+                cpu.sr.set(StatusReg::Z, cpu.x == 0);
+                cpu.sr.set(StatusReg::N, cpu.x & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case LDY:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                cpu.y = cpu.read(bus, cpu.arg);
+                cpu.sr.set(StatusReg::Z, cpu.y == 0);
+                cpu.sr.set(StatusReg::N, cpu.y & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case LSR:{
+            if (arg.is_accumulator){
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    unsigned char val = cpu.read(bus, cpu.arg);
+                    unsigned char res = val >> 1;
+                    cpu.sr.set(StatusReg::C, val & 0x1);
+                    cpu.sr.set(StatusReg::Z, res == 0);
+                    cpu.sr.set(StatusReg::N, 0);
+                    cpu.write(bus, cpu.arg,  res & 0xff);
+                    cpu.pc += cpu.di.bytes;
+                });
+            } else {
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    unsigned char val = cpu.read(bus, cpu.arg);
+                    unsigned char res = val >> 1;
+                    cpu.sr.set(StatusReg::C, val & 0x1);
+                    cpu.sr.set(StatusReg::Z, res == 0);
+                    cpu.sr.set(StatusReg::N, 0);
+                    cpu.as.write_value = res & 0xff;
+                });
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    cpu.write(bus, cpu.arg, cpu.as.write_value);
+                    cpu.pc += cpu.di.bytes;
+                });
+            }
+            break;
+        }
+        case ASR: {
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val = cpu.read(bus, cpu.arg);
+                unsigned char res = cpu.a & val;
+                unsigned char shifted_res = res >> 1;
+                cpu.sr.set(StatusReg::C, res & 0x1);
+                cpu.sr.set(StatusReg::Z, shifted_res == 0);
+                cpu.sr.set(StatusReg::N, shifted_res & 0x80);
+                cpu.a = shifted_res;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+            // TODO: check
+        case ATX: {
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val = cpu.read(bus, cpu.arg);
+                cpu.a = val;
+                cpu.x = cpu.a;
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+
+        case AXS: {
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val = cpu.read(bus, cpu.arg);
+                int tmp = (cpu.a & cpu.x) - val;
+                cpu.sr.set(StatusReg::C, tmp >= 0);
+                cpu.sr.set(StatusReg::Z, (tmp & 0xff) == 0);
+                cpu.sr.set(StatusReg::N, tmp & 0x80);
+                cpu.x = tmp & 0xff;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case ARR: {
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val = cpu.read(bus, cpu.arg);
+                cpu.a = (cpu.a & val);
+                cpu.a = (cpu.a >> 1) | (cpu.sr.get(StatusReg::C) << 7);
+                cpu.sr.set(StatusReg::C, (cpu.a >> 6) & 0x1);
+                cpu.sr.set(StatusReg::V, ((cpu.a >> 6) & 0x1) ^  ((cpu.a >> 5) & 0x1));
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case AAC:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                unsigned char val =  cpu.read(bus, cpu.arg);
+                cpu.a &= val;
+                cpu.sr.set(StatusReg::C, cpu.a & 0x80);
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case NOP:
+        case DOP:
+        case TOP:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc+=cpu.di.bytes;
+            });
+            break;}
+
+        case ORA:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                unsigned char val =  cpu.read(bus, cpu.arg);
+                unsigned char res = cpu.a | val;
+                cpu.sr.set(StatusReg::Z, res == 0);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.a = res;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case PHA:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.mem.write(bus,0x100 + cpu.sp, cpu.a); --cpu.sp;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case PHP:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.mem.write(bus,0x100 + cpu.sp, cpu.sr.get_status()); --cpu.sp;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case PLA:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                ++cpu.sp; cpu.a = cpu.mem.read(bus,0x100 + cpu.sp);
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case PLP:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                ++cpu.sp;
+                // TODO: Interrupt disable flag The effect of changing this flag is delayed 1 instruction.
+                cpu.sr.set_status(cpu.mem.read(bus,0x100 + cpu.sp));
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case ROL:{
+            if (arg.is_accumulator){
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    unsigned char val = cpu.read(bus, cpu.arg);
+                    bool prev_c = cpu.sr.get(StatusReg::C);
+                    unsigned char res = (val << 1) | prev_c;
+                    cpu.sr.set(StatusReg::C, val & 0x80);
+                    cpu.sr.set(StatusReg::Z, res == 0);
+                    cpu.sr.set(StatusReg::N, res & 0x80);
+                    cpu.write(bus, cpu.arg, res & 0xff);
+                    cpu.pc += cpu.di.bytes;
+                });
+            } else {
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    unsigned char val = cpu.read(bus, cpu.arg);
+                    bool prev_c = cpu.sr.get(StatusReg::C);
+                    unsigned char res = (val << 1) | prev_c;
+                    cpu.sr.set(StatusReg::C, val & 0x80);
+                    cpu.sr.set(StatusReg::Z, res == 0);
+                    cpu.sr.set(StatusReg::N, res & 0x80);
+                    cpu.as.write_value = res & 0xff;
+                });
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    cpu.write(bus, cpu.arg, cpu.as.write_value);
+                    cpu.pc += cpu.di.bytes;
+                });
+            }
+            break;
+        }
+        case ROR:{
+            if (arg.is_accumulator){
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    unsigned char val = cpu.read(bus, cpu.arg);
+                    bool prev_c = cpu.sr.get(StatusReg::C);
+                    unsigned char res = (val >> 1) | (prev_c << 7) ;
+                    cpu.sr.set(StatusReg::C, val & 0x1);
+                    cpu.sr.set(StatusReg::Z, res == 0);
+                    cpu.sr.set(StatusReg::N, res & 0x80);
+                    cpu.write(bus, cpu.arg, res & 0xff);
+                    cpu.pc += cpu.di.bytes;
+                });
+            } else {
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    unsigned char val = cpu.read(bus, cpu.arg);
+                    bool prev_c = cpu.sr.get(StatusReg::C);
+                    unsigned char res = (val >> 1) | (prev_c << 7) ;
+                    cpu.sr.set(StatusReg::C, val & 0x1);
+                    cpu.sr.set(StatusReg::Z, res == 0);
+                    cpu.sr.set(StatusReg::N, res & 0x80);
+                    cpu.as.write_value = res & 0xff;
+                });
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    cpu.write(bus, cpu.arg, cpu.as.write_value);
+                    cpu.pc += cpu.di.bytes;
+                });
+            }
+            break;
+        }
+        case RTI:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                ++cpu.sp; cpu.sr.set_status(cpu.mem.read(bus,0x100 + cpu.sp));
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                ++cpu.sp; cpu.as.tmp_l = cpu.mem.read(bus,0x100 + cpu.sp);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                ++cpu.sp; unsigned char h = cpu.mem.read(bus,0x100 + cpu.sp);
+                cpu.pc = cpu.as.tmp_l | (h << 8);
+            });
+            break;
+        }
+        case RTS:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                ++cpu.sp; cpu.as.tmp_l = cpu.mem.read(bus,0x100 + cpu.sp);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                ++cpu.sp; unsigned char h = cpu.mem.read(bus,0x100 + cpu.sp);
+                cpu.pc = cpu.as.tmp_l | (h << 8);
+                ++cpu.pc;
+            });
+            break;
+        }
+        case SBC:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                unsigned char val = cpu.read(bus, cpu.arg);
+                bool prev_c = cpu.sr.get(StatusReg::C);
+                int res = (cpu.a - val - (!prev_c));
+                cpu.sr.set(StatusReg::C, res >= 0);
+                cpu.sr.set(StatusReg::Z, (res & 0xff) == 0);
+                cpu.sr.set(StatusReg::V, (((res & 0xff) ^ cpu.a) & ((res & 0xff) ^ (~val))) & 0x80);
+                cpu.sr.set(StatusReg::N, res & 0x80);
+                cpu.a = res & 0xff;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case SEC:{iop.push_front([](Bus& bus, CPU& cpu){cpu.sr.set(StatusReg::C, true); cpu.pc+=cpu.di.bytes; }); break;}
+        case SED:{iop.push_front([](Bus& bus, CPU& cpu){cpu.sr.set(StatusReg::D, true); cpu.pc+=cpu.di.bytes; }); break;}
+        case SEI:{iop.push_front([](Bus& bus, CPU& cpu){cpu.sr.set(StatusReg::I, true); cpu.pc+=cpu.di.bytes; }); break;}
+        case STA:{
+            // todo: check for dummy read
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                cpu.write(bus, cpu.arg, cpu.a);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case STX:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                cpu.write(bus, cpu.arg, cpu.x);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case STY:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
+                cpu.write(bus, cpu.arg, cpu.y);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case TAX:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.x = cpu.a;
+                cpu.sr.set(StatusReg::Z, cpu.x == 0);
+                cpu.sr.set(StatusReg::N, cpu.x & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case TAY:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.y = cpu.a;
+                cpu.sr.set(StatusReg::Z, cpu.y == 0);
+                cpu.sr.set(StatusReg::N, cpu.y & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case TSX:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.x = cpu.sp;
+                cpu.sr.set(StatusReg::Z, cpu.x == 0);
+                cpu.sr.set(StatusReg::N, cpu.x & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case TXA:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.a = cpu.x;
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case TXS:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.sp = cpu.x;
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case TYA:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.a = cpu.y;
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
     }
 }
 
@@ -658,651 +1482,109 @@ void CPU::tick_step(Bus& bus){
         return;
     }
 
-    if (!execute_in_progress) {
-        if (bus.dma_active){
-            // Every cpu cycle
-            bus.dma_tick(mem.read(bus, bus.dma_address + bus.dma_index));
-            return;
-        }
-        if (bus.ppustatus.reg & 0x80 && bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop){
-            interrupt_requests[NMI] = true;
-            sr.set(StatusReg::I, false);
-            bus.nmi_interrupt_flip_flop = false;
-        }
-        if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)){
-            interrupt_requests[IRQ] = true;
-            bus.irq_interrupt_flip_flop = false;
-        }
+    switch (istep) {
+        case Prepare: {
+            if (bus.dma_active) {
+                // Every cpu cycle
+                bus.dma_tick(mem.read(bus, bus.dma_address + bus.dma_index));
+                return;
+            }
+            if (bus.ppustatus.reg & 0x80 && bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop) {
+                interrupt_requests[NMI] = true;
+                sr.set(StatusReg::I, false);
+                bus.nmi_interrupt_flip_flop = false;
+            }
+            if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)) {
+                interrupt_requests[IRQ] = true;
+                bus.irq_interrupt_flip_flop = false;
+            }
 
-        if (!sr.get(StatusReg::I)){
-            // TODO:
-            // The NES has an interrupt latency of 7 cycles, which means it takes 7 CPU cycles to begin
-            // executing the interrupt handler
-            for (int i = 0; i < InterruptsCount; ++i){
-                if (interrupt_requests[i]){
-                    if (!interrupt_handling_in_progress) {
-                        interrupt_handling_cycle = 6;
-                        interrupt_handling_in_progress = true;
-                    } else if (!(--interrupt_handling_cycle)) {
-                        handle_interrupt(bus, static_cast<Interrupt>(i));
-                        interrupt_handling_in_progress = false;
+            if (!sr.get(StatusReg::I)) {
+                // TODO:
+                // The NES has an interrupt latency of 7 cycles, which means it takes 7 CPU cycles to begin
+                // executing the interrupt handler
+                for (int i = 0; i < InterruptsCount; ++i) {
+                    if (interrupt_requests[i]) {
+                        if (!interrupt_handling_in_progress) {
+                            interrupt_handling_cycle = 6;
+                            interrupt_handling_in_progress = true;
+                        } else if (!(--interrupt_handling_cycle)) {
+                            handle_interrupt(bus, static_cast<Interrupt>(i));
+                            interrupt_handling_in_progress = false;
 #if DEBUG_MODE
-                        // TODO: check
-                        debug_run = false;
-                        return;
+                            // TODO: check
+                            debug_run = false;
+                            return;
 #endif
+                        }
+                        break;
                     }
-                    break;
                 }
             }
+
+            if (interrupt_handling_in_progress) return;
+            di = decode(mem.read(bus, pc));
+            fill_address_ops();
+            as.fetching = address_cmd.size() > 0;
+            as.execute = !as.fetching;
+#if DEBUG_MODE
+            pc_watch_count += (pc == pc_watch_address);
+#endif
+
+            istep = as.execute ? Execution : ArgFetching;
+            if (istep == Execution)
+                fill_exec_ops(bus);
+            else {
+                if (di.addr_mode == Immediate ||
+                    di.addr_mode == Relative) {
+                    addressing_tick(bus);
+                    istep = Execution;
+                    fill_exec_ops(bus);
+                }
+            }
+//            if (di.i == JMP){
+//                addressing_tick(bus);
+//            }
+            --di.cycles;
+            break;
         }
-
-        if (interrupt_handling_in_progress) return;
-
-        di = decode(mem.read(bus, pc));
-        fill_address_cmd();
-        as.fetching = address_cmd.size() > 0;
-        as.execute = !as.fetching;
+        case ArgFetching: {
+            addressing_tick(bus);
+            --di.cycles;
+            if (address_cmd.size() == 0){
+                istep = Execution;
+                fill_exec_ops(bus);
+                as.execute = true;
+            }
+            break;
+        }
+        case Execution: {
+            if (iop.size() > 0){
+                auto f = iop[iop.size()-1]; iop.pop_back();
+                f(bus, *this);
+                --di.cycles;
+                if (iop.size() > 0) return;
+            }
+//            if (di.cycles){ --di.cycles; return;}
 #if DEBUG_MODE
-        pc_watch_count += (pc == pc_watch_address);
+            if (di.i == CPU::Instruction::RTI){
+                di.bytes += 0;
+            }
 #endif
-        execute_in_progress = true;
+            instruction_execute_done = true;
+            if (!additional_cycles) {
+                execute_in_progress = false;
+                instruction_execute_done = false;
+#if DEBUG_MODE
+                debug_run = false;
+#endif
+            }
+            istep = Prepare;
+            break;
+        }
     }
-    if (as.fetching) {addressing_tick(bus); --di.cycles; return;}
-    if (as.execute)  {exec(bus); --di.cycles; as.execute = false;}
-    if (as.write)    {write(bus, arg, as.write_value); --di.cycles;  as.write = false; return;}
-    if (di.cycles > 1)
-        di.cycles += 0;
-    if (di.cycles){ --di.cycles; return;}
 
-#if DEBUG_MODE
-    if (di.i == CPU::Instruction::RTI){
-        di.bytes += 0;
-    }
-#endif
-    instruction_execute_done = true;
-    if (!additional_cycles) {
-        execute_in_progress = false;
-        instruction_execute_done = false;
-#if DEBUG_MODE
-        debug_run = false;
-#endif
-    }
 }
-
-void CPU::exec(Bus& bus) {
-    arg = AddressingResult{
-            .addr = as.result,
-            .page_crossed = as.cross_check,
-            .is_accumulator = di.addr_mode == Accumulator,
-            .add_to_addr = as.addr_to_add,
-    };
-    switch(di.i) {
-        case ADC: {
-            unsigned char val = read(bus, arg);
-            unsigned short res = a + val + sr.get(StatusReg::C);
-            sr.set(StatusReg::C, res > 0xff);
-            sr.set(StatusReg::Z, (res & 0xff) == 0);
-            sr.set(StatusReg::V, (res ^ a) & (res ^ val) & 0x80);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case AND:{
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val =  read(bus, arg);
-            a &= val;
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case ASL:{
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val << 1;
-            sr.set(StatusReg::C, val & 0x80);
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            as.write = true; as.write_value = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case SLO:{
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val << 1;
-            a |= res;
-            sr.set(StatusReg::C, val & 0x80);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            as.write = true; as.write_value = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case RLA:{
-            unsigned char val = read(bus, arg);
-            unsigned char res = (val << 1) | sr.get(StatusReg::C);
-            a &= res;
-            sr.set(StatusReg::C, val & 0x80);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            as.write = true; as.write_value = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case SRE:{
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val >> 1;
-            a ^= res;
-            sr.set(StatusReg::C, val & 0x1);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            as.write = true; as.write_value = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case RRA:{
-            unsigned char val = read(bus, arg);
-            unsigned char ror_res = (val >> 1) | (sr.get(StatusReg::C) << 7);
-            sr.set(StatusReg::C, val & 0x1);
-            sr.set(StatusReg::Z, ror_res == 0);
-            sr.set(StatusReg::N, ror_res & 0x80);
-            write(bus, arg, ror_res);
-            val = read(bus, arg);
-            unsigned short res = (a + val + sr.get(StatusReg::C));
-            sr.set(StatusReg::C, res > 0xff);
-            sr.set(StatusReg::Z, (res & 0xff) == 0);
-            sr.set(StatusReg::V, (res ^ a) & (res ^ val) & 0x80);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case AAX:{
-            as.write = true; as.write_value = a & x;
-            pc += di.bytes;
-            break;
-        }
-        case LAX:{
-            unsigned char val = read(bus, arg);
-            a = val;
-            x = val;
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case DCP:{
-            unsigned char val = read(bus, arg);
-            unsigned char res = val - 1;
-            sr.set(StatusReg::C, a >= res);
-            sr.set(StatusReg::Z, a == res);
-            sr.set(StatusReg::N, (a - res) & 0x80);
-            as.write = true; as.write_value = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case ISC:{
-            unsigned char val = read(bus, arg);
-            write(bus, arg, val + 1);
-            val = read(bus, arg);
-            int res = a - val - (1 - sr.get(StatusReg::C));
-            sr.set(StatusReg::C, res >= 0);
-            sr.set(StatusReg::Z, (res & 0xff) == 0);
-            sr.set(StatusReg::V, (((res & 0xff) ^ a) & ((res & 0xff) ^ (~val))) & 0x80);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case SYA:{
-            unsigned char res = y & (((arg.addr >> 8) & 0xff) + 1);
-            if (res > 0){
-                as.write = true; as.write_value = res & 0xff;
-            }
-            pc += di.bytes;
-            break;
-        }
-        case SXA:{
-            unsigned char res = x & (((arg.addr >> 8) & 0xff) + 1);
-            if (res > 0)
-                {as.write = true; as.write_value = res & 0xff;}
-            pc += di.bytes;
-            break;
-        }
-        case BCC:{
-            pc += di.bytes;
-            if (!sr.get(StatusReg::C)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-            }
-            break;
-        }
-        case BCS:{
-            pc += di.bytes;
-            if (sr.get(StatusReg::C)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-            }
-            break;
-        }
-        case BEQ:{
-            pc += di.bytes;
-            if (sr.get(StatusReg::Z)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-            }
-            break;
-        }
-        case BMI: {
-            pc += di.bytes;
-            if (sr.get(StatusReg::N)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-            }
-            break;
-        }
-        case BNE:{
-            pc += di.bytes;
-            if (!sr.get(StatusReg::Z)) {
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-            }
-            break;
-        }
-        case BPL:{
-            pc += di.bytes;
-            if (!sr.get(StatusReg::N)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-            }
-
-            break;
-        }
-        case BVC:{
-            pc += di.bytes;
-            if (!sr.get(StatusReg::V)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-            }
-
-            break;
-        }
-        case BVS:{
-            pc += di.bytes;
-            if (sr.get(StatusReg::V)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-            }
-            break;
-        }
-        case BIT:{
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val = read(bus, arg);
-            unsigned char res = a & val;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::V, val & 0x40);
-            sr.set(StatusReg::N, val & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case BRK:{
-            if (!interrupt_requests[IRQ]){
-                sr.set(StatusReg::I, false);
-                interrupt_requests[IRQ] = true;
-            }
-            break;}
-        case CLC:{sr.set(StatusReg::C, 0); pc+=1; break;}
-        case CLD:{sr.set(StatusReg::D, 0); pc+=1; break;}
-        case CLI:{sr.set(StatusReg::I, 0); pc+=1; break;}
-        case CLV:{sr.set(StatusReg::V, 0); pc+=1; break;}
-        case CMP:{
-            if (arg.page_crossed) { arg = dummy_read(bus, arg); additional_cycles = 1;}
-            unsigned char val =  read(bus, arg);
-            unsigned char res = a - val;
-            sr.set(StatusReg::C, a >= val);
-            sr.set(StatusReg::Z, a == val);
-            sr.set(StatusReg::N, res & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case CPX:{
-            unsigned char val =  read(bus, arg);
-            unsigned char res = x - val;
-            sr.set(StatusReg::C, x >= val);
-            sr.set(StatusReg::Z, x == val);
-            sr.set(StatusReg::N, res & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case CPY:{
-            unsigned char val =  read(bus, arg);
-            unsigned char res = y - val;
-            sr.set(StatusReg::C, y >= val);
-            sr.set(StatusReg::Z, y == val);
-            sr.set(StatusReg::N, res & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case DEC:{
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val - 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            as.write = true; as.write_value = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case DEX:{
-            unsigned char res = x - 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            x = res;
-            pc += di.bytes;
-            break;
-        }
-        case DEY:{
-            unsigned char res = y - 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            y = res;
-            pc += di.bytes;
-            break;
-        }
-        case EOR:{
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = a ^ val;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res;
-            pc += di.bytes;
-            break;
-        }
-        case INC:{
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val + 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            as.write = true; as.write_value = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case INX:{
-            unsigned char res = x + 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            x = res;
-            pc += di.bytes;
-            break;
-        }
-        case INY:{
-            unsigned char res = y + 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            y = res;
-            pc += di.bytes;
-            break;
-        }
-        case JMP:{
-            // todo
-            if (di.addr_mode == Absolute){
-                pc = (mem.read(bus,pc + 1) | (mem.read(bus,pc + 2) << 8));
-            } else { // Indirect
-                unsigned short arg_addr = (mem.read(bus,pc + 1) | (mem.read(bus,pc + 2) << 8));
-                unsigned char l = mem.read(bus,arg_addr);
-                unsigned char h = mem.read(bus,(arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
-                pc = l | (h << 8);
-            }
-            break;
-        }
-        case JSR:{
-            // TODO: maybe check
-            mem.write(bus,0x100 + sp, ((pc + 2) >> 8) & 0xff); --sp;
-            mem.write(bus,0x100 + sp, (pc + 2) & 0xff); --sp;
-            pc = arg.addr;
-            break;
-        }
-        case LDA:{
-            if (arg.page_crossed) {arg = dummy_read(bus, arg); additional_cycles = 1;}
-            a = read(bus, arg);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case LDX:{
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            x = read(bus, arg);
-            sr.set(StatusReg::Z, x == 0);
-            sr.set(StatusReg::N, x & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case LDY:{
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            y = read(bus, arg);
-            sr.set(StatusReg::Z, y == 0);
-            sr.set(StatusReg::N, y & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case LSR:{
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val >> 1;
-            sr.set(StatusReg::C, val & 0x1);
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, 0);
-            as.write = true; as.write_value = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case ASR: {
-            unsigned char val = read(bus, arg);
-            unsigned char res = a & val;
-            unsigned char shifted_res = res >> 1;
-            sr.set(StatusReg::C, res & 0x1);
-            sr.set(StatusReg::Z, shifted_res == 0);
-            sr.set(StatusReg::N, shifted_res & 0x80);
-            a = shifted_res;
-            pc += di.bytes;
-            break;
-        }
-            // TODO: check
-        case ATX: {
-            unsigned char val = read(bus, arg);
-            a = val;
-            x = a;
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-
-        case AXS: {
-            unsigned char val = read(bus, arg);
-            int tmp = (a & x) - val;
-            sr.set(StatusReg::C, tmp >= 0);
-            sr.set(StatusReg::Z, (tmp & 0xff) == 0);
-            sr.set(StatusReg::N, tmp & 0x80);
-            x = tmp & 0xff;
-            pc += di.bytes;
-            break;
-        }
-
-        case ARR: {
-            unsigned char val = read(bus, arg);
-            a = (a & val);
-            a = (a >> 1) | (sr.get(StatusReg::C) << 7);
-            sr.set(StatusReg::C, (a >> 6) & 0x1);
-            sr.set(StatusReg::V, ((a >> 6) & 0x1) ^  ((a >> 5) & 0x1));
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case AAC:{
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val =  read(bus, arg);
-            a &= val;
-            sr.set(StatusReg::C, a & 0x80);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-
-        case NOP:
-        case DOP:
-        case TOP:{pc+=di.bytes; break;}
-
-        case ORA:{
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = a | val;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res;
-            pc += di.bytes;
-            break;
-        }
-        case PHA:{
-            mem.write(bus,0x100 + sp, a); --sp;
-            pc += di.bytes;
-            break;
-        }
-        case PHP:{
-            mem.write(bus,0x100 + sp, sr.get_status()); --sp;
-            pc += di.bytes;
-            break;
-        }
-        case PLA:{
-            ++sp; a = mem.read(bus,0x100 + sp);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case PLP:{
-            ++sp;
-            // TODO: Interrupt disable flag The effect of changing this flag is delayed 1 instruction.
-            sr.set_status(mem.read(bus,0x100 + sp));
-            pc += di.bytes;
-            break;
-        }
-        case ROL:{
-            unsigned char val = read(bus, arg);
-            bool prev_c = sr.get(StatusReg::C);
-            unsigned char res = (val << 1) | prev_c;
-            sr.set(StatusReg::C, val & 0x80);
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            as.write = true; as.write_value = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case ROR:{
-            unsigned char val = read(bus, arg);
-            bool prev_c = sr.get(StatusReg::C);
-            unsigned char res = (val >> 1) | (prev_c << 7) ;
-            sr.set(StatusReg::C, val & 0x1);
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            as.write = true; as.write_value = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case RTI:{
-            ++sp; sr.set_status(mem.read(bus,0x100 + sp));
-            ++sp; unsigned char l = mem.read(bus,0x100 + sp);
-            ++sp; unsigned char h = mem.read(bus,0x100 + sp);
-            pc = l | (h << 8);
-            break;
-        }
-        case RTS:{
-            ++sp; unsigned char l = mem.read(bus,0x100 + sp);
-            ++sp; unsigned char h = mem.read(bus,0x100 + sp);
-            pc = l | (h << 8);
-            ++pc;
-            break;
-        }
-        case SBC:{
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val = read(bus, arg);
-            bool prev_c = sr.get(StatusReg::C);
-            int res = (a - val - (!prev_c));
-            sr.set(StatusReg::C, res >= 0);
-            sr.set(StatusReg::Z, (res & 0xff) == 0);
-            sr.set(StatusReg::V, (((res & 0xff) ^ a) & ((res & 0xff) ^ (~val))) & 0x80);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case SEC:{sr.set(StatusReg::C, true); pc+=di.bytes; break;}
-        case SED:{sr.set(StatusReg::D, true); pc+=di.bytes; break;}
-        case SEI:{sr.set(StatusReg::I, true); pc+=di.bytes; break;}
-        case STA:{
-            // todo: check for dummy read
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            as.write = true; as.write_value = a;
-            pc += di.bytes;
-            break;
-        }
-        case STX:{
-            as.write = true; as.write_value = x;
-            pc += di.bytes;
-            break;
-        }
-        case STY:{
-            as.write = true; as.write_value = y;
-            pc += di.bytes;
-            break;
-        }
-        case TAX:{
-            x = a;
-            sr.set(StatusReg::Z, x == 0);
-            sr.set(StatusReg::N, x & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case TAY:{
-            y = a;
-            sr.set(StatusReg::Z, y == 0);
-            sr.set(StatusReg::N, y & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case TSX:{
-            x = sp;
-            sr.set(StatusReg::Z, x == 0);
-            sr.set(StatusReg::N, x & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case TXA:{
-            a = x;
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case TXS:{
-            sp = x;
-            pc += di.bytes;
-            break;
-        }
-        case TYA:{
-            a = y;
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-    }
-}
-
 
 void CPU::tick(Bus& bus){
 #if DEBUG_MODE
@@ -1535,7 +1817,6 @@ void CPU::tick(Bus& bus){
                 pc += (char)(read(bus, arg));
                 additional_cycles = 1 + (arg.page_crossed);
             }
-
             break;
         }
         case BCS:{

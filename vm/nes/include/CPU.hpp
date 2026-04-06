@@ -196,11 +196,21 @@ struct CPU {
         PCPlusOne,
     };
 
+    enum InstructionStep {
+        Prepare,
+        ArgFetching,
+        Execution
+    } istep = Prepare;
+
+    SimpleDeque<void(*)(Bus& bus, CPU&), 6> iop{};
+
     struct InstructionState {
         bool cross_check{};
         bool fetching{};
         bool execute{};
         bool write = false;
+        unsigned char tmp_l{};
+        unsigned char tmp_h{};
         unsigned char write_value{};
         unsigned char ind_low{};
         unsigned char addr_to_add{};
@@ -211,8 +221,8 @@ struct CPU {
     } as;
 
     void addressing_tick(Bus& bus);
-    void exec(Bus& bus);
-    void fill_address_cmd();
+    void fill_address_ops();
+    void fill_exec_ops(Bus& bus);
 
     DecodedInstruction decode(unsigned char v);
     void tick(Bus& mem);
