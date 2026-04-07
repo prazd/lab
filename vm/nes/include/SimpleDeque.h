@@ -73,12 +73,19 @@ struct SimpleDeque {
     T& operator[](size_t index){
         return  *reinterpret_cast<T*>(buffer + index * sizeof(T));
     }
+    T& back() {
+        return  *reinterpret_cast<T*>(buffer + (current_sz-1) * sizeof(T));
+    }
     const T& operator[](size_t index)const{
         return  *reinterpret_cast<const T*>(buffer + index * sizeof(T));
     }
     size_t size() const {
         return current_sz;
     }
+    bool empty() const {
+        return current_sz == 0;
+    }
+
     void reset(){
         for (int i = 0; i < current_sz; ++i) reinterpret_cast<T*>(buffer + i * sizeof(T))->~T();
 #if DEBUG_MODE

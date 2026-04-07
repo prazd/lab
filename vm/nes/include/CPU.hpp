@@ -137,6 +137,7 @@ struct CPU {
         bool is_accumulator = false;
         unsigned char add_to_addr{};
     } arg;
+    void update_arg();
 
     unsigned char read(Bus& bus, AddressingResult ar);
     void write(Bus& bus, AddressingResult ar, unsigned char value);
@@ -193,16 +194,19 @@ struct CPU {
         AbsX, AbsY, PageCross,
         IndXReadLow, IndXReadHigh,
         IndYReadLow, IndYReadHigh,
+        Nop,
         PCPlusOne,
     };
 
     enum InstructionStep {
         Prepare,
-        ArgFetching,
         Execution
     } istep = Prepare;
 
-    SimpleDeque<void(*)(Bus& bus, CPU&), 6> iop{};
+    SimpleDeque<void(*)(Bus& bus, CPU&), 7> iop{};
+    void iop_exec_step(Bus& bus);
+    SimpleDeque<unsigned char, 7> merged_iop_indexes{};
+    size_t current_iop_index{};
 
     struct InstructionState {
         bool cross_check{};
@@ -220,9 +224,9 @@ struct CPU {
         unsigned short result{};
     } as;
 
-    void addressing_tick(Bus& bus);
+    void push_addr_step(AddressingStep);
     void fill_address_ops();
-    void fill_exec_ops(Bus& bus);
+    void fill_exec_ops();
 
     DecodedInstruction decode(unsigned char v);
     void tick(Bus& mem);
@@ -234,8 +238,6 @@ struct CPU {
     int interrupt_handling_cycle = 0;
     void handle_interrupt(Bus&, Interrupt);
     DecodedInstruction di{};
-    SimpleDeque<AddressingStep, 6> address_cmd{};
-
 //
     struct AsmInfo {
         std::string_view mnemonic{};
