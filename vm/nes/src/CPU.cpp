@@ -273,40 +273,38 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x91: {return {IndexedIndirectY, STA,  2, 6};}
 
 
-        case 0x07: {return {ZeroPage,  SLO,    2, 3};}
-        case 0x0F: {return {Absolute,  SLO,    3, 4};}
-        case 0x1F: {return {AbsoluteX,  SLO,    3, 5};}
-        case 0x1B: {return {AbsoluteY,  SLO,    3, 5};}
-        case 0x03: {return {IndexedIndirectX, SLO,  2, 6};}
-        case 0x13: {return {IndexedIndirectY, SLO,  2, 6};}
+        case 0x07: {return {ZeroPage,  SLO,    2, 5};}
+        case 0x17: {return {ZeroPageX,  SLO,    2, 6};}
+        case 0x0F: {return {Absolute,  SLO,    3, 6};}
+        case 0x1F: {return {AbsoluteX,  SLO,    3, 7};}
+        case 0x1B: {return {AbsoluteY,  SLO,    3, 7};}
+        case 0x03: {return {IndexedIndirectX, SLO,  2, 8};}
+        case 0x13: {return {IndexedIndirectY, SLO,  2, 8};}
 
-        case 0x17: {return {ZeroPageX,  SLO,    2, 4};}
+        case 0x27: {return {ZeroPage,  RLA,    2, 5};}
+        case 0x37: {return {ZeroPageX,  RLA,    2, 6};}
+        case 0x2F: {return {Absolute,  RLA,    3, 6};}
+        case 0x3F: {return {AbsoluteX,  RLA,    3, 7};}
+        case 0x3B: {return {AbsoluteY,  RLA,    3, 7};}
+        case 0x23: {return {IndexedIndirectX, RLA,  2, 8};}
+        case 0x33: {return {IndexedIndirectY, RLA,  2, 8};}
 
-        case 0x27: {return {ZeroPage,  RLA,    2, 3};}
-        case 0x2F: {return {Absolute,  RLA,    3, 4};}
-        case 0x3F: {return {AbsoluteX,  RLA,    3, 5};}
-        case 0x3B: {return {AbsoluteY,  RLA,    3, 5};}
-        case 0x23: {return {IndexedIndirectX, RLA,  2, 6};}
-        case 0x33: {return {IndexedIndirectY, RLA,  2, 6};}
 
-        case 0x37: {return {ZeroPageX,  RLA,    2, 4};}
-
-        case 0x47: {return {ZeroPage,  SRE,    2, 3};}
-        case 0x4F: {return {Absolute,  SRE,    3, 4};}
-        case 0x5F: {return {AbsoluteX,  SRE,    3, 5};}
-        case 0x5B: {return {AbsoluteY,  SRE,    3, 5};}
-        case 0x57: {return {ZeroPageX,  SRE,    2, 4};}
-        case 0x43: {return {IndexedIndirectX, SRE,  2, 6};}
-        case 0x53: {return {IndexedIndirectY, SRE,  2, 6};}
+        case 0x47: {return {ZeroPage,  SRE,    2, 5};}
+        case 0x57: {return {ZeroPageX,  SRE,    2, 6};}
+        case 0x4F: {return {Absolute,  SRE,    3, 6};}
+        case 0x5F: {return {AbsoluteX,  SRE,    3, 7};}
+        case 0x5B: {return {AbsoluteY,  SRE,    3, 7};}
+        case 0x43: {return {IndexedIndirectX, SRE,  2, 8};}
+        case 0x53: {return {IndexedIndirectY, SRE,  2, 8};}
 
         case 0x67: {return {ZeroPage,  RRA,    2, 5};}
-        case 0x6F: {return {Absolute,  RRA,    3, 5};} // TODO: check
-        case 0x7F: {return {AbsoluteX,  RRA,    3, 5};} // TODO: check
-        case 0x7B: {return {AbsoluteY,  RRA,    3, 5};} // TODO: check
-        case 0x63: {return {IndexedIndirectX, RRA,  2, 6};}
-        case 0x73: {return {IndexedIndirectY, RRA,  2, 6};}
-
         case 0x77: {return {ZeroPageX,  RRA,    2, 6};}
+        case 0x6F: {return {Absolute,  RRA,    3, 6};}
+        case 0x7F: {return {AbsoluteX,  RRA,    3, 7};}
+        case 0x7B: {return {AbsoluteY,  RRA,    3, 7};}
+        case 0x63: {return {IndexedIndirectX, RRA,  2, 8};}
+        case 0x73: {return {IndexedIndirectY, RRA,  2, 8};}
 
         case 0x87: {return {ZeroPage,  AAX,    2, 3};}
         case 0x8F: {return {Absolute,  AAX,    3, 4};}
@@ -314,27 +312,28 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x83: {return {IndexedIndirectX, AAX,  2, 6};}
 
         case 0xA7: {return {ZeroPage,  LAX,    2, 3};}
-        case 0xAF: {return {Absolute,  LAX,    3, 4};}
-        case 0xBF: {return {AbsoluteY,  LAX,    3, 5};}
         case 0xB7: {return {ZeroPageY,  LAX,    2, 4};}
+        case 0xAF: {return {Absolute,  LAX,    3, 4};}
+        case 0xBF: {return {AbsoluteY,  LAX,    3, 4};} //*
         case 0xA3: {return {IndexedIndirectX, LAX,  2, 6};}
-        case 0xB3: {return {IndexedIndirectY, LAX,  2, 6};}
+        case 0xB3: {return {IndexedIndirectY, LAX,  2, 5};}//*
 
-        case 0xC7: {return {ZeroPage,  DCP,    2, 3};}
-        case 0xCF: {return {Absolute,  DCP,    3, 4};}
-        case 0xDF: {return {AbsoluteX,  DCP,    3, 5};}
-        case 0xDB: {return {AbsoluteY,  DCP,    3, 5};}
-        case 0xC3: {return {IndexedIndirectX, DCP,  2, 6};}
-        case 0xD3: {return {IndexedIndirectY, DCP,  2, 6};}
+        case 0xC7: {return {ZeroPage,  DCP,    2, 5};}
+        case 0xD7: {return {ZeroPageX,  DCP,    2, 6};}
+        case 0xCF: {return {Absolute,  DCP,    3, 6};}
+        case 0xDF: {return {AbsoluteX,  DCP,    3, 7};}
+        case 0xDB: {return {AbsoluteY,  DCP,    3, 7};}
+        case 0xC3: {return {IndexedIndirectX, DCP,  2, 8};}
+        case 0xD3: {return {IndexedIndirectY, DCP,  2, 8};}
 
-        case 0xD7: {return {ZeroPageX,  DCP,    2, 4};}
-        case 0xE7: {return {ZeroPage,  ISC,    2, 3};}
-        case 0xEF: {return {Absolute,  ISC,    3, 4};}
-        case 0xFF: {return {AbsoluteX,  ISC,    3, 5};}
-        case 0xFB: {return {AbsoluteY,  ISC,    3, 5};}
-        case 0xF7: {return {ZeroPageX,  ISC,    2, 4};}
-        case 0xE3: {return {IndexedIndirectX, ISC,  2, 6};}
-        case 0xF3: {return {IndexedIndirectY, ISC,  2, 6};}
+
+        case 0xE7: {return {ZeroPage,  ISC,    2, 5};}
+        case 0xF7: {return {ZeroPageX,  ISC,    2, 6};}
+        case 0xEF: {return {Absolute,  ISC,    3, 6};}
+        case 0xFF: {return {AbsoluteX,  ISC,    3, 7};}
+        case 0xFB: {return {AbsoluteY,  ISC,    3, 7};}
+        case 0xE3: {return {IndexedIndirectX, ISC,  2, 8};}
+        case 0xF3: {return {IndexedIndirectY, ISC,  2, 8};}
 
         case 0x9C: {return {AbsoluteX,  SYA,    3, 5};}
         case 0x9E: {return {AbsoluteY,  SXA,    3, 5};}
@@ -394,7 +393,7 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x04:
         case 0x44:
         case 0x64:
-            {return {ZeroPage, DOP, 2, 2};}
+            {return {ZeroPage, DOP, 2, 3};}
 
         case 0x14:
         case 0x34:
@@ -413,7 +412,7 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x7C:
         case 0xDC:
         case 0xFC:
-            {return {AbsoluteX, TOP, 3, 5};}
+            {return {AbsoluteX, TOP, 3, 4};} //*
 
         case 0xCA: {return {Implied, DEX, 1, 2};}
         case 0x88: {return {Implied, DEY, 1, 2};}
@@ -456,6 +455,7 @@ void CPU::push_addr_step(AddressingStep step) {
         }
         case AbsX: {
             iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.as.arg2 = cpu.mem.read(bus, cpu.pc + 2);
                 unsigned short args_as_addr = ((cpu.as.arg1) | cpu.as.arg2 << 8);
                 unsigned short addr = args_as_addr + cpu.x;
                 if (cpu.as.cross_check && (cpu.as.arg2 != ((addr >> 8) & 0xff))){
@@ -473,6 +473,7 @@ void CPU::push_addr_step(AddressingStep step) {
         }
         case AbsY: {
             iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.as.arg2 = cpu.mem.read(bus, cpu.pc + 2);
                 unsigned short args_as_addr = ((cpu.as.arg1) | cpu.as.arg2 << 8);
                 unsigned short addr = args_as_addr + cpu.y;
                 if (cpu.as.cross_check && (cpu.as.arg2 != ((addr >> 8) & 0xff))){
@@ -495,8 +496,13 @@ void CPU::push_addr_step(AddressingStep step) {
         }
         case IndXReadHigh: {
             iop.push_front([](Bus& bus, CPU& cpu){
-                auto ind_high =  cpu.mem.read(bus,(cpu.as.arg1 + cpu.x + 1) % 256)* 256;
-                cpu.as.result = cpu.as.ind_low + ind_high;
+                cpu.as.tmp_h = cpu.mem.read(bus,(cpu.as.arg1 + cpu.x + 1) % 256)*256;
+            });
+            break;
+        }
+        case IndXRes: {
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.as.result = cpu.as.ind_low + cpu.as.tmp_h;
             });
             break;
         }
@@ -536,13 +542,6 @@ void CPU::push_addr_step(AddressingStep step) {
             });
             break;
         }
-        case PCPlusOne: {
-                iop.push_front([](Bus& bus, CPU& cpu){
-                    cpu.as.result = cpu.pc + 1;
-                });
-                break;
-        }
-        case Nop: // todo: update
         case PageCross: {
             iop.push_front([](Bus&, CPU&){});
             break;
@@ -553,7 +552,7 @@ void CPU::push_addr_step(AddressingStep step) {
 void CPU::fill_address_ops() {
     static constexpr Instruction cmds[] = {
             BRK,
-            CLC, CLD, CLI, CLV, DEX, DEY, INX, INY, NOP, DOP, TOP,
+            CLC, CLD, CLI, CLV, DEX, DEY, INX, INY,
             PHA,  PHP, PLA, PLP, RTI, RTS, SEC, SEI, SED,
             TAX,
             TAY,
@@ -567,14 +566,14 @@ void CPU::fill_address_ops() {
     switch (di.addr_mode) {
         case ZeroPageX: {push_addr_step(LowByte); push_addr_step(AddrPlusX); break;}
         case ZeroPageY: {push_addr_step(LowByte); push_addr_step(AddrPlusY); break;}
-        case AbsoluteX: {push_addr_step(LowByte); push_addr_step(HighByte);push_addr_step(AbsX); break;}
-        case AbsoluteY: {push_addr_step(LowByte); push_addr_step(HighByte);push_addr_step(AbsY); break;}
-        case IndexedIndirectX: {push_addr_step(LowByte);push_addr_step(IndXReadLow);push_addr_step(IndXReadHigh); break;}
-        case IndexedIndirectY: {push_addr_step(LowByte);push_addr_step(Nop);push_addr_step(IndYReadLow);push_addr_step(IndYReadHigh); break;}
+        case AbsoluteX: {push_addr_step(LowByte); push_addr_step(AbsX); break;}
+        case AbsoluteY: {push_addr_step(LowByte); push_addr_step(AbsY); break;}
+        case IndexedIndirectX: {push_addr_step(LowByte);push_addr_step(IndXReadLow);push_addr_step(IndXReadHigh); push_addr_step(IndXRes); break;}
+        case IndexedIndirectY: {push_addr_step(LowByte);push_addr_step(IndYReadLow);push_addr_step(IndYReadHigh); break;}
         case Absolute: {push_addr_step(LowByte);push_addr_step(Abs); break;}
         case ZeroPage: {push_addr_step(Zp); break;}
         case Immediate:
-        case Relative:  {push_addr_step(PCPlusOne); break;}
+        case Relative:  {as.result = pc + 1; break;}
         case Accumulator: {break;}
     }
 }
@@ -618,6 +617,7 @@ void CPU::fill_exec_ops() {
                     cpu.pc += cpu.di.bytes;
                 });
             } else {
+                if (di.addr_mode == AbsoluteX) iop.push_front([](Bus& bus, CPU& cpu){});
                 iop.push_front([](Bus& bus, CPU& cpu){
                     unsigned char val =  cpu.read(bus, cpu.arg);
                     cpu.as.write_value = val; // RMW
@@ -638,6 +638,7 @@ void CPU::fill_exec_ops() {
             break;
         }
         case SLO:{
+            if (di.addr_mode == AbsoluteX || di.addr_mode == AbsoluteY || di.addr_mode == IndexedIndirectY) iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char val =  cpu.read(bus, cpu.arg);
                 unsigned char res = val << 1;
@@ -649,11 +650,14 @@ void CPU::fill_exec_ops() {
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.pc += cpu.di.bytes;
             });
             break;
         }
         case RLA:{
+            if (di.addr_mode == AbsoluteX || di.addr_mode == AbsoluteY || di.addr_mode == IndexedIndirectY) iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char val = cpu.read(bus, cpu.arg);
                 unsigned char res = (val << 1) | cpu.sr.get(StatusReg::C);
@@ -665,11 +669,14 @@ void CPU::fill_exec_ops() {
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.pc += cpu.di.bytes;
             });
             break;
         }
         case SRE:{
+            if (di.addr_mode == AbsoluteX || di.addr_mode == AbsoluteY || di.addr_mode == IndexedIndirectY) iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char val =  cpu.read(bus, cpu.arg);
                 unsigned char res = val >> 1;
@@ -681,11 +688,14 @@ void CPU::fill_exec_ops() {
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.pc += cpu.di.bytes;
             });
             break;
         }
         case RRA:{
+            if (di.addr_mode == AbsoluteX || di.addr_mode == AbsoluteY || di.addr_mode == IndexedIndirectY) iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char val = cpu.read(bus, cpu.arg);
                 unsigned char ror_res = (val >> 1) | (cpu.sr.get(StatusReg::C) << 7);
@@ -703,6 +713,8 @@ void CPU::fill_exec_ops() {
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.pc += cpu.di.bytes;
             });
             break;
@@ -726,6 +738,7 @@ void CPU::fill_exec_ops() {
             break;
         }
         case DCP:{
+            if (di.addr_mode == AbsoluteX || di.addr_mode == AbsoluteY || di.addr_mode == IndexedIndirectY) iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char val = cpu.read(bus, cpu.arg);
                 unsigned char res = val - 1;
@@ -736,12 +749,15 @@ void CPU::fill_exec_ops() {
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.pc += cpu.di.bytes;
             });
             break;
         }
         case ISC:{
             // todo: check
+            if (di.addr_mode == AbsoluteX || di.addr_mode == AbsoluteY || di.addr_mode == IndexedIndirectY) iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char val = cpu.read(bus, cpu.arg);
                 val += 1;
@@ -755,16 +771,20 @@ void CPU::fill_exec_ops() {
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.pc += cpu.di.bytes;
             });
             break;
         }
         case SYA:{
+            if (di.addr_mode == AbsoluteX || di.addr_mode == AbsoluteY) iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char res = cpu.y & (((cpu.arg.addr >> 8) & 0xff) + 1);
                 if (res > 0){
                      cpu.as.write_value = res & 0xff;
                      cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                         ++cpu.di.cycles;
                          cpu.write(bus, cpu.arg, cpu.as.write_value);
                          cpu.pc += cpu.di.bytes;
                      });
@@ -775,12 +795,14 @@ void CPU::fill_exec_ops() {
             break;
         }
         case SXA:{
+            if (di.addr_mode == AbsoluteX || di.addr_mode == AbsoluteY) iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char res = cpu.x & (((cpu.arg.addr >> 8) & 0xff) + 1);
                 if (res > 0){
                     cpu.as.write_value = res & 0xff;
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
                         cpu.write(bus, cpu.arg, cpu.as.write_value);
+                        ++cpu.di.cycles;
                         cpu.pc += cpu.di.bytes;
                     });
                 } else {
@@ -960,6 +982,7 @@ void CPU::fill_exec_ops() {
             break;
         }
         case DEC:{
+            if (di.addr_mode == AbsoluteX) iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char val =  cpu.read(bus, cpu.arg);
                 cpu.as.write_value = val; // RMW
@@ -1010,6 +1033,7 @@ void CPU::fill_exec_ops() {
             break;
         }
         case INC:{
+            if (di.addr_mode == AbsoluteX) iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
                 if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 unsigned char val =  cpu.read(bus, cpu.arg);
@@ -1052,14 +1076,23 @@ void CPU::fill_exec_ops() {
             // todo
             if (di.addr_mode == Absolute){
                 iop.push_front([](Bus& bus, CPU& cpu){
-                     cpu.pc = (cpu.mem.read(bus, cpu.pc + 1) | ( cpu.mem.read(bus, cpu.pc + 2) << 8));
+                    cpu.pc = (cpu.as.arg1 | ( cpu.mem.read(bus, cpu.pc + 2) << 8));
                 });
             } else { // Indirect
                 iop.push_front([](Bus& bus, CPU& cpu){
-                    unsigned short arg_addr = (cpu.mem.read(bus,cpu.pc + 1) | (cpu.mem.read(bus,cpu.pc + 2) << 8));
-                    unsigned char l = cpu.mem.read(bus,arg_addr);
-                    unsigned char h = cpu.mem.read(bus,(arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
-                    cpu.pc = l | (h << 8);
+                    cpu.as.arg1 = cpu.mem.read(bus,cpu.pc + 1);
+                });
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    cpu.as.result = (cpu.as.arg1 | (cpu.mem.read(bus,cpu.pc + 2) << 8));
+                });
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    cpu.as.tmp_l = cpu.mem.read(bus,cpu.as.result);
+                });
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    cpu.as.tmp_h = cpu.mem.read(bus,(cpu.as.result & 0xff) == 0xff ? (cpu.as.result & 0xff00) : cpu.as.result + 1);
+                });
+                iop.push_front([](Bus& bus, CPU& cpu){
+                    cpu.pc = cpu.as.tmp_l | (cpu.as.tmp_h << 8);
                 });
             }
             break;
@@ -1119,6 +1152,7 @@ void CPU::fill_exec_ops() {
                     cpu.pc += cpu.di.bytes;
                 });
             } else {
+                if (di.addr_mode == AbsoluteX) iop.push_front([](Bus& bus, CPU& cpu){});
                 iop.push_front([](Bus& bus, CPU& cpu){
                     unsigned char val = cpu.read(bus, cpu.arg);
                     cpu.as.write_value = val; // RMW
@@ -1281,10 +1315,10 @@ void CPU::fill_exec_ops() {
                     cpu.pc += cpu.di.bytes;
                 });
             } else {
+                if (di.addr_mode == AbsoluteX) iop.push_front([](Bus& bus, CPU& cpu){});
                 iop.push_front([](Bus& bus, CPU& cpu){
                     unsigned char val = cpu.read(bus, cpu.arg);
                     cpu.as.write_value = val; // RMW
-
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
                     cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -1315,6 +1349,7 @@ void CPU::fill_exec_ops() {
                     cpu.pc += cpu.di.bytes;
                 });
             } else {
+                if (di.addr_mode == AbsoluteX) iop.push_front([](Bus& bus, CPU& cpu){});
                 iop.push_front([](Bus& bus, CPU& cpu){
                     unsigned char val = cpu.read(bus, cpu.arg);
                     cpu.as.write_value = val;
@@ -1337,10 +1372,16 @@ void CPU::fill_exec_ops() {
         }
         case RTI:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                ++cpu.sp; cpu.sr.set_status(cpu.mem.read(bus,0x100 + cpu.sp));
+                ++cpu.sp;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                ++cpu.sp; cpu.as.tmp_l = cpu.mem.read(bus,0x100 + cpu.sp);
+                cpu.sr.set_status(cpu.mem.read(bus,0x100 + cpu.sp));
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                ++cpu.sp;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.as.tmp_l = cpu.mem.read(bus,0x100 + cpu.sp);
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 ++cpu.sp; unsigned char h = cpu.mem.read(bus,0x100 + cpu.sp);
@@ -1387,6 +1428,11 @@ void CPU::fill_exec_ops() {
         case SEI:{iop.push_front([](Bus& bus, CPU& cpu){cpu.sr.set(StatusReg::I, true); cpu.pc+=cpu.di.bytes; }); break;}
         case STA:{
             // todo: check for dummy read
+            if (di.addr_mode == AbsoluteX ||
+                di.addr_mode == AbsoluteY ||
+                di.addr_mode == IndexedIndirectY
+            ) iop.push_front([](Bus& bus, CPU& cpu){});
+
             iop.push_front([](Bus& bus, CPU& cpu){
                 if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 cpu.write(bus, cpu.arg, cpu.a);
@@ -1639,32 +1685,19 @@ void CPU::tick_step(Bus& bus){
             di = decode(mem.read(bus, pc));
             current_iop_index = 0;
             fill_address_ops();
-            update_arg();
             fill_exec_ops();
+            if (di.i == JMP) iop_exec_step(bus); // todo: check
 #if DEBUG_MODE
             pc_watch_count += (pc == pc_watch_address);
 #endif
             istep = Execution;
 // todo: finish
-
-            if (di.addr_mode == Immediate ||
-                di.addr_mode == Relative ||
-                di.i == JMP) {
-                merged_iop_indexes.push_front(0);
-            }
             --di.cycles;
             break;
         }
         case Execution: {
             if (!iop.empty()){
                 iop_exec_step(bus);
-                if (!merged_iop_indexes.empty()){
-                    if (current_iop_index == merged_iop_indexes.back()){
-                        iop_exec_step(bus);
-                        ++current_iop_index;
-                        merged_iop_indexes.pop_back();
-                    }
-                }
                 ++current_iop_index;
                 --di.cycles;
                 if (!iop.empty()) return;
@@ -1818,6 +1851,7 @@ void CPU::tick(Bus& bus){
             break;
         }
         case RLA:{
+            if (di.addr_mode == AbsoluteX) iop.push_front([](Bus& bus, CPU& cpu){});
             auto arg = get_arg_pc(bus, di.addr_mode, false);
             unsigned char val =  read(bus, arg);
             unsigned char res = (val << 1) | sr.get(StatusReg::C);

@@ -192,10 +192,8 @@ struct CPU {
         Abs, Zp,
         AddrPlusX, AddrPlusY,
         AbsX, AbsY, PageCross,
-        IndXReadLow, IndXReadHigh,
+        IndXReadLow, IndXReadHigh, IndXRes,
         IndYReadLow, IndYReadHigh,
-        Nop,
-        PCPlusOne,
     };
 
     enum InstructionStep {
@@ -205,7 +203,6 @@ struct CPU {
 
     SimpleDeque<void(*)(Bus& bus, CPU&), 7> iop{};
     void iop_exec_step(Bus& bus);
-    SimpleDeque<unsigned char, 7> merged_iop_indexes{};
     size_t current_iop_index{};
 
     struct InstructionState {
@@ -213,8 +210,8 @@ struct CPU {
         bool fetching{};
         bool execute{};
         bool write = false;
-        unsigned char tmp_l{};
-        unsigned char tmp_h{};
+        unsigned short tmp_l{};
+        unsigned short tmp_h{};
         unsigned char write_value{};
         unsigned char ind_low{};
         unsigned char addr_to_add{};
