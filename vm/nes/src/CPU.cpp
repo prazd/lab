@@ -123,16 +123,17 @@ void CPU::reset() {
 
 
 // https://www.nesdev.org/wiki/Instruction_reference
+// https://www.masswerk.at/nowgobang/2021/6502-illegal-opcodes
 CPU::DecodedInstruction CPU::decode(unsigned char i) {
     switch(i){
-        case 0x69: {return {Immediate, ADC,  2, 2};}
-        case 0x65: {return {ZeroPage,  ADC,  2, 3};}
-        case 0x75: {return {ZeroPageX, ADC,  2, 4};}
-        case 0x6d: {return {Absolute,  ADC,  3, 4};}
-        case 0x7d: {return {AbsoluteX, ADC,  3, 4};} // 5 if page crossed
-        case 0x79: {return {AbsoluteY, ADC,  3, 4};} // 5 if page crossed
+        case 0x69: {return {Immediate, ADC,  2, 2, };}
+        case 0x65: {return {ZeroPage,  ADC,  2, 3, };}
+        case 0x75: {return {ZeroPageX, ADC,  2, 4, };}
+        case 0x6d: {return {Absolute,  ADC,  3, 4, };}
+        case 0x7d: {return {AbsoluteX, ADC,  3, 4, true};} // 5 if page crossed
+        case 0x79: {return {AbsoluteY, ADC,  3, 4, true};} // 5 if page crossed
         case 0x61: {return {IndexedIndirectX, ADC, 2, 6};}
-        case 0x71: {return {IndexedIndirectY, ADC, 2, 5};} // 6 if page crossed
+        case 0x71: {return {IndexedIndirectY, ADC, 2, 5, true};} // 6 if page crossed
 
         case 0x0B:
         case 0x2B:
@@ -142,10 +143,10 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x25: {return {ZeroPage,  AND, 2, 3};}
         case 0x35: {return {ZeroPageX, AND, 2, 4};}
         case 0x2d: {return {Absolute,  AND, 3, 4};}
-        case 0x3d: {return {AbsoluteX, AND, 3, 4};} // 5 if page crossed
-        case 0x39: {return {AbsoluteY, AND, 3, 4};} // 5 if page crossed
+        case 0x3d: {return {AbsoluteX, AND, 3, 4, true};} // 5 if page crossed
+        case 0x39: {return {AbsoluteY, AND, 3, 4, true};} // 5 if page crossed
         case 0x21: {return {IndexedIndirectX,  AND, 2, 6};}
-        case 0x31: {return {IndexedIndirectY,  AND, 2, 5};} // 6 if page crossed
+        case 0x31: {return {IndexedIndirectY,  AND, 2, 5, true};} // 6 if page crossed
 
         case 0x0A: {return {Accumulator, ASL, 1, 2};}
         case 0x06: {return {ZeroPage,    ASL, 2, 5};}
@@ -153,23 +154,23 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x0E: {return {Absolute,    ASL, 3, 6};}
         case 0x1E: {return {AbsoluteX,   ASL, 3, 7};}
 
-        case 0x90: {return {Relative, BCC, 2, 2};} // (3 if branch taken, 4 if page crossed)*
-        case 0xB0: {return {Relative, BCS, 2, 2};} // (3 if branch taken, 4 if page crossed)*
-        case 0xF0: {return {Relative, BEQ, 2, 2};} // (3 if branch taken, 4 if page crossed)*
-        case 0x30: {return {Relative, BMI, 2, 2};} // (3 if branch taken, 4 if page crossed)*
-        case 0xD0: {return {Relative, BNE, 2, 2};} // (3 if branch taken, 4 if page crossed)*
-        case 0x10: {return {Relative, BPL, 2, 2};} // (3 if branch taken, 4 if page crossed)*
-        case 0x50: {return {Relative, BVC, 2, 2};} // (3 if branch taken, 4 if page crossed)*
-        case 0x70: {return {Relative, BVS, 2, 2};} // (3 if branch taken, 4 if page crossed)*
+        case 0x90: {return {Relative, BCC, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
+        case 0xB0: {return {Relative, BCS, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
+        case 0xF0: {return {Relative, BEQ, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
+        case 0x30: {return {Relative, BMI, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
+        case 0xD0: {return {Relative, BNE, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
+        case 0x10: {return {Relative, BPL, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
+        case 0x50: {return {Relative, BVC, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
+        case 0x70: {return {Relative, BVS, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
 
         case 0xC9: {return {Immediate, CMP,        2, 2};}
         case 0xC5: {return {ZeroPage, CMP,         2, 3};}
         case 0xD5: {return {ZeroPageX, CMP,        2, 4};}
         case 0xCD: {return {Absolute, CMP,         3, 4};}
-        case 0xDD: {return {AbsoluteX, CMP,        3, 4};} // 5 if page crossed
-        case 0xD9: {return {AbsoluteY, CMP,        3, 4};} // 5 if page crossed
+        case 0xDD: {return {AbsoluteX, CMP,        3, 4, true};} // 5 if page crossed
+        case 0xD9: {return {AbsoluteY, CMP,        3, 4, true};} // 5 if page crossed
         case 0xC1: {return {IndexedIndirectX, CMP, 2, 6};}
-        case 0xD1: {return {IndexedIndirectY, CMP, 2, 5};} // 6 if page crossed
+        case 0xD1: {return {IndexedIndirectY, CMP, 2, 5, true};} // 6 if page crossed
 
         case 0xE0: {return {Immediate, CPX, 2, 2};}
         case 0xE4: {return {ZeroPage,  CPX, 2, 3};}
@@ -188,10 +189,10 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x45: {return {ZeroPage,            EOR, 2, 3};}
         case 0x55: {return {ZeroPageX,           EOR, 2, 4};}
         case 0x4D: {return {Absolute,            EOR, 3, 4};}
-        case 0x5D: {return {AbsoluteX,           EOR, 3, 4};} // 5 if page crossed
-        case 0x59: {return {AbsoluteY,           EOR, 3, 4};} // 5 if page crossed
+        case 0x5D: {return {AbsoluteX,           EOR, 3, 4, true};} // 5 if page crossed
+        case 0x59: {return {AbsoluteY,           EOR, 3, 4, true};} // 5 if page crossed
         case 0x41: {return {IndexedIndirectX,    EOR, 2, 6};}
-        case 0x51: {return {IndexedIndirectY,    EOR, 2, 5};} // 6 if page crossed
+        case 0x51: {return {IndexedIndirectY,    EOR, 2, 5, true};} // 6 if page crossed
 
         case 0xE6: {return {ZeroPage,    INC, 2, 5};}
         case 0xF6: {return {ZeroPageX,   INC, 2, 6};}
@@ -202,23 +203,23 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xA5: {return {ZeroPage, LDA,          2, 3};}
         case 0xB5: {return {ZeroPageX, LDA,         2, 4};}
         case 0xAD: {return {Absolute, LDA,          3, 4};}
-        case 0xBD: {return {AbsoluteX, LDA,         3, 4};} // 5 if page crossed
-        case 0xB9: {return {AbsoluteY, LDA,         3, 4};} // 5 if page crossed
+        case 0xBD: {return {AbsoluteX, LDA,         3, 4, true};} // 5 if page crossed
+        case 0xB9: {return {AbsoluteY, LDA,         3, 4, true};} // 5 if page crossed
         case 0xA1: {return {IndexedIndirectX, LDA,  2, 6};} 
-        case 0xB1: {return {IndexedIndirectY, LDA,  2, 5};} // 6 if page crossed
+        case 0xB1: {return {IndexedIndirectY, LDA,  2, 5, true};} // 6 if page crossed
 
 
         case 0xA2: {return {Immediate, LDX,  2, 2};}
         case 0xA6: {return {ZeroPage, LDX,   2, 3};}
         case 0xB6: {return {ZeroPageY, LDX,  2, 4};}
         case 0xAE: {return {Absolute, LDX,   3, 4};}
-        case 0xBE: {return {AbsoluteY, LDX,  3, 4};} // 5 if page crossed
+        case 0xBE: {return {AbsoluteY, LDX,  3, 4, true};} // 5 if page crossed
 
         case 0xA0: {return {Immediate, LDY, 2, 2};}
         case 0xA4: {return {ZeroPage, LDY,  2, 3};}
         case 0xB4: {return {ZeroPageX, LDY, 2, 4};}
         case 0xAC: {return {Absolute, LDY,  3, 4};}
-        case 0xBC: {return {AbsoluteX, LDY, 3, 4};}  // 5 if page crossed
+        case 0xBC: {return {AbsoluteX, LDY, 3, 4, true};}  // 5 if page crossed
 
 
         case 0x6B: {return {Immediate, ARR, 2, 2};}
@@ -237,10 +238,10 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x05: {return {ZeroPage,  ORA,         2, 3};}
         case 0x15: {return {ZeroPageX, ORA,         2, 4};}
         case 0x0D: {return {Absolute,  ORA,         3, 4};}
-        case 0x1D: {return {AbsoluteX, ORA,         3, 4};}  // 5 if page crossed
-        case 0x19: {return {AbsoluteY, ORA,         3, 4};}  // 5 if page crossed
+        case 0x1D: {return {AbsoluteX, ORA,         3, 4, true};}  // 5 if page crossed
+        case 0x19: {return {AbsoluteY, ORA,         3, 4, true};}  // 5 if page crossed
         case 0x01: {return {IndexedIndirectX, ORA,  2, 6};} 
-        case 0x11: {return {IndexedIndirectY, ORA,  2, 5};}  // 6 if page crossed
+        case 0x11: {return {IndexedIndirectY, ORA,  2, 5, true};}  // 6 if page crossed
 
         case 0x2A: {return {Accumulator, ROL, 1, 2};}
         case 0x26: {return {ZeroPage, ROL,    2, 5};}
@@ -259,18 +260,18 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xE5: {return {ZeroPage,  SBC,         2, 3};}
         case 0xF5: {return {ZeroPageX, SBC,         2, 4};}
         case 0xED: {return {Absolute,  SBC,         3, 4};}
-        case 0xFD: {return {AbsoluteX, SBC,         3, 4};}  // 5 if page crossed
-        case 0xF9: {return {AbsoluteY, SBC,         3, 4};}  // 5 if page crossed
+        case 0xFD: {return {AbsoluteX, SBC,         3, 4, true};}  // 5 if page crossed
+        case 0xF9: {return {AbsoluteY, SBC,         3, 4, true};}  // 5 if page crossed
         case 0xE1: {return {IndexedIndirectX, SBC,  2, 6};} 
-        case 0xF1: {return {IndexedIndirectY, SBC,  2, 5};}  // 6 if page crossed
+        case 0xF1: {return {IndexedIndirectY, SBC,  2, 5, true};}  // 6 if page crossed
 
         case 0x85: {return {ZeroPage,  STA,    2, 3};}
         case 0x95: {return {ZeroPageX, STA,    2, 4};}
         case 0x8D: {return {Absolute,  STA,    3, 4};}
-        case 0x9D: {return {AbsoluteX, STA,    3, 5};} 
-        case 0x99: {return {AbsoluteY, STA,    3, 5};} 
-        case 0x81: {return {IndexedIndirectX, STA,  2, 6};} 
-        case 0x91: {return {IndexedIndirectY, STA,  2, 6};}
+        case 0x9D: {return {AbsoluteX, STA,    3, 5, true};}
+        case 0x99: {return {AbsoluteY, STA,    3, 5, true};}
+        case 0x81: {return {IndexedIndirectX, STA,  2, 6};}
+        case 0x91: {return {IndexedIndirectY, STA,  2, 6, true};}
 
 
         case 0x07: {return {ZeroPage,  SLO,    2, 5};}
@@ -456,13 +457,18 @@ void CPU::push_addr_step(AddressingStep step) {
         case AbsX: {
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.as.arg2 = cpu.mem.read(bus, cpu.pc + 2);
-                unsigned short args_as_addr = ((cpu.as.arg1) | cpu.as.arg2 << 8);
+                unsigned short args_as_addr = ((cpu.as.arg1) | (cpu.as.arg2 << 8));
                 unsigned short addr = args_as_addr + cpu.x;
-                if (cpu.as.cross_check && (cpu.as.arg2 != ((addr >> 8) & 0xff))){
+                if (cpu.di.cross_check && (cpu.as.arg2 != ((addr >> 8) & 0xff))){
+                    cpu.as.crossed = true;
                     cpu.as.result = args_as_addr;
                     cpu.as.addr_to_add = cpu.x;
                     ++cpu.di.cycles;
-                    cpu.iop.push_back([](Bus& bus, CPU& cpu){}); // PageCross
+                    cpu.update_arg();
+                    cpu.iop.push_back([](Bus& bus, CPU& cpu){
+                        auto arg = cpu.dummy_read(bus, cpu.arg);
+                        cpu.as.result = arg.addr;
+                    }); // PageCross
                 } else {
                     cpu.as.result = addr;
                     cpu.as.addr_to_add = 0;
@@ -474,13 +480,18 @@ void CPU::push_addr_step(AddressingStep step) {
         case AbsY: {
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.as.arg2 = cpu.mem.read(bus, cpu.pc + 2);
-                unsigned short args_as_addr = ((cpu.as.arg1) | cpu.as.arg2 << 8);
+                unsigned short args_as_addr = ((cpu.as.arg1) | (cpu.as.arg2 << 8));
                 unsigned short addr = args_as_addr + cpu.y;
-                if (cpu.as.cross_check && (cpu.as.arg2 != ((addr >> 8) & 0xff))){
+                if (cpu.di.cross_check  && (cpu.as.arg2 != ((addr >> 8) & 0xff))){
+                    cpu.as.crossed = true;
                     cpu.as.result = args_as_addr;
                     cpu.as.addr_to_add = cpu.y;
                     ++cpu.di.cycles;
-                    cpu.iop.push_back([](Bus& bus, CPU& cpu){}); // PageCross
+                    cpu.update_arg();
+                    cpu.iop.push_back([](Bus& bus, CPU& cpu){
+                        auto arg = cpu.dummy_read(bus, cpu.arg);
+                        cpu.as.result = arg.addr;
+                    }); // PageCross
                 } else {
                     cpu.as.result = addr;
                     cpu.as.addr_to_add = 0;
@@ -517,11 +528,16 @@ void CPU::push_addr_step(AddressingStep step) {
                 unsigned char h = cpu.mem.read(bus,(cpu.as.arg1 + 1) % 256);
                 unsigned short addr = (cpu.as.ind_low | (h << 8));
                 unsigned short res_addr = addr + cpu.y;
-                if (cpu.as.cross_check && (h != ((res_addr >> 8) & 0xff))){
+                if (cpu.di.cross_check && (h != ((res_addr >> 8) & 0xff))){
+                    cpu.as.crossed = true;
                     cpu.as.result = addr;
                     cpu.as.addr_to_add = cpu.y;
                     ++cpu.di.cycles;
-                    cpu.iop.push_back([](Bus&, CPU&){}); // PageCross
+                    cpu.update_arg();
+                    cpu.iop.push_back([](Bus& bus, CPU& cpu){
+                        auto arg = cpu.dummy_read(bus, cpu.arg);
+                        cpu.as.result = arg.addr;
+                    }); // PageCross
                 } else {
                     cpu.as.result = res_addr;
                     cpu.as.addr_to_add = 0;
@@ -542,10 +558,6 @@ void CPU::push_addr_step(AddressingStep step) {
             });
             break;
         }
-        case PageCross: {
-            iop.push_front([](Bus&, CPU&){});
-            break;
-        }
     }
 }
 
@@ -563,6 +575,7 @@ void CPU::fill_address_ops() {
     };
     if (std::any_of(std::begin(cmds), std::end(cmds), [i = di.i](auto el){return i == el;})) return;
 
+    as.crossed = false;
     switch (di.addr_mode) {
         case ZeroPageX: {push_addr_step(LowByte); push_addr_step(AddrPlusX); break;}
         case ZeroPageY: {push_addr_step(LowByte); push_addr_step(AddrPlusY); break;}
@@ -582,7 +595,6 @@ void CPU::fill_exec_ops() {
     switch(di.i) {
         case ADC: {
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 unsigned char val = cpu.read(bus, cpu.arg);
                 unsigned short res = cpu.a + val + cpu.sr.get(StatusReg::C);
                 cpu.sr.set(StatusReg::C, res > 0xff);
@@ -596,7 +608,6 @@ void CPU::fill_exec_ops() {
         }
         case AND:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 unsigned char val =  cpu.read(bus, cpu.arg);
                 cpu.a &= val;
                 cpu.sr.set(StatusReg::Z, cpu.a == 0);
@@ -816,9 +827,7 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (!cpu.sr.get(StatusReg::C)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        cpu.arg.addr += cpu.arg.add_to_addr;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-
                         ++cpu.di.cycles;
                     });
                 }
@@ -830,9 +839,7 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (cpu.sr.get(StatusReg::C)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        cpu.arg.addr += cpu.arg.add_to_addr;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-
                         ++cpu.di.cycles;
                     });
                 }
@@ -844,9 +851,7 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (cpu.sr.get(StatusReg::Z)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        cpu.arg.addr += cpu.arg.add_to_addr;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-
                         ++cpu.di.cycles;
                     });
                 }
@@ -858,9 +863,7 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (cpu.sr.get(StatusReg::N)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        cpu.arg.addr += cpu.arg.add_to_addr;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-
                         ++cpu.di.cycles;
                     });
                 }
@@ -872,9 +875,7 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (!cpu.sr.get(StatusReg::Z)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        cpu.arg.addr += cpu.arg.add_to_addr;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-
                         ++cpu.di.cycles;
                     });
                 }
@@ -886,9 +887,7 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (!cpu.sr.get(StatusReg::N)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        cpu.arg.addr += cpu.arg.add_to_addr;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-
                         ++cpu.di.cycles;
                     });
                 }
@@ -900,9 +899,7 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (!cpu.sr.get(StatusReg::V)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        cpu.arg.addr += cpu.arg.add_to_addr;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-
                         ++cpu.di.cycles;
                     });
                 }
@@ -914,9 +911,7 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (cpu.sr.get(StatusReg::V)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        cpu.arg.addr += cpu.arg.add_to_addr;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-
                         ++cpu.di.cycles;
                     });
                 }
@@ -925,7 +920,6 @@ void CPU::fill_exec_ops() {
         }
         case BIT:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 unsigned char val = cpu.read(bus, cpu.arg);
                 unsigned char res = cpu.a & val;
                 cpu.sr.set(StatusReg::Z, res == 0);
@@ -949,7 +943,6 @@ void CPU::fill_exec_ops() {
         case CLV:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::V, 0); cpu.pc+=1; }); break;}
         case CMP:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) { cpu.arg = cpu.dummy_read(bus, cpu.arg);}
                 unsigned char val =  cpu.read(bus, cpu.arg);
                 unsigned char res = cpu.a - val;
                 cpu.sr.set(StatusReg::C, cpu.a >= val);
@@ -1022,7 +1015,6 @@ void CPU::fill_exec_ops() {
         }
         case EOR:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 unsigned char val =  cpu.read(bus, cpu.arg);
                 unsigned char res = cpu.a ^ val;
                 cpu.sr.set(StatusReg::Z, res == 0);
@@ -1035,7 +1027,6 @@ void CPU::fill_exec_ops() {
         case INC:{
             if (di.addr_mode == AbsoluteX) iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 unsigned char val =  cpu.read(bus, cpu.arg);
                 cpu.as.write_value = val; // RMW
             });
@@ -1112,7 +1103,6 @@ void CPU::fill_exec_ops() {
         }
         case LDA:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) {cpu.arg = cpu.dummy_read(bus, cpu.arg);}
                 cpu.a = cpu.read(bus, cpu.arg);
                 cpu.sr.set(StatusReg::Z, cpu.a == 0);
                 cpu.sr.set(StatusReg::N, cpu.a & 0x80);
@@ -1122,7 +1112,6 @@ void CPU::fill_exec_ops() {
         }
         case LDX:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 cpu.x = cpu.read(bus, cpu.arg);
                 cpu.sr.set(StatusReg::Z, cpu.x == 0);
                 cpu.sr.set(StatusReg::N, cpu.x & 0x80);
@@ -1132,7 +1121,6 @@ void CPU::fill_exec_ops() {
         }
         case LDY:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 cpu.y = cpu.read(bus, cpu.arg);
                 cpu.sr.set(StatusReg::Z, cpu.y == 0);
                 cpu.sr.set(StatusReg::N, cpu.y & 0x80);
@@ -1225,7 +1213,6 @@ void CPU::fill_exec_ops() {
         }
         case AAC:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 unsigned char val =  cpu.read(bus, cpu.arg);
                 cpu.a &= val;
                 cpu.sr.set(StatusReg::C, cpu.a & 0x80);
@@ -1245,7 +1232,6 @@ void CPU::fill_exec_ops() {
 
         case ORA:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 unsigned char val =  cpu.read(bus, cpu.arg);
                 unsigned char res = cpu.a | val;
                 cpu.sr.set(StatusReg::Z, res == 0);
@@ -1410,7 +1396,6 @@ void CPU::fill_exec_ops() {
         }
         case SBC:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 unsigned char val = cpu.read(bus, cpu.arg);
                 bool prev_c = cpu.sr.get(StatusReg::C);
                 int res = (cpu.a - val - (!prev_c));
@@ -1427,22 +1412,22 @@ void CPU::fill_exec_ops() {
         case SED:{iop.push_front([](Bus& bus, CPU& cpu){cpu.sr.set(StatusReg::D, true); cpu.pc+=cpu.di.bytes; }); break;}
         case SEI:{iop.push_front([](Bus& bus, CPU& cpu){cpu.sr.set(StatusReg::I, true); cpu.pc+=cpu.di.bytes; }); break;}
         case STA:{
-            // todo: check for dummy read
-            if (di.addr_mode == AbsoluteX ||
-                di.addr_mode == AbsoluteY ||
-                di.addr_mode == IndexedIndirectY
-            ) iop.push_front([](Bus& bus, CPU& cpu){});
-
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 cpu.write(bus, cpu.arg, cpu.a);
-                cpu.pc += cpu.di.bytes;
+                if (!cpu.as.crossed &&
+                    cpu.di.addr_mode == AbsoluteX ||
+                    cpu.di.addr_mode == AbsoluteY ||
+                    cpu.di.addr_mode == IndexedIndirectY
+                    ) cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                            cpu.pc += cpu.di.bytes;
+                    });
+                else
+                    cpu.pc += cpu.di.bytes;
             });
             break;
         }
         case STX:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 cpu.write(bus, cpu.arg, cpu.x);
                 cpu.pc += cpu.di.bytes;
             });
@@ -1450,7 +1435,6 @@ void CPU::fill_exec_ops() {
         }
         case STY:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (cpu.arg.page_crossed) cpu.arg = cpu.dummy_read(bus, cpu.arg);
                 cpu.write(bus, cpu.arg, cpu.y);
                 cpu.pc += cpu.di.bytes;
             });
@@ -1606,10 +1590,10 @@ CPU::AddressingResult CPU::dummy_read(Bus& bus, AddressingResult arg) {
 
 void CPU::update_arg() {
     arg = AddressingResult{
-            .addr = as.result,
-            .page_crossed = as.cross_check,
-            .is_accumulator = di.addr_mode == Accumulator,
-            .add_to_addr = as.addr_to_add,
+        .addr = as.result,
+        .page_crossed = di.cross_check,
+        .is_accumulator = di.addr_mode == Accumulator,
+        .add_to_addr = as.addr_to_add,
     };
 }
 

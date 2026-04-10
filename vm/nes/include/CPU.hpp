@@ -168,10 +168,11 @@ struct CPU {
     };
 
     struct DecodedInstruction {
-        AddressingMode addr_mode;
-        Instruction i;
-        unsigned char bytes;
-        unsigned char cycles;
+        AddressingMode addr_mode{};
+        Instruction i{};
+        unsigned char bytes{};
+        unsigned char cycles{};
+        bool cross_check{};
     };
 
     // todo: finish
@@ -191,7 +192,7 @@ struct CPU {
         LowByte, HighByte,
         Abs, Zp,
         AddrPlusX, AddrPlusY,
-        AbsX, AbsY, PageCross,
+        AbsX, AbsY,
         IndXReadLow, IndXReadHigh, IndXRes,
         IndYReadLow, IndYReadHigh,
     };
@@ -206,10 +207,6 @@ struct CPU {
     size_t current_iop_index{};
 
     struct InstructionState {
-        bool cross_check{};
-        bool fetching{};
-        bool execute{};
-        bool write = false;
         unsigned short tmp_l{};
         unsigned short tmp_h{};
         unsigned char write_value{};
@@ -219,6 +216,7 @@ struct CPU {
         unsigned char arg1{};
         unsigned char arg2{};
         unsigned short result{};
+        bool crossed = false;
     } as;
 
     void push_addr_step(AddressingStep);

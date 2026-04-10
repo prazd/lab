@@ -330,6 +330,6 @@ int main(){
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
     // /Users/prazd/Desktop/dev/GameGenie.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes");
     nes.run();
 }
