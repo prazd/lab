@@ -14,7 +14,9 @@ void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
         bus.mapper.write_chr_ram(addr, value);
         return;
     }
-    map[addr] = value;
+    if (addr >= 0x0000 && addr <= 0x3fff)
+        map[addr] = value;
+    // todo: check
 }
 
 unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {
@@ -245,17 +247,20 @@ void PPU::bg_tick(Bus &bus) {
     bus.irq_interrupt_flip_flop = bus.mapper.is_irq_requested();
     // TODO: continue debug
     update_state(bus);
+#if DEBUG_MODE
+    if (!current_scanline_cycle){
+        frame_start = false;
+        line_start = false;
+        if (current_y == 0 && current_scanline_cycle == 0 && (fill_white_background))
+            internal_display.fill(WHITE);
+        return;}
+    else if (current_scanline_cycle == 340){
+        last_line_x =  std::exchange(current_line_x, 0);
+        line_start = true;
+    }
+#endif
 
     if (current_y < 240){
-        if (!current_scanline_cycle){
-#if DEBUG_MODE
-            frame_start = false;
-            line_start = false;
-            if (current_y == 0 && current_scanline_cycle == 0 && (fill_white_background))
-                internal_display.fill(WHITE);
-#endif
-            return;}
-
         // 1-256 cycles
         if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && ppumask.enable_background_rendering) {
             fetch_tile_data_step(bus);
@@ -297,18 +302,12 @@ void PPU::bg_tick(Bus &bus) {
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
         }
-        if (current_scanline_cycle == 340){
-#if DEBUG_MODE
-            last_line_x =  std::exchange(current_line_x, 0);
-            line_start = true;
-#endif
-        }
+
     } else if (current_y >= 240 && current_y < 261){
         if (current_y == 241 && current_scanline_cycle == 1) {
             ppustatus.vblank_flag = 1;
             bus.ppustatus.reg |= 1 << 7;
-//            bus.current_nmi_cycle = 0;
-//            bus.was_read_status = false;
+            bus.current_nmi_cycle = current_cycle;
             bus.nmi_interrupt_flip_flop = true;
         }
     } else if (current_y == 261){
@@ -317,7 +316,6 @@ void PPU::bg_tick(Bus &bus) {
             ppustatus.vblank_flag = 0;
             bus.ppustatus.reg &= 0x7f;
             bus.nmi_interrupt_flip_flop = false; // todo: check
-//            bus.was_read_status = false;
         } else if (current_scanline_cycle == 280 && ppumask.enable_background_rendering) {
             v &= 0x841f;
             v |= ((t & (~0x841f & 0xffff)));
@@ -532,6 +530,7 @@ void PPU::tick(Bus& bus) {
     bg_tick(bus);
     bus.mapper.tick();
     current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && ppumask.enable_background_rendering && (frames_count & 1));
+    bus.current_ppu_cycle = current_cycle;
 #if DEBUG_MODE
     if (!is_sprite_off)
 #endif

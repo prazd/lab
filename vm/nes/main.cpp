@@ -14,6 +14,7 @@ struct NESVM {
     std::string_view rom_path;
 #if DEBUG_MODE
     Disassembler<30,520,200,400> dis;
+    StateStorage<decltype(dis)> ss;
     RegsInfo<30,30,180,425> reg_info{};
 #endif
     NESVM(std::string_view rom_path): rom_path(rom_path)
@@ -81,11 +82,12 @@ struct NESVM {
             dis.next = false;
         }
         do {
+            if (cpu.debug_run) ss.push_state(bus, cpu, ppu, dis);
             while (cpu.debug_run) {
+                cpu.tick_step(bus);
+                bus.tick();
                 for (int j = 0; j < 3; ++j)
                     ppu.tick(bus);
-                cpu.tick(bus);
-                bus.tick();
                 ++current_tick;
             }
             if (dis.selected_move_active) {
@@ -120,7 +122,8 @@ struct NESVM {
             } else if (dis.trigger_search) {
                 dis.trigger_search = !(ppu.mem.triggered_on_read || ppu.mem.triggered_on_write);
             }
-            if (cpu_tick_count++ % 3 == 2) {cpu.tick(bus); bus.tick();}
+            if (cpu_tick_count++ % 3 == 2) {bus.tick();  cpu.tick_step(bus); }
+//  TODO: fix if (!cpu.debug_run) ss.push_state(bus, cpu, ppu, dis);
         }
         if (!dis.selected_move_active &&
             !dis.is_frame_jump_active &&
@@ -261,7 +264,7 @@ struct NESVM {
             BeginDrawing();
             ClearBackground(WHITE);
 #if DEBUG_MODE
-            dis.draw(cpu, ppu, bus);
+            dis.draw(cpu, ppu, bus,ss);
 #endif
 
 #if DEBUG_MODE
@@ -313,6 +316,12 @@ struct NESVM {
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes - todo (E224)
 // /Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes
 
+// VBL:
+// /Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes
+// /Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes
+// /Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes
+
+
 // Done:
 // CPU:
 // - /Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes
@@ -330,6 +339,6 @@ int main(){
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
     // /Users/prazd/Desktop/dev/GameGenie.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes");
     nes.run();
 }

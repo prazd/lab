@@ -332,7 +332,6 @@ template <size_t x, size_t y, size_t w, size_t h>
 struct UserInput {
     std::string s;
     Rectangle rec;
-    std::stringstream ss;
     UserInput(): rec{x, y, w, h} {}
     void push_handler() {
         if (!CheckCollisionPointRec(GetMousePosition(), rec)) return;
@@ -346,6 +345,7 @@ struct UserInput {
             s.pop_back();
     }
     void draw() {
+        std::stringstream ss;
         push_handler();
         pop_handler();
         DrawRectangleLinesEx({rec.x, rec.y, rec.width, rec.height}, 1.f, BLACK);
@@ -375,7 +375,6 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     unsigned short selected_line_pc = 0;
     unsigned short base{};
     unsigned short pc{};
-    std::stringstream ss;
 
     bool is_frame_jump_active = false;
     bool is_tile_line_jump_active = false;
@@ -398,6 +397,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle button11;
     Rectangle button12;
     Rectangle button13;
+    Rectangle button14;
 
     Rectangle sync_button;
     Rectangle change_mode_button;
@@ -418,8 +418,10 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       button10{DW::rec.x + 40*3, DW::rec.y + h + 40, 40, 40},
                                       button11{DW::rec.x + 40*4, DW::rec.y + h + 40, 40, 40},
                                       button12{DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40},
-                                      button13{DW::rec.x + w, DW::rec.y + 40, 40, 40}
+                                      button13{DW::rec.x + w, DW::rec.y + 40, 40, 40},
+                                      button14{DW::rec.x + 40 * 8, DW::rec.y + h, 40, 40}
                                       {}
+
     void reset(){
         selected_move_active = false;
         is_frame_jump_active = false;
@@ -444,7 +446,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         next = (CheckCollisionPointRec(GetMousePosition(), button1) && mouse_button_pred(pressed_mode));
     }
 
-    void draw(CPU& cpu, PPU& ppu, Bus& bus) {
+    void draw(CPU& cpu, PPU& ppu, Bus& bus, auto& state_storage) {
+        std::stringstream ss;
         line_button = {DW::rec.x - 20, DW::rec.y, 10, 10};
         button1 = {DW::rec.x, DW::rec.y + h, 40, 40};
         button2 = {DW::rec.x + 40, DW::rec.y + h, 40, 40};
@@ -454,6 +457,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         button6 = {DW::rec.x + 40 * 5, DW::rec.y + h, 40, 40};
         button7 = {DW::rec.x + 40 * 6, DW::rec.y + h, 40, 40};
         button8 = {DW::rec.x + 40 * 7, DW::rec.y + h, 40, 40};
+        button14 = {DW::rec.x + 40 * 8, DW::rec.y + h, 40, 40};
         button9 = {DW::rec.x + 40*2, DW::rec.y + h + 40, 40, 40};
         button10 = {DW::rec.x + 40*3, DW::rec.y + h + 40, 40, 40};
         button11 = {DW::rec.x + 40*4, DW::rec.y + h + 40, 40, 40};
@@ -493,6 +497,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             cpu.mem.triggered_on_write = !trigger_search;
             cpu.mem.triggered_on_read = !trigger_search;
             ppu.fill_white_background = !trigger_search;
+        } else if (CheckCollisionPointRec(GetMousePosition(), button14) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
+            state_storage.step_back(bus, cpu, ppu, *this);
         } else if (CheckCollisionPointRec(GetMousePosition(), button1) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
             is_frame_jump_active = true;
         else if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
@@ -602,6 +608,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button6, " radd", GREEN, 15.f);
             DW::draw_text_button(button7, " clear", GREEN, 15.f);
             DW::draw_text_button(button8, " trun", GREEN, 15.f);
+            DW::draw_text_button(button14, " prev", GREEN, 15.f);
 
         } else {
             DW::draw_text_button(button1, "frame", GREEN, 15.f);
@@ -622,6 +629,41 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         ss.str("");
     }
 };
+
+// TODO: finish
+template <typename Dis>
+struct StateStorage {
+    struct State {
+        CPU cpu;
+        PPU ppu;
+        Bus bus;
+        Dis dis;
+        State(): dis(cpu, bus){}
+        State(CPU& cpu,
+              PPU& ppu,
+              Bus& bus,
+              Dis& dis): cpu(cpu), ppu(ppu), bus(bus), dis(dis){}
+    };
+    SimpleDeque<State,10> prev_states;
+    void step_back(Bus& bus, CPU& cpu, PPU& ppu, Dis& dis){
+        if (!prev_states.empty()){
+            auto& [c,p,b,d] = prev_states.back();
+            bus = b;
+            ppu = p;
+            cpu = c;
+            dis = d;
+            prev_states.pop_back();
+        }
+    }
+    void push_state(Bus& bus, CPU& cpu, PPU& ppu, Dis& dis){
+        if (prev_states.size() == 10)
+            prev_states.pop_front();
+        State s{cpu,ppu,bus,dis};
+        s.cpu.debug_run = false;
+        prev_states.push_back(s);
+    }
+};
+
 
 template<size_t x, size_t y, size_t w, size_t h>
 struct RegsInfo: DebugWindowText<x, y, w, h> {

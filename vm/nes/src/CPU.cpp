@@ -268,10 +268,10 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x85: {return {ZeroPage,  STA,    2, 3};}
         case 0x95: {return {ZeroPageX, STA,    2, 4};}
         case 0x8D: {return {Absolute,  STA,    3, 4};}
-        case 0x9D: {return {AbsoluteX, STA,    3, 5, true};}
-        case 0x99: {return {AbsoluteY, STA,    3, 5, true};}
+        case 0x9D: {return {AbsoluteX, STA,    3, 5 };}
+        case 0x99: {return {AbsoluteY, STA,    3, 5 };}
         case 0x81: {return {IndexedIndirectX, STA,  2, 6};}
-        case 0x91: {return {IndexedIndirectY, STA,  2, 6, true};}
+        case 0x91: {return {IndexedIndirectY, STA,  2, 6};}
 
 
         case 0x07: {return {ZeroPage,  SLO,    2, 5};}
@@ -1416,7 +1416,7 @@ void CPU::fill_exec_ops() {
                 cpu.write(bus, cpu.arg, cpu.a);
                 if (!cpu.as.crossed &&
                     cpu.di.addr_mode == AbsoluteX ||
-                    cpu.di.addr_mode == AbsoluteY ||
+//                    cpu.di.addr_mode == AbsoluteY ||
                     cpu.di.addr_mode == IndexedIndirectY
                     ) cpu.iop.push_front([](Bus& bus, CPU& cpu){
                             cpu.pc += cpu.di.bytes;
