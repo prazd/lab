@@ -14,8 +14,10 @@ struct NESVM {
     std::string_view rom_path;
 #if DEBUG_MODE
     Disassembler<30,520,200,400> dis;
-    StateStorage<decltype(dis)> ss;
     RegsInfo<30,30,180,425> reg_info{};
+#endif
+#if SNAP_MODE
+    SnapStorage snap_storage;
 #endif
     NESVM(std::string_view rom_path): rom_path(rom_path)
 #if DEBUG_MODE
@@ -82,14 +84,20 @@ struct NESVM {
             dis.next = false;
         }
         do {
-            if (cpu.debug_run) ss.push_state(bus, cpu, ppu, dis);
+#if SNAP_MODE
+            bool snap_update = cpu.debug_run;
+#endif
             while (cpu.debug_run) {
                 cpu.tick_step(bus);
                 bus.tick();
-                for (int j = 0; j < 3; ++j)
+                for (int j = 0; j < 3; ++j){
                     ppu.tick(bus);
+                }
                 ++current_tick;
             }
+#if SNAP_MODE
+            if (snap_update) snap_storage.push_state(bus, cpu, ppu);
+#endif
             if (dis.selected_move_active) {
                 dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
             } else if (dis.trigger_search) {
@@ -122,8 +130,11 @@ struct NESVM {
             } else if (dis.trigger_search) {
                 dis.trigger_search = !(ppu.mem.triggered_on_read || ppu.mem.triggered_on_write);
             }
-            if (cpu_tick_count++ % 3 == 2) {bus.tick();  cpu.tick_step(bus); }
-//  TODO: fix if (!cpu.debug_run) ss.push_state(bus, cpu, ppu, dis);
+            if (cpu_tick_count++ % 3 == 2) {bus.tick(); cpu.tick_step(bus); }
+#if SNAP_MODE
+            if (!cpu.debug_run)
+                snap_storage.push_state(bus, cpu, ppu);
+#endif
         }
         if (!dis.selected_move_active &&
             !dis.is_frame_jump_active &&
@@ -264,7 +275,10 @@ struct NESVM {
             BeginDrawing();
             ClearBackground(WHITE);
 #if DEBUG_MODE
-            dis.draw(cpu, ppu, bus,ss);
+            dis.draw(cpu, ppu, bus);
+#endif
+#if SNAP_MODE
+            dis.snap_handle(cpu, ppu, bus, snap_storage);
 #endif
 
 #if DEBUG_MODE

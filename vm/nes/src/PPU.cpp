@@ -11,12 +11,18 @@ void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
         triggered_on_write = true;
 #endif
     if (addr >= 0x0000 && addr <= 0x1FFF && ((bus.ppustatus.reg >> 7) & 1 || !((bus.ppumask.reg >> 3) & 1) || !((bus.ppumask.reg >> 4) & 1))) {
+#if SNAP_MODE
+        write_addresses.push_back(std::pair{addr, read(bus, addr)});
+#endif
         bus.mapper.write_chr_ram(addr, value);
         return;
     }
-    if (addr >= 0x0000 && addr <= 0x3fff)
+    if (addr >= 0x0000 && addr <= 0x3fff){     // todo: check
+#if SNAP_MODE
+        write_addresses.push_back(std::pair{addr, read(bus, addr)});
+#endif
         map[addr] = value;
-    // todo: check
+    }
 }
 
 unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {

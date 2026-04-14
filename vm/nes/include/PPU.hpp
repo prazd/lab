@@ -60,6 +60,8 @@ struct PPU {
         void write(Bus& bus, unsigned short addr, unsigned char value);
         static void adjust_if_mirror(unsigned short&);
 #if DEBUG_MODE
+        SimpleDeque<std::pair<unsigned short,unsigned char>,3> write_addresses;
+
         std::vector<unsigned short> write_trigger_addresses{};
         std::vector<unsigned short> read_trigger_addresses{};
         mutable bool triggered_on_write = false;

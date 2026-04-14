@@ -23,6 +23,9 @@ struct CPU {
         void unsafe_write(Bus&, unsigned short addr, unsigned char value);
         static void adjust_if_mirror(unsigned short&);
 #if DEBUG_MODE
+#if SNAP_MODE
+        SimpleDeque<std::pair<unsigned short,unsigned char>,5> write_addresses;
+#endif
         std::vector<unsigned short> write_trigger_addresses{};
         std::vector<unsigned short> read_trigger_addresses{};
         mutable bool triggered_on_write = false;

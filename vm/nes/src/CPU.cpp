@@ -16,9 +16,13 @@ void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
 #endif
     if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
     || addr >= 0x8000 && addr <= 0xffff){
+        // todo: test write_addresses
         bus.write(addr, value);
         return;
     }
+#if SNAP_MODE
+    write_addresses.push_back(std::pair{addr, unsafe_read(bus, addr)});
+#endif
     map[addr] = value;
 }
 
