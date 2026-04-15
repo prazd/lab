@@ -1,13 +1,69 @@
 #include <iostream>
 #include <cassert>
 #include <tuple>
-
+#include <algorithm>
 #if 1
-template <typename T, int sz>
-struct CircleStack {
+template <typename T, size_t sz>
+struct CircleStack { 
     alignas(T) unsigned char arr[sizeof(T) * sz]{};   
-    int current = 0;
+    size_t current = 0;
     unsigned char* ptr = arr;
+    void els_copy(const CircleStack& rhs){
+        ptr += rhs.ptr - rhs.arr;
+        size_t current_tmp = rhs.current;
+        auto ptr_rhs = rhs.ptr;
+        auto ptr_cur = ptr;
+        while(current_tmp){
+            ptr_cur = ptr_cur + ((ptr_cur != arr) ? ptrdiff_t(-1 * sizeof(T)) : ptrdiff_t(sizeof(T) * (sz-1)));
+            ptr_rhs = ptr_rhs + ((ptr_rhs != rhs.arr) ? ptrdiff_t(-1 * sizeof(T)) : ptrdiff_t(sizeof(T) * (sz-1)));
+            new (ptr_cur) T(*std::launder(reinterpret_cast<T*>(ptr_rhs)));
+            --current_tmp;
+        }
+        current = rhs.current;
+    }
+    void els_move(CircleStack&& rhs){
+        ptr += rhs.ptr - rhs.arr;
+        size_t current_tmp = rhs.current;
+        auto ptr_rhs = rhs.ptr;
+        auto ptr_cur = ptr;
+        while(current_tmp){
+            ptr_cur = ptr_cur + ((ptr_cur != arr) ? ptrdiff_t(-1 * sizeof(T)) : ptrdiff_t(sizeof(T) * (sz-1)));
+            ptr_rhs = ptr_rhs + ((ptr_rhs != rhs.arr) ? ptrdiff_t(-1 * sizeof(T)) : ptrdiff_t(sizeof(T) * (sz-1)));
+            new (ptr_cur) T(std::move(
+                *std::launder(reinterpret_cast<T*>(ptr_rhs))));
+            --current_tmp;
+            std::launder(reinterpret_cast<T*>(ptr_rhs))->~T();
+        }
+        current = rhs.current;
+        rhs.current = 0;
+        rhs.ptr = rhs.arr;
+    }
+
+    CircleStack() = default;
+    CircleStack(const CircleStack& rhs){
+        els_copy(rhs);
+    }
+    CircleStack(CircleStack&& rhs){
+        els_move(std::move(rhs));
+    }
+
+    CircleStack& operator=(const CircleStack& rhs){
+        if (&rhs != this) {
+            while(!empty()) pop();
+            ptr = arr;
+            els_copy(rhs);
+        }
+        return *this;
+    }
+
+    CircleStack& operator=(CircleStack&& rhs){
+         if (&rhs != this) {
+            while(!empty()) pop();
+            ptr = arr;
+            els_move(std::move(rhs));
+        }
+        return *this;
+    }
 
     template <typename U>
     void push(U&& value){
@@ -40,6 +96,60 @@ struct CircleStack {
     T arr[sz]{};
     int current = 0;
     T* ptr = arr;
+    void els_copy(const CircleStack& rhs){
+        ptr += rhs.ptr - rhs.arr;
+        size_t current_tmp = rhs.current;
+        auto ptr_rhs = rhs.ptr;
+        auto ptr_cur = ptr;
+        while(current_tmp){
+            ptr_cur += (ptr_cur != arr) ? -1 : sz-1;
+            ptr_rhs += (ptr_rhs != rhs.arr) ? -1 : sz-1;
+            *ptr_cur = *ptr_rhs;
+            --current_tmp;
+        }
+        current = rhs.current;
+    }
+    void els_move(CircleStack&& rhs){
+        ptr += rhs.ptr - rhs.arr;
+        size_t current_tmp = rhs.current;
+        auto ptr_rhs = rhs.ptr;
+        auto ptr_cur = ptr;
+        while(current_tmp){
+            ptr_cur += (ptr_cur != arr) ? -1 : sz-1;
+            ptr_rhs += (ptr_rhs != rhs.arr) ? -1 : sz-1;
+            *ptr_cur = std::move(*ptr_rhs);
+            --current_tmp;
+        }
+        current = rhs.current;
+        rhs.current = 0;
+        rhs.ptr = rhs.arr;
+    }
+    
+    CircleStack() = default;
+    CircleStack(const CircleStack& rhs){
+        els_copy(rhs);
+    }
+    CircleStack(CircleStack&& rhs){
+        els_move(std::move(rhs));
+    }
+
+    CircleStack& operator=(const CircleStack& rhs){
+        if (&rhs != this) {
+            while(!empty()) pop();
+            ptr = arr;
+            els_copy(rhs);
+        }
+        return *this;
+    }
+
+    CircleStack& operator=(CircleStack&& rhs){
+         if (&rhs != this) {
+            while(!empty()) pop();
+            ptr = arr;
+            els_move(std::move(rhs));
+        }
+        return *this;
+    }
     void push(const T& value){
         *ptr = value;
         current = std::min(current + 1, sz);
@@ -125,7 +235,49 @@ void pop_test() {
     assert(cb.top() == 1 && (unsigned char*)cb.ptr == (unsigned char*)cb.arr + sizeof(int)); cb.pop();
 }
 
+void copy_and_move_test(){
+    CircleStack<int, 3> cb;
+    cb.push(1);cb.push(2);cb.push(3);
+
+    CircleStack<int, 3> cb2;
+    cb2.push(4);cb2.push(5);cb2.push(6);
+
+    CircleStack<int, 3> cb3;
+    cb3.push(7);cb3.push(8);cb3.push(9);
+
+    CircleStack<int, 3> cb_cp = cb;
+    assert(cb_cp.top() == 3 && (unsigned char*)cb_cp.ptr == (unsigned char*)cb_cp.arr); cb_cp.pop();
+    assert(cb_cp.top() == 2 && (unsigned char*)cb_cp.ptr == (unsigned char*)cb_cp.arr+sizeof(int)*2); cb_cp.pop();
+    assert(cb_cp.top() == 1 && (unsigned char*)cb_cp.ptr == (unsigned char*)cb_cp.arr + sizeof(int)); cb_cp.pop();
+
+    cb_cp = cb;
+    assert(cb_cp.top() == 3 && (unsigned char*)cb_cp.ptr == (unsigned char*)cb_cp.arr); cb_cp.pop();
+    assert(cb_cp.top() == 2 && (unsigned char*)cb_cp.ptr == (unsigned char*)cb_cp.arr+sizeof(int)*2); cb_cp.pop();
+    assert(cb_cp.top() == 1 && (unsigned char*)cb_cp.ptr == (unsigned char*)cb_cp.arr + sizeof(int)); cb_cp.pop();
+
+    cb_cp = cb;
+    cb_cp = cb2;
+    assert(cb_cp.top() == 6 && (unsigned char*)cb_cp.ptr == (unsigned char*)cb_cp.arr); cb_cp.pop();
+    assert(cb_cp.top() == 5 && (unsigned char*)cb_cp.ptr == (unsigned char*)cb_cp.arr+sizeof(int)*2); cb_cp.pop();
+    assert(cb_cp.top() == 4 && (unsigned char*)cb_cp.ptr == (unsigned char*)cb_cp.arr + sizeof(int)); cb_cp.pop();
+    
+
+    CircleStack<int, 3> cb_cp2 = std::move(cb);
+    assert(cb_cp2.top() == 3 && (unsigned char*)cb_cp2.ptr == (unsigned char*)cb_cp2.arr); cb_cp2.pop();
+    assert(cb_cp2.top() == 2 && (unsigned char*)cb_cp2.ptr == (unsigned char*)cb_cp2.arr+sizeof(int)*2); cb_cp2.pop();
+    assert(cb_cp2.top() == 1 && (unsigned char*)cb_cp2.ptr == (unsigned char*)cb_cp2.arr + sizeof(int)); cb_cp2.pop();
+
+    cb_cp2 = std::move(cb2);
+    cb_cp2 = std::move(cb3);
+
+    assert(cb_cp2.top() == 9 && (unsigned char*)cb_cp2.ptr == (unsigned char*)cb_cp2.arr); cb_cp2.pop();
+    assert(cb_cp2.top() == 8 && (unsigned char*)cb_cp2.ptr == (unsigned char*)cb_cp2.arr+sizeof(int)*2); cb_cp2.pop();
+    assert(cb_cp2.top() == 7 && (unsigned char*)cb_cp2.ptr == (unsigned char*)cb_cp2.arr + sizeof(int)); cb_cp2.pop();
+}
+
+
 int main(){
     push_test();
     pop_test();
+    copy_and_move_test();
 }
