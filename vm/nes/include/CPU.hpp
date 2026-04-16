@@ -1,7 +1,7 @@
 #include "Constants.hpp"
 #include "Bus.hpp"
 #include "SmallString.h"
-#include "SimpleDeque.h"
+#include "Simple.h"
 struct CPU {
     struct Memory {
 // https://www.nesdev.org/wiki/CPU_memory_map

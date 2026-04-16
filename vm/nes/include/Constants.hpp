@@ -1,7 +1,7 @@
 #ifndef NES_CONSTANTS_HPP
 #define NES_CONSTANTS_HPP
 #include <iostream>
-#define SNAP_MODE 0
+#define SNAP_MODE 1
 #define DEBUG_MODE 1
 #define GAME_GENIE_MODE 0
 namespace constants {

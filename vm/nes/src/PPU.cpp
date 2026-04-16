@@ -309,20 +309,8 @@ void PPU::bg_tick(Bus &bus) {
             fetch_tile_data_step(bus);
         }
 
-    } else if (current_y >= 240 && current_y < 261){
-        if (current_y == 241 && current_scanline_cycle == 1) {
-            ppustatus.vblank_flag = 1;
-            bus.ppustatus.reg |= 1 << 7;
-            bus.current_nmi_cycle = current_cycle;
-            bus.nmi_interrupt_flip_flop = true;
-        }
     } else if (current_y == 261){
-        if (current_scanline_cycle == 1){
-            std::copy(internal_display.begin(), internal_display.end(), display.begin());
-            ppustatus.vblank_flag = 0;
-            bus.ppustatus.reg &= 0x7f;
-            bus.nmi_interrupt_flip_flop = false; // todo: check
-        } else if (current_scanline_cycle == 280 && ppumask.enable_background_rendering) {
+        if (current_scanline_cycle == 280 && ppumask.enable_background_rendering) {
             v &= 0x841f;
             v |= ((t & (~0x841f & 0xffff)));
         } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && ppumask.enable_background_rendering){
@@ -532,11 +520,9 @@ void PPU::draw_pixel(Bus &bus) {
 }
 
 void PPU::tick(Bus& bus) {
-    ++current_cycle;
     bg_tick(bus);
     bus.mapper.tick();
     current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && ppumask.enable_background_rendering && (frames_count & 1));
-    bus.current_ppu_cycle = current_cycle;
 #if DEBUG_MODE
     if (!is_sprite_off)
 #endif
@@ -586,6 +572,22 @@ void PPU::tick(Bus& bus) {
         secondary_oam_buffer.reset();
     }
     ++current_scanline_cycle;
+    ++current_cycle;
+
+    // todo: timing debug
+    if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1)) {
+        ppustatus.vblank_flag = 1;
+        bus.ppustatus.reg |= 1 << 7;
+        bus.current_nmi_cycle = current_cycle;
+        bus.nmi_interrupt_flip_flop = true;
+    } else if (current_y == 261 && current_scanline_cycle == 1) {
+        std::copy(internal_display.begin(), internal_display.end(), display.begin());
+        ppustatus.vblank_flag = 0;
+        bus.ppustatus.reg &= 0x7f;
+        bus.nmi_interrupt_flip_flop = false; // todo: check
+    }
+
+    bus.current_ppu_cycle = current_cycle;
     if (current_scanline_cycle == 341){
         current_sprite_evaluation_step = SpriteCopy;
         current_scanline_cycle = 0;

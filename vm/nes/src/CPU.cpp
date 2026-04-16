@@ -272,8 +272,8 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x85: {return {ZeroPage,  STA,    2, 3};}
         case 0x95: {return {ZeroPageX, STA,    2, 4};}
         case 0x8D: {return {Absolute,  STA,    3, 4};}
-        case 0x9D: {return {AbsoluteX, STA,    3, 5 };}
-        case 0x99: {return {AbsoluteY, STA,    3, 5 };}
+        case 0x9D: {return {AbsoluteX, STA,    3, 5};}
+        case 0x99: {return {AbsoluteY, STA,    3, 5};}
         case 0x81: {return {IndexedIndirectX, STA,  2, 6};}
         case 0x91: {return {IndexedIndirectY, STA,  2, 6};}
 
@@ -1420,7 +1420,7 @@ void CPU::fill_exec_ops() {
                 cpu.write(bus, cpu.arg, cpu.a);
                 if (!cpu.as.crossed &&
                     cpu.di.addr_mode == AbsoluteX ||
-//                    cpu.di.addr_mode == AbsoluteY ||
+                    cpu.di.addr_mode == AbsoluteY ||
                     cpu.di.addr_mode == IndexedIndirectY
                     ) cpu.iop.push_front([](Bus& bus, CPU& cpu){
                             cpu.pc += cpu.di.bytes;
@@ -1636,7 +1636,7 @@ void CPU::tick_step(Bus& bus){
                 bus.dma_tick(mem.read(bus, bus.dma_address + bus.dma_index));
                 return;
             }
-            if (bus.ppustatus.reg & 0x80 && bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop) {
+            if (bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop) {
                 interrupt_requests[NMI] = true;
                 sr.set(StatusReg::I, false);
                 bus.nmi_interrupt_flip_flop = false;

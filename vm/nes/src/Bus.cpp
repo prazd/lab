@@ -74,13 +74,14 @@ unsigned char Bus::read_prg(unsigned short addr) {
         case constants::PPUADDR:  return open_bus_value;
 
         case constants::PPUSTATUS: {
-// todo: debug
-//            if (ppustatus.reg & 0x80 && current_nmi_cycle == current_ppu_cycle) {
+//            if (ppustatus.reg & 0x80 && current_ppu_cycle - current_nmi_cycle == 1) {
+//                status_read_cycle = current_ppu_cycle;
 //                nmi_interrupt_flip_flop = false;
 //                auto tmp = ppustatus.reg & 0x7f;
 //                ppustatus.reg = 0;
 //                return tmp;
 //            }
+            status_read_cycle = current_ppu_cycle;
             unsigned char current = (ppustatus.reg & 0xe0) | (open_bus_value & 0x1f);
             ppustatus.reg = 0;
             ppustatus.read_requested = true;

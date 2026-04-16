@@ -67,13 +67,18 @@ struct NESVM {
     }
 
     void reset(std::string_view path){
-        *this = NESVM(path);
+        auto tmp = NESVM(path);
+        bus = tmp.bus;
+        dis = std::move(tmp.dis);
+        cpu = std::move(tmp.cpu);
+        ppu = std::move(tmp.ppu);
+        cartridge = std::move(tmp.cartridge);
+        rom_path = tmp.rom_path;
+        reg_info = std::move(tmp.reg_info);
+#if SNAP_MODE
+        snap_storage = tmp.snap_storage;
+#endif
         ppu_init();
-        // TODO: debug
-        // dis.reset();
-        // cpu.reset();
-        // ppu.reset();
-        // bus.reset();
     }
 
 #if DEBUG_MODE
@@ -86,18 +91,18 @@ struct NESVM {
         do {
 #if SNAP_MODE
             bool snap_update = cpu.debug_run;
+            if (snap_update)
+                snap_storage.push_state(bus, cpu, ppu);
 #endif
             while (cpu.debug_run) {
+                ppu.tick(bus);
+                ppu.tick(bus);
+                ppu.tick(bus);
+
                 cpu.tick_step(bus);
                 bus.tick();
-                for (int j = 0; j < 3; ++j){
-                    ppu.tick(bus);
-                }
                 ++current_tick;
             }
-#if SNAP_MODE
-            if (snap_update) snap_storage.push_state(bus, cpu, ppu);
-#endif
             if (dis.selected_move_active) {
                 dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
             } else if (dis.trigger_search) {
@@ -117,6 +122,10 @@ struct NESVM {
         static size_t cpu_tick_count = 0;
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active
                 || dis.is_line_jump_active || dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLES) {
+#if SNAP_MODE
+            if (!cpu.debug_run)
+                snap_storage.push_state(bus, cpu, ppu);
+#endif
             cpu.debug_run = true;
             ppu.tick(bus);
             if (dis.is_frame_jump_active && ppu.frame_start){
@@ -130,11 +139,7 @@ struct NESVM {
             } else if (dis.trigger_search) {
                 dis.trigger_search = !(ppu.mem.triggered_on_read || ppu.mem.triggered_on_write);
             }
-            if (cpu_tick_count++ % 3 == 2) {bus.tick(); cpu.tick_step(bus); }
-#if SNAP_MODE
-            if (!cpu.debug_run)
-                snap_storage.push_state(bus, cpu, ppu);
-#endif
+            if (cpu_tick_count++ % 3 == 2) {bus.tick(); cpu.tick_step(bus);}
         }
         if (!dis.selected_move_active &&
             !dis.is_frame_jump_active &&
@@ -330,7 +335,15 @@ struct NESVM {
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes - todo (E224)
 // /Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes
 
+
+
 // VBL:
+// /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/1.frame_basics.nes
+// /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes
+// /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes
+// /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes
+// /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/5.nmi_suppression.nes // todo: (e152) debug
+
 // /Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes
 // /Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes
 // /Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes
@@ -353,6 +366,6 @@ int main(){
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
     // /Users/prazd/Desktop/dev/GameGenie.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/5.nmi_suppression.nes");
     nes.run();
 }

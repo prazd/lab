@@ -6,7 +6,7 @@
 #include "raylib.h"
 #include "PPU.hpp"
 #include "Cartridge.h"
-#include "SimpleDeque.h"
+#include "Simple.h"
 #include <algorithm>
 
 template <size_t x, size_t y, size_t w, size_t h>
@@ -368,7 +368,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
 
     enum RunMode {
         CPU_M, PPU_M, RunModeCount
-    } run_mode = CPU_M;
+    } run_mode = PPU_M;
 
     bool next = false;
     bool selected_move_active = false;
@@ -689,8 +689,8 @@ struct SnapStorage {
         bool is_sprite_off = false;
         bool run = false;
         bool fill_white_background = true;
-        PPU::PixelMixingDebugView pixel_mixing_debug_view;
-        PPU::FetchStep current_step;
+        PPU::PixelMixingDebugView pixel_mixing_debug_view{};
+        PPU::FetchStep current_step{};
         SimpleDeque<PPU::Sprite, 8> secondary_oam_buffer{};
         SimpleDeque<PPU::SpriteData, 8> secondary_oam{};
 
@@ -844,27 +844,25 @@ struct SnapStorage {
         PPUs ppus;
         Bus bus;
     };
-    SimpleDeque<State,10> prev_states;
-
+    CircleStack<State,10> prev_states;
     void step_back(Bus& bus, CPU& cpu, PPU& ppu){
         if (!prev_states.empty()){
-            auto& [c,p,b] = prev_states.back();
+            auto& [c,p,b] = prev_states.top();
             bus = b;
             c.to_cpu(bus, cpu);
             p.to_ppu(bus, ppu);
-            prev_states.pop_back();
+            prev_states.pop();
         }
     }
 
     void push_state(Bus& bus, CPU& cpu, PPU& ppu){
-        if (prev_states.size() == 10)
-            prev_states.pop_front();
         State s;
         s.cpus.from_cpu(cpu);
+        s.ppus.from_ppu(ppu);
         s.bus = bus;
         cpu.mem.write_addresses.reset();
         ppu.mem.write_addresses.reset();
-        prev_states.push_back(s);
+        prev_states.push(std::move(s)); // todo: check
     }
 };
 #endif

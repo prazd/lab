@@ -5,7 +5,7 @@
 #include "Constants.hpp"
 #include "raylib.h"
 #include <tuple>
-#include "SimpleDeque.h"
+#include "Simple.h"
 
 // TODO: https://www.nesdev.org/wiki/Mirroring + Attributes
 inline bool operator==(const Color& lhs, const Color& rhs){
