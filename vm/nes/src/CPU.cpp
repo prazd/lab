@@ -20,7 +20,7 @@ void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
         bus.write(addr, value);
         return;
     }
-#if SNAP_MODE
+#if SNAP_MODE && DEBUG_MODE
     write_addresses.push_back(std::pair{addr, unsafe_read(bus, addr)});
 #endif
     map[addr] = value;

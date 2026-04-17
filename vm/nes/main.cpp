@@ -5,6 +5,7 @@
 #include "CPU.hpp"
 #include "Cartridge.h"
 #include "Debug.h"
+#include "MultiTest.h"
 
 struct NESVM {
     Bus bus{};
@@ -16,9 +17,17 @@ struct NESVM {
     Disassembler<30,520,200,400> dis;
     RegsInfo<30,30,180,425> reg_info{};
 #endif
-#if SNAP_MODE
+
+#if SNAP_MODE && DEBUG_MODE
     SnapStorage snap_storage;
 #endif
+
+    NESVM()
+#if DEBUG_MODE
+    : dis(cpu, bus)
+#endif
+    {};
+
     NESVM(std::string_view rom_path): rom_path(rom_path)
 #if DEBUG_MODE
     ,dis(cpu, bus)
@@ -53,7 +62,7 @@ struct NESVM {
 
         tiles_index_start += 16384 * cartridge.prg_rom_sz;
         size_t chr_sz = cartridge.chr_rom_sz == 0 ?
-                        8000 : // CHR_RAM
+                        8192 : // CHR_RAM
                         8192 * cartridge.chr_rom_sz;
         bus.mapper.chr.resize(chr_sz);
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.end(), bus.mapper.chr.begin());
@@ -69,13 +78,16 @@ struct NESVM {
     void reset(std::string_view path){
         auto tmp = NESVM(path);
         bus = tmp.bus;
-        dis = std::move(tmp.dis);
         cpu = std::move(tmp.cpu);
         ppu = std::move(tmp.ppu);
         cartridge = std::move(tmp.cartridge);
         rom_path = tmp.rom_path;
+
+#if DEBUG_MODE
         reg_info = std::move(tmp.reg_info);
-#if SNAP_MODE
+        dis = std::move(tmp.dis);
+#endif
+#if SNAP_MODE && DEBUG_MODE
         snap_storage = tmp.snap_storage;
 #endif
         ppu_init();
@@ -167,9 +179,9 @@ struct NESVM {
 #else
         if (cpu.stop_requested) return;
         for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
-             cpu.tick(bus);
-             bus.open_bus_decay();
              for (int j = 0; j < 3; ++j) ppu.tick(bus);
+             cpu.tick_step(bus);
+             bus.tick();
         }
 #endif
     }
@@ -282,7 +294,7 @@ struct NESVM {
 #if DEBUG_MODE
             dis.draw(cpu, ppu, bus);
 #endif
-#if SNAP_MODE
+#if SNAP_MODE && DEBUG_MODE
             dis.snap_handle(cpu, ppu, bus, snap_storage);
 #endif
 
@@ -366,6 +378,25 @@ int main(){
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
     // /Users/prazd/Desktop/dev/GameGenie.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/5.nmi_suppression.nes");
+
+#if MULTI_TEST_MODE
+    constexpr static std::string_view tests_paths[] = {
+            "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/1.frame_basics.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/5.nmi_suppression.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes"
+    };
+    MultiTest<NESVM, std::size(tests_paths)>{}.run(tests_paths);
+#else
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/1.frame_basics.nes");
     nes.run();
+#endif
 }

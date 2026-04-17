@@ -70,6 +70,8 @@ struct PPU {
 #endif
     } mem;
 
+    unsigned short last_address = constants::PATTERN_TABLE1_BEGIN;
+
     void adjust_nt_mirroring(Bus& bus, unsigned short& address);
 
     // Current VRAM address (15 bits)
@@ -297,7 +299,7 @@ struct PPU {
     void read_ppuaddr(Bus& mem);
     void update_state(Bus& mem);
 
-    static inline std::array<Color, 256 * 240> internal_display{};
+    VEC_MODE std::array<Color, 256 * 240> internal_display{};
     size_t current_x = 0;
     size_t current_y = 0;
 
@@ -307,7 +309,8 @@ struct PPU {
         ++current_line_x;
 #endif
     }
-    static inline std::array<Color, 256 * 240> display{};
+
+    VEC_MODE std::array<Color, 256 * 240> display{};
 
     std::array<Color, 64> palette{
         Color{0x75, 0x75,  0x75, 0xFF},

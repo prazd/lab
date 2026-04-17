@@ -4,6 +4,14 @@
 #define SNAP_MODE 1
 #define DEBUG_MODE 1
 #define GAME_GENIE_MODE 0
+#define MULTI_TEST_MODE 0
+
+#if !MULTI_TEST_MODE
+#define VEC_MODE static inline
+#else
+#define VEC_MODE
+#endif
+
 namespace constants {
     constexpr float WIDTH = 600.f;
     constexpr float HEIGHT = 600.f;

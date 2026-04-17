@@ -280,8 +280,8 @@ struct Mapper {
 
     bool is_chr_ram = false;
 
-    static inline std::vector<unsigned char> prg{};
-    static inline std::vector<unsigned char> chr{}; // rom/ram
+    VEC_MODE std::vector<unsigned char> prg{};
+    VEC_MODE std::vector<unsigned char> chr{}; // rom/ram
 
     mappers::NROM nrom;
     mappers::MMC1 mmc1;
