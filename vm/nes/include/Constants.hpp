@@ -6,6 +6,7 @@
 #define GAME_GENIE_MODE 0
 #define MULTI_TEST_MODE 0
 
+#define COPY_IN_MULTITEST 0
 #if !MULTI_TEST_MODE
 #define VEC_MODE static inline
 #else

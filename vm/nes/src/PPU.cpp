@@ -580,7 +580,9 @@ void PPU::tick(Bus& bus) {
         bus.current_nmi_cycle = current_cycle;
         bus.nmi_interrupt_flip_flop = true;
     } else if (current_y == 261 && current_scanline_cycle == 1) {
+#if !COPY_IN_MULTITEST
         std::copy(internal_display.begin(), internal_display.end(), display.begin());
+#endif
         ppustatus.vblank_flag = 0;
         bus.ppustatus.reg &= 0x7f;
         bus.nmi_interrupt_flip_flop = false; // todo: check

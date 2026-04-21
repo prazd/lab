@@ -1,6 +1,11 @@
 #ifndef NES_SIMPLE_H
 #define NES_SIMPLE_H
 #include <iostream>
+#include <optional>
+#include <thread>
+#include <queue>
+#include <algorithm>
+
 template <typename T, size_t sz>
 struct SimpleDeque {
     int current_sz = 0;
@@ -183,6 +188,81 @@ struct CircleStack {
     }
     ~CircleStack(){
         while(!empty()) pop();
+    }
+};
+
+template <size_t sz, typename Func, typename ... Args>
+struct WorkerPool {
+private:
+    struct Task {
+        Func f;
+        std::tuple<Args...> args;
+        explicit Task(Func f, Args ... args): f(f), args(std::forward<Args>(args)...){}
+    };
+    struct TaskPool {
+        mutable std::mutex mt;
+        std::queue<Task> tasks{};
+        bool empty() const {
+            std::lock_guard lg(mt);
+            return tasks.empty();
+        }
+        std::optional<Task> get_task(){
+            std::lock_guard lg(mt);
+            if (tasks.empty()) return std::nullopt;
+            auto r = tasks.front(); tasks.pop();
+            return r;
+        }
+        void add(Task t){
+            std::lock_guard lg(mt);
+            tasks.push(t);
+        }
+    } task_pool;
+
+    struct alignas(64) ThreadStatus {
+        std::atomic<bool> running{};
+        std::atomic<bool> sleep{};
+        std::atomic<bool> in_progress{};
+    };
+
+    std::array<ThreadStatus, sz> thread_status;
+    std::vector<std::thread> pool{};
+
+    static void t_func(ThreadStatus& ts, TaskPool& tp){
+        while(ts.running.load()){
+            if (!ts.sleep.load()){
+                if (auto t = tp.get_task(); t.has_value()){
+                    ts.in_progress.store(true);
+                    auto v = t.value();
+                    std::apply(v.f, v.args);
+                    ts.in_progress.store(false);
+                }
+            }
+        }
+    }
+public:
+    WorkerPool(){
+        pool.reserve(sz);
+        for (auto& el: thread_status) {el.running.store(true); el.sleep.store(true);}
+        for (int i = 0; i < sz; ++i){
+            pool.emplace_back(t_func, std::ref(thread_status[i]), std::ref(task_pool));
+        }
+    }
+    void add(Func f, Args&& ... args){
+        task_pool.add(Task{f, std::forward<Args>(args)...});
+    }
+    void run(){
+        for (auto& el: thread_status) {el.sleep.store(false);}
+    }
+    void run_and_wait(){
+        for (auto& el: thread_status) {el.sleep.store(false);}
+        while(!task_pool.empty() || std::any_of(thread_status.begin(), thread_status.end(), [](auto& el){return el.in_progress.load();}));
+        for (auto& el: thread_status) {el.sleep.store(true);}
+    }
+
+    ~WorkerPool(){
+        while(!task_pool.empty() || std::any_of(thread_status.begin(), thread_status.end(), [](auto& el){return el.in_progress.load();}));
+        for (auto& el: thread_status) {el.running.store(false); el.sleep.store(false);}
+        for (auto&& t: pool) if (t.joinable()) t.join();
     }
 };
 #endif

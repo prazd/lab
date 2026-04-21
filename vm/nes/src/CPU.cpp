@@ -122,7 +122,7 @@ void CPU::reset() {
 #if DEBUG_MODE
     cycles_count = 0;
 #endif
-    std::memset(mem.map, 0, 0x10000);
+    memset(mem.map, 0, 0x10000);
 }
 
 
