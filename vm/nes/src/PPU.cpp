@@ -254,13 +254,11 @@ void PPU::bg_tick(Bus &bus) {
     // TODO: continue debug
     update_state(bus);
 #if DEBUG_MODE
-    if (!current_scanline_cycle){
-        frame_start = false;
+    if (current_scanline_cycle == 0){
         line_start = false;
-        if (current_y == 0 && current_scanline_cycle == 0 && (fill_white_background))
-            internal_display.fill(WHITE);
-        return;}
-    else if (current_scanline_cycle == 340){
+        if (current_y == 0) frame_start = false;
+//        if (fill_white_background) get_active_display().fill(WHITE);
+    } else if (current_scanline_cycle == 340){
         last_line_x =  std::exchange(current_line_x, 0);
         line_start = true;
     }
@@ -319,11 +317,10 @@ void PPU::bg_tick(Bus &bus) {
             attributes_low <<= 1;
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
-        } else if (current_scanline_cycle == 340 && ppumask.enable_background_rendering){
+        } else if (current_scanline_cycle == 340){ // todo: check ppumask.enable_background_rendering
             ++frames_count;
 #if DEBUG_MODE
-                    frame_start = true;
-
+            frame_start = true;
 #endif
         }
     }
@@ -337,8 +334,8 @@ void PPU::reset() {
     t = 0;
     x = 0;
     w = false;
-    internal_display.fill(WHITE);
-    display.fill(WHITE);
+    display1.fill(BLACK);
+    display2.fill(BLACK);
     secondary_oam_buffer.reset();
     secondary_oam.reset();
     current_scanline_cycle = 0;
@@ -362,6 +359,7 @@ void PPU::reset() {
     ppustatus.reset();
 #if DEBUG_MODE
     run = false;
+    frame_start = false;
 #endif
 }
 
@@ -453,8 +451,6 @@ void PPU::draw_pixel(Bus &bus) {
     bool universal_background = false;
     unsigned char oam_index{};
     unsigned char cur_oam_index = secondary_oam.size() > 0 ? secondary_oam[0].oam_index : 0;
-//    bool cur_above_background {};
-    bool init_cur_above = false;
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
         if (secondary_oam[i].x_count == 0 && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
                 is_horizontal_flip = (secondary_oam[i].attrib >> 6) & 1;
@@ -580,9 +576,7 @@ void PPU::tick(Bus& bus) {
         bus.current_nmi_cycle = current_cycle;
         bus.nmi_interrupt_flip_flop = true;
     } else if (current_y == 261 && current_scanline_cycle == 1) {
-#if !COPY_IN_MULTITEST
-        std::copy(internal_display.begin(), internal_display.end(), display.begin());
-#endif
+        if (ppumask.enable_background_rendering) update_current_display(); // todo: check
         ppustatus.vblank_flag = 0;
         bus.ppustatus.reg &= 0x7f;
         bus.nmi_interrupt_flip_flop = false; // todo: check

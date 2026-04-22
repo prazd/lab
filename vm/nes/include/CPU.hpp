@@ -34,9 +34,8 @@ struct CPU {
 #endif
     } mem;
 
-
     // For debug
-    inline static unsigned short write_mmio_addr[] = {
+    inline constexpr static unsigned short write_mmio_addr[] = {
             constants::PPUCTRL,
             constants::PPUMASK,
             constants::PPUSTATUS,
@@ -50,7 +49,7 @@ struct CPU {
             constants::CONTROLLER2_AND_APU_FC,
     };
 
-    inline static unsigned short read_mmio_addr[] = {
+    inline constexpr static unsigned short read_mmio_addr[] = {
             constants::PPUCTRL,
             constants::PPUMASK,
             constants::PPUSTATUS,
@@ -161,7 +160,7 @@ struct CPU {
 
     AddressingResult dummy_read(Bus& bus, AddressingResult);
 
-    static inline std::string_view instruction_str[73] = {
+    static constexpr inline std::string_view instruction_str[73] = {
         "ADC", "AND", "ASL","BCC", "BCS","BEQ", "BIT", "BMI", "BNE","BPL", "BRK", "BVC", "BVS",	"CLC",
         "CLD", "CLI", "CLV","CMP", "CPX","CPY", "DEC", "DEX", "DEY","EOR", "INC", "INX", "INY",	"JMP",
         "JSR", "LDA", "LDX","LDY", "LSR","NOP", "ORA", "PHA", "PHP","PLA", "PLP", "ROL", "ROR",	"RTI",

@@ -299,18 +299,50 @@ struct PPU {
     void read_ppuaddr(Bus& mem);
     void update_state(Bus& mem);
 
-    VEC_MODE std::array<Color, 256 * 240> internal_display{};
+    VEC_MODE std::array<Color, 256 * 240> display1{};
+    VEC_MODE std::array<Color, 256 * 240> display2{};
+
+#if MULTI_TEST_MODE
+
+    std::atomic<bool> update_display = false;
+    std::atomic<int> display_in_progress_num = 0;
+    Color* display_in_progress = display1.data(); // todo: check
+    inline void update_current_display(){
+        if (display_in_progress_num.fetch_xor(1, std::memory_order_acq_rel)){
+            display_in_progress =  display2.data();
+        } else {
+            display_in_progress =  display1.data();
+        }
+        update_display.store(true, std::memory_order_release);
+    }
+    inline auto& get_active_display(){
+        return display_in_progress_num.load(std::memory_order_acquire) ? display2 : display1;
+    }
+#else
+    bool is_first_display_in_progress = true;
+    Color* display_in_progress = display1.data();
+    inline void update_current_display(){
+        is_first_display_in_progress = !is_first_display_in_progress;
+        display_in_progress = is_first_display_in_progress ? display1.data() : display2.data();
+    }
+    inline auto& get_active_display(){
+#if DEBUG_MODE && !MULTI_TEST_MODE
+        return is_first_display_in_progress ? display1 : display2;
+#else
+        return is_first_display_in_progress ? display2 : display1;
+#endif
+    }
+#endif
+
     size_t current_x = 0;
     size_t current_y = 0;
 
     inline void update_internal_display(Color pixel){
-        internal_display[current_x++] = pixel;
+        display_in_progress[current_x++] = pixel;
 #if DEBUG_MODE
         ++current_line_x;
 #endif
     }
-
-    VEC_MODE std::array<Color, 256 * 240> display{};
 
     std::array<Color, 64> palette{
         Color{0x75, 0x75,  0x75, 0xFF},
