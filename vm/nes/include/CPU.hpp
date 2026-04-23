@@ -1,6 +1,5 @@
 #include "Constants.hpp"
 #include "Bus.hpp"
-#include "SmallString.h"
 #include "Simple.h"
 struct CPU {
     struct Memory {

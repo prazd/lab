@@ -245,7 +245,6 @@ struct PPU {
 
     } ppustatus;
 
-
     unsigned short current_scanline_cycle = 0;
     unsigned char nt_byte = 0;
     unsigned char attrib_value = 0;
@@ -414,19 +413,8 @@ struct PPU {
     void update_base_nt(Bus& bus);
     unsigned short get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n);
 
-//  Pattern table
-    template <typename = void>
-    auto pattern_table(std::array<unsigned char, 8> l,  std::array<unsigned char, 8> r){
-        std::array<std::array<unsigned char, 8>, 8> res{};
-        for (int i = 0 ; i < 8; ++i){
-            for (int j = 0; j < 8; ++j){
-                res[i][7-j] = ((l[i] >> j) & 1) | (((r[i] >> j) & 1) << 1);
-            }
-        }
-        return res;
-    }
-
     unsigned char tile_byte_from_addr(Bus& bus, unsigned short addr);
+
     //    0HNNNN NNNNPyyy
     unsigned short to_pattern_addr(unsigned char y, unsigned char tile_n, bool plane, bool h);
 };

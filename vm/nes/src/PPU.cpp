@@ -97,9 +97,7 @@ void PPU::read_ppuaddr(Bus& bus) {
 }
 
 void PPU::update_state(Bus& bus) {
-    if (bus.ppustatus.read_requested)  {
-        w = false;
-        bus.ppustatus.read_requested = false;}
+    if (bus.ppustatus.read_requested)   { w = false; bus.ppustatus.read_requested = false;}
     if (bus.ppuctrl.write_requested)    {read_ppuctrl(bus); bus.ppuctrl.write_requested = false;}
     if (bus.ppumask.write_requested)    {ppumask.set(bus.ppumask.reg); bus.ppumask.write_requested = false;}
     if (bus.ppuscroll.write_requested)  {read_ppuscroll(bus); bus.ppuscroll.write_requested = false;}
@@ -275,13 +273,11 @@ void PPU::bg_tick(Bus &bus) {
                 update_shifts = false;
             }
 #endif
-
             if (current_scanline_cycle == 256){
                 unsigned char y_fine_add_prev = ((v >> 12) & 0x7);
-                unsigned char y_fine_add_val = ((((v >> 12) & 0x7) + 1) % 8);
+                unsigned char y_fine_add_val = ((((v >> 12) & 0x7) + 1) & 0x7);
                 v &= 0x8fff;
                 v |= y_fine_add_val << 12;
-
                 if (y_fine_add_prev == 7){
                     auto prev = ((v >> 5) & 0x1f);
                     // todo: check prev == 31 case
@@ -295,10 +291,8 @@ void PPU::bg_tick(Bus &bus) {
         } else if(current_scanline_cycle == 257 && ppumask.enable_background_rendering) {
             // TODO: debug (oam_read test (v & 0x1f) == 2)
             // set coarse x + update ntx bit
-            v &= 0xffe0;
-            v |= (t & 0x1f);
-            v &= 0xfbff;
-            v |= (t & 0x400);
+            v &= 0xfbe0;
+            v |= (t & 0x41f);
         } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && ppumask.enable_background_rendering) {
             shift_register_high <<= 1;
             shift_register_low <<= 1;
@@ -306,11 +300,10 @@ void PPU::bg_tick(Bus &bus) {
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
         }
-
     } else if (current_y == 261){
         if (current_scanline_cycle == 280 && ppumask.enable_background_rendering) {
             v &= 0x841f;
-            v |= ((t & (~0x841f & 0xffff)));
+            v |= (t & 0x7be0);
         } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && ppumask.enable_background_rendering){
             shift_register_high <<= 1;
             shift_register_low <<= 1;

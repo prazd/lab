@@ -343,41 +343,22 @@ struct NESVM {
     }
 };
 
-// /Users/prazd/Desktop/dev/DonkeyKongJU.nes (NROM)
-
 // PPU tests:
 // - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes - todo (E224)
 // /Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes
 
-
 // VBL:
-// /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/1.frame_basics.nes
-// /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes
-// /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes
-// /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes
 // /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/5.nmi_suppression.nes // todo: (e152) debug
-
-// /Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes
-// /Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes
-// /Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes
-
-
-// Done:
-// CPU:
-// - /Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes
-// - /Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes
-// - /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes // todo: fix
-
-// PPU:
-// - /Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes
 
 int main(){
     // /Users/prazd/Desktop/dev/BattleCity.nes - TODO: https://www.nesdev.org/wiki/Vs._System
     // /Users/prazd/Desktop/dev/DonkeyKong.nes
+    // /Users/prazd/Desktop/dev/DonkeyKongJU.nes (NROM)
     // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: 0x8082/0x80e4/0x80c3/0x8eb6
     // palette_ram.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
     // /Users/prazd/Desktop/dev/GameGenie.nes
+
 #if MULTI_TEST_MODE
     constexpr static std::string_view tests_paths[] = {
             "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes",
@@ -390,10 +371,12 @@ int main(){
             "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes",
+//            "/Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes"
     };
     MultiTest<NESVM, std::size(tests_paths)>{}.run(tests_paths);
 #else
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes");
     nes.run();
 #endif
 }
