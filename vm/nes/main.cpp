@@ -143,15 +143,19 @@ struct NESVM {
             if (dis.is_frame_jump_active && ppu.frame_start){
                 dis.is_frame_jump_active = false;
             } else if (dis.is_tile_line_jump_active && ppu.tile_start) {
-                dis.is_tile_line_jump_active = false; ppu.tile_start = false;
-            } else if (dis.is_line_jump_active && ppu.line_start){
-                dis.is_line_jump_active = false;
+                dis.is_tile_line_jump_active = false;
+                ppu.tile_start = false;
             } else if (dis.is_one_tick_ppu_active) {
                 dis.is_one_tick_ppu_active = false;
             } else if (dis.trigger_search) {
                 dis.trigger_search = !(ppu.mem.triggered_on_read || ppu.mem.triggered_on_write);
             }
-            if (cpu_tick_count++ % 3 == 2) {bus.tick(); cpu.tick_step(bus);}
+            if (cpu_tick_count++ % 3 == 2) {
+                bus.tick(); cpu.tick_step(bus);
+                if (dis.is_line_jump_active && ppu.line_start) {
+                    dis.is_line_jump_active = false;
+                }
+            }
         }
         if (!dis.selected_move_active &&
             !dis.is_frame_jump_active &&
@@ -376,7 +380,7 @@ int main(){
     };
     MultiTest<NESVM, std::size(tests_paths)>{}.run(tests_paths);
 #else
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes");
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes"); // СA09 (Vblank debug)
     nes.run();
 #endif
 }

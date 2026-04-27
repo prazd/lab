@@ -54,6 +54,7 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
         case constants::OAMDMA : {
             dma_address = value << 8;
             dma_active = true;
+            dma_start = true;
             dma_index = 0;
             break;
         }
@@ -83,7 +84,7 @@ unsigned char Bus::read_prg(unsigned short addr) {
 //            }
             status_read_cycle = current_ppu_cycle;
             unsigned char current = (ppustatus.reg & 0xe0) | (open_bus_value & 0x1f);
-            ppustatus.reg = 0;
+            ppustatus.reg &= 0x60;
             ppustatus.read_requested = true;
             return current;
         }
@@ -144,13 +145,6 @@ unsigned char Bus::unsafe_read_prg(unsigned short addr) {
 
 unsigned char Bus::read_chr(unsigned short addr) {
     return mapper.read_chr_rom(addr);
-}
-
-void Bus::dma_tick(unsigned char val) {
-    if (dma_active){
-        oam[dma_index++] = val;
-        dma_active = (dma_index != 256);
-    }
 }
 
 void Bus::tick() {

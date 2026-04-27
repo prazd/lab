@@ -12,31 +12,7 @@
 template <size_t x, size_t y, size_t w, size_t h>
 struct DebugWindow {
     Rectangle rec;
-    bool in_motion = false;
     DebugWindow(): rec{x,y,w,h}{}
-
-    void move() {
-        if (IsMouseButtonReleased(0)) in_motion = false;
-        auto mouse_pos = GetMousePosition();
-        if (CheckCollisionPointRec(mouse_pos, rec)){
-            if (IsMouseButtonPressed(0) && !in_motion) in_motion = true;
-            if (in_motion){
-                rec.x = mouse_pos.x - rec.width/2;
-                rec.y = mouse_pos.y - rec.height/2;
-            }
-        }
-    }
-
-    template<size_t n>
-    static void move_recs(std::array<Rectangle*, n> recs) {
-        auto mouse_pos = GetMousePosition();
-        for (auto r: recs) {
-            if (CheckCollisionPointRec(mouse_pos, *r) && IsMouseButtonDown(0)){
-                r->x = mouse_pos.x - r->width/2;
-                r->y = mouse_pos.y - r->height/2;
-            }
-        }
-    }
 
     void draw_win(){
         DrawRectangleLinesEx(rec, 1.f, BLACK);
@@ -98,8 +74,6 @@ struct DebugWindowWithTexture : DebugWindow<x,y,w,h> {
     }
 
     void handle() {
-        DW::template move_recs<2>({&(DW::rec), &texture_rec});
-
         UpdateTexture(target, buffer.data());
         DrawTexturePro(target, {0, 0, (float)target.width, (float)target.height}, Rectangle{texture_rec.x, texture_rec.y, w, h}, {0, 0}, 0.0f, WHITE);
         DW::draw_win();
@@ -322,7 +296,6 @@ struct NameTableNumView: DebugWindowText<x, y, w, h> {
             ss << '\n';
         }
         auto s = ss.str();
-        DW::move();
         DW::draw(s.c_str());
         ss.str("");
     }
@@ -504,12 +477,17 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             cpu.mem.triggered_on_write = !trigger_search;
             cpu.mem.triggered_on_read = !trigger_search;
             ppu.fill_white_background = !trigger_search;
-        } else if (CheckCollisionPointRec(GetMousePosition(), button1) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
+        } else if (CheckCollisionPointRec(GetMousePosition(), button1) && run_mode == PPU_M && mouse_button_pred(pressed_mode)){
+            ppu.frame_start = false;
             is_frame_jump_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
+        }
+        else if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == PPU_M && mouse_button_pred(pressed_mode)){
             is_tile_line_jump_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button3) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
+        }
+        else if (CheckCollisionPointRec(GetMousePosition(), button3) && run_mode == PPU_M && mouse_button_pred(pressed_mode)){
+            ppu.line_start = false;
             is_line_jump_active = true;
+        }
         else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
             is_one_tick_ppu_active = true;
         else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == PPU_M && IsMouseButtonPressed(0)){
@@ -600,7 +578,6 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         for (auto el: read_trigger_address)
             ss << std::hex << el << ',';
 
-        DW::move();
         auto str = ss.str();
         DW::draw(str.data(), 15.f);
         if (run_mode == CPU_M) {
@@ -1021,7 +998,6 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         DW::draw_text_button(mirroring_switch_button, "MS", BLACK);
         DW::draw_text_button(sprite_off_button, "S_OFF", BLACK);
         ss.str("");
-        DW::move();
         u_input.draw();
     }
 };
@@ -1201,7 +1177,6 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
 #endif
         }
                 auto s = ss.str();
-        DW::move();
         DW::draw(s.c_str(), 13.f);
         ss.str("");
     }
@@ -1275,7 +1250,6 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         ss << '\n';
         ss << "\nPC watch address:" << cpu.pc_watch_address << " , count:"  << std::dec << cpu.pc_watch_count << '\n';
         auto s = ss.str();
-        DW::move();
         DW::draw(s.c_str(), 13.f);
         DW::draw_text_button(update_target_button, "update", BLACK);
         DW::draw_text_button(mode_button, "mode", BLACK);
@@ -1343,7 +1317,6 @@ struct SpriteInfo: DebugWindowText<x, y, w, h> {
             }
         }
         auto s = ss.str();
-        DW::move();
         DW::draw(s.c_str(), 13.f);
         ss.str("");
     }
@@ -1422,7 +1395,6 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                     if ((ppu.sprite_mode == PPU::SpriteMode::m8x8 && i % 2 == 1) || ppu.sprite_mode  == PPU::SpriteMode::m8x16) ++k;
                 }
             }
-            DW::move();
             DW::handle();
         } else {
             for (int i = 0; i < 64; ++i) {
@@ -1432,7 +1404,6 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
             auto s = ss.str();
             DrawText(s.c_str(), DW::rec.x, DW::rec.y, 12.3f, BLACK);
             ss.str("");
-            DW::move();
         }
     }
 };
@@ -1576,7 +1547,6 @@ struct InstructionFinder: DebugWindowText<x, y, w, h> {
         }
         ss.str("");
         DW::draw_win();
-        DW::move();
     }
 };
 
@@ -1640,7 +1610,6 @@ struct CustomController: DebugWindowText<x,y,w,h> {
         auto s = ss.str();
         DrawText(s.c_str(), DW::rec.x, DW::rec.y, 12.f, BLACK);
         ss.str("");
-        DW::move();
         DW::draw_win();
     }
 };
@@ -1711,7 +1680,6 @@ struct CustomGameGenie: DebugWindowText<x, y, w, h> {
         u_input.draw();
         ss.str("");
         DW::draw_win();
-        DW::move();
     }
 };
 #endif
@@ -1844,7 +1812,6 @@ struct Snapshot: DebugWindowText<x, y, w, h> {
         DrawText(s.c_str(), DW::rec.x, DW::rec.y  + (15 * SnapValuesCount), 12.f, BLACK);
         ss.str("");
         DW::draw_win();
-        DW::move();
     }
 };
 

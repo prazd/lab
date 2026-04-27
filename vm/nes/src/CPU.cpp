@@ -831,8 +831,12 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (!cpu.sr.get(StatusReg::C)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        ++cpu.di.cycles;
+                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                            ++cpu.di.cycles;
+                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
+                        }
                     });
                 }
             });
@@ -843,8 +847,12 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (cpu.sr.get(StatusReg::C)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        ++cpu.di.cycles;
+                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                            ++cpu.di.cycles;
+                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
+                        }
                     });
                 }
             });
@@ -855,8 +863,12 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (cpu.sr.get(StatusReg::Z)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        ++cpu.di.cycles;
+                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                            ++cpu.di.cycles;
+                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
+                        }
                     });
                 }
             });
@@ -867,8 +879,12 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (cpu.sr.get(StatusReg::N)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        ++cpu.di.cycles;
+                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                            ++cpu.di.cycles;
+                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
+                        }
                     });
                 }
             });
@@ -879,8 +895,12 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (!cpu.sr.get(StatusReg::Z)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        ++cpu.di.cycles;
+                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                            ++cpu.di.cycles;
+                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
+                        }
                     });
                 }
             });
@@ -891,8 +911,12 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (!cpu.sr.get(StatusReg::N)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        ++cpu.di.cycles;
+                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                            ++cpu.di.cycles;
+                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
+                        }
                     });
                 }
             });
@@ -903,8 +927,12 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (!cpu.sr.get(StatusReg::V)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        ++cpu.di.cycles;
+                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                            ++cpu.di.cycles;
+                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
+                        }
                     });
                 }
             });
@@ -915,8 +943,12 @@ void CPU::fill_exec_ops() {
                 cpu.pc += cpu.di.bytes;
                 if (cpu.sr.get(StatusReg::V)){
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                        unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        ++cpu.di.cycles;
+                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                            ++cpu.di.cycles;
+                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
+                        }
                     });
                 }
             });
@@ -1612,10 +1644,9 @@ void CPU::iop_exec_step(Bus& bus) {
 // todo: finish
 void CPU::tick_step(Bus& bus){
 #if DEBUG_MODE
-    ++cycles_count;
     if (!debug_run) return;
 #endif
-
+    ++cycles_count;
     if (instruction_execute_done) {
         --additional_cycles;
         if (additional_cycles) {
@@ -1632,20 +1663,13 @@ void CPU::tick_step(Bus& bus){
     switch (istep) {
         case Prepare: {
             if (bus.dma_active) {
-                // Every cpu cycle
-                bus.dma_tick(mem.read(bus, bus.dma_address + bus.dma_index));
+                if (bus.dma_start){
+                    bus.dma_start = false;
+                    if (cycles_count & 1) return;
+                }
+                mem.tick_dma(bus);
                 return;
             }
-            if (bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop) {
-                interrupt_requests[NMI] = true;
-                sr.set(StatusReg::I, false);
-                bus.nmi_interrupt_flip_flop = false;
-            }
-            if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)) {
-                interrupt_requests[IRQ] = true;
-                bus.irq_interrupt_flip_flop = false;
-            }
-
             if (!sr.get(StatusReg::I)) {
                 // TODO:
                 // The NES has an interrupt latency of 7 cycles, which means it takes 7 CPU cycles to begin
@@ -1685,6 +1709,14 @@ void CPU::tick_step(Bus& bus){
         }
         case Execution: {
             if (!iop.empty()){
+                if (bus.dma_active) {
+                    if (bus.dma_start){
+                        bus.dma_start = false;
+                        if (cycles_count & 1) return;
+                    }
+                    mem.tick_dma(bus);
+                    return;
+                }
                 iop_exec_step(bus);
                 ++current_iop_index;
                 --di.cycles;
@@ -1694,11 +1726,6 @@ void CPU::tick_step(Bus& bus){
                 // todo: debug cycles
                 di.cycles += 0;
             }
-#if DEBUG_MODE
-            if (di.i == CPU::Instruction::RTI){
-                di.bytes += 0;
-            }
-#endif
             instruction_execute_done = true;
             if (!additional_cycles) {
                 execute_in_progress = false;
@@ -1707,6 +1734,16 @@ void CPU::tick_step(Bus& bus){
                 debug_run = false;
 #endif
             }
+
+if (bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop) {
+    interrupt_requests[NMI] = true;
+    sr.set(StatusReg::I, false);
+    bus.nmi_interrupt_flip_flop = false;
+}
+if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)) {
+    interrupt_requests[IRQ] = true;
+    bus.irq_interrupt_flip_flop = false;
+}
             istep = Prepare;
             break;
         }
@@ -1745,7 +1782,7 @@ void CPU::tick(Bus& bus){
         }
         if (bus.dma_active){
             // Every cpu cycle
-            bus.dma_tick(mem.read(bus, bus.dma_address + bus.dma_index));
+            mem.tick_dma(bus);
             return;
         }
 

@@ -21,6 +21,22 @@ struct CPU {
         void write(Bus&, unsigned short addr, unsigned char value);
         void unsafe_write(Bus&, unsigned short addr, unsigned char value);
         static void adjust_if_mirror(unsigned short&);
+
+        enum StateDMA: unsigned char {
+            Read,
+            Write,
+        } dma_state = Read;
+        StateDMA next[2]{Write, Read};
+        unsigned char value = 0;
+        inline void tick_dma(Bus& bus){
+            if (dma_state == Read){
+                value = read(bus, bus.dma_address + bus.dma_index);
+            } else {
+                bus.oam[bus.dma_index++] = value;
+                bus.dma_active = (bus.dma_index != 256);
+            }
+            dma_state = next[dma_state];
+        }
 #if DEBUG_MODE
 #if SNAP_MODE
         SimpleDeque<std::pair<unsigned short,unsigned char>,5> write_addresses;
@@ -29,7 +45,6 @@ struct CPU {
         std::vector<unsigned short> read_trigger_addresses{};
         mutable bool triggered_on_write = false;
         mutable bool triggered_on_read = false;
-        unsigned long cycles_count = 0;
 #endif
     } mem;
 
@@ -96,11 +111,12 @@ struct CPU {
     };
 
     size_t additional_cycles = 0; // todo: check
+    size_t cycles_count = 0;
 
 #if DEBUG_MODE
     unsigned short pc_watch_address{};
     size_t pc_watch_count{};
-    unsigned long cycles_count = 0;
+
     bool debug_run = true;
 #endif
 
@@ -176,19 +192,6 @@ struct CPU {
         bool cross_check{};
     };
 
-    // todo: finish
-    enum Operation {
-        ReadAddr,
-        MemRead,
-        MemWrite,
-        Exec
-    };
-
-    struct OperationCycle {
-        Operation op{};
-        unsigned char cycle{};
-    };
-
     enum AddressingStep {
         LowByte, HighByte,
         Abs, Zp,
@@ -200,7 +203,7 @@ struct CPU {
 
     enum InstructionStep {
         Prepare,
-        Execution
+        Execution,
     } istep = Prepare;
 
     SimpleDeque<void(*)(Bus& bus, CPU&), 7> iop{};

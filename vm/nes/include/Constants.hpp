@@ -10,6 +10,12 @@
 #define VEC_MODE static inline
 #else
 #define VEC_MODE
+#undef SNAP_MODE
+#undef DEBUG_MODE
+#undef GAME_GENIE_MODE
+#define SNAP_MODE 0
+#define DEBUG_MODE 0
+#define GAME_GENIE_MODE 0
 #endif
 
 namespace constants {

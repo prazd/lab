@@ -252,10 +252,9 @@ void PPU::bg_tick(Bus &bus) {
     // TODO: continue debug
     update_state(bus);
 #if DEBUG_MODE
-    if (current_scanline_cycle == 0){
-        line_start = false;
-        if (current_y == 0) frame_start = false;
-//        if (fill_white_background) get_active_display().fill(WHITE);
+    if (current_scanline_cycle == 0 && current_y == 0){
+        frame_start = false;
+//        get_active_display().fill(WHITE);
     } else if (current_scanline_cycle == 340){
         last_line_x =  std::exchange(current_line_x, 0);
         line_start = true;
@@ -320,7 +319,7 @@ void PPU::bg_tick(Bus &bus) {
 }
 
 void PPU::reset() {
-    current_y = 261;
+    current_y = 0;
     current_x = 0;
     current_cycle = 0;
     v = 0;
@@ -471,7 +470,8 @@ void PPU::draw_pixel(Bus &bus) {
     } else if (bg_data != 0 && sprite_data == 0)
         res = bg_data;
     else if (bg_data != 0 && sprite_data != 0) {
-        if (oam_index == 0){
+        if (oam_index == 0 && !is_bg_prio && ppumask.enable_sprite_rendering){
+            // todo: debug
             ppustatus.sprite_zero_hit_flag = true;
             bus.ppustatus.reg |= (1 << 6);
         }
@@ -511,7 +511,7 @@ void PPU::draw_pixel(Bus &bus) {
 void PPU::tick(Bus& bus) {
     bg_tick(bus);
     bus.mapper.tick();
-    current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && ppumask.enable_background_rendering && (frames_count & 1));
+    current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && ppumask.enable_background_rendering && !(frames_count & 1)); // todo: check
 #if DEBUG_MODE
     if (!is_sprite_off)
 #endif
@@ -582,11 +582,9 @@ void PPU::tick(Bus& bus) {
         sprite_evaluation_index = 0;
         if (current_y == 261){
             ppustatus.sprite_zero_hit_flag = false;
-            bus.ppustatus.reg &= 0xbf;
             ppustatus.sprite_overflow_flag = false;
-            bus.ppustatus.reg &= ((~(1 << 5)) & 0xff);
+            bus.ppustatus.reg &= 0x3f; // todo: check
         }
         current_y = current_y == 261 ? (current_x = 0) : current_y + 1;
-
     }
 }

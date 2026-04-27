@@ -10,6 +10,7 @@ struct Bus {
 #endif
     unsigned char oam[0x100]{};
     unsigned short dma_address{};
+    bool dma_start = false;
     bool dma_active = false;
     unsigned dma_index = 0;
     bool nmi_interrupt_flip_flop = false;
@@ -44,7 +45,6 @@ struct Bus {
     unsigned char read_prg(unsigned short addr);
     unsigned char unsafe_read_prg(unsigned short addr);
     unsigned char read_chr(unsigned short addr);
-    void dma_tick(unsigned char val);
     void open_bus_decay();
     void reset();
 };
