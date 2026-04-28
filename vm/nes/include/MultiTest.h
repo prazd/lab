@@ -25,9 +25,9 @@ struct MultiTest{
     static void step(VM& vm, FrameData& fm) {
         for (int i = 0; i < CYCLES_COUNT; ++i){
             for (int j = 0; j < 3; ++j) {
-                vm.ppu.tick(vm.bus);
+                vm.ppu_tick();
             }
-            vm.cpu.tick_step(vm.bus);
+            vm.cpu_tick();
             vm.bus.tick();
         }
         fm.in_progress.store(false);

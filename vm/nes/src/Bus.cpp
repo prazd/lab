@@ -26,6 +26,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
         case constants::OAMDMA : {
             dma_address = value << 8;
             dma_active = true;
+            dma_start = true;
             dma_index = 0;
             break;
         }

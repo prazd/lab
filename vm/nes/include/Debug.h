@@ -456,8 +456,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         else if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == CPU_M && mouse_button_pred(pressed_mode)){
             selected_move_active = true;
         } else if (CheckCollisionPointRec(GetMousePosition(), button3)  && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
-            auto val = std::stoul(u_input.s, nullptr, 16);
-            selected_line_pc = (unsigned short)val;
+            selected_line_pc = pc + cpu.decode(cpu.mem.unsafe_read(bus, pc)).bytes;
             selected_move_active = true;
         } else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             next = true;
@@ -583,7 +582,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         if (run_mode == CPU_M) {
             DW::draw_text_button(button1, " next", GREEN, 15.f);
             DW::draw_text_button(button2, " jmp", GREEN, 15.f);
-            DW::draw_text_button(button3, " tjmp", GREEN, 15.f);
+            DW::draw_text_button(button3, " step", GREEN, 15.f);
             DW::draw_text_button(button4, " ntjmp", GREEN, 15.f);
 
             DW::draw_text_button(button5, " wadd", GREEN, 15.f);

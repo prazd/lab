@@ -28,6 +28,15 @@ struct NESVM {
 #endif
     {};
 
+    void cpu_tick(){
+        cpu.tick_step(bus);
+        ++cpu.cycles_count;
+    }
+    void ppu_tick(){
+        ppu.tick(bus);
+        ++ppu.current_cycle;
+    }
+
     NESVM(std::string_view rom_path): rom_path(rom_path)
 #if DEBUG_MODE
     ,dis(cpu, bus)
@@ -107,11 +116,11 @@ struct NESVM {
                 snap_storage.push_state(bus, cpu, ppu);
 #endif
             while (cpu.debug_run) {
-                ppu.tick(bus);
-                ppu.tick(bus);
-                ppu.tick(bus);
+                ppu_tick();
+                ppu_tick();
+                ppu_tick();
 
-                cpu.tick_step(bus);
+                cpu_tick();
                 bus.tick();
                 ++current_tick;
             }
@@ -139,7 +148,7 @@ struct NESVM {
                 snap_storage.push_state(bus, cpu, ppu);
 #endif
             cpu.debug_run = true;
-            ppu.tick(bus);
+            ppu_tick();
             if (dis.is_frame_jump_active && ppu.frame_start){
                 dis.is_frame_jump_active = false;
             } else if (dis.is_tile_line_jump_active && ppu.tile_start) {
@@ -151,7 +160,7 @@ struct NESVM {
                 dis.trigger_search = !(ppu.mem.triggered_on_read || ppu.mem.triggered_on_write);
             }
             if (cpu_tick_count++ % 3 == 2) {
-                bus.tick(); cpu.tick_step(bus);
+                bus.tick(); cpu_tick();
                 if (dis.is_line_jump_active && ppu.line_start) {
                     dis.is_line_jump_active = false;
                 }
@@ -183,8 +192,8 @@ struct NESVM {
 #else
         if (cpu.stop_requested) return;
         for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
-             for (int j = 0; j < 3; ++j) ppu.tick(bus);
-             cpu.tick_step(bus);
+             for (int j = 0; j < 3; ++j) ppu_tick();
+             cpu_tick();
              bus.tick();
         }
 #endif
@@ -380,7 +389,7 @@ int main(){
     };
     MultiTest<NESVM, std::size(tests_paths)>{}.run(tests_paths);
 #else
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes"); // СA09 (Vblank debug)
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes"); // C8DA (X reg)
     nes.run();
 #endif
 }

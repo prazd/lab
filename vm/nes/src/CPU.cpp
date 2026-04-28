@@ -1646,7 +1646,6 @@ void CPU::tick_step(Bus& bus){
 #if DEBUG_MODE
     if (!debug_run) return;
 #endif
-    ++cycles_count;
     if (instruction_execute_done) {
         --additional_cycles;
         if (additional_cycles) {
@@ -1665,13 +1664,13 @@ void CPU::tick_step(Bus& bus){
             if (bus.dma_active) {
                 if (bus.dma_start){
                     bus.dma_start = false;
-                    if (cycles_count & 1) return;
+                    mem.alignment = !(cycles_count & 1); // todo: check
+                    return;
                 }
                 mem.tick_dma(bus);
                 return;
             }
             if (!sr.get(StatusReg::I)) {
-                // TODO:
                 // The NES has an interrupt latency of 7 cycles, which means it takes 7 CPU cycles to begin
                 // executing the interrupt handler
                 for (int i = 0; i < InterruptsCount; ++i) {
@@ -1683,7 +1682,6 @@ void CPU::tick_step(Bus& bus){
                             handle_interrupt(bus, static_cast<Interrupt>(i));
                             interrupt_handling_in_progress = false;
 #if DEBUG_MODE
-                            // TODO: check
                             debug_run = false;
                             return;
 #endif
@@ -1712,7 +1710,8 @@ void CPU::tick_step(Bus& bus){
                 if (bus.dma_active) {
                     if (bus.dma_start){
                         bus.dma_start = false;
-                        if (cycles_count & 1) return;
+                        mem.alignment = !(cycles_count & 1); // todo: check
+                        return;
                     }
                     mem.tick_dma(bus);
                     return;
@@ -1721,10 +1720,6 @@ void CPU::tick_step(Bus& bus){
                 ++current_iop_index;
                 --di.cycles;
                 if (!iop.empty()) return;
-            }
-            if (di.cycles){
-                // todo: debug cycles
-                di.cycles += 0;
             }
             instruction_execute_done = true;
             if (!additional_cycles) {
@@ -1735,15 +1730,15 @@ void CPU::tick_step(Bus& bus){
 #endif
             }
 
-if (bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop) {
-    interrupt_requests[NMI] = true;
-    sr.set(StatusReg::I, false);
-    bus.nmi_interrupt_flip_flop = false;
-}
-if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)) {
-    interrupt_requests[IRQ] = true;
-    bus.irq_interrupt_flip_flop = false;
-}
+            if (bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop) {
+                interrupt_requests[NMI] = true;
+                sr.set(StatusReg::I, false);
+                bus.nmi_interrupt_flip_flop = false;
+            }
+            if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)) {
+                interrupt_requests[IRQ] = true;
+                bus.irq_interrupt_flip_flop = false;
+            }
             istep = Prepare;
             break;
         }

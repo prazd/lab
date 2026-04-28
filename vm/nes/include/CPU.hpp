@@ -28,7 +28,12 @@ struct CPU {
         } dma_state = Read;
         StateDMA next[2]{Write, Read};
         unsigned char value = 0;
+        unsigned char alignment = 0;
         inline void tick_dma(Bus& bus){
+            if (alignment > 0){
+                --alignment;
+                return;
+            }
             if (dma_state == Read){
                 value = read(bus, bus.dma_address + bus.dma_index);
             } else {
