@@ -418,14 +418,13 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         base = cpu.pc;
         next = (CheckCollisionPointRec(GetMousePosition(), button1) && mouse_button_pred(pressed_mode));
     }
-#if  SNAP_MODE
+
     void snap_handle(CPU& cpu, PPU& ppu, Bus& bus, auto& snap_storage){
         if (CheckCollisionPointRec(GetMousePosition(), button14) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             snap_storage.step_back(bus, cpu, ppu);
             handle(cpu);
         }
     }
-#endif
 
     void draw(CPU& cpu, PPU& ppu, Bus& bus) {
         line_button = {DW::rec.x - 20, DW::rec.y, 10, 10};
@@ -589,9 +588,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button6, " radd", GREEN, 15.f);
             DW::draw_text_button(button7, " clear", GREEN, 15.f);
             DW::draw_text_button(button8, " trun", GREEN, 15.f);
-#if SNAP_MODE
             DW::draw_text_button(button14, " prev", GREEN, 15.f);
-#endif
 
         } else {
             DW::draw_text_button(button1, "frame", GREEN, 15.f);
@@ -613,9 +610,6 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     }
 };
 
-// todo: finish
-
-#if SNAP_MODE
 struct SnapStorage {
     struct CPUs {
         unsigned char x{},y{},a{};
@@ -841,7 +835,6 @@ struct SnapStorage {
         prev_states.push(std::move(s)); // todo: check
     }
 };
-#endif
 
 template<size_t x, size_t y, size_t w, size_t h>
 struct RegsInfo: DebugWindowText<x, y, w, h> {
@@ -1185,7 +1178,12 @@ template <size_t x, size_t y, size_t w, size_t h>
 struct MemoryViewer: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
     unsigned short target_address{};
+    unsigned short start_address{};
+    static constexpr unsigned char lines_count = 10;
+    float t_x = 0;
+    float t_y = 0;
     std::stringstream ss;
+    std::string tmp_str;
     Rectangle update_target_button;
     Rectangle write_button;
     Rectangle mode_button;
@@ -1200,6 +1198,51 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
             write_button{DW::rec.x+30*2, DW::rec.y+DW::rec.height, 30,30},
             pc_watch_address_button{DW::rec.x+30*3, DW::rec.y+DW::rec.height, 30,30}
             {}
+
+    void mem_print(Bus& bus, auto& r){
+        t_x = DW::rec.x;
+        t_y = DW::rec.y;
+        ss << std::hex;
+        auto current_address = start_address;
+        unsigned short adjusted_address = current_address;
+        for (int i = 0; i < 16 * lines_count; ++i){
+            adjusted_address = current_address = (start_address + i) & (std::size(r.mem.map)-1);
+            r.mem.adjust_if_mirror(adjusted_address);
+            if (!(i & 0xf)){
+                ss << "\n";
+                tmp_str = ss.str();
+                DrawText(tmp_str.c_str(), t_x, t_y, 10.f, BLACK);
+                ss.str("");
+                ss << std::hex;
+                ss << "  " << current_address << " | ";
+                t_y += 15.f;
+                t_x = DW::rec.x;
+            }
+            if (current_address == target_address) ss << " [ ";
+            if (r.mem.write_set_addresses[adjusted_address] || r.mem.read_set_addresses[adjusted_address]){
+                tmp_str = ss.str();
+                size_t sz = tmp_str.size();
+                DrawText(tmp_str.c_str(), t_x, t_y, 10.f, BLACK);
+                ss.str("");
+                t_x += (sz * 5.f);
+                ss << std::hex;
+                ss  << (unsigned)r.mem.unsafe_read(bus, current_address) << ' ';
+                tmp_str = ss.str();
+                DrawText(tmp_str.c_str(), t_x, t_y, 10.f, r.mem.write_set_addresses[adjusted_address] ? RED : GREEN);
+                sz = tmp_str.size();
+                t_x += (sz * 5.f);
+                ss.str("");
+                ss << std::hex;
+            } else
+                ss  << (unsigned)r.mem.unsafe_read(bus, current_address) << ' ';
+            if (current_address == target_address) ss << " ] ";
+        }
+        ss << "\n ";
+        tmp_str = ss.str();
+        DrawText(tmp_str.c_str(), t_x, t_y, 10.f, BLACK);
+        ss.str("");
+    }
+
     void handle(Bus& bus, CPU& cpu, PPU& ppu){
         update_target_button = {DW::rec.x, DW::rec.y+DW::rec.height, 30,30};
         mode_button   = {DW::rec.x+30, DW::rec.y+DW::rec.height, 30,30};
@@ -1207,22 +1250,12 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         pc_watch_address_button = {DW::rec.x+30*3, DW::rec.y+DW::rec.height, 30,30};
         u_input.rec   = {DW::rec.x, DW::rec.y-30, DW::rec.width,30};
 
-        auto mem_print = [](auto& bus, auto& ss, auto& r, unsigned short target_address){
-            auto start_address = target_address - (target_address % 16);
-            ss << std::hex << "\n "<< start_address << " | ";
-            for (int i = 0; i < 32; ++i){
-                if (i == 16){ ss << "\n "; ss << start_address + i << " | ";}
-                if (start_address + i == target_address)
-                    ss << " [ " << (unsigned)r.mem.read(bus, start_address + i) << " ] " << ' ';
-                else
-                    ss  << (unsigned)r.mem.read(bus, start_address + i) << ' ';
-            }
-        };
         if (CheckCollisionPointRec(GetMousePosition(), mode_button) && IsMouseButtonPressed(0))
             mode = static_cast<Mode>((mode + 1) % ModeCount);
-        else if (CheckCollisionPointRec(GetMousePosition(), update_target_button) && IsMouseButtonPressed(0))
+        else if (CheckCollisionPointRec(GetMousePosition(), update_target_button) && IsMouseButtonPressed(0)){
             target_address = std::stoul(u_input.s, nullptr, 16);
-        else if (CheckCollisionPointRec(GetMousePosition(), write_button) && IsMouseButtonPressed(0)){
+            start_address = target_address - (target_address % 16);
+        } else if (CheckCollisionPointRec(GetMousePosition(), write_button) && IsMouseButtonPressed(0)){
             if (mode == CPUm)
                 cpu.mem.unsafe_write(bus, target_address, std::stoul(u_input.s, nullptr, 16));
             else
@@ -1230,11 +1263,15 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         } else if (CheckCollisionPointRec(GetMousePosition(), pc_watch_address_button) && IsMouseButtonPressed(0)){
             cpu.pc_watch_address = std::stoul(u_input.s, nullptr, 16);
             cpu.pc_watch_count = 0;
+        } else if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyDown(KEY_UP)){
+            start_address = (start_address - 16) & 0xffff;
+        } else if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyDown(KEY_DOWN)){
+            start_address = (start_address + 16) & 0xffff;
         }
 
         switch (mode){
-            case CPUm: mem_print(bus, ss, cpu, target_address); ss << "\nCPU"; break;
-            case PPUm: mem_print(bus, ss, ppu, target_address); ss << "\nPPU"; break;
+            case CPUm: mem_print(bus,  cpu); ss << "\nCPU"; break;
+            case PPUm: mem_print(bus, ppu); ss << "\nPPU"; break;
             case OAMm: {
                 auto i = target_address * 4;
                 auto e = i + (16 * 4);
@@ -1243,18 +1280,23 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 for (; i != e; i+=4)
                     ss << (int)bus.oam[i] << ' ' << (int)bus.oam[i+1] << ' ' << (int)bus.oam[i+2] << ' ' << (int)bus.oam[i+3] << '\n';
                 ss << "OAM";
+                tmp_str = ss.str();
+                DrawText(tmp_str.c_str(), DW::rec.x,  DW::rec.y, 11.2, BLACK);
+                ss.str("");
+                ss << std::hex;
                 break;
             }
         }
         ss << '\n';
         ss << "\nPC watch address:" << cpu.pc_watch_address << " , count:"  << std::dec << cpu.pc_watch_count << '\n';
         auto s = ss.str();
-        DW::draw(s.c_str(), 13.f);
+        DrawText(s.c_str(), DW::rec.x,  DW::rec.y + h - 200, 11.2, BLACK);
         DW::draw_text_button(update_target_button, "update", BLACK);
         DW::draw_text_button(mode_button, "mode", BLACK);
         DW::draw_text_button(write_button, "write", BLACK);
         DW::draw_text_button(pc_watch_address_button, "pc_watch", BLACK);
         u_input.draw();
+        DW::draw_win();
         ss.str("");
     }
 };

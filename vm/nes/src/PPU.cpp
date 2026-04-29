@@ -11,15 +11,16 @@ void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
         triggered_on_write = true;
 #endif
     if (addr >= 0x0000 && addr <= 0x1FFF && ((bus.ppustatus.reg >> 7) & 1 || !((bus.ppumask.reg >> 3) & 1) || !((bus.ppumask.reg >> 4) & 1))) {
-#if SNAP_MODE && DEBUG_MODE
+#if DEBUG_MODE
         write_addresses.push_back(std::pair{addr, read(bus, addr)});
 #endif
         bus.mapper.write_chr_ram(addr, value);
         return;
     }
     if (addr >= 0x0000 && addr <= 0x3fff){     // todo: check
-#if SNAP_MODE && DEBUG_MODE
+#if  DEBUG_MODE
         write_addresses.push_back(std::pair{addr, read(bus, addr)});
+        write_set_addresses[addr] = true;
 #endif
         map[addr] = value;
     }
@@ -31,6 +32,17 @@ unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {
     if (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}))
         triggered_on_read = true;
 #endif
+    if (addr >= 0x0000 && addr <= 0x1FFF){
+        return bus.read_chr(addr);
+    }
+#if DEBUG_MODE
+    read_set_addresses[addr] = true;
+#endif
+    return map[addr];
+}
+
+unsigned char PPU::Memory::unsafe_read(Bus& bus, unsigned short addr) const {
+    adjust_if_mirror(addr);
     if (addr >= 0x0000 && addr <= 0x1FFF){
         return bus.read_chr(addr);
     }

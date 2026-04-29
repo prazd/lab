@@ -57,9 +57,12 @@ struct PPU {
 // the colours for the tiles
         unsigned char map[0x4000]{};
         unsigned char read(Bus& bus, unsigned short addr) const;
+        unsigned char unsafe_read(Bus& bus, unsigned short addr) const;
         void write(Bus& bus, unsigned short addr, unsigned char value);
         static void adjust_if_mirror(unsigned short&);
 #if DEBUG_MODE
+        mutable std::bitset<0x4000> write_set_addresses{};
+        mutable std::bitset<0x4000> read_set_addresses{};
         SimpleDeque<std::pair<unsigned short,unsigned char>,3> write_addresses;
 
         std::vector<unsigned short> write_trigger_addresses{};

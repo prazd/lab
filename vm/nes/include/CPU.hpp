@@ -1,6 +1,7 @@
 #include "Constants.hpp"
 #include "Bus.hpp"
 #include "Simple.h"
+#include <bitset>
 struct CPU {
     struct Memory {
 // https://www.nesdev.org/wiki/CPU_memory_map
@@ -43,9 +44,9 @@ struct CPU {
             dma_state = next[dma_state];
         }
 #if DEBUG_MODE
-#if SNAP_MODE
+        mutable std::bitset<0x10000> write_set_addresses{};
+        mutable std::bitset<0x10000> read_set_addresses{};
         SimpleDeque<std::pair<unsigned short,unsigned char>,5> write_addresses;
-#endif
         std::vector<unsigned short> write_trigger_addresses{};
         std::vector<unsigned short> read_trigger_addresses{};
         mutable bool triggered_on_write = false;

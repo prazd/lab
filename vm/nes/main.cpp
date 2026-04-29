@@ -16,9 +16,6 @@ struct NESVM {
 #if DEBUG_MODE
     Disassembler<30,520,200,400> dis;
     RegsInfo<30,30,180,425> reg_info{};
-#endif
-
-#if SNAP_MODE && DEBUG_MODE
     SnapStorage snap_storage;
 #endif
 
@@ -95,8 +92,6 @@ struct NESVM {
 #if DEBUG_MODE
         reg_info = std::move(tmp.reg_info);
         dis = std::move(tmp.dis);
-#endif
-#if SNAP_MODE && DEBUG_MODE
         snap_storage = tmp.snap_storage;
 #endif
         ppu_init();
@@ -110,11 +105,9 @@ struct NESVM {
             dis.next = false;
         }
         do {
-#if SNAP_MODE
             bool snap_update = cpu.debug_run;
             if (snap_update)
                 snap_storage.push_state(bus, cpu, ppu);
-#endif
             while (cpu.debug_run) {
                 ppu_tick();
                 ppu_tick();
@@ -143,7 +136,7 @@ struct NESVM {
         static size_t cpu_tick_count = 0;
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active
                 || dis.is_line_jump_active || dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLES) {
-#if SNAP_MODE
+#if DEBUG_MODE
             if (!cpu.debug_run)
                 snap_storage.push_state(bus, cpu, ppu);
 #endif
@@ -308,8 +301,6 @@ struct NESVM {
             ClearBackground(WHITE);
 #if DEBUG_MODE
             dis.draw(cpu, ppu, bus);
-#endif
-#if SNAP_MODE && DEBUG_MODE
             dis.snap_handle(cpu, ppu, bus, snap_storage);
 #endif
 

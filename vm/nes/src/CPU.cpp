@@ -20,8 +20,9 @@ void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
         bus.write(addr, value);
         return;
     }
-#if SNAP_MODE && DEBUG_MODE
+#if DEBUG_MODE
     write_addresses.push_back(std::pair{addr, unsafe_read(bus, addr)});
+    write_set_addresses[addr] = true;
 #endif
     map[addr] = value;
 }
@@ -57,6 +58,9 @@ unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) const {
         || addr >= 0x8000 && addr <= 0xffff){
         return bus.read_prg(addr);
     }
+#if DEBUG_MODE
+    read_set_addresses[addr] = true;
+#endif
     return map[addr];
 #endif
 }
