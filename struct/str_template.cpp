@@ -57,6 +57,9 @@ consteval void test(){
     StrTemplate<12, '$'> st("Number: $$$");
     st.update({"123"});
     assert(std::string_view("Number: 123") == st.to_sv());
+
+    st.update({"4","5","6"});
+    assert(std::string_view("Number: 456") == st.to_sv());
     
     st.reset();
     assert(std::string_view("Number: $$$") == st.to_sv());
@@ -72,9 +75,13 @@ consteval void test(){
     st.update({"789"});
     assert(std::string_view("Number: 789") == st.to_sv());
 
+    
     StrTemplate<16, '$'> st2("Number: $$$'$$$");
     st2.update({"123", "456"});
     assert(std::string_view("Number: 123'456") == st2.to_sv());
+
+    st2.update({"4","5","6","7","8","9"});
+    assert(std::string_view("Number: 456'789") == st2.to_sv());
 
     st2.reset();
     st2.update_and_clear({"12", "34"});
