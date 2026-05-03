@@ -173,8 +173,8 @@ struct NESVM {
     void frame_execute(){
 #if DEBUG_MODE
             if (dis.should_sync) {
-                if (cpu.execute_in_progress) cpu_debug_exec();
-                dis.should_sync = cpu.execute_in_progress;
+                if (cpu.debug_run) cpu_debug_exec(); // todo: check
+                dis.should_sync = !cpu.debug_run;
             } else {
                 if (dis.run_mode == decltype(dis)::RunMode::CPU_M) {
                     cpu_debug_exec();
@@ -362,7 +362,7 @@ int main(){
     // palette_ram.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
     // /Users/prazd/Desktop/dev/GameGenie.nes
-
+    // /Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes - TODO: C20f
 #if MULTI_TEST_MODE
     constexpr static std::string_view tests_paths[] = {
             "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes",
@@ -376,11 +376,12 @@ int main(){
             "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes",
-//            "/Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes"
+            "/Users/prazd/Desktop/dev/nes-test-roms/cpu_timing_test6/cpu_timing_test.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/instr_test-v5/all_instrs.nes"
     };
     MultiTest<NESVM, std::size(tests_paths)>{}.run(tests_paths);
 #else
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes"); // C8DA (X reg)
+    auto nes = NESVM("/Users/prazd/Desktop/dev/SuperMarioBros.nes"); // todo: debug
     nes.run();
 #endif
 }

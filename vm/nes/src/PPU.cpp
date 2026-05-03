@@ -13,6 +13,7 @@ void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
     if (addr >= 0x0000 && addr <= 0x1FFF && ((bus.ppustatus.reg >> 7) & 1 || !((bus.ppumask.reg >> 3) & 1) || !((bus.ppumask.reg >> 4) & 1))) {
 #if DEBUG_MODE
         write_addresses.push_back(std::pair{addr, read(bus, addr)});
+        write_set_addresses[addr] = true;
 #endif
         bus.mapper.write_chr_ram(addr, value);
         return;

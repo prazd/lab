@@ -17,6 +17,9 @@ void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
     if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
     || addr >= 0x8000 && addr <= 0xffff){
         // todo: test write_addresses
+#if DEBUG_MODE
+        write_set_addresses[addr] = true;
+#endif
         bus.write(addr, value);
         return;
     }
@@ -117,11 +120,6 @@ void CPU::reset() {
     interrupt_requests[CPU::RESET] = true;
     sr.set(StatusReg::I, false);
     stop_requested = false;
-    execute_in_progress = false;
-    instruction_execute_done = false;
-    interrupt_handling_in_progress = false;
-    interrupt_handling_cycle = 0;
-    additional_cycles = 0;
     pc = 0;
 #if DEBUG_MODE
     cycles_count = 0;
@@ -134,14 +132,14 @@ void CPU::reset() {
 // https://www.masswerk.at/nowgobang/2021/6502-illegal-opcodes
 CPU::DecodedInstruction CPU::decode(unsigned char i) {
     switch(i){
-        case 0x69: {return {Immediate, ADC,  2, 2, };}
-        case 0x65: {return {ZeroPage,  ADC,  2, 3, };}
-        case 0x75: {return {ZeroPageX, ADC,  2, 4, };}
-        case 0x6d: {return {Absolute,  ADC,  3, 4, };}
-        case 0x7d: {return {AbsoluteX, ADC,  3, 4, true};} // 5 if page crossed
-        case 0x79: {return {AbsoluteY, ADC,  3, 4, true};} // 5 if page crossed
+        case 0x69: {return {Immediate, ADC,  2, 2};}
+        case 0x65: {return {ZeroPage,  ADC,  2, 3};}
+        case 0x75: {return {ZeroPageX, ADC,  2, 4};}
+        case 0x6d: {return {Absolute,  ADC,  3, 4};}
+        case 0x7d: {return {AbsoluteX, ADC,  3, 4, CrossPageM};} // 5 if page crossed
+        case 0x79: {return {AbsoluteY, ADC,  3, 4, CrossPageM};} // 5 if page crossed
         case 0x61: {return {IndexedIndirectX, ADC, 2, 6};}
-        case 0x71: {return {IndexedIndirectY, ADC, 2, 5, true};} // 6 if page crossed
+        case 0x71: {return {IndexedIndirectY, ADC, 2, 5, CrossPageM};} // 6 if page crossed
 
         case 0x0B:
         case 0x2B:
@@ -151,10 +149,10 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x25: {return {ZeroPage,  AND, 2, 3};}
         case 0x35: {return {ZeroPageX, AND, 2, 4};}
         case 0x2d: {return {Absolute,  AND, 3, 4};}
-        case 0x3d: {return {AbsoluteX, AND, 3, 4, true};} // 5 if page crossed
-        case 0x39: {return {AbsoluteY, AND, 3, 4, true};} // 5 if page crossed
+        case 0x3d: {return {AbsoluteX, AND, 3, 4, CrossPageM};} // 5 if page crossed
+        case 0x39: {return {AbsoluteY, AND, 3, 4, CrossPageM};} // 5 if page crossed
         case 0x21: {return {IndexedIndirectX,  AND, 2, 6};}
-        case 0x31: {return {IndexedIndirectY,  AND, 2, 5, true};} // 6 if page crossed
+        case 0x31: {return {IndexedIndirectY,  AND, 2, 5, CrossPageM};} // 6 if page crossed
 
         case 0x0A: {return {Accumulator, ASL, 1, 2};}
         case 0x06: {return {ZeroPage,    ASL, 2, 5};}
@@ -162,23 +160,23 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x0E: {return {Absolute,    ASL, 3, 6};}
         case 0x1E: {return {AbsoluteX,   ASL, 3, 7};}
 
-        case 0x90: {return {Relative, BCC, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
-        case 0xB0: {return {Relative, BCS, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
-        case 0xF0: {return {Relative, BEQ, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
-        case 0x30: {return {Relative, BMI, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
-        case 0xD0: {return {Relative, BNE, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
-        case 0x10: {return {Relative, BPL, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
-        case 0x50: {return {Relative, BVC, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
-        case 0x70: {return {Relative, BVS, 2, 2, true};} // (3 if branch taken, 4 if page crossed)*
+        case 0x90: {return {Relative, BCC, 2, 2, CrossPageM};} // (3 if branch taken, 4 if page crossed)*
+        case 0xB0: {return {Relative, BCS, 2, 2, CrossPageM};} // (3 if branch taken, 4 if page crossed)*
+        case 0xF0: {return {Relative, BEQ, 2, 2, CrossPageM};} // (3 if branch taken, 4 if page crossed)*
+        case 0x30: {return {Relative, BMI, 2, 2, CrossPageM};} // (3 if branch taken, 4 if page crossed)*
+        case 0xD0: {return {Relative, BNE, 2, 2, CrossPageM};} // (3 if branch taken, 4 if page crossed)*
+        case 0x10: {return {Relative, BPL, 2, 2, CrossPageM};} // (3 if branch taken, 4 if page crossed)*
+        case 0x50: {return {Relative, BVC, 2, 2, CrossPageM};} // (3 if branch taken, 4 if page crossed)*
+        case 0x70: {return {Relative, BVS, 2, 2, CrossPageM};} // (3 if branch taken, 4 if page crossed)*
 
         case 0xC9: {return {Immediate, CMP,        2, 2};}
         case 0xC5: {return {ZeroPage, CMP,         2, 3};}
         case 0xD5: {return {ZeroPageX, CMP,        2, 4};}
         case 0xCD: {return {Absolute, CMP,         3, 4};}
-        case 0xDD: {return {AbsoluteX, CMP,        3, 4, true};} // 5 if page crossed
-        case 0xD9: {return {AbsoluteY, CMP,        3, 4, true};} // 5 if page crossed
+        case 0xDD: {return {AbsoluteX, CMP,        3, 4, CrossPageM};} // 5 if page crossed
+        case 0xD9: {return {AbsoluteY, CMP,        3, 4, CrossPageM};} // 5 if page crossed
         case 0xC1: {return {IndexedIndirectX, CMP, 2, 6};}
-        case 0xD1: {return {IndexedIndirectY, CMP, 2, 5, true};} // 6 if page crossed
+        case 0xD1: {return {IndexedIndirectY, CMP, 2, 5, CrossPageM};} // 6 if page crossed
 
         case 0xE0: {return {Immediate, CPX, 2, 2};}
         case 0xE4: {return {ZeroPage,  CPX, 2, 3};}
@@ -197,10 +195,10 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x45: {return {ZeroPage,            EOR, 2, 3};}
         case 0x55: {return {ZeroPageX,           EOR, 2, 4};}
         case 0x4D: {return {Absolute,            EOR, 3, 4};}
-        case 0x5D: {return {AbsoluteX,           EOR, 3, 4, true};} // 5 if page crossed
-        case 0x59: {return {AbsoluteY,           EOR, 3, 4, true};} // 5 if page crossed
+        case 0x5D: {return {AbsoluteX,           EOR, 3, 4, CrossPageM};} // 5 if page crossed
+        case 0x59: {return {AbsoluteY,           EOR, 3, 4, CrossPageM};} // 5 if page crossed
         case 0x41: {return {IndexedIndirectX,    EOR, 2, 6};}
-        case 0x51: {return {IndexedIndirectY,    EOR, 2, 5, true};} // 6 if page crossed
+        case 0x51: {return {IndexedIndirectY,    EOR, 2, 5, CrossPageM};} // 6 if page crossed
 
         case 0xE6: {return {ZeroPage,    INC, 2, 5};}
         case 0xF6: {return {ZeroPageX,   INC, 2, 6};}
@@ -211,23 +209,23 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xA5: {return {ZeroPage, LDA,          2, 3};}
         case 0xB5: {return {ZeroPageX, LDA,         2, 4};}
         case 0xAD: {return {Absolute, LDA,          3, 4};}
-        case 0xBD: {return {AbsoluteX, LDA,         3, 4, true};} // 5 if page crossed
-        case 0xB9: {return {AbsoluteY, LDA,         3, 4, true};} // 5 if page crossed
+        case 0xBD: {return {AbsoluteX, LDA,         3, 4, CrossPageM};} // 5 if page crossed
+        case 0xB9: {return {AbsoluteY, LDA,         3, 4, CrossPageM};} // 5 if page crossed
         case 0xA1: {return {IndexedIndirectX, LDA,  2, 6};} 
-        case 0xB1: {return {IndexedIndirectY, LDA,  2, 5, true};} // 6 if page crossed
+        case 0xB1: {return {IndexedIndirectY, LDA,  2, 5, CrossPageM};} // 6 if page crossed
 
 
         case 0xA2: {return {Immediate, LDX,  2, 2};}
         case 0xA6: {return {ZeroPage, LDX,   2, 3};}
         case 0xB6: {return {ZeroPageY, LDX,  2, 4};}
         case 0xAE: {return {Absolute, LDX,   3, 4};}
-        case 0xBE: {return {AbsoluteY, LDX,  3, 4, true};} // 5 if page crossed
+        case 0xBE: {return {AbsoluteY, LDX,  3, 4, CrossPageM};} // 5 if page crossed
 
         case 0xA0: {return {Immediate, LDY, 2, 2};}
         case 0xA4: {return {ZeroPage, LDY,  2, 3};}
         case 0xB4: {return {ZeroPageX, LDY, 2, 4};}
         case 0xAC: {return {Absolute, LDY,  3, 4};}
-        case 0xBC: {return {AbsoluteX, LDY, 3, 4, true};}  // 5 if page crossed
+        case 0xBC: {return {AbsoluteX, LDY, 3, 4, CrossPageM};}  // 5 if page crossed
 
 
         case 0x6B: {return {Immediate, ARR, 2, 2};}
@@ -246,10 +244,10 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x05: {return {ZeroPage,  ORA,         2, 3};}
         case 0x15: {return {ZeroPageX, ORA,         2, 4};}
         case 0x0D: {return {Absolute,  ORA,         3, 4};}
-        case 0x1D: {return {AbsoluteX, ORA,         3, 4, true};}  // 5 if page crossed
-        case 0x19: {return {AbsoluteY, ORA,         3, 4, true};}  // 5 if page crossed
+        case 0x1D: {return {AbsoluteX, ORA,         3, 4, CrossPageM};}  // 5 if page crossed
+        case 0x19: {return {AbsoluteY, ORA,         3, 4, CrossPageM};}  // 5 if page crossed
         case 0x01: {return {IndexedIndirectX, ORA,  2, 6};} 
-        case 0x11: {return {IndexedIndirectY, ORA,  2, 5, true};}  // 6 if page crossed
+        case 0x11: {return {IndexedIndirectY, ORA,  2, 5, CrossPageM};}  // 6 if page crossed
 
         case 0x2A: {return {Accumulator, ROL, 1, 2};}
         case 0x26: {return {ZeroPage, ROL,    2, 5};}
@@ -268,18 +266,18 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xE5: {return {ZeroPage,  SBC,         2, 3};}
         case 0xF5: {return {ZeroPageX, SBC,         2, 4};}
         case 0xED: {return {Absolute,  SBC,         3, 4};}
-        case 0xFD: {return {AbsoluteX, SBC,         3, 4, true};}  // 5 if page crossed
-        case 0xF9: {return {AbsoluteY, SBC,         3, 4, true};}  // 5 if page crossed
+        case 0xFD: {return {AbsoluteX, SBC,         3, 4, CrossPageM};}  // 5 if page crossed
+        case 0xF9: {return {AbsoluteY, SBC,         3, 4, CrossPageM};}  // 5 if page crossed
         case 0xE1: {return {IndexedIndirectX, SBC,  2, 6};} 
-        case 0xF1: {return {IndexedIndirectY, SBC,  2, 5, true};}  // 6 if page crossed
+        case 0xF1: {return {IndexedIndirectY, SBC,  2, 5, CrossPageM};}  // 6 if page crossed
 
         case 0x85: {return {ZeroPage,  STA,    2, 3};}
         case 0x95: {return {ZeroPageX, STA,    2, 4};}
         case 0x8D: {return {Absolute,  STA,    3, 4};}
-        case 0x9D: {return {AbsoluteX, STA,    3, 5, true};}
-        case 0x99: {return {AbsoluteY, STA,    3, 5, true};}
-        case 0x81: {return {IndexedIndirectX, STA,  2, 6};}
-        case 0x91: {return {IndexedIndirectY, STA,  2, 6, true};}
+        case 0x9D: {return {AbsoluteX, STA,    3, 5, DummyReadM};}
+        case 0x99: {return {AbsoluteY, STA,    3, 5, DummyReadM};}
+        case 0x81: {return {IndexedIndirectX, STA,  2, 6, DummyReadM};}
+        case 0x91: {return {IndexedIndirectY, STA,  2, 6, DummyReadM};}
 
 
         case 0x07: {return {ZeroPage,  SLO,    2, 5};}
@@ -430,7 +428,6 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x58: {return {Implied, CLI, 1, 2};}
         case 0xB8: {return {Implied, CLV, 1, 2};}
         case 0x00: {return {Implied, BRK, 2, 7};}
-
     }
     // TODO: maybe error or optional
     return {};
@@ -467,8 +464,7 @@ void CPU::push_addr_step(AddressingStep step) {
                 cpu.as.arg2 = cpu.mem.read(bus, cpu.pc + 2);
                 unsigned short args_as_addr = ((cpu.as.arg1) | (cpu.as.arg2 << 8));
                 unsigned short addr = args_as_addr + cpu.x;
-                if (cpu.di.cross_check && (cpu.as.arg2 != ((addr >> 8) & 0xff))){
-                    cpu.as.crossed = true;
+                if ((cpu.di.penalty_mode == CrossPageM  && (cpu.as.arg2 != ((addr >> 8) & 0xff))) || cpu.di.penalty_mode == DummyReadM){
                     cpu.as.result = args_as_addr;
                     cpu.as.addr_to_add = cpu.x;
                     ++cpu.di.cycles;
@@ -490,8 +486,7 @@ void CPU::push_addr_step(AddressingStep step) {
                 cpu.as.arg2 = cpu.mem.read(bus, cpu.pc + 2);
                 unsigned short args_as_addr = ((cpu.as.arg1) | (cpu.as.arg2 << 8));
                 unsigned short addr = args_as_addr + cpu.y;
-                if (cpu.di.cross_check  && (cpu.as.arg2 != ((addr >> 8) & 0xff))){
-                    cpu.as.crossed = true;
+                if ((cpu.di.penalty_mode == CrossPageM && (cpu.as.arg2 != ((addr >> 8) & 0xff))) || cpu.di.penalty_mode == DummyReadM){
                     cpu.as.result = args_as_addr;
                     cpu.as.addr_to_add = cpu.y;
                     ++cpu.di.cycles;
@@ -536,8 +531,7 @@ void CPU::push_addr_step(AddressingStep step) {
                 unsigned char h = cpu.mem.read(bus,(cpu.as.arg1 + 1) % 256);
                 unsigned short addr = (cpu.as.ind_low | (h << 8));
                 unsigned short res_addr = addr + cpu.y;
-                if (cpu.di.cross_check && (h != ((res_addr >> 8) & 0xff))){
-                    cpu.as.crossed = true;
+                if ((cpu.di.penalty_mode == CrossPageM && (h != ((res_addr >> 8) & 0xff)) || cpu.di.penalty_mode == DummyReadM)){
                     cpu.as.result = addr;
                     cpu.as.addr_to_add = cpu.y;
                     ++cpu.di.cycles;
@@ -583,7 +577,6 @@ void CPU::fill_address_ops() {
     };
     if (std::any_of(std::begin(cmds), std::end(cmds), [i = di.i](auto el){return i == el;})) return;
 
-    as.crossed = false;
     switch (di.addr_mode) {
         case ZeroPageX: {push_addr_step(LowByte); push_addr_step(AddrPlusX); break;}
         case ZeroPageY: {push_addr_step(LowByte); push_addr_step(AddrPlusY); break;}
@@ -837,7 +830,7 @@ void CPU::fill_exec_ops() {
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
                         unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                        if (h != ((cpu.pc >> 8) & 0xff)) {
                             ++cpu.di.cycles;
                             cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
                         }
@@ -853,7 +846,7 @@ void CPU::fill_exec_ops() {
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
                         unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                        if (h != ((cpu.pc >> 8) & 0xff)) {
                             ++cpu.di.cycles;
                             cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
                         }
@@ -869,7 +862,7 @@ void CPU::fill_exec_ops() {
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
                         unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                        if (h != ((cpu.pc >> 8) & 0xff)) {
                             ++cpu.di.cycles;
                             cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
                         }
@@ -885,7 +878,7 @@ void CPU::fill_exec_ops() {
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
                         unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                        if (h != ((cpu.pc >> 8) & 0xff)) {
                             ++cpu.di.cycles;
                             cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
                         }
@@ -901,7 +894,7 @@ void CPU::fill_exec_ops() {
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
                         unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                        if (h != ((cpu.pc >> 8) & 0xff)) {
                             ++cpu.di.cycles;
                             cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
                         }
@@ -917,7 +910,7 @@ void CPU::fill_exec_ops() {
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
                         unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                        if (h != ((cpu.pc >> 8) & 0xff)) {
                             ++cpu.di.cycles;
                             cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
                         }
@@ -933,7 +926,7 @@ void CPU::fill_exec_ops() {
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
                         unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                        if (h != ((cpu.pc >> 8) & 0xff)) {
                             ++cpu.di.cycles;
                             cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
                         }
@@ -949,7 +942,7 @@ void CPU::fill_exec_ops() {
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
                         unsigned char h = (cpu.pc >> 8) & 0xff;
                         cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (cpu.di.cross_check && (h != ((cpu.pc >> 8) & 0xff))) {
+                        if (h != ((cpu.pc >> 8) & 0xff)) {
                             ++cpu.di.cycles;
                             cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
                         }
@@ -971,10 +964,26 @@ void CPU::fill_exec_ops() {
         }
         case BRK:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                if (!cpu.interrupt_requests[IRQ]){
-                    cpu.sr.set(StatusReg::I, false);
-                    cpu.interrupt_requests[IRQ] = true;
-                }
+                cpu.mem.write(bus,0x100 + cpu.sp, ((cpu.pc + 2) >> 8) & 0xff);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                --cpu.sp;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.mem.write(bus,0x100 + cpu.sp, (cpu.pc + 2) & 0xff);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                --cpu.sp;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.sr.set(StatusReg::B, true);
+                cpu.mem.write(bus,0x100 + cpu.sp, cpu.sr.get_status());
+                cpu.sr.set(StatusReg::I, true);
+                --cpu.sp;
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc = (cpu.mem.read(bus, constants::IRQ_INTERRUPT_HANDLER_L + 1) << 8) |
+                          cpu.mem.read(bus, constants::IRQ_INTERRUPT_HANDLER_L);
             });
             break;}
         case CLC:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::C, 0); cpu.pc+=1; }); break;}
@@ -1454,15 +1463,7 @@ void CPU::fill_exec_ops() {
         case STA:{
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.a);
-                if (!cpu.as.crossed &&
-                    cpu.di.addr_mode == AbsoluteX ||
-                    cpu.di.addr_mode == AbsoluteY ||
-                    cpu.di.addr_mode == IndexedIndirectY
-                    ) cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                            cpu.pc += cpu.di.bytes;
-                    });
-                else
-                    cpu.pc += cpu.di.bytes;
+                cpu.pc += cpu.di.bytes;
             });
             break;
         }
@@ -1610,15 +1611,32 @@ CPU::AddressingResult CPU::get_arg_by_addr(Bus &bus, CPU::AddressingMode am, uns
     throw std::exception();
 }
 
-void CPU::handle_interrupt(Bus& bus, Interrupt i) {
-    mem.write(bus,0x100 + sp, (pc >> 8) & 0xff); --sp;
-    mem.write(bus,0x100 + sp, pc & 0xff); --sp;
-    sr.set(StatusReg::B, false);
-    sr.set(StatusReg::Unused, true);
-    mem.write(bus,0x100 + sp, sr.reg); --sp;
-    sr.set(StatusReg::I, true);
-    pc = (mem.read(bus, interrupt_addresses[i]) | (mem.read(bus, interrupt_addresses[i] + 1) << 8));
-    interrupt_requests[i] = false;
+void CPU::push_interrupts_ops(Bus& bus) {
+    iop.push_front([](Bus& bus, CPU& cpu){
+        cpu.mem.write(bus,0x100 + cpu.sp, (cpu.pc >> 8) & 0xff);
+    });
+    iop.push_front([](Bus& bus, CPU& cpu){
+        --cpu.sp;
+    });
+    iop.push_front([](Bus& bus, CPU& cpu){
+        cpu.mem.write(bus,0x100 + cpu.sp, cpu.pc & 0xff);
+    });
+    iop.push_front([](Bus& bus, CPU& cpu){
+        --cpu.sp;
+    });
+    iop.push_front([](Bus& bus, CPU& cpu){
+        cpu.sr.set(StatusReg::B, false);
+        cpu.sr.set(StatusReg::Unused, true);
+        cpu.mem.write(bus,0x100 + cpu.sp, cpu.sr.reg);
+        cpu.sr.set(StatusReg::I, true);
+    });
+    iop.push_front([](Bus& bus, CPU& cpu){
+        --cpu.sp;
+    });
+    iop.push_front([](Bus& bus, CPU& cpu){
+        cpu.pc = (cpu.mem.read(bus, cpu.interrupt_addresses[cpu.as.interrupt]) | (cpu.mem.read(bus, cpu.interrupt_addresses[cpu.as.interrupt] + 1) << 8));
+        cpu.interrupt_requests[cpu.as.interrupt] = false;
+    });
 }
 
 CPU::AddressingResult CPU::dummy_read(Bus& bus, AddressingResult arg) {
@@ -1631,7 +1649,7 @@ CPU::AddressingResult CPU::dummy_read(Bus& bus, AddressingResult arg) {
 void CPU::update_arg() {
     arg = AddressingResult{
         .addr = as.result,
-        .page_crossed = di.cross_check,
+        .page_crossed = di.penalty_mode == CrossPageM,
         .is_accumulator = di.addr_mode == Accumulator,
         .add_to_addr = as.addr_to_add,
     };
@@ -1650,21 +1668,8 @@ void CPU::tick_step(Bus& bus){
 #if DEBUG_MODE
     if (!debug_run) return;
 #endif
-    if (instruction_execute_done) {
-        --additional_cycles;
-        if (additional_cycles) {
-            return;
-        }
-        execute_in_progress = false;
-        instruction_execute_done = false;
-#if DEBUG_MODE
-        debug_run = false;
-#endif
-        return;
-    }
-
     switch (istep) {
-        case Prepare: {
+        case Fetch: {
             if (bus.dma_active) {
                 if (bus.dma_start){
                     bus.dma_start = false;
@@ -1674,28 +1679,6 @@ void CPU::tick_step(Bus& bus){
                 mem.tick_dma(bus);
                 return;
             }
-            if (!sr.get(StatusReg::I)) {
-                // The NES has an interrupt latency of 7 cycles, which means it takes 7 CPU cycles to begin
-                // executing the interrupt handler
-                for (int i = 0; i < InterruptsCount; ++i) {
-                    if (interrupt_requests[i]) {
-                        if (!interrupt_handling_in_progress) {
-                            interrupt_handling_cycle = 6;
-                            interrupt_handling_in_progress = true;
-                        } else if (!(--interrupt_handling_cycle)) {
-                            handle_interrupt(bus, static_cast<Interrupt>(i));
-                            interrupt_handling_in_progress = false;
-#if DEBUG_MODE
-                            debug_run = false;
-                            return;
-#endif
-                        }
-                        break;
-                    }
-                }
-            }
-
-            if (interrupt_handling_in_progress) return;
             di = decode(mem.read(bus, pc));
             current_iop_index = 0;
             fill_address_ops();
@@ -1704,12 +1687,12 @@ void CPU::tick_step(Bus& bus){
 #if DEBUG_MODE
             pc_watch_count += (pc == pc_watch_address);
 #endif
-            istep = Execution;
+            istep = Execute;
 // todo: finish
             --di.cycles;
             break;
         }
-        case Execution: {
+        case Execute: {
             if (!iop.empty()){
                 if (bus.dma_active) {
                     if (bus.dma_start){
@@ -1725,741 +1708,35 @@ void CPU::tick_step(Bus& bus){
                 --di.cycles;
                 if (!iop.empty()) return;
             }
-            instruction_execute_done = true;
-            if (!additional_cycles) {
-                execute_in_progress = false;
-                instruction_execute_done = false;
-#if DEBUG_MODE
-                debug_run = false;
-#endif
-            }
 
             if (bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop) {
                 interrupt_requests[NMI] = true;
                 sr.set(StatusReg::I, false);
                 bus.nmi_interrupt_flip_flop = false;
-            }
-            if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)) {
+            } else if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)) {
                 interrupt_requests[IRQ] = true;
                 bus.irq_interrupt_flip_flop = false;
             }
-            istep = Prepare;
-            break;
-        }
-    }
 
-}
-
-void CPU::tick(Bus& bus){
-#if DEBUG_MODE
-    ++cycles_count;
-    if (!debug_run) return;
-#endif
-
-    if (instruction_execute_done) {
-        --additional_cycles;
-        if (additional_cycles) {
-            return;
-        }
-        execute_in_progress = false;
-        instruction_execute_done = false;
-#if DEBUG_MODE
-        debug_run = false;
-#endif
-        return;
-    }
-
-    if (!execute_in_progress) {
-        if (bus.ppustatus.reg & 0x80 && bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop){
-            interrupt_requests[NMI] = true;
-            sr.set(StatusReg::I, false);
-            bus.nmi_interrupt_flip_flop = false;
-        }
-        if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)){
-            interrupt_requests[IRQ] = true;
-            bus.irq_interrupt_flip_flop = false;
-        }
-        if (bus.dma_active){
-            // Every cpu cycle
-            mem.tick_dma(bus);
-            return;
-        }
-
-        if (!sr.get(StatusReg::I)){
-            // TODO:
-            // The NES has an interrupt latency of 7 cycles, which means it takes 7 CPU cycles to begin
-            // executing the interrupt handler
-            for (int i = 0; i < InterruptsCount; ++i){
-                if (interrupt_requests[i]){
-                    if (!interrupt_handling_in_progress) {
-                        interrupt_handling_cycle = 6;
-                        interrupt_handling_in_progress = true;
-                    } else if (!(--interrupt_handling_cycle)) {
-                        handle_interrupt(bus, static_cast<Interrupt>(i));
-                        interrupt_handling_in_progress = false;
-#if DEBUG_MODE
-                        // TODO: check
-                        debug_run = false;
-                        return;
-#endif
+            bool interrupt_in_progress = false;
+            if (!sr.get(StatusReg::I)) {
+                for (int i = 0; i < InterruptsCount; ++i) {
+                    if (interrupt_requests[i]) {
+                        as.interrupt = static_cast<Interrupt>(i);
+                        push_interrupts_ops(bus);
+                        interrupt_in_progress = true;
+                        break;
                     }
-                    break;
                 }
             }
-        }
-
-        if (interrupt_handling_in_progress) return;
-
-        di = decode(mem.read(bus, pc));
+            istep = interrupt_in_progress ? Execute : Fetch;
 #if DEBUG_MODE
-        pc_watch_count += (pc == pc_watch_address);
+            debug_run = false; // todo: check
 #endif
-        execute_in_progress = true;
-    }
-
-    if (--di.cycles) return;
-
-#if DEBUG_MODE
-    if (di.i == CPU::Instruction::RTI){
-        di.bytes += 0;
-    }
-#endif
-
-    switch(di.i) {
-        case ADC: {
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val = read(bus, arg);
-            unsigned short res = a + val + sr.get(StatusReg::C);
-            sr.set(StatusReg::C, res > 0xff);
-            sr.set(StatusReg::Z, (res & 0xff) == 0);
-            sr.set(StatusReg::V, (res ^ a) & (res ^ val) & 0x80);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res & 0xff;
-            pc += di.bytes;
-            if (arg.page_crossed) additional_cycles = 1;
-            break;
-        }
-        case AND:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val =  read(bus, arg);
-            a &= val;
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            if (arg.page_crossed) additional_cycles = 1;
-            break;
-        }
-        case ASL:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val << 1;
-            sr.set(StatusReg::C, val & 0x80);
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            write(bus, arg, res & 0xff);
-            pc += di.bytes;
-            break;
-        }
-        case SLO:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val << 1;
-            a |= res;
-            sr.set(StatusReg::C, val & 0x80);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            write(bus, arg, res & 0xff);
-            pc += di.bytes;
-            break;
-        }
-        case RLA:{
-            if (di.addr_mode == AbsoluteX) iop.push_front([](Bus& bus, CPU& cpu){});
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = (val << 1) | sr.get(StatusReg::C);
-            a &= res;
-            sr.set(StatusReg::C, val & 0x80);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            write(bus, arg, res & 0xff);
-            pc += di.bytes;
-            break;
-        }
-        case SRE:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val >> 1;
-            a ^= res;
-            sr.set(StatusReg::C, val & 0x1);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            write(bus, arg, res & 0xff);
-            pc += di.bytes;
-            break;
-        }
-        case RRA:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val = read(bus, arg);
-            unsigned char ror_res = (val >> 1) | (sr.get(StatusReg::C) << 7);
-            sr.set(StatusReg::C, val & 0x1);
-            sr.set(StatusReg::Z, ror_res == 0);
-            sr.set(StatusReg::N, ror_res & 0x80);
-            write(bus, arg, ror_res);
-            val = read(bus, arg);
-            unsigned short res = (a + val + sr.get(StatusReg::C));
-            sr.set(StatusReg::C, res > 0xff);
-            sr.set(StatusReg::Z, (res & 0xff) == 0);
-            sr.set(StatusReg::V, (res ^ a) & (res ^ val) & 0x80);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case AAX:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            write(bus, arg, a & x);
-            pc += di.bytes;
-            break;
-        }
-        case LAX:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val = read(bus, arg);
-            a = val;
-            x = val;
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case DCP:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val = read(bus, arg);
-            unsigned char res = val - 1;
-            sr.set(StatusReg::C, a >= res);
-            sr.set(StatusReg::Z, a == res);
-            sr.set(StatusReg::N, (a - res) & 0x80);
-            write(bus, arg, res & 0xff);
-            pc += di.bytes;
-            break;
-        }
-        case ISC:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val = read(bus, arg);
-            write(bus, arg, val + 1);
-            val = read(bus, arg);
-            int res = a - val - (1 - sr.get(StatusReg::C));
-            sr.set(StatusReg::C, res >= 0);
-            sr.set(StatusReg::Z, (res & 0xff) == 0);
-            sr.set(StatusReg::V, (((res & 0xff) ^ a) & ((res & 0xff) ^ (~val))) & 0x80);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res & 0xff;
-            pc += di.bytes;
-            break;
-        }
-        case SYA:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char res = y & (((arg.addr >> 8) & 0xff) + 1);
-            if (res > 0)
-                write(bus, arg, res);
-            pc += di.bytes;
-            break;
-        }
-        case SXA:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char res = x & (((arg.addr >> 8) & 0xff) + 1);
-            if (res > 0)
-                write(bus, arg, res);
-            pc += di.bytes;
-            break;
-        }
-        case BCC:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            pc += di.bytes;
-            if (!sr.get(StatusReg::C)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-                additional_cycles = 1 + (arg.page_crossed);
-            }
-            break;
-        }
-        case BCS:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            pc += di.bytes;
-            if (sr.get(StatusReg::C)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-                additional_cycles = 1 + (arg.page_crossed);
-            }
-            break;
-        }
-        case BEQ:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            pc += di.bytes;
-            if (sr.get(StatusReg::Z)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-                additional_cycles = 1 + (arg.page_crossed);
-            }
-            break;
-        }
-        case BMI: {
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            pc += di.bytes;
-            if (sr.get(StatusReg::N)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-                additional_cycles = 1 + (arg.page_crossed);
-            }
-            break;
-        }
-        case BNE:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            pc += di.bytes;
-            if (!sr.get(StatusReg::Z)) {
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-                additional_cycles = 1 + (arg.page_crossed);
-            }
-
-            break;
-        }
-        case BPL:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            pc += di.bytes;
-            if (!sr.get(StatusReg::N)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-                additional_cycles = 1 + (arg.page_crossed);
-            }
-
-            break;
-        }
-        case BVC:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            pc += di.bytes;
-            if (!sr.get(StatusReg::V)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-                additional_cycles = 1 + (arg.page_crossed);
-            }
-
-            break;
-        }
-        case BVS:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            pc += di.bytes;
-            if (sr.get(StatusReg::V)){
-                arg.addr += arg.add_to_addr;
-                pc += (char)(read(bus, arg));
-                additional_cycles = 1 + (arg.page_crossed);
-            }
-            break;
-        }
-
-        case BIT:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val = read(bus, arg);
-            unsigned char res = a & val;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::V, val & 0x40);
-            sr.set(StatusReg::N, val & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case BRK:{
-            if (!interrupt_requests[IRQ]){
-                sr.set(StatusReg::I, false);
-                interrupt_requests[IRQ] = true;
-            }
-            break;}
-
-        case CLC:{sr.set(StatusReg::C, 0); pc+=1; break;}
-        case CLD:{sr.set(StatusReg::D, 0); pc+=1; break;}
-        case CLI:{sr.set(StatusReg::I, 0); pc+=1; break;}
-        case CLV:{sr.set(StatusReg::V, 0); pc+=1; break;}
-        case CMP:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) { arg = dummy_read(bus, arg); additional_cycles = 1;}
-            unsigned char val =  read(bus, arg);
-            unsigned char res = a - val;
-            sr.set(StatusReg::C, a >= val);
-            sr.set(StatusReg::Z, a == val);
-            sr.set(StatusReg::N, res & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case CPX:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = x - val;
-            sr.set(StatusReg::C, x >= val);
-            sr.set(StatusReg::Z, x == val);
-            sr.set(StatusReg::N, res & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case CPY:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = y - val;
-            sr.set(StatusReg::C, y >= val);
-            sr.set(StatusReg::Z, y == val);
-            sr.set(StatusReg::N, res & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case DEC:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val - 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            write(bus, arg, res);
-            pc += di.bytes;
-            break;
-        }
-        case DEX:{
-            unsigned char res = x - 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            x = res;
-            pc += di.bytes;
-            break;
-        }
-        case DEY:{
-            unsigned char res = y - 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            y = res;
-            pc += di.bytes;
-            break;
-        }
-        case EOR:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = a ^ val;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res;
-            pc += di.bytes;
-            if (arg.page_crossed) additional_cycles = 1;
-            break;
-        }
-        case INC:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val + 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            write(bus, arg, res);
-            pc += di.bytes;
-            break;
-        }
-        case INX:{
-            unsigned char res = x + 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            x = res;
-            pc += di.bytes;
-            break;
-        }
-        case INY:{
-            unsigned char res = y + 1;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            y = res;
-            pc += di.bytes;
-            break;
-        }
-        case JMP:{
-            if (di.addr_mode == Absolute){
-                pc = (mem.read(bus,pc + 1) | (mem.read(bus,pc + 2) << 8));
-            } else { // Indirect
-                unsigned short arg_addr = (mem.read(bus,pc + 1) | (mem.read(bus,pc + 2) << 8));
-                unsigned char l = mem.read(bus,arg_addr);
-                unsigned char h = mem.read(bus,(arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
-                pc = l | (h << 8);
-            }
-            break;
-        }
-        case JSR:{
-            // TODO: maybe check
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            mem.write(bus,0x100 + sp, ((pc + 2) >> 8) & 0xff); --sp;
-            mem.write(bus,0x100 + sp, (pc + 2) & 0xff); --sp;
-            pc = arg.addr;
-            break;
-        }
-        case LDA:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) {arg = dummy_read(bus, arg); additional_cycles = 1;}
-            a = read(bus, arg);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case LDX:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            x = read(bus, arg);
-            sr.set(StatusReg::Z, x == 0);
-            sr.set(StatusReg::N, x & 0x80);
-            pc += di.bytes;
-            if (arg.page_crossed) additional_cycles = 1;
-            break;
-        }
-        case LDY:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            y = read(bus, arg);
-            sr.set(StatusReg::Z, y == 0);
-            sr.set(StatusReg::N, y & 0x80);
-            pc += di.bytes;
-            if (arg.page_crossed) additional_cycles = 1;
-            break;
-        }
-        case LSR:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = val >> 1;
-            sr.set(StatusReg::C, val & 0x1);
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, 0);
-            write(bus, arg, res);
-            pc += di.bytes;
-            break;
-        }
-        case ASR: {
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val = read(bus, arg);
-            unsigned char res = a & val;
-            unsigned char shifted_res = res >> 1;
-            sr.set(StatusReg::C, res & 0x1);
-            sr.set(StatusReg::Z, shifted_res == 0);
-            sr.set(StatusReg::N, shifted_res & 0x80);
-            a = shifted_res;
-            pc += di.bytes;
-            break;
-        }
-        // TODO: check
-        case ATX: {
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val = read(bus, arg);
-            a = val;
-            x = a;
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-
-        case AXS: {
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val = read(bus, arg);
-            int tmp = (a & x) - val;
-            sr.set(StatusReg::C, tmp >= 0);
-            sr.set(StatusReg::Z, (tmp & 0xff) == 0);
-            sr.set(StatusReg::N, tmp & 0x80);
-            x = tmp & 0xff;
-            pc += di.bytes;
-            break;
-        }
-
-        case ARR: {
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val = read(bus, arg);
-            a = (a & val);
-            a = (a >> 1) | (sr.get(StatusReg::C) << 7);
-            sr.set(StatusReg::C, (a >> 6) & 0x1);
-            sr.set(StatusReg::V, ((a >> 6) & 0x1) ^  ((a >> 5) & 0x1));
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case AAC:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val =  read(bus, arg);
-            a &= val;
-            sr.set(StatusReg::C, a & 0x80);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-
-        case NOP:
-        case DOP:
-        case TOP:{pc+=di.bytes; break;}
-
-        case ORA:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val =  read(bus, arg);
-            unsigned char res = a | val;
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res;
-            pc += di.bytes;
-            if (arg.page_crossed) additional_cycles = 1;
-            break;
-        }
-        case PHA:{
-            mem.write(bus,0x100 + sp, a); --sp;
-            pc += di.bytes;
-            break;
-        }
-        case PHP:{
-            mem.write(bus,0x100 + sp, sr.get_status()); --sp;
-            pc += di.bytes;
-            break;
-        }
-        case PLA:{
-            ++sp; a = mem.read(bus,0x100 + sp);
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case PLP:{
-            ++sp;
-            // TODO: Interrupt disable flag The effect of changing this flag is delayed 1 instruction.
-            sr.set_status(mem.read(bus,0x100 + sp));
-            pc += di.bytes;
-            break;
-        }
-        case ROL:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val = read(bus, arg);
-            bool prev_c = sr.get(StatusReg::C);
-            unsigned char res = (val << 1) | prev_c;
-            sr.set(StatusReg::C, val & 0x80);
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            write(bus, arg, res);
-            pc += di.bytes;
-            break;
-        }
-        case ROR:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            unsigned char val = read(bus, arg);
-            bool prev_c = sr.get(StatusReg::C);
-            unsigned char res = (val >> 1) | (prev_c << 7) ;
-            sr.set(StatusReg::C, val & 0x1);
-            sr.set(StatusReg::Z, res == 0);
-            sr.set(StatusReg::N, res & 0x80);
-            write(bus, arg, res);
-            pc += di.bytes;
-            break;
-        }
-        case RTI:{
-            ++sp; sr.set_status(mem.read(bus,0x100 + sp));
-            ++sp; unsigned char l = mem.read(bus,0x100 + sp);
-            ++sp; unsigned char h = mem.read(bus,0x100 + sp);
-            pc = l | (h << 8);
-            break;
-        }
-        case RTS:{
-            ++sp; unsigned char l = mem.read(bus,0x100 + sp);
-            ++sp; unsigned char h = mem.read(bus,0x100 + sp);
-            pc = l | (h << 8);
-            ++pc;
-            break;
-        }
-        case SBC:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            unsigned char val = read(bus, arg);
-            bool prev_c = sr.get(StatusReg::C);
-            int res = (a - val - (!prev_c));
-            sr.set(StatusReg::C, res >= 0);
-            sr.set(StatusReg::Z, (res & 0xff) == 0);
-            sr.set(StatusReg::V, (((res & 0xff) ^ a) & ((res & 0xff) ^ (~val))) & 0x80);
-            sr.set(StatusReg::N, res & 0x80);
-            a = res & 0xff;
-            pc += di.bytes;
-            if (arg.page_crossed) additional_cycles = 1;
-            break;
-        }
-        case SEC:{sr.set(StatusReg::C, true); pc+=di.bytes; break;}
-        case SED:{sr.set(StatusReg::D, true); pc+=di.bytes; break;}
-        case SEI:{sr.set(StatusReg::I, true); pc+=di.bytes; break;}
-        case STA:{
-            auto arg = get_arg_pc(bus, di.addr_mode, true);
-            // todo: check for dummy read
-            if (arg.page_crossed) arg = dummy_read(bus, arg);
-            write(bus, arg, a);
-            pc += di.bytes;
-            break;
-        }
-        case STX:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            write(bus, arg, x);
-            pc += di.bytes;
-            break;
-        }
-        case STY:{
-            auto arg = get_arg_pc(bus, di.addr_mode, false);
-            write(bus, arg, y);
-            pc += di.bytes;
-            break;
-        }
-        case TAX:{
-            x = a;
-            sr.set(StatusReg::Z, x == 0);
-            sr.set(StatusReg::N, x & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case TAY:{
-            y = a;
-            sr.set(StatusReg::Z, y == 0);
-            sr.set(StatusReg::N, y & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case TSX:{
-            x = sp;
-            sr.set(StatusReg::Z, x == 0);
-            sr.set(StatusReg::N, x & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case TXA:{
-            a = x;
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
-            break;
-        }
-        case TXS:{
-            sp = x;
-            pc += di.bytes;
-            break;
-        }
-        case TYA:{
-            a = y;
-            sr.set(StatusReg::Z, a == 0);
-            sr.set(StatusReg::N, a & 0x80);
-            pc += di.bytes;
             break;
         }
     }
-    instruction_execute_done = true;
-    if (!additional_cycles) {
-        execute_in_progress = false;
-        instruction_execute_done = false;
-#if DEBUG_MODE
-        debug_run = false;
-#endif
-    }
+
 }
 
 unsigned char CPU::read(Bus &bus, AddressingResult ar) {

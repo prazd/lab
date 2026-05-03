@@ -1184,20 +1184,33 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
     float t_y = 0;
     std::stringstream ss;
     std::string tmp_str;
-    Rectangle update_target_button;
-    Rectangle write_button;
-    Rectangle mode_button;
+    Rectangle update_target_button{};
+    Rectangle write_button{};
+    Rectangle mode_button{};
     Rectangle pc_watch_address_button{};
+    Rectangle dump_button{};
     UserInput<x, y - 30, w, 30> u_input;
     enum Mode {
         CPUm, PPUm, OAMm, ModeCount
     } mode = CPUm;
+    std::string_view mode_str[2] = {
+            "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/CPU.dump",
+            "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/PPU.dump",
+    };
     MemoryViewer():
             update_target_button{DW::rec.x, DW::rec.y+DW::rec.height, 30,30},
             mode_button{DW::rec.x+30, DW::rec.y+DW::rec.height, 30,30},
             write_button{DW::rec.x+30*2, DW::rec.y+DW::rec.height, 30,30},
-            pc_watch_address_button{DW::rec.x+30*3, DW::rec.y+DW::rec.height, 30,30}
+            pc_watch_address_button{DW::rec.x+30*3, DW::rec.y+DW::rec.height, 30,30},
+            dump_button{DW::rec.x+30*4, DW::rec.y+DW::rec.height, 30,30}
             {}
+
+    void dump(Bus& bus, auto& r, std::string_view path){
+        std::ofstream file(path, std::ios::binary);
+        if (!file.is_open()) return;
+        for (int i = 0, e = sizeof(r.mem.map); i != e; ++i)
+            file.put(r.mem.unsafe_read(bus, i));
+    }
 
     void mem_print(Bus& bus, auto& r){
         t_x = DW::rec.x;
@@ -1248,18 +1261,25 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         mode_button   = {DW::rec.x+30, DW::rec.y+DW::rec.height, 30,30};
         write_button = {DW::rec.x+30*2, DW::rec.y+DW::rec.height, 30,30};
         pc_watch_address_button = {DW::rec.x+30*3, DW::rec.y+DW::rec.height, 30,30};
-        u_input.rec   = {DW::rec.x, DW::rec.y-30, DW::rec.width,30};
+        dump_button = {DW::rec.x+30*4, DW::rec.y+DW::rec.height, 30,30};
+        u_input.rec = {DW::rec.x, DW::rec.y-30, DW::rec.width,30};
 
         if (CheckCollisionPointRec(GetMousePosition(), mode_button) && IsMouseButtonPressed(0))
             mode = static_cast<Mode>((mode + 1) % ModeCount);
         else if (CheckCollisionPointRec(GetMousePosition(), update_target_button) && IsMouseButtonPressed(0)){
             target_address = std::stoul(u_input.s, nullptr, 16);
             start_address = target_address - (target_address % 16);
-        } else if (CheckCollisionPointRec(GetMousePosition(), write_button) && IsMouseButtonPressed(0)){
+        } else if (CheckCollisionPointRec(GetMousePosition(), write_button) && IsMouseButtonPressed(0)) {
             if (mode == CPUm)
                 cpu.mem.unsafe_write(bus, target_address, std::stoul(u_input.s, nullptr, 16));
             else
                 ppu.mem.write(bus, target_address, std::stoul(u_input.s, nullptr, 16));
+        } else if (CheckCollisionPointRec(GetMousePosition(), dump_button) && IsMouseButtonPressed(0)){
+            switch (mode) {
+                case PPUm: dump(bus, ppu, mode_str[mode]); break;
+                case CPUm: dump(bus, cpu, mode_str[mode]); break;
+                default: break;
+            }
         } else if (CheckCollisionPointRec(GetMousePosition(), pc_watch_address_button) && IsMouseButtonPressed(0)){
             cpu.pc_watch_address = std::stoul(u_input.s, nullptr, 16);
             cpu.pc_watch_count = 0;
@@ -1295,6 +1315,7 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         DW::draw_text_button(mode_button, "mode", BLACK);
         DW::draw_text_button(write_button, "write", BLACK);
         DW::draw_text_button(pc_watch_address_button, "pc_watch", BLACK);
+        DW::draw_text_button(dump_button, "dump", BLACK);
         u_input.draw();
         DW::draw_win();
         ss.str("");

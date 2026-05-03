@@ -116,7 +116,6 @@ struct CPU {
         RESET, NMI, IRQ, InterruptsCount
     };
 
-    size_t additional_cycles = 0; // todo: check
     size_t cycles_count = 0;
 
 #if DEBUG_MODE
@@ -190,12 +189,18 @@ struct CPU {
         "TOP", "SYA", "SXA"
     };
 
+    enum IPenaltyMode: unsigned char {
+        NoPenaltyM = 0,
+        CrossPageM = 1,
+        DummyReadM = 2,
+    };
+
     struct DecodedInstruction {
         AddressingMode addr_mode{};
         Instruction i{};
         unsigned char bytes{};
         unsigned char cycles{};
-        bool cross_check{};
+        IPenaltyMode penalty_mode = NoPenaltyM;
     };
 
     enum AddressingStep {
@@ -208,9 +213,9 @@ struct CPU {
     };
 
     enum InstructionStep {
-        Prepare,
-        Execution,
-    } istep = Prepare;
+        Fetch,
+        Execute,
+    } istep = Execute;
 
     SimpleDeque<void(*)(Bus& bus, CPU&), 7> iop{};
     void iop_exec_step(Bus& bus);
@@ -226,7 +231,7 @@ struct CPU {
         unsigned char arg1{};
         unsigned char arg2{};
         unsigned short result{};
-        bool crossed = false;
+        Interrupt interrupt = RESET;
     } as;
 
     void push_addr_step(AddressingStep);
@@ -237,11 +242,7 @@ struct CPU {
     void tick(Bus& mem);
     void tick_step(Bus& mem);
     bool stop_requested = false;
-    bool execute_in_progress = false;
-    bool instruction_execute_done = false;
-    bool interrupt_handling_in_progress = false;
-    int interrupt_handling_cycle = 0;
-    void handle_interrupt(Bus&, Interrupt);
+    void push_interrupts_ops(Bus&);
     DecodedInstruction di{};
 //
     struct AsmInfo {
