@@ -104,7 +104,6 @@ void PPU::read_ppuaddr(Bus& bus) {
         bus.mapper.update_state(t, v);
         v = t;
         bus.last_ppu_address = v;
-
     }
     w = !w;
 }
@@ -119,7 +118,7 @@ void PPU::update_state(Bus& bus) {
     if (bus.ppudata.write_requested)   {
         unsigned short addr = v;
         adjust_nt_mirroring(bus, addr);
-        mem.write(bus, addr, bus.ppudata.reg);
+        mem.write(bus, addr, bus.ppudata.write_value);
         v = (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff;
         bus.ppudata.write_requested = false;
     }
@@ -490,7 +489,7 @@ void PPU::draw_pixel(Bus &bus) {
     } else if (bg_data != 0 && sprite_data == 0)
         res = bg_data;
     else if (bg_data != 0 && sprite_data != 0) {
-        if (oam_index == 0 && !is_bg_prio && ppumask.enable_sprite_rendering && ppumask.enable_background_rendering){
+        if (oam_index == 0 && ppumask.enable_sprite_rendering && ppumask.enable_background_rendering){
             // todo: debug
             ppustatus.sprite_zero_hit_flag = true;
             bus.ppustatus.reg |= (1 << 6);

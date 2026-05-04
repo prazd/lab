@@ -22,6 +22,9 @@ struct MultiTest{
         std::atomic<bool> in_progress = false;
     };
 
+    static inline FrameData frame_data[tests_count]{};
+    static inline VM vms[tests_count]{};
+
     static void step(VM& vm, FrameData& fm) {
         for (int i = 0; i < CYCLES_COUNT; ++i){
             for (int j = 0; j < 3; ++j) {
@@ -33,10 +36,20 @@ struct MultiTest{
         fm.in_progress.store(false);
     }
 
+    void move(){
+        if (IsKeyDown(KEY_DOWN)) {
+            for (auto& f: frame_data) f.rec.y -= 1.f;
+        } else if (IsKeyDown(KEY_UP)) {
+            for (auto& f: frame_data) f.rec.y += 1.f;
+        } else if (auto w = GetMouseWheelMove(); w > 0) {
+            for (auto& f: frame_data) f.rec.y += 10.f;
+        } else if (w < 0) {
+            for (auto& f: frame_data) f.rec.y -= 10.f;
+        }
+    }
+
     void run(const auto& tests_paths){
         InitWindow(WIDTH, HEIGHT, "MultiTest");
-        static FrameData frame_data[tests_count]{};
-        static VM vms[tests_count];
 
         float x = 0.f;
         float y = 0.f;
@@ -59,6 +72,7 @@ struct MultiTest{
         wp.run();
 
         while(!WindowShouldClose()) {
+            move();
             for (int i = 0, e = tests_count; i < e; ++i){
                 if (!frame_data[i].in_progress.exchange(true, std::memory_order_acquire)) {wp.add(&step, vms[i], frame_data[i]);}
                 if (vms[i].ppu.update_display.exchange(false, std::memory_order_acquire))

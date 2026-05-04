@@ -22,7 +22,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
         case constants::OAMDATA:   { oamdata   =   {value, true}; oam[oamaddr.reg++] = value; break;}
         case constants::PPUSCROLL: { ppuscroll =   {value, true}; break;}
         case constants::PPUADDR:   { ppuaddr   =   {value, true}; break;}
-        case constants::PPUDATA:   { ppudata   =   {value, true}; break;}
+        case constants::PPUDATA:   { ppudata   =   {ppudata.reg, true, false, value}; break;}
         case constants::OAMDMA : {
             dma_address = value << 8;
             dma_active = true;

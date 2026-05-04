@@ -954,8 +954,8 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << "  X:" << (unsigned)(ppu.x) << '\n'
         << "  T:" << (unsigned)(ppu.t) << '\n'
         << "  W:" << (unsigned)(ppu.w) << '\n'
-        << "  VBLank:" << (unsigned)(ppu.ppustatus.vblank_flag) << '\n'
-        << "  Bus VBLank:" << (unsigned)(bus.ppustatus.reg & 0x80) << '\n'
+        << "  VBLank:" << (unsigned)(ppu.ppustatus.vblank_flag) << "   Bus VBLank:" << (unsigned)(bus.ppustatus.reg & 0x80) << '\n'
+        << "  OpenBus:" <<  (int)bus.open_bus_value << '\n'
         << std::dec << "  Cycles:" << ppu.current_scanline_cycle
         << "  Scanline:" << ppu.current_y << '\n'
         << " DrawX:" << ppu.current_x%256 << '\n'
@@ -1097,7 +1097,10 @@ struct ColorsViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
 template <size_t x, size_t y, size_t w, size_t h>
 struct GeneralInfo: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
-    enum Mode {
+    enum View: unsigned char {
+        Bin, Hex, ViewCount
+    } view = Bin;
+    enum Mode: unsigned char {
         CartridgeM,
         PPUM,
         MMIORegsM,
@@ -1111,6 +1114,9 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
     void handle(Bus& bus, Cartridge& c, PPU& ppu){
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
             mode = static_cast<Mode>((mode + 1) % ModeCount);
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
+            view = static_cast<View>((view + 1) % ViewCount);
+
         switch (mode) {
             case CartridgeM: {
                 ss << "CartridgeInfo:\n"
@@ -1142,15 +1148,38 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
                 break;
             }
             case MMIORegsM: {
-                ss << "MMIO:\n"
-                   << "  PPUCTRL(0x2000):"       <<  std::bitset<8>(bus.unsafe_read_prg(constants::PPUCTRL)).to_string()  << '\n'
-                   << "  PPUMASK(0x2001):"      <<   std::bitset<8>(bus.unsafe_read_prg(constants::PPUMASK)).to_string()<< '\n'
-                   << "  PPUSTATUS(0x2002):"   <<    std::bitset<8>(bus.unsafe_read_prg(constants::PPUSTATUS)).to_string() << '\n'
-                   << "  OAMADDR(0x2003):"      <<   std::bitset<8>(bus.unsafe_read_prg(constants::OAMADDR)).to_string() << '\n'
-                   << "  OAMDATA(0x2004):"      <<   std::bitset<8>(bus.unsafe_read_prg(constants::OAMDATA)).to_string() << '\n'
-                   << "  PPUSCROLL(0x2005):" <<      std::bitset<8>(bus.unsafe_read_prg(constants::PPUSCROLL)).to_string() << '\n'
-                   << "  PPUADDR(0x2006):" <<        std::bitset<8>(bus.unsafe_read_prg(constants::PPUADDR)).to_string()<< '\n'
-                   << "  PPUDATA(0x2007):" <<        std::bitset<8>(bus.unsafe_read_prg(constants::PPUDATA)).to_string()<< '\n';
+
+                auto ppuctrl_v = bus.unsafe_read_prg(constants::PPUCTRL);
+                auto ppumask_v = bus.unsafe_read_prg(constants::PPUMASK);
+                auto ppustatus_v = bus.unsafe_read_prg(constants::PPUSTATUS);
+                auto ppuoamaddr_v = bus.unsafe_read_prg(constants::OAMADDR);
+                auto ppuoamdata_v = bus.unsafe_read_prg(constants::OAMDATA);
+                auto ppuscroll_v = bus.unsafe_read_prg(constants::PPUSCROLL);
+                auto ppuaddr_v = bus.unsafe_read_prg(constants::PPUADDR);
+                auto ppudata_v = bus.unsafe_read_prg(constants::PPUDATA);
+
+                if (view == Bin) {
+                    ss << "MMIO:\n"
+                       << "  PPUCTRL(0x2000):"     <<   std::bitset<8>(ppuctrl_v).to_string()  << '\n'
+                       << "  PPUMASK(0x2001):"     <<   std::bitset<8>(ppumask_v).to_string()<< '\n'
+                       << "  PPUSTATUS(0x2002):"   <<    std::bitset<8>(ppustatus_v).to_string() << '\n'
+                       << "  OAMADDR(0x2003):"     <<   std::bitset<8>(ppuoamaddr_v).to_string() << '\n'
+                       << "  OAMDATA(0x2004):"     <<    std::bitset<8>(ppuoamdata_v).to_string() << '\n'
+                       << "  PPUSCROLL(0x2005):"   <<      std::bitset<8>(ppuscroll_v).to_string() << '\n'
+                       << "  PPUADDR(0x2006):" <<        std::bitset<8>(ppuaddr_v).to_string()<< '\n'
+                       << "  PPUDATA(0x2007):" <<        std::bitset<8>(ppudata_v).to_string()<< '\n';
+                } else if (view == Hex) {
+                    ss << "MMIO:\n" << std::hex
+                       << "  PPUCTRL(0x2000):"     <<   (int)(ppuctrl_v)  << '\n'
+                       << "  PPUMASK(0x2001):"     <<   (int)(ppumask_v)<< '\n'
+                       << "  PPUSTATUS(0x2002):"   <<    (int)(ppustatus_v) << '\n'
+                       << "  OAMADDR(0x2003):"     <<   (int)(ppuoamaddr_v) << '\n'
+                       << "  OAMDATA(0x2004):"     <<    (int)(ppuoamdata_v)<< '\n'
+                       << "  PPUSCROLL(0x2005):"   <<     (int)(ppuscroll_v) << '\n'
+                       << "  PPUADDR(0x2006):" <<        (int)(ppuaddr_v) << '\n'
+                       << "  PPUDATA(0x2007):" <<        (int)(ppudata_v) << '\n';
+                }
+
                 break;
             }
 #if GAME_GENIE_MODE

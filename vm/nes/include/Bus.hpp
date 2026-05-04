@@ -21,10 +21,12 @@ struct Bus {
     size_t open_bus_value_cycles = 0;
     unsigned char open_bus_value {};
     unsigned short last_ppu_address = 0;
+    // TODO: update
     struct REG {
         unsigned char reg{};
         bool write_requested{};
         bool read_requested{};
+        unsigned char write_value{};
     };
     REG ppuctrl{};
     REG ppumask{};
