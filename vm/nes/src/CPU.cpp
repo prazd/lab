@@ -5,78 +5,46 @@
 
 void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
     adjust_if_mirror(addr);
-#if DEBUG_MODE
-    triggered_on_write = (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}));
-#endif
 #if GAME_GENIE_MODE
     if (addr >= 0x8000 && addr <= 0x800b){
         bus.gg.handle(addr, value);
         return;
     }
 #endif
-    if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
-    || addr >= 0x8000 && addr <= 0xffff){
-        // todo: test write_addresses
 #if DEBUG_MODE
-        write_set_addresses[addr] = true;
+// TODO: fix
+//    if ((addr >= 0x2000 && addr <= 0x2007) || (addr >= 0x8000 && addr <= 0xffff)) {
+//        triggered_on_write = (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}));
+//        write_addresses.push_back(std::pair{addr, unsafe_read(bus, addr)});
+//        write_set_addresses[addr] = true;
+//    }
 #endif
-        bus.write(addr, value);
-        return;
-    }
-#if DEBUG_MODE
-    write_addresses.push_back(std::pair{addr, unsafe_read(bus, addr)});
-    write_set_addresses[addr] = true;
-#endif
-    map[addr] = value;
+    bus.write(addr, value);
 }
 
 void CPU::Memory::unsafe_write(Bus& bus, unsigned short addr, unsigned char value) {
     adjust_if_mirror(addr);
-    if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
-        || addr >= 0x8000 && addr <= 0xffff){
-        bus.unsafe_write(addr, value);
-        return;
-    }
-    map[addr] = value;
+    bus.unsafe_write(addr, value);
 }
 
 unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) const {
     adjust_if_mirror(addr);
-#if DEBUG_MODE
-    triggered_on_read = (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}));
-#endif
 #if GAME_GENIE_MODE
-    unsigned char value = 0;
-    if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
-        || addr >= 0x8000 && addr <= 0xffff){
-        value =  bus.read_prg(addr);
-    } else {
-        value = map[addr];
-    }
     if (auto i = bus.gg.find_index(addr); i != -1)
         return bus.gg.get(i, value);
-    return value;
-#else
-    if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
-        || addr >= 0x8000 && addr <= 0xffff){
-        return bus.read_prg(addr);
-    }
+    return bus.read_prg(addr);
+#endif
 #if DEBUG_MODE
-    read_set_addresses[addr] = true;
+    triggered_on_read = (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}));
+    read_set_addresses[addr] = true; // todo: check
 #endif
-    return map[addr];
-#endif
+    return bus.read_prg(addr);
 }
 
 unsigned char CPU::Memory::unsafe_read(Bus& bus, unsigned short addr) const {
     adjust_if_mirror(addr);
-    if (std::any_of(std::begin(write_mmio_addr), std::end(write_mmio_addr), [addr](auto el){return el == addr;})
-        || addr >= 0x8000 && addr <= 0xffff){
-        return bus.unsafe_read_prg(addr);
-    }
-    return map[addr];
+    return bus.read_prg(addr);
 }
-
 
 void CPU::Memory::adjust_if_mirror(unsigned short& addr) {
     if (addr >= constants::RAM_MIRROR1_BEGIN && addr <= constants::RAM_MIRROR1_END)
@@ -124,7 +92,7 @@ void CPU::reset() {
 #if DEBUG_MODE
     cycles_count = 0;
 #endif
-    memset(mem.map, 0, 0x10000);
+//    memset(map, 0, 0x10000);
 }
 
 
@@ -1709,7 +1677,7 @@ void CPU::tick_step(Bus& bus){
                 if (!iop.empty()) return;
             }
 
-            if (bus.ppuctrl.reg & 0x80 && bus.nmi_interrupt_flip_flop) {
+            if (bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) {
                 interrupt_requests[NMI] = true;
                 sr.set(StatusReg::I, false);
                 bus.nmi_interrupt_flip_flop = false;

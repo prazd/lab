@@ -9,22 +9,13 @@ void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
 #if DEBUG_MODE
     if (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}))
         triggered_on_write = true;
-#endif
-    if (addr >= 0x0000 && addr <= 0x1FFF && ((bus.ppustatus.reg >> 7) & 1 || !((bus.ppumask.reg >> 3) & 1) || !((bus.ppumask.reg >> 4) & 1))) {
-#if DEBUG_MODE
-        write_addresses.push_back(std::pair{addr, read(bus, addr)});
-        write_set_addresses[addr] = true;
-#endif
-        bus.mapper.write_chr_ram(addr, value);
-        return;
+    if (addr >= 0x0000 && addr <= 0x3fff ||
+            addr >= 0x0000 && addr <= 0x1FFF && ((bus.ppustatus >> 7) & 1 || !((bus.ppumask >> 3) & 1) || !((bus.ppumask >> 4) & 1))){
+            write_addresses.push_back(std::pair{addr, read(bus, addr)});
+            write_set_addresses[addr] = true;
     }
-    if (addr >= 0x0000 && addr <= 0x3fff){     // todo: check
-#if  DEBUG_MODE
-        write_addresses.push_back(std::pair{addr, read(bus, addr)});
-        write_set_addresses[addr] = true;
 #endif
-        map[addr] = value;
-    }
+    bus.write_chr(addr, value);
 }
 
 unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {
@@ -32,22 +23,14 @@ unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {
 #if DEBUG_MODE
     if (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}))
         triggered_on_read = true;
+    if (addr >= 0x2000){ read_set_addresses[addr] = true;}
 #endif
-    if (addr >= 0x0000 && addr <= 0x1FFF){
-        return bus.read_chr(addr);
-    }
-#if DEBUG_MODE
-    read_set_addresses[addr] = true;
-#endif
-    return map[addr];
+    return bus.read_chr(addr);
 }
 
 unsigned char PPU::Memory::unsafe_read(Bus& bus, unsigned short addr) const {
     adjust_if_mirror(addr);
-    if (addr >= 0x0000 && addr <= 0x1FFF){
-        return bus.read_chr(addr);
-    }
-    return map[addr];
+    return bus.read_chr(addr);
 }
 
 void PPU::Memory::adjust_if_mirror(unsigned short& addr) {
@@ -60,76 +43,6 @@ void PPU::Memory::adjust_if_mirror(unsigned short& addr) {
         addr -= 0x10;
 }
 
-void PPU::read_ppuctrl(Bus& bus) {
-    ppuctrl.set(bus.ppuctrl.reg);
-    t &= 0xf3ff;
-    t |= (ppuctrl.base_name_table_addr << 10);
-
-    address_increment_on_read_ppudata = ppuctrl.addr_inc;
-    sprite_pattern_table_address8x8 = ppuctrl.pattern_table_addr8x8 ? constants::PATTERN_TABLE0_BEGIN : constants::PATTERN_TABLE1_BEGIN;
-    sprite_mode = ppuctrl.sprite_sz ?  m8x16 : m8x8;
-    bg_pattern_table_address = ppuctrl.bg_pattern_table_addr ? constants::PATTERN_TABLE0_BEGIN : constants::PATTERN_TABLE1_BEGIN;
-
-
-    // TODO: check
-    //    PPU master/slave select
-    //    (0: read backdrop from EXT pins; 1: output color on EXT pins)
-    vblank_nmi_enable = ppuctrl.vblank_nmi_enable;
-}
-
-void PPU::read_ppuscroll(Bus& bus) {
-    if (!w){
-        // set x coarse + x
-        t &= 0x7fe0;
-        t |= ((bus.ppuscroll.reg >> 3) & 0x1f);
-        x = bus.ppuscroll.reg & 0x7;
-    } else {
-        // set y coarse + y fine
-        t &= 0xc1f;
-        t |= ((bus.ppuscroll.reg >> 3) & 0x1f) << 5;
-        t |= (bus.ppuscroll.reg & 0x7) << 12;
-    }
-    w = !w;
-}
-
-void PPU::read_ppuaddr(Bus& bus) {
-    if (w){
-        t &= 0x7f00;
-        t |= bus.ppuaddr.reg;
-    } else {
-        t &= 0xff;
-        t |= (((bus.ppuaddr.reg & 0x7f) << 8));
-    }
-    if (w){
-        bus.mapper.update_state(t, v);
-        v = t;
-        bus.last_ppu_address = v;
-    }
-    w = !w;
-}
-
-void PPU::update_state(Bus& bus) {
-    if (bus.ppustatus.read_requested)   { w = false; bus.ppustatus.read_requested = false;}
-    if (bus.ppuctrl.write_requested)    {read_ppuctrl(bus); bus.ppuctrl.write_requested = false;}
-    if (bus.ppumask.write_requested)    {ppumask.set(bus.ppumask.reg); bus.ppumask.write_requested = false;}
-    if (bus.ppuscroll.write_requested)  {read_ppuscroll(bus); bus.ppuscroll.write_requested = false;}
-    if (bus.ppuaddr.write_requested)    {read_ppuaddr(bus); bus.ppuaddr.write_requested = false;}
-    // TODO: finish
-    if (bus.ppudata.write_requested)   {
-        unsigned short addr = v;
-        adjust_nt_mirroring(bus, addr);
-        mem.write(bus, addr, bus.ppudata.write_value);
-        v = (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff;
-        bus.ppudata.write_requested = false;
-    }
-    if (bus.ppudata.read_requested){
-        unsigned short addr = v;
-        adjust_nt_mirroring(bus, addr);
-        bus.ppudata.reg = mem.read(bus, addr);
-        v = (v + (ppuctrl.addr_inc ? 32 : 1)) & 0x3fff;
-        bus.ppudata.read_requested = false;
-    }
-}
 
 void PPU::adjust_nt_mirroring(Bus& bus, unsigned short& address) {
     for (int i = 0; i < 4; ++i){
@@ -165,7 +78,7 @@ unsigned short PPU::to_pattern_addr(unsigned char y, unsigned char tile_n, bool 
 
 // https://www.nesdev.org/wiki/PPU_sprite_evaluation
 void PPU::sprite_evaluate_tick(Bus &bus) {
-    int sprite_sz = sprite_mode == m8x8 ? 8 : 16;
+    int sprite_sz = bus.sprite_mode == Bus::SpriteMode::m8x8 ? 8 : 16;
     // TODO: finish
     if (current_scanline_cycle <= 64){
     // Secondary OAM (32-byte buffer for current sprites on scanline) is initialized to $FF
@@ -219,8 +132,7 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                 ++sprite_evaluation_index;
                 if (secondary_oam_buffer.size() == 8 && sprite_evaluation_index != 64) {
                     current_sprite_evaluation_step = SpriteOverflow;
-                    ppustatus.sprite_overflow_flag = true; // todo: check
-                    bus.ppustatus.reg |= 1 << 5;
+                    bus.ppustatus |= 1 << 5;
                 } else if (secondary_oam_buffer.size() <= 8 && sprite_evaluation_index == 64) {
                     current_sprite_evaluation_step = SpriteFinish;
                 } else {
@@ -260,9 +172,12 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
 }
 
 void PPU::bg_tick(Bus &bus) {
+    auto& v = bus.ppu_v;
+    auto& t = bus.ppu_t;
+
     bus.irq_interrupt_flip_flop = bus.mapper.is_irq_requested();
     // TODO: continue debug
-    update_state(bus);
+//    update_state(bus);
 #if DEBUG_MODE
     if (current_scanline_cycle == 0 && current_y == 0){
         frame_start = false;
@@ -275,7 +190,7 @@ void PPU::bg_tick(Bus &bus) {
 
     if (current_y < 240){
         // 1-256 cycles
-        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && ppumask.enable_background_rendering) {
+        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && (bus.ppumask >> 3) & 1) {
             fetch_tile_data_step(bus);
 
 #if DEBUG_MODE
@@ -299,12 +214,12 @@ void PPU::bg_tick(Bus &bus) {
                     v |= (add_val << 5);
                 }
             }
-        } else if(current_scanline_cycle == 257 && ppumask.enable_background_rendering) {
+        } else if(current_scanline_cycle == 257 && (bus.ppumask >> 3) & 1) {
             // TODO: debug (oam_read test (v & 0x1f) == 2)
             // set coarse x + update ntx bit
             v &= 0xfbe0;
             v |= (t & 0x41f);
-        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && ppumask.enable_background_rendering) {
+        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && (bus.ppumask >> 3) & 1) {
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
@@ -312,17 +227,17 @@ void PPU::bg_tick(Bus &bus) {
             fetch_tile_data_step(bus);
         }
     } else if (current_y == 261){
-        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && ppumask.enable_background_rendering) {
+        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && (bus.ppumask >> 3) & 1) {
             // todo: check
             fetch_tile_data_step(bus);
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
             attributes_high <<= 1;
-        } else if (current_scanline_cycle == 280 && ppumask.enable_background_rendering) {
+        } else if (current_scanline_cycle == 280 &&(bus.ppumask >> 3) & 1) {
             v &= 0x841f;
             v |= (t & 0x7be0);
-        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && ppumask.enable_background_rendering){
+        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && (bus.ppumask >> 3) & 1){
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
@@ -341,10 +256,6 @@ void PPU::reset() {
     current_y = 0;
     current_x = 0;
     current_cycle = 0;
-    v = 0;
-    t = 0;
-    x = 0;
-    w = false;
     display1.fill(BLACK);
     display2.fill(BLACK);
     secondary_oam_buffer.reset();
@@ -357,17 +268,11 @@ void PPU::reset() {
     copy_in_progress = false;
     tmp_oam_value = 0;
     base_name_table_address = 0;
-    bg_pattern_table_address = 0;
-    base_attrib_address = 0;
-    sprite_pattern_table_address8x8 = 0;
     shift_register_low = 0;
     shift_register_high = 0;
     attributes_low = 0;
     attributes_high = 0;
     current_step = NT;
-    ppuctrl.reset();
-    ppumask.reset();
-    ppustatus.reset();
 #if DEBUG_MODE
     run = false;
     frame_start = false;
@@ -375,7 +280,7 @@ void PPU::reset() {
 }
 
 void PPU::update_base_nt(Bus& bus) {
-    base_name_table_address = get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, ((v >> 10) & 0x3));
+    base_name_table_address = get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, ((bus.ppu_v >> 10) & 0x3));
 }
 
 unsigned short PPU::get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n) {
@@ -391,6 +296,9 @@ unsigned short PPU::get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned c
 }
 
 void PPU::fetch_tile_data_step(Bus& bus) {
+    auto& v = bus.ppu_v;
+    auto& t = bus.ppu_t;
+
     if (!(current_scanline_cycle & 1)) {
         unsigned char x_tile_n = (v & 0x1f);
         unsigned char y_tile_n = ((v >> 5) & 0x1f);
@@ -411,10 +319,10 @@ void PPU::fetch_tile_data_step(Bus& bus) {
                 current_step = PTL;
                 break;}  // fetch attribute table byte
             case PTL: {
-                pattern_table_l = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, false, ppuctrl.bg_pattern_table_addr));
+                pattern_table_l = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, false, (bus.ppuctrl >> 4) & 1));
                 current_step = PTH; break;}     // pattern table tile low
             case PTH: {
-                pattern_table_h = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, true, ppuctrl.bg_pattern_table_addr));
+                pattern_table_h = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, true, (bus.ppuctrl >> 4) & 1));
                 shift_register_low &= 0xff00;
                 shift_register_low |=  pattern_table_l;
                 shift_register_high &= 0xff00;
@@ -480,27 +388,25 @@ void PPU::draw_pixel(Bus &bus) {
                 break;
         }
     }
-    unsigned char bg_data = (((shift_register_high >> (15-x)) & 1) << 1) | (shift_register_low >> (15-x)) & 1;
+    unsigned char bg_data = (((shift_register_high >> (15-bus.ppu_x)) & 1) << 1) | (shift_register_low >> (15 - bus.ppu_x)) & 1;
     unsigned char res{};
 
-    if (bg_data == 0 && (sprite_data != 0 && ppumask.enable_sprite_rendering)){
+    if (bg_data == 0 && (sprite_data != 0 && (bus.ppumask >> 4) & 1)){
         is_sprite = true;
         res = sprite_data;
     } else if (bg_data != 0 && sprite_data == 0)
         res = bg_data;
     else if (bg_data != 0 && sprite_data != 0) {
-        if (oam_index == 0 && ppumask.enable_sprite_rendering && ppumask.enable_background_rendering){
-            // todo: debug
-            ppustatus.sprite_zero_hit_flag = true;
-            bus.ppustatus.reg |= (1 << 6);
+        if (oam_index == 0 && (bus.ppumask >> 4) & 1 && (bus.ppumask >> 3) & 1){
+            bus.ppustatus |= (1 << 6);
         }
-        res = (!is_bg_prio && ppumask.enable_sprite_rendering) ? (is_sprite = true, sprite_data) : bg_data;
+        res = (!is_bg_prio && (bus.ppumask >> 4) & 1) ? (is_sprite = true, sprite_data) : bg_data;
     } else {
         universal_background = true;
     }
 
-    unsigned char attrib_high_bit = is_sprite ? ((sprite_attrib >> 1) & 1) :  (attributes_high >> (15-x)) & 1;
-    unsigned char attrib_low_bit = is_sprite ? ((sprite_attrib) & 1) : (attributes_low >> (15-x)) & 1;
+    unsigned char attrib_high_bit = is_sprite ? ((sprite_attrib >> 1) & 1) : (attributes_high >> (15-bus.ppu_x)) & 1;
+    unsigned char attrib_low_bit = is_sprite ? ((sprite_attrib) & 1) : (attributes_low >> (15-bus.ppu_x)) & 1;
 
     unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
 
@@ -530,35 +436,35 @@ void PPU::draw_pixel(Bus &bus) {
 void PPU::tick(Bus& bus) {
     bg_tick(bus);
     bus.mapper.tick();
-    current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && ppumask.enable_background_rendering && !(frames_count & 1)); // todo: check
+    current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && (bus.ppumask >> 3) & 1 && !(frames_count & 1)); // todo: check
 #if DEBUG_MODE
     if (!is_sprite_off)
 #endif
     sprite_evaluate_tick(bus);
-    if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && ppumask.enable_background_rendering) {
+    if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && (bus.ppumask >> 3) & 1) {
         draw_pixel(bus);
     } else if (current_scanline_cycle == 257) {
         // 257-320
         secondary_oam.reset();
-        if (ppumask.enable_background_rendering) {
+        if ((bus.ppumask >> 3) & 1) {
             if (!secondary_oam_buffer.size()){
                 // dummy read for IRQ
                 mem.read(bus, last_address);
             }
             for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
                 bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1;
-                auto pt_base = (sprite_mode == m8x8 ?
-                                (!ppuctrl.pattern_table_addr8x8 ? constants::PATTERN_TABLE0_BEGIN
+                auto pt_base = (bus.sprite_mode == Bus::SpriteMode::m8x8 ?
+                                (!((bus.ppuctrl >> 3) & 1) ? constants::PATTERN_TABLE0_BEGIN
                                                                 : constants::PATTERN_TABLE1_BEGIN) :
                                 (secondary_oam_buffer[i].pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN
                                                                       : constants::PATTERN_TABLE0_BEGIN));
-                auto pt_index = (sprite_mode == m8x8 ?
+                auto pt_index = (bus.sprite_mode == Bus::SpriteMode::m8x8 ?
                         secondary_oam_buffer[i].pt_index :
                         secondary_oam_buffer[i].pt_index & 0xfe);
                 auto diff =  (current_y - secondary_oam_buffer[i].y_pos);
                 unsigned char current_index = pt_index;
                 if (diff < 8){
-                    current_index += (sprite_mode == PPU::SpriteMode::m8x16 && is_vertical_flip);
+                    current_index += (bus.sprite_mode == Bus::SpriteMode::m8x16 && is_vertical_flip);
                 } else {
                     current_index += (!is_vertical_flip);
                 }
@@ -582,18 +488,15 @@ void PPU::tick(Bus& bus) {
 
     // todo: timing debug
     if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1)) {
-        ppustatus.vblank_flag = 1;
-        bus.ppustatus.reg |= 1 << 7;
+        bus.ppustatus |= 1 << 7;
         bus.current_nmi_cycle = current_cycle;
         bus.nmi_interrupt_flip_flop = true;
     }
 
     if (current_y == 261 && current_scanline_cycle == 1){
-        if (ppumask.enable_background_rendering) update_current_display(); // todo: check
+        if ((bus.ppumask >> 3) & 1) update_current_display(); // todo: check
         bus.nmi_interrupt_flip_flop = false; // todo: check
-        ppustatus.sprite_zero_hit_flag = false;
-        ppustatus.sprite_overflow_flag = false;
-        bus.ppustatus.reg &= 0x3f;
+        bus.ppustatus &= 0x3f;
     }
 
     bus.current_ppu_cycle = current_cycle;

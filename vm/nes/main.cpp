@@ -136,6 +136,7 @@ struct NESVM {
         static size_t cpu_tick_count = 0;
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active
                 || dis.is_line_jump_active || dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLES) {
+// todo: fix
 #if DEBUG_MODE
             if (!cpu.debug_run)
                 snap_storage.push_state(bus, cpu, ppu);
@@ -261,7 +262,7 @@ struct NESVM {
             switch(current_up_right_view) {
                 case PatternTableV: {ptv.handle(ppu,bus); break;}
                 case PaletteViewer: {pv.handle(bus, ppu); break;}
-                default: {ntnv.handle(ppu); break;}
+                default: {ntnv.handle(bus); break;}
             }
         };
 
@@ -375,7 +376,7 @@ int main(){
             "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes", // TODO: Debug
             "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/1.frame_basics.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes",
@@ -392,7 +393,7 @@ int main(){
     };
     MultiTest<NESVM, std::size(tests_paths)>{}.run(tests_paths);
 #else
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/dma_2007_read.nes"); // todo: debug
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes"); // todo: debug
     nes.run();
 #endif
 }

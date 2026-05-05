@@ -16,7 +16,6 @@ struct CPU {
 //    $4020–$FFFF   $BFE0   Unmapped. Available for cartridge use.
 //    • $6000–$7FFF $2000   Usually cartridge RAM, when present.
 //    • $8000–$FFFF $8000   Usually cartridge ROM and mapper registers.
-        unsigned char map[0x10000]{};
         unsigned char read(Bus&, unsigned short addr) const;
         unsigned char unsafe_read(Bus&, unsigned short addr) const;
         void write(Bus&, unsigned short addr, unsigned char value);
@@ -53,35 +52,6 @@ struct CPU {
         mutable bool triggered_on_read = false;
 #endif
     } mem;
-
-    // For debug
-    inline constexpr static unsigned short write_mmio_addr[] = {
-            constants::PPUCTRL,
-            constants::PPUMASK,
-            constants::PPUSTATUS,
-            constants::OAMADDR,
-            constants::OAMDATA,
-            constants::PPUSCROLL,
-            constants::PPUADDR,
-            constants::PPUDATA,
-            constants::OAMDMA,
-            constants::CONTROLLER1,
-            constants::CONTROLLER2_AND_APU_FC,
-    };
-
-    inline constexpr static unsigned short read_mmio_addr[] = {
-            constants::PPUCTRL,
-            constants::PPUMASK,
-            constants::PPUSTATUS,
-            constants::OAMADDR,
-            constants::OAMDATA,
-            constants::PPUSCROLL,
-            constants::PPUADDR,
-            constants::PPUDATA,
-            constants::OAMDMA,
-            constants::CONTROLLER1,
-            constants::CONTROLLER2_AND_APU_FC,
-    };
 
     // https://www.nesdev.org/NESDoc.pdf (page 12-13)
     // SPR

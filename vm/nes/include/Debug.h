@@ -199,10 +199,10 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                         auto nt =  ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt);
                         auto x_tile_n = (i % 32);
                         auto y_tile_n = current_nt_y % 30;
-                        auto pt_addr = ((base_pt_address + (16 * *(ppu.mem.map + nt + (y_tile_n * 32) + x_tile_n))));
+                        auto pt_addr = ((base_pt_address + (16 * *(bus.ppu_map + nt + (y_tile_n * 32) + x_tile_n))));
                         auto l_tile = bus.read_chr(pt_addr + z);
                         auto h_tile = bus.read_chr(pt_addr + z + 8);
-                        auto val = ppu.mem.map[nt + 0x3c0 + (y_tile_n/4 * 8) + x_tile_n/4];
+                        auto val = bus.ppu_map[nt + 0x3c0 + (y_tile_n/4 * 8) + x_tile_n/4];
                         auto shift_y = (y_tile_n/2) % 2;
                         auto shift_x = (x_tile_n/2) % 2;
                         auto attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
@@ -215,7 +215,7 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                             unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
                             unsigned short r_index =  constants::IMAGE_PALETTE_BEGIN;
                             r_index += ((res != 0) * index);
-                            auto pixel_index = ppu.mem.map[r_index];
+                            auto pixel_index = bus.ppu_map[r_index];
                             DW::buffer[current++] = ppu.palette[pixel_index];
                         }
                     }
@@ -245,7 +245,7 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                             ++current_nt;
                         }
                         auto pt_addr = ((base_pt_address + (16 *
-                                                            *(ppu.mem.map + (ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) +
+                                                            *(bus.ppu_map + (ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) +
                                                                              ((current_nt_y % 30) * 32) + (i % 32))))));
                         auto l_tile = bus.read_chr(pt_addr + z);
                         auto h_tile = bus.read_chr(pt_addr + z + 8);
@@ -283,13 +283,13 @@ struct NameTableNumView: DebugWindowText<x, y, w, h> {
     bool ascii_print = false;
     // 32 x 30
     short base_nt_address = constants::NAME_TABLE0_BEGIN;
-    void handle(PPU& ppu){
+    void handle(Bus& bus){
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
             ascii_print = !ascii_print;
         ss << std::hex;
         for (int s = 0; s < 30; ++s){
             for (int i = 0; i < 32; ++i){
-                auto v = *(ppu.mem.map + (base_nt_address + (s * 32) + i));
+                auto v = *(bus.ppu_map + (base_nt_address + (s * 32) + i));
                 if (ascii_print && v != '\0') ss << v; else ss << (unsigned)v;
                 ss << " ";
             }
@@ -610,6 +610,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     }
 };
 
+
 struct SnapStorage {
     struct CPUs {
         unsigned char x{},y{},a{};
@@ -644,9 +645,6 @@ struct SnapStorage {
     };
 
     struct PPUs{
-        unsigned short v{},t{};
-        unsigned char x{};
-        bool w{};
         size_t current_cycle{};
         size_t frames_count{};
 
@@ -663,10 +661,6 @@ struct SnapStorage {
         PPU::FetchStep current_step{};
         SimpleDeque<PPU::Sprite, 8> secondary_oam_buffer{};
         SimpleDeque<PPU::SpriteData, 8> secondary_oam{};
-
-        PPU::PPUCTRL ppuctrl;
-        PPU::PPUMASK ppumask;
-        PPU::PPUSTATUS ppustatus;
 
         unsigned short current_scanline_cycle = 0;
         unsigned char nt_byte = 0;
@@ -694,7 +688,6 @@ struct SnapStorage {
         unsigned short attributes_low{};
         unsigned short attributes_high{};
         bool address_increment_on_read_ppudata = false; //    RAM address increment per CPU read/write of PPUDATA
-        PPU::SpriteMode sprite_mode;
         bool vblank_nmi_enable = false;
 
         SimpleDeque<std::pair<unsigned short, unsigned char>, 3> write_addresses;
@@ -703,10 +696,6 @@ struct SnapStorage {
         size_t current_y = 0;
 
         inline void from_ppu(const PPU& ppu){
-            v = ppu.v;
-            t = ppu.t;
-            x = ppu.x;
-            w = ppu.w;
             current_cycle = ppu.current_cycle;
             frames_count = ppu.frames_count;
             frame_start = ppu.frame_start;
@@ -722,19 +711,12 @@ struct SnapStorage {
             current_step = ppu.current_step;
             secondary_oam_buffer = ppu.secondary_oam_buffer;
             secondary_oam = ppu.secondary_oam;
-            ppuctrl = ppu.ppuctrl;
-            ppumask = ppu.ppumask;
-            ppustatus = ppu.ppustatus;
-
             current_scanline_cycle = ppu.current_scanline_cycle;
             nt_byte = ppu.nt_byte;
             attrib_value = ppu.attrib_value;
             pattern_table_l = ppu.pattern_table_l;
             pattern_table_h = ppu.pattern_table_h;
             base_name_table_address = ppu.base_name_table_address;
-            bg_pattern_table_address = ppu.bg_pattern_table_address;
-            base_attrib_address = ppu.base_attrib_address;
-            sprite_pattern_table_address8x8 = ppu.sprite_pattern_table_address8x8;
             current_sprite_evaluation_step = ppu.current_sprite_evaluation_step;
             copy_in_progress = ppu.copy_in_progress;
             tmp_oam_value = ppu.tmp_oam_value;
@@ -746,9 +728,6 @@ struct SnapStorage {
             shift_register_high = ppu.shift_register_high;
             attributes_low = ppu.attributes_low;
             attributes_high = ppu.attributes_high;
-            address_increment_on_read_ppudata = ppu.address_increment_on_read_ppudata;
-            sprite_mode = ppu.sprite_mode;
-            vblank_nmi_enable = ppu.vblank_nmi_enable;
             current_x = ppu.current_x;
             current_y = ppu.current_y;
             write_addresses = ppu.mem.write_addresses;
@@ -759,10 +738,6 @@ struct SnapStorage {
                 ppu.mem.write(bus, cur.first, cur.second);
                 write_addresses.pop_back();
             }
-            ppu.v = v;
-            ppu.t = t;
-            ppu.x = x;
-            ppu.w = w;
             ppu.current_cycle = current_cycle;
             ppu.frames_count = frames_count;
             ppu.frame_start = frame_start;
@@ -778,19 +753,12 @@ struct SnapStorage {
             ppu.current_step = current_step;
             ppu.secondary_oam_buffer = secondary_oam_buffer;
             ppu.secondary_oam = secondary_oam;
-            ppu.ppuctrl = ppuctrl;
-            ppu.ppumask = ppumask;
-            ppu.ppustatus = ppustatus;
-
             ppu.current_scanline_cycle = current_scanline_cycle;
             ppu.nt_byte = nt_byte;
             ppu.attrib_value = attrib_value;
             ppu.pattern_table_l = pattern_table_l;
             ppu.pattern_table_h = pattern_table_h;
             ppu.base_name_table_address = base_name_table_address;
-            ppu.bg_pattern_table_address = bg_pattern_table_address;
-            ppu.base_attrib_address = base_attrib_address;
-            ppu.sprite_pattern_table_address8x8 = sprite_pattern_table_address8x8;
             ppu.current_sprite_evaluation_step = current_sprite_evaluation_step;
             ppu.copy_in_progress = copy_in_progress;
             ppu.tmp_oam_value = tmp_oam_value;
@@ -802,9 +770,6 @@ struct SnapStorage {
             ppu.shift_register_high = shift_register_high;
             ppu.attributes_low = attributes_low;
             ppu.attributes_high = attributes_high;
-            ppu.address_increment_on_read_ppudata = address_increment_on_read_ppudata;
-            ppu.sprite_mode = sprite_mode;
-            ppu.vblank_nmi_enable = vblank_nmi_enable;
             ppu.current_x = current_x;
             ppu.current_y = current_y;
         }
@@ -862,10 +827,10 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         return watch_status & 0x03c0;
     }
 
-    void watch_update_check(CPU& cpu, PPU& ppu){
+    void watch_update_check(CPU& cpu, Bus& bus, PPU& ppu){
         for (int i = 0; i < 10; ++i){
             auto rn = static_cast<RegNum>(i);
-            if ((get_watch_status(rn) && get_reg_value(rn, ppu, cpu) != previous_reg_values[i])){
+            if ((get_watch_status(rn) && get_reg_value(rn, bus, ppu, cpu) != previous_reg_values[i])){
                 watch_status = 0;
                 ppu.fill_white_background = true;
                 break;
@@ -875,7 +840,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
 
     std::array<unsigned char, RegsNumCount> previous_reg_values = {};
 
-    unsigned char get_reg_value(RegNum rn, PPU& ppu, CPU& cpu){
+    unsigned char get_reg_value(RegNum rn, Bus& bus, PPU& ppu, CPU& cpu){
         switch (rn) {
             case A: return cpu.a;
             case CPU_X: return cpu.x;
@@ -883,10 +848,10 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
             case PC: return cpu.pc;
             case SP: return cpu.sp;
             case Flags: return cpu.sr.reg;
-            case V: return ppu.v;
-            case PPU_X: return ppu.x;
-            case T: return ppu.t;
-            default: return ppu.w;
+            case V: return bus.ppu_v;
+            case PPU_X: return bus.ppu_x;
+            case T: return bus.ppu_t;
+            default: return bus.ppu_w;
         }
     }
 
@@ -906,24 +871,24 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
     Rectangle mirroring_switch_button = {DW::rec.x-30, DW::rec.y+DW::rec.height-30, 30, 30};
     Rectangle sprite_off_button = {DW::rec.x-30, DW::rec.y+DW::rec.height, 30, 30};
     std::stringstream ss;
-    void update_reg(CPU& cpu, PPU& ppu, RegNum rn, unsigned short value){
+    void update_reg(Bus& bus, CPU& cpu, RegNum rn, unsigned short value){
         switch (rn) {
             case A:     {cpu.a = value & 0xff; break;}
             case CPU_X: {cpu.x = value & 0xff; break;}
             case Y:     {cpu.y = value & 0xff; break;}
             case PC:    {cpu.pc = value; break;}
             case SP:    {cpu.sp = value; break;}
-            case V:     {ppu.v = value; break;}
-            case PPU_X: {ppu.x = value & 0x7; break;}
-            case T:     {ppu.t = value; break;}
-            case W:     {ppu.w = (value); break;}
+            case V:     {bus.ppu_v = value; break;}
+            case PPU_X: {bus.ppu_x = value & 0x7; break;}
+            case T:     {bus.ppu_t = value; break;}
+            case W:     {bus.ppu_w = (value); break;}
         }
     }
     void handle(CPU& cpu, PPU& ppu, Bus& bus) {
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
         mirroring_switch_button = {DW::rec.x-30, DW::rec.y+DW::rec.height-30, 30, 30};
         sprite_off_button = {DW::rec.x-30, DW::rec.y+DW::rec.height, 30, 30};
-        if (watch_status) watch_update_check(cpu, ppu);
+        if (watch_status) watch_update_check(cpu, bus, ppu);
 
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
             mode = static_cast<Mode>((mode + 1) % ModeCount);
@@ -938,23 +903,23 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
         << std::hex << " A:" << (unsigned)cpu.a << '\n'
         << " X:" << (unsigned)cpu.x << '\n'
         << " Y:" << (unsigned)cpu.y << '\n'
-        << " PC:" << cpu.pc << '\n'
-        << " SP:" << (unsigned )cpu.sp << '\n'
-        << "  Flags:" << (unsigned)(cpu.sr.reg & 0xcf) << '\n'
-        << "  Cf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::C)) << ' '
-        << "  Zf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::Z)) << ' '
-        << "  If:" << (unsigned)(cpu.sr.get(CPU::StatusReg::I)) << '\n'
-        << "  Df:" << (unsigned)(cpu.sr.get(CPU::StatusReg::D)) << ' '
-        << "  Vf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::V)) << ' '
-        << "  Nf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::N)) << ' '
-        << " \n\n PPU:\n"
-        << "  V:" << (unsigned)(ppu.v) << '\n'
-        << " Coarse(Y):" << (unsigned)((ppu.v >> 5) & 0x1f) << " Fine(Y):" <<  (unsigned)((ppu.v >> 12) & 0x7) << '\n'
-        << "  NT:" << (unsigned)((ppu.v >> 10) & 0x3) << '\n'
-        << "  X:" << (unsigned)(ppu.x) << '\n'
-        << "  T:" << (unsigned)(ppu.t) << '\n'
-        << "  W:" << (unsigned)(ppu.w) << '\n'
-        << "  VBLank:" << (unsigned)(ppu.ppustatus.vblank_flag) << "   Bus VBLank:" << (unsigned)(bus.ppustatus.reg & 0x80) << '\n'
+                << " PC:" << cpu.pc << '\n'
+                << " SP:" << (unsigned )cpu.sp << '\n'
+                << "  Flags:" << (unsigned)(cpu.sr.reg & 0xcf) << '\n'
+                << "  Cf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::C)) << ' '
+                << "  Zf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::Z)) << ' '
+                << "  If:" << (unsigned)(cpu.sr.get(CPU::StatusReg::I)) << '\n'
+                << "  Df:" << (unsigned)(cpu.sr.get(CPU::StatusReg::D)) << ' '
+                << "  Vf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::V)) << ' '
+                << "  Nf:" << (unsigned)(cpu.sr.get(CPU::StatusReg::N)) << ' '
+                << " \n\n PPU:\n"
+                << "  V:" << (unsigned)(bus.ppu_v) << '\n'
+                << " Coarse(Y):" << (unsigned)((bus.ppu_v >> 5) & 0x1f) << " Fine(Y):" << (unsigned)((bus.ppu_v >> 12) & 0x7) << '\n'
+                << "  NT:" << (unsigned)((bus.ppu_v >> 10) & 0x3) << '\n'
+                << "  X:" << (unsigned)(bus.ppu_x) << '\n'
+                << "  T:" << (unsigned)(bus.ppu_t) << '\n'
+                << "  W:" << (unsigned)(bus.ppu_w) << '\n'
+        << "  VBLank:" << (unsigned)((bus.ppustatus>> 7) & 1) << "   Bus VBLank:" << (unsigned)(bus.ppustatus & 0x80) << '\n'
         << "  OpenBus:" <<  (int)bus.open_bus_value << '\n'
         << std::dec << "  Cycles:" << ppu.current_scanline_cycle
         << "  Scanline:" << ppu.current_y << '\n'
@@ -976,11 +941,11 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
                 DW::draw_button(current_button_rec,   get_watch_status(rn) ? GREEN : RED);
 
             if (CheckCollisionPointRec(GetMousePosition(), current_button_rec) && mode == Set && IsMouseButtonPressed(0) && !u_input.s.empty())
-                update_reg(cpu, ppu, rn, std::stoul(u_input.s, nullptr, 16));
+                update_reg(bus, cpu,  rn, std::stoul(u_input.s, nullptr, 16));
             else if (CheckCollisionPointRec(GetMousePosition(), current_button_rec) && mode == Watch && IsMouseButtonPressed(0)){
                 watch_status_switch(rn);
                 if (get_watch_status(rn)){
-                    previous_reg_values[i] = get_reg_value(rn, ppu, cpu);
+                    previous_reg_values[i] = get_reg_value(rn, bus, ppu, cpu);
                     ppu.fill_white_background = false;
                 }
             }
@@ -1011,7 +976,7 @@ struct PaletteViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
             DW::buffer.fill(WHITE);
             DW::handle();
             for (int i = 0; i < 0x20; ++i){
-                ss << std::hex << (unsigned)ppu.mem.map[constants::IMAGE_PALETTE_BEGIN + i] << ' ';
+                ss << std::hex << (unsigned)bus.ppu_map[constants::IMAGE_PALETTE_BEGIN + i] << ' ';
                 if (i % 4 == 3) ss << '\n';
             }
             auto str = ss.str();
@@ -1234,21 +1199,21 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
             dump_button{DW::rec.x+30*4, DW::rec.y+DW::rec.height, 30,30}
             {}
 
-    void dump(Bus& bus, auto& r, std::string_view path){
+    void dump(Bus& bus, auto& r, std::string_view path, size_t sz){
         std::ofstream file(path, std::ios::binary);
         if (!file.is_open()) return;
-        for (int i = 0, e = sizeof(r.mem.map); i != e; ++i)
+        for (int i = 0; i != sz; ++i)
             file.put(r.mem.unsafe_read(bus, i));
     }
 
-    void mem_print(Bus& bus, auto& r){
+    void mem_print(Bus& bus, auto& r, size_t sz){
         t_x = DW::rec.x;
         t_y = DW::rec.y;
         ss << std::hex;
         auto current_address = start_address;
         unsigned short adjusted_address = current_address;
         for (int i = 0; i < 16 * lines_count; ++i){
-            adjusted_address = current_address = (start_address + i) & (std::size(r.mem.map)-1);
+            adjusted_address = current_address = (start_address + i) & (sz-1);
             r.mem.adjust_if_mirror(adjusted_address);
             if (!(i & 0xf)){
                 ss << "\n";
@@ -1305,8 +1270,8 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 ppu.mem.write(bus, target_address, std::stoul(u_input.s, nullptr, 16));
         } else if (CheckCollisionPointRec(GetMousePosition(), dump_button) && IsMouseButtonPressed(0)){
             switch (mode) {
-                case PPUm: dump(bus, ppu, mode_str[mode]); break;
-                case CPUm: dump(bus, cpu, mode_str[mode]); break;
+                case PPUm: dump(bus, ppu, mode_str[mode], sizeof(bus.ppu_map)); break;
+                case CPUm: dump(bus, cpu, mode_str[mode], sizeof(bus.cpu_map)); break;
                 default: break;
             }
         } else if (CheckCollisionPointRec(GetMousePosition(), pc_watch_address_button) && IsMouseButtonPressed(0)){
@@ -1319,8 +1284,8 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         }
 
         switch (mode){
-            case CPUm: mem_print(bus,  cpu); ss << "\nCPU"; break;
-            case PPUm: mem_print(bus, ppu); ss << "\nPPU"; break;
+            case CPUm: mem_print(bus,  cpu, sizeof(bus.cpu_map)); ss << "\nCPU"; break;
+            case PPUm: mem_print(bus, ppu, sizeof(bus.ppu_map)); ss << "\nPPU"; break;
             case OAMm: {
                 auto i = target_address * 4;
                 auto e = i + (16 * 4);
@@ -1375,7 +1340,7 @@ struct SpriteInfo: DebugWindowText<x, y, w, h> {
             info_version = static_cast<InfoVersion>((info_version + 1) % InfoVersionCount);
 
         ss << "SpriteInfo:\n"
-            << " SpriteMode:" << (ppu.sprite_mode == PPU::SpriteMode::m8x8 ? 8 : 16) << '\n'
+            << " SpriteMode:" << (bus.sprite_mode == Bus::SpriteMode::m8x8 ? 8 : 16) << '\n'
            << "  SecondaryOAMSize:"    <<   std::dec << ppu.secondary_oam.size() << '\n'
            << "  OAMBufferSize:"      <<   std::dec << ppu.secondary_oam_buffer.size() << '\n'
         << (view_version == Dec ? std::dec : std::hex);
@@ -1444,18 +1409,18 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                         bool is_horizontal_flip = ((attrib >> 6) & 1);
 
                         unsigned char updated_pt_index =
-                                ppu.sprite_mode ==  PPU::SpriteMode::m8x8 ? pt_index : (pt_index & 0xfe);
+                                bus.sprite_mode ==  Bus::SpriteMode::m8x8 ? pt_index : (pt_index & 0xfe);
 
                         unsigned char current_index = updated_pt_index;
                         if (k < 8){
-                            current_index += (ppu.sprite_mode == PPU::SpriteMode::m8x16 && is_vertical_flip);
+                            current_index += (bus.sprite_mode == Bus::SpriteMode::m8x16 && is_vertical_flip);
                         } else {
                             current_index += (!is_vertical_flip);
                         }
 
                         auto pt_base =
-                                ppu.sprite_mode == PPU::SpriteMode::m8x8 ?
-                                       (ppu.ppuctrl.pattern_table_addr8x8 & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN) :
+                                bus.sprite_mode == Bus::SpriteMode::m8x8 ?
+                                       ((bus.ppuctrl >> 3) & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN) :
                                 (pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN);
 
                         unsigned char shift_l = ppu.mem.read(bus,
@@ -1483,7 +1448,7 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                         }
                         DW::buffer[buffer_index++] = RED;
                     }
-                    if ((ppu.sprite_mode == PPU::SpriteMode::m8x8 && i % 2 == 1) || ppu.sprite_mode  == PPU::SpriteMode::m8x16) ++k;
+                    if ((bus.sprite_mode == Bus::SpriteMode::m8x8 && i % 2 == 1) || bus.sprite_mode  == Bus::SpriteMode::m8x16) ++k;
                 }
             }
             DW::handle();
@@ -1835,13 +1800,13 @@ struct Snapshot: DebugWindowText<x, y, w, h> {
             s[CPU_Y] = cpu.y;
             s[CPU_A] = cpu.a;
             s[CPU_FLAG] = cpu.sr.reg;
-            s[PPU_V] = ppu.v;
-            s[PPU_T]=  ppu.t;
-            s[PPU_X] = ppu.x;
+            s[PPU_V] = bus.ppu_v;
+            s[PPU_T]=  bus.ppu_t;
+            s[PPU_X] = bus.ppu_x;
             s[PPU_SHIFT_L] = ppu.shift_register_low;
             s[PPU_SHIFT_H] = ppu.shift_register_high;
-            s[PPU_CTRL_REG] = ppu.ppuctrl.get();
-            s[PPU_STATUS_REG] = ppu.ppustatus.get();
+            s[PPU_CTRL_REG] = bus.ppuctrl;
+            s[PPU_STATUS_REG] = bus.ppustatus;
         } else if (CheckCollisionPointRec(GetMousePosition(), clear_s) && IsMouseButtonPressed(0)){
             std::memset(s1, 0 , sizeof(s1));
             std::memset(s2, 0 , sizeof(s2));
@@ -1859,7 +1824,7 @@ struct Snapshot: DebugWindowText<x, y, w, h> {
 //            res.resize(bus.mapper.chr.size());
 //            memcpy(res.data(), bus.mapper.chr.data(), 0x2000);
 //            auto res = bus.mapper.chr;
-//            memcpy(ppu_s.mem.map + 0x3f00, ppu.mem.map + 0x3f00, 0xff);
+//            memcpy(ppu_s.mem.map + 0x3f00, bus.ppu_map + 0x3f00, 0xff);
 //            ppu_s.run = ppu.run;
 //            ppu_s.fill_white_background = ppu.fill_white_background;
 //            static bool f = true;

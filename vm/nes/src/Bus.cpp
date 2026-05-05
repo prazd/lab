@@ -13,16 +13,54 @@ void Bus::write(unsigned short addr, unsigned char value) {
 
     switch (addr) {
         case constants::PPUCTRL:   {
-            ppuctrl   =   {value, true};
+            ppuctrl = value;
+            ppu_t &= 0xf3ff;
+            ppu_t |= ((ppuctrl & 0x3) << 10);
+            sprite_mode = static_cast<SpriteMode>((ppuctrl >> 5) & 1);
             break;}
-        case constants::PPUMASK:   {
-            ppumask   =   {value, true};
+        case constants::PPUMASK:   {ppumask   = value; break;}
+        case constants::OAMADDR:   { oamaddr   =   value; break;}
+        case constants::OAMDATA:   { oamdata   =   value; oam[oamaddr++] = value; break;}
+        case constants::PPUSCROLL: {
+            ppuscroll = value;
+            if (!ppu_w){
+                // set x coarse + x
+                ppu_t &= 0x7fe0;
+                ppu_t |= ((ppuscroll >> 3) & 0x1f);
+                ppu_x = ppuscroll & 0x7;
+            } else {
+                // set y coarse + y fine
+                ppu_t &= 0xc1f;
+                ppu_t |= ((ppuscroll >> 3) & 0x1f) << 5;
+                ppu_t |= (ppuscroll & 0x7) << 12;
+            }
+            ppu_w = !ppu_w;
             break;}
-        case constants::OAMADDR:   { oamaddr   =   {value, true}; break;}
-        case constants::OAMDATA:   { oamdata   =   {value, true}; oam[oamaddr.reg++] = value; break;}
-        case constants::PPUSCROLL: { ppuscroll =   {value, true}; break;}
-        case constants::PPUADDR:   { ppuaddr   =   {value, true}; break;}
-        case constants::PPUDATA:   { ppudata   =   {ppudata.reg, true, false, value}; break;}
+        case constants::PPUADDR:   {
+            ppuaddr  = value;
+            if (ppu_w){
+                ppu_t &= 0x7f00;
+                ppu_t |= ppuaddr;
+            } else {
+                ppu_t &= 0xff;
+                ppu_t |= (((ppuaddr & 0x7f) << 8));
+            }
+            if (ppu_w){
+                mapper.update_state(ppu_t, ppu_v);
+                ppu_v = ppu_t;
+                last_ppu_address = ppu_v;
+            }
+            ppu_w = !ppu_w;
+            break;
+        }
+        case constants::PPUDATA:   {
+            ppudata   =   value;
+            unsigned short w_addr = ppu_v;
+            adjust_ppu_nt_mirroring(w_addr);
+            adjust_ppu_mirroring(w_addr);
+            write_chr(w_addr, ppudata);
+            ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
+            break;}
         case constants::OAMDMA : {
             dma_address = value << 8;
             dma_active = true;
@@ -31,8 +69,9 @@ void Bus::write(unsigned short addr, unsigned char value) {
             break;
         }
         case constants::CONTROLLER1: { if (value) c.latch1 = true; else c.update_status1();  break; }
-        case constants::CONTROLLER2_AND_APU_FC: { apufc = {value, true};  break; }
+        case constants::CONTROLLER2_AND_APU_FC: { apufc = value;  break; }
     }
+    cpu_map[addr] = value;
 }
 
 void Bus::unsafe_write(unsigned short addr, unsigned char value) {
@@ -42,16 +81,16 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
     }
     switch (addr) {
         case constants::PPUCTRL:   {
-            ppuctrl   =   {value, true};
+            ppuctrl  =  value;
             break;}
         case constants::PPUMASK:   {
-            ppumask   =   {value, true};
+            ppumask  =  value;
             break;}
-        case constants::OAMADDR:   { oamaddr   =   {value, true}; break;}
-        case constants::OAMDATA:   { oamdata   =   {value, true}; oam[oamaddr.reg++] = value; break;}
-        case constants::PPUSCROLL: { ppuscroll =   {value, true}; break;}
-        case constants::PPUADDR:   { ppuaddr   =   {value, true}; break;}
-        case constants::PPUDATA:   { ppudata   =   {value, true}; break;}
+        case constants::OAMADDR: {  oamaddr   =   value; break;}
+        case constants::OAMDATA:  { oamdata   =   value; oam[oamaddr++] = value; break;}
+        case constants::PPUSCROLL: {ppuscroll =   value; break;}
+        case constants::PPUADDR:  { ppuaddr   =   value; break;}
+        case constants::PPUDATA:  { ppudata   =   value; break;}
         case constants::OAMDMA : {
             dma_address = value << 8;
             dma_active = true;
@@ -60,8 +99,9 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
             break;
         }
         case constants::CONTROLLER1: { if (value) c.latch1 = true; else c.update_status1();  break; }
-        case constants::CONTROLLER2_AND_APU_FC: { apufc = {value, true}; break; }
+        case constants::CONTROLLER2_AND_APU_FC: { apufc = value; break; }
     }
+    cpu_map[addr] = value;
 }
 
 // All regs for debug
@@ -76,22 +116,21 @@ unsigned char Bus::read_prg(unsigned short addr) {
         case constants::PPUADDR:  return open_bus_value;
 
         case constants::PPUSTATUS: {
-//            if (ppustatus.reg & 0x80 && current_ppu_cycle - current_nmi_cycle == 1) {
+//            if (ppustatus & 0x80 && current_ppu_cycle - current_nmi_cycle == 1) {
 //                status_read_cycle = current_ppu_cycle;
 //                nmi_interrupt_flip_flop = false;
-//                auto tmp = ppustatus.reg & 0x7f;
-//                ppustatus.reg = 0;
+//                auto tmp = ppustatus & 0x7f;
+//                ppustatus = 0;
 //                return tmp;
 //            }
             status_read_cycle = current_ppu_cycle;
-            unsigned char current = (ppustatus.reg & 0xe0) | (open_bus_value & 0x1f);
-            ppustatus.reg &= 0x60;
-            ppustatus.read_requested = true;
+            unsigned char current = (ppustatus & 0xe0) | (open_bus_value & 0x1f);
+            ppustatus &= 0x60;
             return current;
         }
-        case constants::OAMADDR:     return oamaddr.reg;
+        case constants::OAMADDR:     return oamaddr;
         case constants::OAMDATA: {
-            if (oamaddr.reg == 0x2) {
+            if (oamaddr == 0x2) {
                 open_bus_value = 0;
                 open_bus_value_cycles = 0;
             }
@@ -99,25 +138,32 @@ unsigned char Bus::read_prg(unsigned short addr) {
             // 2 Attrib
             // 1 Tile index
             // 0 Y
-            if (oamaddr.reg % 4 == 2) { // for attrib
-                return oam[oamaddr.reg] & 0xe3;
+            if (oamaddr % 4 == 2) { // for attrib
+                return oam[oamaddr] & 0xe3;
             }
-            return oam[oamaddr.reg];
+            return oam[oamaddr];
         }
 
         case constants::PPUDATA:     {
             if (last_ppu_address >= constants::IMAGE_PALETTE_BEGIN){
-                return (ppudata.reg & 0x3f) | ((open_bus_value & 0xc0) & 0xff);
+                return (ppudata & 0x3f) | ((open_bus_value & 0xc0) & 0xff);
             }
-            ppudata.read_requested = true;
             open_bus_value_cycles = 0;
-            open_bus_value = ppudata.reg;
-            return ppudata.reg;
+            open_bus_value = ppudata;
+            auto res = (ppudata & 0x3f) | ((open_bus_value & 0xc0) & 0xff);
+
+            unsigned short w_addr = ppu_v;
+            adjust_ppu_nt_mirroring(w_addr);
+            adjust_ppu_mirroring(w_addr);
+            ppudata = read_chr(w_addr);
+            ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
+            return res;
         }
         case constants::CONTROLLER1: return c.read_status1();
         case constants::CONTROLLER2_AND_APU_FC: return 0;
-        default: return 0xff; // dummy
     }
+
+    return cpu_map[addr];
 }
 
 unsigned char Bus::unsafe_read_prg(unsigned short addr) {
@@ -126,26 +172,37 @@ unsigned char Bus::unsafe_read_prg(unsigned short addr) {
     }
     switch (addr) {
         case constants::PPUCTRL:
-            return ppuctrl.reg;
+            return ppuctrl;
         case constants::PPUMASK:
-            return ppumask.reg;
+            return ppumask;
         case constants::PPUSTATUS: {
-            return ppustatus.reg;
+            return ppustatus;
         }
-        case constants::OAMADDR:     return oamaddr.reg;
+        case constants::OAMADDR:     return oamaddr;
         case constants::OAMDATA: {
-            return oam[oamaddr.reg];
+            return oam[oamaddr];
         }
-        case constants::PPUSCROLL:   return ppuscroll.reg;
-        case constants::PPUADDR:     return ppuaddr.reg;
-        case constants::PPUDATA:     {return ppudata.reg;}
+        case constants::PPUSCROLL:   return ppuscroll;
+        case constants::PPUADDR:     return ppuaddr;
+        case constants::PPUDATA:     {return ppudata;}
         case constants::CONTROLLER1: return c.read_status1();
-        default: return 0xff; // dummy
     }
+    return cpu_map[addr];
 }
 
 unsigned char Bus::read_chr(unsigned short addr) {
-    return mapper.read_chr_rom(addr);
+    if (addr >= 0x0000 && addr <= 0x1FFF){
+        return mapper.read_chr_rom(addr);
+    }
+    return ppu_map[addr];
+}
+
+void Bus::write_chr(unsigned short addr, unsigned char value){
+    if (addr >= 0x0000 && addr <= 0x1FFF && ((ppustatus >> 7) & 1 || !((ppumask >> 3) & 1) || !((ppumask >> 4) & 1))) {
+        mapper.write_chr_ram(addr, value);
+    } else if (addr >= 0x0000 && addr <= 0x3fff){
+        ppu_map[addr] = value;
+    }
 }
 
 void Bus::tick() {
@@ -159,16 +216,64 @@ void Bus::open_bus_decay() {
     }
 }
 
+void Bus::adjust_cpu_mirroring(unsigned short& addr) {
+    if (addr >= constants::RAM_MIRROR1_BEGIN && addr <= constants::RAM_MIRROR1_END)
+        addr-=constants::RAM_MIRROR1_BEGIN;
+    else if (addr >= constants::RAM_MIRROR2_BEGIN && addr <= constants::RAM_MIRROR2_END)
+        addr-=constants::RAM_MIRROR2_BEGIN;
+    else if (addr >= constants::RAM_MIRROR3_BEGIN && addr <= constants::RAM_MIRROR3_END)
+        addr-=constants::RAM_MIRROR3_BEGIN;
+    else if (addr >= constants::PPU_REGS_MIRROR_BEGIN && addr <= constants::PPU_REGS_MIRROR_END){
+        addr = constants::PPU_REGS_BEGIN + (addr % 8);
+    }
+}
+
+void Bus::adjust_ppu_mirroring(unsigned short& addr) {
+    if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
+        addr = constants::IMAGE_PALETTE_BEGIN + (addr % 32);
+    else if (addr >= constants::TABLES_MIRROR_BEGIN && addr <= constants::TABLES_MIRROR_END)
+        addr = constants::NAME_TABLE0_BEGIN + (addr - constants::TABLES_MIRROR_BEGIN);
+    else if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
+        addr -= 0x10;
+}
+
+unsigned short Bus::get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n) {
+    using SM = Mapper::ScreenMirroring;
+    switch (sm) {
+        case SM::Vertical: { return (n == 0 || n == 2) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
+        case SM::Horizontal: { return (n == 0 || n == 1) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
+        case SM::SingleScreenLower: {return constants::NAME_TABLE0_BEGIN;}
+        case SM::SingleScreenUpper: {return constants::NAME_TABLE1_BEGIN;}
+        default:
+            return constants::NAME_TABLE0_BEGIN;
+    }
+}
+
+void Bus::adjust_ppu_nt_mirroring(unsigned short& address) {
+    for (int i = 0; i < 4; ++i){
+        auto current_nt = constants::NAME_TABLE0_BEGIN + (i * 0x400);
+        if (address >= current_nt  && address <= current_nt  + 0x3bf){
+            auto r = get_nt_by_mirror_mode(mapper.current_screen_mirroring, i);
+            address = r + (address - current_nt);
+            return;
+        }
+    }
+}
+
 void Bus::reset(){
-    ppuctrl.reg = 0;
-    ppuctrl.reg = 0;
-    ppumask.reg = 0;
-    ppustatus.reg = 0;
-    oamaddr.reg = 0;
-    oamdata.reg = 0;
-    ppuscroll.reg = 0;
-    ppuaddr.reg = 0;
-    ppudata.reg = 0;
+    ppu_t = 0;
+    ppu_v = 0;
+    ppu_w = false;
+    ppu_x = 0;
+    ppuctrl = 0;
+    ppuctrl = 0;
+    ppumask = 0;
+    ppustatus = 0;
+    oamaddr = 0;
+    oamdata = 0;
+    ppuscroll = 0;
+    ppuaddr = 0;
+    ppudata = 0;
     open_bus_value = 0;
     dma_active = false;
     dma_index = 0;
