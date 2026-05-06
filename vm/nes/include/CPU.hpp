@@ -195,6 +195,7 @@ struct CPU {
         unsigned short tmp_l{};
         unsigned short tmp_h{};
         unsigned char write_value{};
+        unsigned char old_value{};
         unsigned char ind_low{};
         unsigned char addr_to_add{};
         unsigned short pc{};

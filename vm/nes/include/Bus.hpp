@@ -25,8 +25,6 @@ struct Bus {
     unsigned char open_bus_value {};
     unsigned short last_ppu_address = 0;
 
-    unsigned char ppustatus_buffer{};
-
     unsigned char ppuctrl{};
     unsigned char ppumask{};
     unsigned char ppustatus{};

@@ -136,11 +136,8 @@ struct NESVM {
         static size_t cpu_tick_count = 0;
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active
                 || dis.is_line_jump_active || dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLES) {
-// todo: fix
-#if DEBUG_MODE
             if (!cpu.debug_run)
                 snap_storage.push_state(bus, cpu, ppu);
-#endif
             cpu.debug_run = true;
             ppu_tick();
             if (dis.is_frame_jump_active && ppu.frame_start){
@@ -279,11 +276,7 @@ struct NESVM {
         ppu_init();
         while(!WindowShouldClose()){
             frame_execute();
-#if DEBUG_MODE
             UpdateTexture(display_texture, ppu.get_active_display().data());
-#else
-            UpdateTexture(display_texture, ppu.get_active_display().data());
-#endif
 
 #if GAME_GENIE_MODE
             if (bus.gg.game_mode && !bus.gg.started){
@@ -369,6 +362,8 @@ int main(){
     // /Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/dma_2007_write.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/dma_4016_read.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/dma_2007_read.nes
+    // /Users/prazd/Desktop/dev/nes-test-roms/instr_timing/instr_timing.nes
+    // /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_ppumem.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes - TODO: C20f
 
 #if MULTI_TEST_MODE
@@ -376,7 +371,7 @@ int main(){
             "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes", // TODO: Debug
+            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/1.frame_basics.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes",
@@ -389,11 +384,13 @@ int main(){
             "/Users/prazd/Desktop/dev/nes-test-roms/branch_timing_tests/1.Branch_Basics.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/branch_timing_tests/2.Backward_Branch.nes",
             "/Users/prazd/Desktop/dev/nes-test-roms/branch_timing_tests/3.Forward_Branch.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/read_write_2007.nes"
+            "/Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/read_write_2007.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_ppumem.nes",
+            "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_oam.nes"
     };
     MultiTest<NESVM, std::size(tests_paths)>{}.run(tests_paths);
 #else
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes"); // todo: debug
+    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_oam.nes"); // todo: debug
     nes.run();
 #endif
 }
