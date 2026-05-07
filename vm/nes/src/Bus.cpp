@@ -1,6 +1,7 @@
 #include "Bus.hpp"
 #include "Constants.hpp"
 void Bus::write(unsigned short addr, unsigned char value) {
+    adjust_cpu_mirroring(addr);
     if (addr >= 0x8000 && addr <= 0xffff){
         mapper.handle(addr, value);
         return;
@@ -74,6 +75,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
 }
 
 void Bus::unsafe_write(unsigned short addr, unsigned char value) {
+    adjust_cpu_mirroring(addr);
     if (addr >= 0x8000 && addr <= 0xffff){
         mapper.handle(addr, value);
         return;
@@ -103,6 +105,7 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
 
 // All regs for debug
 unsigned char Bus::read_prg(unsigned short addr) {
+    adjust_cpu_mirroring(addr);
     if (addr >= 0x8000 && addr <= 0xffff){
         return mapper.read_prg_rom(addr);
     }
@@ -165,6 +168,7 @@ unsigned char Bus::read_prg(unsigned short addr) {
 }
 
 unsigned char Bus::unsafe_read_prg(unsigned short addr) {
+    adjust_cpu_mirroring(addr);
     if (addr >= 0x8000 && addr <= 0xffff){
         return mapper.read_prg_rom(addr);
     }
@@ -189,6 +193,7 @@ unsigned char Bus::unsafe_read_prg(unsigned short addr) {
 }
 
 unsigned char Bus::read_chr(unsigned short addr) {
+    adjust_ppu_mirroring(addr);
     if (addr >= 0x0000 && addr <= 0x1FFF){
         return mapper.read_chr_rom(addr);
     }
@@ -196,6 +201,7 @@ unsigned char Bus::read_chr(unsigned short addr) {
 }
 
 void Bus::write_chr(unsigned short addr, unsigned char value){
+    adjust_ppu_mirroring(addr);
     if (addr >= 0x0000 && addr <= 0x1FFF && ((ppustatus >> 7) & 1 || !((ppumask >> 3) & 1) || !((ppumask >> 4) & 1))) {
         mapper.write_chr_ram(addr, value);
     } else if (addr >= 0x0000 && addr <= 0x3fff){

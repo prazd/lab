@@ -43,15 +43,14 @@ void APU::frame_counter_half_update(Bus& bus, CPU& cpu) {
 }
 
 void APU::handle_frame_counter_update(Bus& bus, CPU& cpu) {
-    if (bus.apufc.write_requested) {
-        frame_counter_mode = static_cast<FrameCounterMode>((bus.apufc.reg >> 7) & 1);
+    if (bus.apufc) {
+        frame_counter_mode = static_cast<FrameCounterMode>((bus.apufc >> 7) & 1);
         if (frame_counter_mode == Step5){
             frame_counter_quarter_update(bus, cpu);
             frame_counter_half_update(bus, cpu);
         }
         cycle_counter = 0;
-        irq_inhibit = (bus.apufc.reg >> 6) & 1;
-        bus.apufc.write_requested = false;
+        irq_inhibit = (bus.apufc >> 6) & 1;
     }
 }
 

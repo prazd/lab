@@ -20,7 +20,6 @@ struct CPU {
         unsigned char unsafe_read(Bus&, unsigned short addr) const;
         void write(Bus&, unsigned short addr, unsigned char value);
         void unsafe_write(Bus&, unsigned short addr, unsigned char value);
-        static void adjust_if_mirror(unsigned short&);
 
         enum StateDMA: unsigned char {
             Read,

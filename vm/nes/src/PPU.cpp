@@ -5,7 +5,6 @@
 #include <cassert>
 
 void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
-    adjust_if_mirror(addr);
 #if DEBUG_MODE
     if (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}))
         triggered_on_write = true;
@@ -19,7 +18,6 @@ void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
 }
 
 unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {
-    adjust_if_mirror(addr);
 #if DEBUG_MODE
     if (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}))
         triggered_on_read = true;
@@ -29,30 +27,7 @@ unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {
 }
 
 unsigned char PPU::Memory::unsafe_read(Bus& bus, unsigned short addr) const {
-    adjust_if_mirror(addr);
     return bus.read_chr(addr);
-}
-
-void PPU::Memory::adjust_if_mirror(unsigned short& addr) {
-    // TODO: check palettes
-    if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
-        addr = constants::IMAGE_PALETTE_BEGIN + (addr % 32);
-    else if (addr >= constants::TABLES_MIRROR_BEGIN && addr <= constants::TABLES_MIRROR_END)
-        addr = constants::NAME_TABLE0_BEGIN + (addr - constants::TABLES_MIRROR_BEGIN);
-    else if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
-        addr -= 0x10;
-}
-
-
-void PPU::adjust_nt_mirroring(Bus& bus, unsigned short& address) {
-    for (int i = 0; i < 4; ++i){
-        auto current_nt = constants::NAME_TABLE0_BEGIN + (i * 0x400);
-        if (address >= current_nt  && address <= current_nt  + 0x3bf){
-            auto r = get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, i);
-            address = r + (address - current_nt);
-            return;
-        }
-    }
 }
 
 unsigned char PPU::tile_byte_from_addr(Bus& bus, unsigned short addr) {
@@ -181,7 +156,7 @@ void PPU::bg_tick(Bus &bus) {
 #if DEBUG_MODE
     if (current_scanline_cycle == 0 && current_y == 0){
         frame_start = false;
-//        get_active_display().fill(WHITE);
+        if (fill_white_background) get_active_display().fill(WHITE);
     } else if (current_scanline_cycle == 340){
         last_line_x =  std::exchange(current_line_x, 0);
         line_start = true;
@@ -349,19 +324,6 @@ void PPU::fetch_tile_data_step(Bus& bus) {
 }
 
 void PPU::draw_pixel(Bus &bus) {
-    for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
-        if (secondary_oam[i].x_count > 0) {
-            --secondary_oam[i].x_count;
-        } else {
-            if ((secondary_oam[i].attrib >> 6) & 1){
-                secondary_oam[i].shift_l >>= 1;
-                secondary_oam[i].shift_h >>= 1;
-            } else {
-                secondary_oam[i].shift_l <<= 1;
-                secondary_oam[i].shift_h <<= 1;
-            }
-        }
-    }
     unsigned char sprite_data = 0;
     unsigned char sprite_attrib = 0;
     bool is_bg_prio = false;
@@ -391,13 +353,16 @@ void PPU::draw_pixel(Bus &bus) {
     unsigned char bg_data = (((shift_register_high >> (15-bus.ppu_x)) & 1) << 1) | (shift_register_low >> (15 - bus.ppu_x)) & 1;
     unsigned char res{};
 
+    // clipping
+    if (current_x % 256 <= 7) { bg_data *= (bus.ppumask >> 1) & 1; sprite_data *= (bus.ppumask >> 2) & 1;}
+
     if (bg_data == 0 && (sprite_data != 0 && (bus.ppumask >> 4) & 1)){
         is_sprite = true;
         res = sprite_data;
     } else if (bg_data != 0 && sprite_data == 0)
         res = bg_data;
     else if (bg_data != 0 && sprite_data != 0) {
-        if (oam_index == 0 && (bus.ppumask >> 4) & 1 && (bus.ppumask >> 3) & 1){
+        if (oam_index == 0 && (bus.ppumask >> 4) & 1 && (bus.ppumask >> 3) & 1 && ((current_x & 0xff) != 0xff)){
             bus.ppustatus |= (1 << 6);
         }
         res = (!is_bg_prio && (bus.ppumask >> 4) & 1) ? (is_sprite = true, sprite_data) : bg_data;
@@ -431,9 +396,21 @@ void PPU::draw_pixel(Bus &bus) {
     shift_register_low <<= 1;
     attributes_low <<= 1;
     attributes_high <<= 1;
+    for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
+        if (secondary_oam[i].x_count == 0) {
+            if ((secondary_oam[i].attrib >> 6) & 1){
+                secondary_oam[i].shift_l >>= 1;
+                secondary_oam[i].shift_h >>= 1;
+            } else {
+                secondary_oam[i].shift_l <<= 1;
+                secondary_oam[i].shift_h <<= 1;
+            }
+        }
+    }
 }
 
 void PPU::tick(Bus& bus) {
+    // todo: update - should draw with 1 cycle delay
     bg_tick(bus);
     bus.mapper.tick();
     current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && (bus.ppumask >> 3) & 1 && !(frames_count & 1)); // todo: check
@@ -483,6 +460,11 @@ void PPU::tick(Bus& bus) {
             }
         }
         secondary_oam_buffer.reset();
+    }
+    if (current_scanline_cycle >= 0 && current_scanline_cycle < 257) {
+        for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
+            if (secondary_oam[i].x_count > 0) {--secondary_oam[i].x_count;} // should dot every cycle
+        }
     }
     ++current_scanline_cycle;
 

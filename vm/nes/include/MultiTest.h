@@ -7,8 +7,53 @@
 #include "Simple.h"
 #include "Constants.hpp"
 #include "PPU.hpp"
-template <typename VM, size_t tests_count>
+
+enum TestMode {
+    CPUm, PPUm
+};
+
+constexpr static std::string_view cpu_tests[] = {
+        "/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/cpu_timing_test6/cpu_timing_test.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/instr_test-v5/all_instrs.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/branch_timing_tests/1.Branch_Basics.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/branch_timing_tests/2.Backward_Branch.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/branch_timing_tests/3.Forward_Branch.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/read_write_2007.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_ppumem.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_oam.nes",
+};
+
+constexpr static std::string_view ppu_tests[] = {
+        "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/1.frame_basics.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes",
+
+        "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/01.basics.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/02.alignment.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/03.corners.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/04.flip.nes",
+//        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/05.left_clip.nes",
+//        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/06.right_edge.nes",
+//        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/11.edge_timing.nes"
+};
+
+template <typename VM, TestMode tm>
 struct MultiTest{
+    static constexpr inline size_t tests_count = []constexpr{
+        switch (tm) {
+            case CPUm: return std::size(cpu_tests);
+            case PPUm: return std::size(ppu_tests);
+            default: return 0ul;
+        }
+    }();
     static constexpr float WIDTH = 1600.f;
     static constexpr float HEIGHT = 1200.f;
     static constexpr float DISPLAY_PIXELS_WIDTH = 256;
@@ -48,8 +93,9 @@ struct MultiTest{
         }
     }
 
-    void run(const auto& tests_paths){
+    void run(){
         InitWindow(WIDTH, HEIGHT, "MultiTest");
+        const auto& tests_paths = tm == CPUm ? cpu_tests : ppu_tests;
 
         float x = 0.f;
         float y = 0.f;

@@ -4,7 +4,6 @@
 #include "Constants.hpp"
 
 void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
-    adjust_if_mirror(addr);
 #if GAME_GENIE_MODE
     if (addr >= 0x8000 && addr <= 0x800b){
         bus.gg.handle(addr, value);
@@ -12,23 +11,18 @@ void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
     }
 #endif
 #if DEBUG_MODE
-// TODO: fix
-    if ((addr >= 0x2000 && addr <= 0x2007) || (addr >= 0x8000 && addr <= 0xffff)) {
         triggered_on_write = (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}));
         write_addresses.push_back(std::pair{addr, unsafe_read(bus, addr)});
         write_set_addresses[addr] = true;
-    }
 #endif
     bus.write(addr, value);
 }
 
 void CPU::Memory::unsafe_write(Bus& bus, unsigned short addr, unsigned char value) {
-    adjust_if_mirror(addr);
     bus.unsafe_write(addr, value);
 }
 
 unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) const {
-    adjust_if_mirror(addr);
 #if GAME_GENIE_MODE
     if (auto i = bus.gg.find_index(addr); i != -1)
         return bus.gg.get(i, value);
@@ -36,26 +30,13 @@ unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) const {
 #endif
 #if DEBUG_MODE
     triggered_on_read = (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}));
-    read_set_addresses[addr] = true; // todo: check
+    read_set_addresses[addr] = true;
 #endif
     return bus.read_prg(addr);
 }
 
 unsigned char CPU::Memory::unsafe_read(Bus& bus, unsigned short addr) const {
-    adjust_if_mirror(addr);
     return bus.unsafe_read_prg(addr);
-}
-
-void CPU::Memory::adjust_if_mirror(unsigned short& addr) {
-    if (addr >= constants::RAM_MIRROR1_BEGIN && addr <= constants::RAM_MIRROR1_END)
-        addr-=constants::RAM_MIRROR1_BEGIN;
-    else if (addr >= constants::RAM_MIRROR2_BEGIN && addr <= constants::RAM_MIRROR2_END)
-        addr-=constants::RAM_MIRROR2_BEGIN;
-    else if (addr >= constants::RAM_MIRROR3_BEGIN && addr <= constants::RAM_MIRROR3_END)
-        addr-=constants::RAM_MIRROR3_BEGIN;
-    else if (addr >= constants::PPU_REGS_MIRROR_BEGIN && addr <= constants::PPU_REGS_MIRROR_END){
-        addr = constants::PPU_REGS_BEGIN + (addr % 8);
-    }
 }
 
 bool CPU::StatusReg::get(Flag flag) {

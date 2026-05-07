@@ -363,34 +363,11 @@ int main(){
     // /Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/dma_4016_read.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/dma_2007_read.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/instr_timing/instr_timing.nes
-    // /Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_ppumem.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes - TODO: C20f
 
 #if MULTI_TEST_MODE
-    constexpr static std::string_view tests_paths[] = {
-            "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/1.frame_basics.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/cpu_timing_test6/cpu_timing_test.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/instr_test-v5/all_instrs.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/branch_timing_tests/1.Branch_Basics.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/branch_timing_tests/2.Backward_Branch.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/branch_timing_tests/3.Forward_Branch.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/read_write_2007.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_ppumem.nes",
-            "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_oam.nes"
-    };
-    MultiTest<NESVM, std::size(tests_paths)>{}.run(tests_paths);
+    MultiTest<NESVM, CPUm>{}.run();
 #else
-    auto nes = NESVM("/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_oam.nes"); // todo: debug
-    nes.run();
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/read_write_2007.nes"}.run(); // todo: debug
 #endif
 }

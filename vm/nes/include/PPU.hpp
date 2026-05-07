@@ -58,7 +58,6 @@ struct PPU {
         unsigned char read(Bus& bus, unsigned short addr) const;
         unsigned char unsafe_read(Bus& bus, unsigned short addr) const;
         void write(Bus& bus, unsigned short addr, unsigned char value);
-        static void adjust_if_mirror(unsigned short&);
 #if DEBUG_MODE
         mutable std::bitset<0x4000> write_set_addresses{};
         mutable std::bitset<0x4000> read_set_addresses{};
@@ -73,8 +72,6 @@ struct PPU {
     } mem;
 
     unsigned short last_address = constants::PATTERN_TABLE1_BEGIN;
-
-    void adjust_nt_mirroring(Bus& bus, unsigned short& address);
 
     size_t current_cycle{};
     size_t frames_count{};

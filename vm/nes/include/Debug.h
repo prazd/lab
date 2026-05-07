@@ -1214,7 +1214,10 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         unsigned short adjusted_address = current_address;
         for (int i = 0; i < 16 * lines_count; ++i){
             adjusted_address = current_address = (start_address + i) & (sz-1);
-            r.mem.adjust_if_mirror(adjusted_address);
+            if (mode == PPUm)
+                bus.adjust_ppu_mirroring(adjusted_address);
+            else
+                bus.adjust_cpu_mirroring(adjusted_address);
             if (!(i & 0xf)){
                 ss << "\n";
                 tmp_str = ss.str();
