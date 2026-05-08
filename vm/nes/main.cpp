@@ -271,8 +271,8 @@ struct NESVM {
         Rectangle display_rec = {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f};
         UnloadImage(img);
 
-        ppu.display1.fill(BLACK);
-        ppu.display2.fill(BLACK);
+        ppu.displays[0].fill(BLACK);
+        ppu.displays[1].fill(BLACK);
         ppu_init();
         while(!WindowShouldClose()){
             frame_execute();
@@ -368,6 +368,7 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, CPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/read_write_2007.nes"}.run(); // todo: debug
+    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // todo: debug
+//    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

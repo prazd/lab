@@ -55,21 +55,23 @@ struct PPU {
 // Nametable - 32x30 tiles numbers (0 - 255)
 // Attribute - Attribute tables hold the upper two bits of
 // the colours for the tiles
-        unsigned char read(Bus& bus, unsigned short addr) const;
-        unsigned char unsafe_read(Bus& bus, unsigned short addr) const;
+        unsigned char read(Bus& bus, unsigned short addr);
+        unsigned char unsafe_read(Bus& bus, unsigned short addr);
         void write(Bus& bus, unsigned short addr, unsigned char value);
 #if DEBUG_MODE
-        mutable std::bitset<0x4000> write_set_addresses{};
-        mutable std::bitset<0x4000> read_set_addresses{};
+        static inline std::bitset<0x4000> write_set_addresses{};
+        static inline std::bitset<0x4000> read_set_addresses{};
         SimpleDeque<std::pair<unsigned short,unsigned char>,3> write_addresses;
 
-        std::vector<unsigned short> write_trigger_addresses{};
-        std::vector<unsigned short> read_trigger_addresses{};
-        mutable bool triggered_on_write = false;
-        mutable bool triggered_on_read = false;
-        unsigned long cycles_count = 0;
+        std::vector<unsigned short> write_trigger_addresses;
+        std::vector<unsigned short> read_trigger_addresses;
+        mutable bool triggered_on_write;
+        mutable bool triggered_on_read;
+        unsigned long cycles_count;
 #endif
-    } mem;
+    };
+
+    VEC_MODE Memory mem;
 
     unsigned short last_address = constants::PATTERN_TABLE1_BEGIN;
 
@@ -126,8 +128,8 @@ struct PPU {
         unsigned char oam_index{};
     };
 
-    SimpleDeque<Sprite, 8> secondary_oam_buffer{};
-    SimpleDeque<SpriteData, 8> secondary_oam{};
+    SimpleDequeTC<Sprite, 8> secondary_oam_buffer{};
+    SimpleDequeTC<SpriteData, 8> secondary_oam{};
 
     void draw_pixel(Bus& bus);
 
@@ -167,37 +169,28 @@ struct PPU {
 
     void reset();
 // REGS
-    VEC_MODE std::array<Color, 256 * 240> display1{};
-    VEC_MODE std::array<Color, 256 * 240> display2{};
-
+    VEC_MODE std::array<std::array<Color, 256 * 240>, 2> displays{};
 #if MULTI_TEST_MODE
-
     std::atomic<bool> update_display = false;
     std::atomic<int> display_in_progress_num = 0;
-    Color* display_in_progress = display1.data(); // todo: check
+    size_t current_display_index = 0;
     inline void update_current_display(){
-        if (display_in_progress_num.fetch_xor(1, std::memory_order_acq_rel)){
-            display_in_progress =  display2.data();
-        } else {
-            display_in_progress =  display1.data();
-        }
+        current_display_index = display_in_progress_num.fetch_xor(1, std::memory_order_acq_rel);
         update_display.store(true, std::memory_order_release);
     }
     inline auto& get_active_display(){
-        return display_in_progress_num.load(std::memory_order_acquire) ? display2 : display1;
+        return displays[display_in_progress_num.load(std::memory_order_acquire)];
     }
 #else
-    bool is_first_display_in_progress = true;
-    Color* display_in_progress = display1.data();
+    size_t current_display_index = 0;
     inline void update_current_display(){
-        is_first_display_in_progress = !is_first_display_in_progress;
-        display_in_progress = is_first_display_in_progress ? display1.data() : display2.data();
+        current_display_index ^= 1;
     }
     inline auto& get_active_display(){
 #if DEBUG_MODE && !MULTI_TEST_MODE
-        return is_first_display_in_progress ? display1 : display2;
+        return displays[current_display_index];
 #else
-        return is_first_display_in_progress ? display2 : display1;
+        return displays[current_display_index ^ 1];
 #endif
     }
 #endif
@@ -206,7 +199,7 @@ struct PPU {
     size_t current_y = 0;
 
     inline void update_internal_display(Color pixel){
-        display_in_progress[current_x++] = pixel;
+        displays[current_display_index][current_x++] = pixel;
 #if DEBUG_MODE
         ++current_line_x;
 #endif

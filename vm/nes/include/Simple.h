@@ -103,6 +103,59 @@ struct SimpleDeque {
     }
 };
 
+
+template <typename T, size_t sz>
+struct SimpleDequeTC {
+    std::array<T, sz> buffer;
+    size_t current_sz = 0;
+
+    auto begin(){
+        return buffer.begin();
+    }
+    auto end(){
+        return buffer.begin() + current_sz;
+    }
+
+    template <typename U>
+    void push_back(U&& value){
+        buffer[current_sz++] = value;
+    }
+
+    template <typename U>
+    void push_front(U&& value){
+        push_back(std::forward<U>(value));
+        for (int i = current_sz-2; i >= 0; --i)
+            std::swap(buffer[i], buffer[i+1]);
+    }
+    size_t size() const {
+        return current_sz;
+    }
+    bool empty() const {
+        return current_sz == 0;
+    }
+
+    void pop_back(){
+        if (current_sz) --current_sz;
+    }
+
+    void pop_front(){
+        for (int i = 0; i <= current_sz-2; ++i)
+            std::swap(this->operator[](i), this->operator[](i+1));
+        pop_back();
+    }
+
+    T& operator[](size_t index){
+        return buffer[index];
+    }
+    T& back() {
+        return buffer[current_sz-1];
+    }
+
+    void reset(){
+        current_sz = 0;
+    }
+};
+
 template <typename T, size_t sz>
 struct CircleStack {
     alignas(T) unsigned char arr[sizeof(T) * sz]{};

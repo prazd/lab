@@ -4,29 +4,30 @@
 #include <bitset>
 #include <cassert>
 
+// todo: move to bus
 void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
-#if DEBUG_MODE
-    if (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}))
-        triggered_on_write = true;
-    if (addr >= 0x0000 && addr <= 0x3fff ||
-            addr >= 0x0000 && addr <= 0x1FFF && ((bus.ppustatus >> 7) & 1 || !((bus.ppumask >> 3) & 1) || !((bus.ppumask >> 4) & 1))){
-            write_addresses.push_back(std::pair{addr, read(bus, addr)});
-            write_set_addresses[addr] = true;
-    }
-#endif
+//#if DEBUG_MODE
+//    if (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}))
+//        triggered_on_write = true;
+//    if (addr >= 0x0000 && addr <= 0x3fff ||
+//            addr >= 0x0000 && addr <= 0x1FFF && ((bus.ppustatus >> 7) & 1 || !((bus.ppumask >> 3) & 1) || !((bus.ppumask >> 4) & 1))){
+//            write_addresses.push_back(std::pair{addr, read(bus, addr)});
+//            write_set_addresses[addr] = true;
+//    }
+//#endif
     bus.write_chr(addr, value);
 }
 
-unsigned char PPU::Memory::read(Bus& bus, unsigned short addr) const {
-#if DEBUG_MODE
-    if (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}))
-        triggered_on_read = true;
-    if (addr >= 0x2000){ read_set_addresses[addr] = true;}
-#endif
+unsigned char PPU::Memory::read(Bus& bus, unsigned short addr)  {
+//#if DEBUG_MODE
+//    if (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}))
+//        triggered_on_read = true;
+//    if (addr >= 0x2000){ read_set_addresses[addr] = true;}
+//#endif
     return bus.read_chr(addr);
 }
 
-unsigned char PPU::Memory::unsafe_read(Bus& bus, unsigned short addr) const {
+unsigned char PPU::Memory::unsafe_read(Bus& bus, unsigned short addr)  {
     return bus.read_chr(addr);
 }
 
@@ -44,7 +45,7 @@ unsigned char PPU::tile_byte_from_addr(Bus& bus, unsigned short addr) {
     unsigned char tile_number = (addr >> 4) & 0xff;
     unsigned short base = (addr >> 12) & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN;
 
-    return mem.read(bus, base + (tile_number * 16) + y_offset + (bit_plane ? 8 : 0));
+    return bus.read_chr( base + (tile_number * 16) + y_offset + (bit_plane ? 8 : 0));
 }
 
 unsigned short PPU::to_pattern_addr(unsigned char y, unsigned char tile_n, bool plane, bool h) {
@@ -231,8 +232,8 @@ void PPU::reset() {
     current_y = 0;
     current_x = 0;
     current_cycle = 0;
-    display1.fill(BLACK);
-    display2.fill(BLACK);
+    displays[0].fill(BLACK);
+    displays[1].fill(BLACK);
     secondary_oam_buffer.reset();
     secondary_oam.reset();
     current_scanline_cycle = 0;
@@ -280,9 +281,9 @@ void PPU::fetch_tile_data_step(Bus& bus) {
         update_base_nt(bus);
         switch (current_step) {
             case NT:  {
-                nt_byte = mem.read(bus,  base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
+                nt_byte = bus.read_chr(  base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
             case AT:  {
-                auto val = mem.read(bus,   base_name_table_address + 0x3c0 + (y_tile_n/4 * 8) + x_tile_n/4);
+                auto val = bus.read_chr(   base_name_table_address + 0x3c0 + (y_tile_n/4 * 8) + x_tile_n/4);
                 // TODO: check
                 //  3 3 2 2
                 //  3 3 2 2
@@ -376,7 +377,7 @@ void PPU::draw_pixel(Bus &bus) {
     unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
 
     
-    unsigned char pixel_index = mem.read(bus, universal_background ? constants::IMAGE_PALETTE_BEGIN : (
+    unsigned char pixel_index = bus.read_chr( universal_background ? constants::IMAGE_PALETTE_BEGIN : (
                                          (is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN) + index));
 
 #if DEBUG_MODE
@@ -426,7 +427,7 @@ void PPU::tick(Bus& bus) {
         if ((bus.ppumask >> 3) & 1) {
             if (!secondary_oam_buffer.size()){
                 // dummy read for IRQ
-                mem.read(bus, last_address);
+                bus.read_chr( last_address);
             }
             for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
                 bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1;
@@ -446,8 +447,8 @@ void PPU::tick(Bus& bus) {
                     current_index += (!is_vertical_flip);
                 }
                 auto addr =  pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8));
-                auto l = mem.read(bus, addr);
-                auto h = mem.read(bus, addr + 8);
+                auto l = bus.read_chr( addr);
+                auto h = bus.read_chr( addr + 8);
                 last_address = addr;
 
                 secondary_oam.push_back(SpriteData{

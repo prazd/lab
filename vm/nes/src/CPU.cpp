@@ -3,18 +3,19 @@
 #include "CPU.hpp"
 #include "Constants.hpp"
 
+// todo: finish move to bus
 void CPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
-#if GAME_GENIE_MODE
-    if (addr >= 0x8000 && addr <= 0x800b){
-        bus.gg.handle(addr, value);
-        return;
-    }
-#endif
-#if DEBUG_MODE
-        triggered_on_write = (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}));
-        write_addresses.push_back(std::pair{addr, unsafe_read(bus, addr)});
-        write_set_addresses[addr] = true;
-#endif
+//#if GAME_GENIE_MODE
+//    if (addr >= 0x8000 && addr <= 0x800b){
+//        bus.gg.handle(addr, value);
+//        return;
+//    }
+//#endif
+//#if DEBUG_MODE
+//        triggered_on_write = (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}));
+//        write_addresses.push_back(std::pair{addr, unsafe_read(bus, addr)});
+//        write_set_addresses[addr] = true;
+//#endif
     bus.write(addr, value);
 }
 
@@ -22,20 +23,20 @@ void CPU::Memory::unsafe_write(Bus& bus, unsigned short addr, unsigned char valu
     bus.unsafe_write(addr, value);
 }
 
-unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) const {
-#if GAME_GENIE_MODE
-    if (auto i = bus.gg.find_index(addr); i != -1)
-        return bus.gg.get(i, value);
-    return bus.read_prg(addr);
-#endif
-#if DEBUG_MODE
-    triggered_on_read = (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}));
-    read_set_addresses[addr] = true;
-#endif
+unsigned char CPU::Memory::read(Bus& bus, unsigned short addr) {
+//#if GAME_GENIE_MODE
+//    if (auto i = bus.gg.find_index(addr); i != -1)
+//        return bus.gg.get(i, value);
+//    return bus.read_prg(addr);
+//#endif
+//#if DEBUG_MODE
+//    triggered_on_read = (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}));
+//    read_set_addresses[addr] = true;
+//#endif
     return bus.read_prg(addr);
 }
 
-unsigned char CPU::Memory::unsafe_read(Bus& bus, unsigned short addr) const {
+unsigned char CPU::Memory::unsafe_read(Bus& bus, unsigned short addr) {
     return bus.unsafe_read_prg(addr);
 }
 
@@ -386,13 +387,13 @@ void CPU::push_addr_step(AddressingStep step) {
     switch (step) {
         case LowByte: {
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.as.arg1 = cpu.mem.read(bus, cpu.pc + 1);
+                cpu.as.arg1 = bus.read_prg(cpu.pc + 1);
             });
             break;
         }
         case HighByte:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.as.arg2 = cpu.mem.read(bus, cpu.pc + 2);
+                cpu.as.arg2 = bus.read_prg(cpu.pc + 2);
             });
             break;
         }
@@ -410,7 +411,7 @@ void CPU::push_addr_step(AddressingStep step) {
         }
         case AbsX: {
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.as.arg2 = cpu.mem.read(bus, cpu.pc + 2);
+                cpu.as.arg2 = bus.read_prg(cpu.pc + 2);
                 unsigned short args_as_addr = ((cpu.as.arg1) | (cpu.as.arg2 << 8));
                 unsigned short addr = args_as_addr + cpu.x;
                 if ((cpu.di.penalty_mode == CrossPageM  && (cpu.as.arg2 != ((addr >> 8) & 0xff))) || cpu.di.penalty_mode == DummyReadM){
@@ -432,7 +433,7 @@ void CPU::push_addr_step(AddressingStep step) {
         }
         case AbsY: {
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.as.arg2 = cpu.mem.read(bus, cpu.pc + 2);
+                cpu.as.arg2 = bus.read_prg(cpu.pc + 2);
                 unsigned short args_as_addr = ((cpu.as.arg1) | (cpu.as.arg2 << 8));
                 unsigned short addr = args_as_addr + cpu.y;
                 if ((cpu.di.penalty_mode == CrossPageM && (cpu.as.arg2 != ((addr >> 8) & 0xff))) || cpu.di.penalty_mode == DummyReadM){
@@ -453,13 +454,13 @@ void CPU::push_addr_step(AddressingStep step) {
         }
         case IndXReadLow: {
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.as.ind_low = cpu.mem.read(bus,(cpu.as.arg1 + cpu.x) % 256);
+                cpu.as.ind_low = bus.read_prg((cpu.as.arg1 + cpu.x) % 256);
             });
             break;
         }
         case IndXReadHigh: {
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.as.tmp_h = cpu.mem.read(bus,(cpu.as.arg1 + cpu.x + 1) % 256)*256;
+                cpu.as.tmp_h = bus.read_prg((cpu.as.arg1 + cpu.x + 1) % 256)*256;
             });
             break;
         }
@@ -471,13 +472,13 @@ void CPU::push_addr_step(AddressingStep step) {
         }
         case IndYReadLow: {
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.as.ind_low = cpu.mem.read(bus,(cpu.as.arg1));
+                cpu.as.ind_low = bus.read_prg((cpu.as.arg1));
             });
             break;
         }
         case IndYReadHigh: {
             iop.push_front([](Bus& bus, CPU& cpu){
-                unsigned char h = cpu.mem.read(bus,(cpu.as.arg1 + 1) % 256);
+                unsigned char h = bus.read_prg((cpu.as.arg1 + 1) % 256);
                 unsigned short addr = (cpu.as.ind_low | (h << 8));
                 unsigned short res_addr = addr + cpu.y;
                 if ((cpu.di.penalty_mode == CrossPageM && (h != ((res_addr >> 8) & 0xff)) || cpu.di.penalty_mode == DummyReadM)){
@@ -498,14 +499,14 @@ void CPU::push_addr_step(AddressingStep step) {
         }
         case Abs: {
             iop.push_front([](Bus& bus, CPU& cpu){
-                auto h = cpu.mem.read(bus, cpu.pc + 2);
+                auto h = bus.read_prg(cpu.pc + 2);
                 cpu.as.result = ((cpu.as.arg1) | h << 8);
             });
             break;
         }
         case Zp: {
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.as.result = cpu.mem.read(bus, cpu.pc + 1);
+                cpu.as.result = bus.read_prg(cpu.pc + 1);
             });
             break;
         }
@@ -933,8 +934,8 @@ void CPU::fill_exec_ops() {
                 --cpu.sp;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.pc = (cpu.mem.read(bus, constants::IRQ_INTERRUPT_HANDLER_L + 1) << 8) |
-                          cpu.mem.read(bus, constants::IRQ_INTERRUPT_HANDLER_L);
+                cpu.pc = (bus.read_prg(constants::IRQ_INTERRUPT_HANDLER_L + 1) << 8) |
+                          bus.read_prg(constants::IRQ_INTERRUPT_HANDLER_L);
             });
             break;}
         case CLC:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::C, 0); cpu.pc+=1; }); break;}
@@ -1065,20 +1066,20 @@ void CPU::fill_exec_ops() {
             // todo
             if (di.addr_mode == Absolute){
                 iop.push_front([](Bus& bus, CPU& cpu){
-                    cpu.pc = (cpu.as.arg1 | ( cpu.mem.read(bus, cpu.pc + 2) << 8));
+                    cpu.pc = (cpu.as.arg1 | (bus.read_prg(cpu.pc + 2) << 8));
                 });
             } else { // Indirect
                 iop.push_front([](Bus& bus, CPU& cpu){
-                    cpu.as.arg1 = cpu.mem.read(bus,cpu.pc + 1);
+                    cpu.as.arg1 = bus.read_prg(cpu.pc + 1);
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
-                    cpu.as.result = (cpu.as.arg1 | (cpu.mem.read(bus,cpu.pc + 2) << 8));
+                    cpu.as.result = (cpu.as.arg1 | (bus.read_prg(cpu.pc + 2) << 8));
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
-                    cpu.as.tmp_l = cpu.mem.read(bus,cpu.as.result);
+                    cpu.as.tmp_l = bus.read_prg(cpu.as.result);
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
-                    cpu.as.tmp_h = cpu.mem.read(bus,(cpu.as.result & 0xff) == 0xff ? (cpu.as.result & 0xff00) : cpu.as.result + 1);
+                    cpu.as.tmp_h = bus.read_prg((cpu.as.result & 0xff) == 0xff ? (cpu.as.result & 0xff00) : cpu.as.result + 1);
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
                     cpu.pc = cpu.as.tmp_l | (cpu.as.tmp_h << 8);
@@ -1263,7 +1264,7 @@ void CPU::fill_exec_ops() {
                 ++cpu.sp;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.a = cpu.mem.read(bus,0x100 + cpu.sp);
+                cpu.a = bus.read_prg(0x100 + cpu.sp);
                 cpu.sr.set(StatusReg::Z, cpu.a == 0);
                 cpu.sr.set(StatusReg::N, cpu.a & 0x80);
             });
@@ -1278,7 +1279,7 @@ void CPU::fill_exec_ops() {
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 // TODO: Interrupt disable flag The effect of changing this flag is delayed 1 instruction.
-                cpu.sr.set_status(cpu.mem.read(bus,0x100 + cpu.sp));
+                cpu.sr.set_status(bus.read_prg(0x100 + cpu.sp));
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.pc += cpu.di.bytes;
@@ -1356,16 +1357,16 @@ void CPU::fill_exec_ops() {
                 ++cpu.sp;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.sr.set_status(cpu.mem.read(bus,0x100 + cpu.sp));
+                cpu.sr.set_status(bus.read_prg(0x100 + cpu.sp));
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 ++cpu.sp;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.as.tmp_l = cpu.mem.read(bus,0x100 + cpu.sp);
+                cpu.as.tmp_l = bus.read_prg(0x100 + cpu.sp);
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                ++cpu.sp; unsigned char h = cpu.mem.read(bus,0x100 + cpu.sp);
+                ++cpu.sp; unsigned char h = bus.read_prg(0x100 + cpu.sp);
                 cpu.pc = cpu.as.tmp_l | (h << 8);
             });
             break;
@@ -1375,13 +1376,13 @@ void CPU::fill_exec_ops() {
                 ++cpu.sp;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.as.tmp_l = cpu.mem.read(bus,0x100 + cpu.sp);
+                cpu.as.tmp_l = bus.read_prg(0x100 + cpu.sp);
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 ++cpu.sp;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                unsigned char h = cpu.mem.read(bus,0x100 + cpu.sp);
+                unsigned char h = bus.read_prg(0x100 + cpu.sp);
                 cpu.pc = cpu.as.tmp_l | (h << 8);
             });
             iop.push_front([](Bus& bus, CPU& cpu){
@@ -1482,47 +1483,6 @@ void CPU::fill_exec_ops() {
     }
 }
 
-CPU::AddressingResult CPU::get_arg_pc(Bus& bus, AddressingMode am, bool cross_check) {
-    auto arg1 = mem.read(bus,pc + 1);
-    auto arg2 = mem.read(bus,pc + 2);
-    unsigned short args_as_addr = ((arg1) | arg2 << 8);
-    switch(am){
-        case ZeroPageX: return {(unsigned short)((arg1 + x) % 256), false, false};
-        case ZeroPageY: return {(unsigned short)((arg1 + y) % 256), false, false};
-        case AbsoluteX: {
-            unsigned short addr = args_as_addr + x;
-            if (cross_check && (arg2 != ((addr >> 8) & 0xff))){
-                return {args_as_addr, true, false, x};
-            }
-            return {addr, false, false, 0};
-        }
-        case AbsoluteY:{
-            unsigned short addr = args_as_addr + y;
-            if (cross_check && (arg2 != ((addr >> 8) & 0xff))){
-                return {args_as_addr, true, false, y};
-            }
-            return {addr, false, false, 0};
-        }
-        case IndexedIndirectX: return
-                    {(unsigned short)(mem.read(bus,(arg1 + x) % 256) + mem.read(bus,(arg1 + x + 1) % 256)* 256), false, false};
-        case IndexedIndirectY: {
-            unsigned char l = mem.read(bus,arg1);
-            unsigned char h = mem.read(bus,(arg1 + 1) % 256);
-            unsigned short addr = (l | (h << 8));
-            unsigned short res_addr = addr + y;
-            if (cross_check && (h != ((res_addr >> 8) & 0xff))){
-                return {addr, true, false, y};
-            }
-            return {res_addr, false, false, 0};
-        }
-        case Immediate: return { (unsigned short)(pc + 1), false, false};
-        case ZeroPage: return {arg1, false, false};
-        case Absolute: return {  args_as_addr, false, false};
-        case Relative: return { (unsigned short)(pc + 1), false, false};
-        case Accumulator: return {0, false, true};
-    }
-    throw std::exception();
-}
 
 CPU::AddressingResult CPU::get_arg_by_addr(Bus &bus, CPU::AddressingMode am, unsigned short pc_addr) {
     auto arg1 = mem.unsafe_read(bus,pc_addr + 1);
@@ -1580,13 +1540,13 @@ void CPU::push_interrupts_ops(Bus& bus) {
         --cpu.sp;
     });
     iop.push_front([](Bus& bus, CPU& cpu){
-        cpu.pc = (cpu.mem.read(bus, cpu.interrupt_addresses[cpu.as.interrupt]) | (cpu.mem.read(bus, cpu.interrupt_addresses[cpu.as.interrupt] + 1) << 8));
+        cpu.pc = (bus.read_prg(cpu.interrupt_addresses[cpu.as.interrupt]) | (bus.read_prg(cpu.interrupt_addresses[cpu.as.interrupt] + 1) << 8));
         cpu.interrupt_requests[cpu.as.interrupt] = false;
     });
 }
 
 CPU::AddressingResult CPU::dummy_read(Bus& bus, AddressingResult arg) {
-     mem.read(bus, (arg.addr & 0xff00) | (arg.addr + arg.add_to_addr) & 0xff);
+     bus.read_prg( (arg.addr & 0xff00) | (arg.addr + arg.add_to_addr) & 0xff);
      arg.addr = arg.addr + arg.add_to_addr;
      // todo: check - addr+1
      return arg; // update address
@@ -1625,7 +1585,7 @@ void CPU::tick_step(Bus& bus){
                 mem.tick_dma(bus);
                 return;
             }
-            di = decode(mem.read(bus, pc));
+            di = decode(bus.read_prg( pc));
             current_iop_index = 0;
             fill_address_ops();
             fill_exec_ops();
@@ -1687,7 +1647,7 @@ void CPU::tick_step(Bus& bus){
 
 unsigned char CPU::read(Bus &bus, AddressingResult ar) {
     if (ar.is_accumulator) return a;
-    return mem.read(bus, ar.addr);
+    return bus.read_prg(ar.addr);
 }
 
 void CPU::write(Bus& bus, AddressingResult ar, unsigned char value){

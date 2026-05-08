@@ -16,18 +16,18 @@ struct CPU {
 //    $4020–$FFFF   $BFE0   Unmapped. Available for cartridge use.
 //    • $6000–$7FFF $2000   Usually cartridge RAM, when present.
 //    • $8000–$FFFF $8000   Usually cartridge ROM and mapper registers.
-        unsigned char read(Bus&, unsigned short addr) const;
-        unsigned char unsafe_read(Bus&, unsigned short addr) const;
+        unsigned char read(Bus&, unsigned short addr);
+        unsigned char unsafe_read(Bus&, unsigned short addr);
         void write(Bus&, unsigned short addr, unsigned char value);
         void unsafe_write(Bus&, unsigned short addr, unsigned char value);
 
         enum StateDMA: unsigned char {
             Read,
             Write,
-        } dma_state = Read;
-        StateDMA next[2]{Write, Read};
-        unsigned char value = 0;
-        unsigned char alignment = 0;
+        } dma_state;
+        static inline constexpr StateDMA next[2]{Write, Read};
+        unsigned char value;
+        unsigned char alignment;
         inline void tick_dma(Bus& bus){
             if (alignment > 0){
                 --alignment;
@@ -42,15 +42,17 @@ struct CPU {
             dma_state = next[dma_state];
         }
 #if DEBUG_MODE
-        mutable std::bitset<0x10000> write_set_addresses{};
-        mutable std::bitset<0x10000> read_set_addresses{};
+        mutable std::bitset<0x10000> write_set_addresses; // todo: maybe add to dump
+        mutable std::bitset<0x10000> read_set_addresses;
         SimpleDeque<std::pair<unsigned short,unsigned char>,5> write_addresses;
-        std::vector<unsigned short> write_trigger_addresses{};
-        std::vector<unsigned short> read_trigger_addresses{};
-        mutable bool triggered_on_write = false;
-        mutable bool triggered_on_read = false;
+        std::vector<unsigned short> write_trigger_addresses;
+        std::vector<unsigned short> read_trigger_addresses;
+        mutable bool triggered_on_write;
+        mutable bool triggered_on_read;
 #endif
-    } mem;
+    };
+
+    VEC_MODE Memory mem;
 
     // https://www.nesdev.org/NESDoc.pdf (page 12-13)
     // SPR
@@ -134,7 +136,6 @@ struct CPU {
     void write(Bus& bus, AddressingResult ar, unsigned char value);
     void reset();
 
-    AddressingResult get_arg_pc(Bus& bus, AddressingMode am, bool cross_check);
     AddressingResult get_arg_by_addr(Bus& bus, AddressingMode am, unsigned short pc_addr);
 
     enum Instruction: unsigned char {
@@ -186,7 +187,7 @@ struct CPU {
         Execute,
     } istep = Execute;
 
-    SimpleDeque<void(*)(Bus& bus, CPU&), 7> iop{};
+    SimpleDequeTC<void(*)(Bus& bus, CPU&), 7> iop{};
     void iop_exec_step(Bus& bus);
     size_t current_iop_index{};
 

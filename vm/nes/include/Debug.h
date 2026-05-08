@@ -59,6 +59,17 @@ struct DebugWindow {
         f.write(ptr, sz);
         f.close();
     }
+
+    static std::vector<unsigned char> read_data_from_file(const std::string& filename){
+        std::vector<unsigned char> res;
+        auto full_path = std::string("/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/") + filename;
+        auto sz = std::filesystem::file_size(full_path);
+        res.resize(sz);
+        auto fs = std::ifstream(full_path, std::ios::binary);
+        if (!fs.is_open()) std::abort();
+        fs.read(reinterpret_cast<char*>(res.data()),sz);
+        return res;
+    }
 };
 
 template<size_t x, size_t y, size_t w, size_t h, size_t t_w, size_t t_h>
@@ -372,6 +383,10 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle button13;
     Rectangle button14;
 
+    Rectangle asm_dump_button;
+    Rectangle state_dump_button;
+    Rectangle state_import_button;
+
     Rectangle sync_button;
     Rectangle change_mode_button;
 
@@ -391,9 +406,59 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       button10{DW::rec.x + 40*3, DW::rec.y + h + 40, 40, 40},
                                       button11{DW::rec.x + 40*4, DW::rec.y + h + 40, 40, 40},
                                       button12{DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40},
-                                      button13{DW::rec.x + w, DW::rec.y + 40, 40, 40},
-                                      button14{DW::rec.x + 40 * 8, DW::rec.y + h, 40, 40}
+                                      button14{DW::rec.x + 40 * 8, DW::rec.y + h, 40, 40},
+                                      asm_dump_button{DW::rec.x + w, DW::rec.y + 40, 40, 40},
+                                      state_dump_button{DW::rec.x + w, DW::rec.y + 40 * 2, 40, 40},
+                                      state_import_button{DW::rec.x + w, DW::rec.y + 40 * 3, 40, 40}
                                       {}
+
+
+    void dump_state(Bus& bus, CPU& cpu, PPU& ppu) {
+        std::vector<unsigned char> res;
+        res.resize(sizeof(ppu) + sizeof(cpu) + sizeof(bus) +
+                       sizeof(Bus::cpu_map) + sizeof(Bus::ppu_map) + sizeof(Bus::oam) +
+                         Mapper::prg.size() + Mapper::chr.size()
+                       );
+        unsigned char* res_ptr = res.data();
+        memcpy(res_ptr, &ppu,  sizeof(ppu));
+        res_ptr += sizeof(ppu);
+        memcpy(res_ptr, &cpu,  sizeof(cpu));
+        res_ptr += sizeof(cpu);
+        memcpy(res_ptr, &bus,  sizeof(bus));
+        res_ptr += sizeof(bus);
+        memcpy(res_ptr, Bus::ppu_map,  sizeof(Bus::ppu_map));
+        res_ptr += sizeof(Bus::ppu_map);
+        memcpy(res_ptr, Bus::cpu_map, sizeof(Bus::cpu_map));
+        res_ptr += sizeof(Bus::cpu_map);
+        memcpy(res_ptr,Bus::oam,  sizeof(Bus::oam));
+        res_ptr += sizeof(Bus::oam);
+        memcpy(res_ptr, Mapper::prg.data(), Mapper::prg.size());
+        res_ptr += Mapper::prg.size();
+        memcpy(res_ptr, Mapper::chr.data(), Mapper::chr.size());
+        DW::save_data_to_file("state_dump", (const char*)res.data(), res.size());
+    }
+
+    void import_state(Bus& bus, CPU& cpu, PPU& ppu) {
+        auto res = DW::read_data_from_file("state_dump");
+        unsigned char* res_ptr = res.data();
+
+        memcpy(&ppu, res_ptr,  sizeof(ppu));
+        res_ptr += sizeof(ppu);
+        memcpy(&cpu, res_ptr,  sizeof(cpu));
+        res_ptr += sizeof(cpu);
+        memcpy(&bus, res_ptr,  sizeof(bus));
+        res_ptr += sizeof(bus);
+        memcpy(Bus::ppu_map, res_ptr,   sizeof(Bus::ppu_map));
+        res_ptr += sizeof(Bus::ppu_map);
+        memcpy(Bus::cpu_map, res_ptr, sizeof(Bus::cpu_map));
+        res_ptr += sizeof(Bus::cpu_map);
+        memcpy(Bus::oam,res_ptr,  sizeof(Bus::oam));
+        res_ptr += sizeof(Bus::oam);
+
+        memcpy(Mapper::prg.data(), res_ptr, Mapper::prg.size());
+        res_ptr += Mapper::prg.size();
+        memcpy(Mapper::chr.data(), res_ptr, Mapper::chr.size());
+    }
 
     void reset(){
         selected_move_active = false;
@@ -441,7 +506,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         button10 = {DW::rec.x + 40*3, DW::rec.y + h + 40, 40, 40};
         button11 = {DW::rec.x + 40*4, DW::rec.y + h + 40, 40, 40};
         button12 = {DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40};
-        button13 = {DW::rec.x + w, DW::rec.y + 40, 40, 40};
+        asm_dump_button = {DW::rec.x + w, DW::rec.y + 40, 40, 40};
 
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
 
@@ -510,7 +575,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             should_sync = true;
         else if (CheckCollisionPointRec(GetMousePosition(), change_mode_button) && IsMouseButtonPressed(0))
             run_mode = static_cast<RunMode>((run_mode + 1) % RunModeCount);
-        else if (CheckCollisionPointRec(GetMousePosition(), button13) && IsMouseButtonPressed(0)){
+        else if (CheckCollisionPointRec(GetMousePosition(), asm_dump_button) && IsMouseButtonPressed(0)){
             std::vector<unsigned short> subroutines_addresses{};
             DW::cpu_search(bus, cpu,
             [](auto lpc, auto& decoded, auto& asm_info){
@@ -543,7 +608,13 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
 
             auto s = lss.str();
             DW::save_data_to_file(u_input.s, (char*)s.c_str(), (long)s.size());
+        }  else if (CheckCollisionPointRec(GetMousePosition(), state_dump_button) && IsMouseButtonPressed(0)){
+            dump_state(bus, cpu, ppu);
+        } else if  (CheckCollisionPointRec(GetMousePosition(), state_import_button) && IsMouseButtonPressed(0)){
+            import_state(bus, cpu, ppu);
         }
+
+
         for (int i = 0; i < 10; ++i){
             auto r = Rectangle{line_button.x, line_button.y + i * (line_button.height + 25.f), line_button.width, line_button.height};
             if (CheckCollisionPointRec(GetMousePosition(), r) && IsMouseButtonPressed(0)){
@@ -602,8 +673,10 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button11, " clear", GREEN, 15.f);
             DW::draw_text_button(button12, " trun", GREEN, 15.f);
         }
-        DW::draw_text_button(button13, " dump", GREEN, 15.f);
-        DW::draw_text_button(sync_button, " sync", GREEN, 15.f);
+        DW::draw_text_button(asm_dump_button, " d_asm", GREEN, 15.f);
+        DW::draw_text_button(state_dump_button, " d_state", GREEN, 15.f);
+        DW::draw_text_button(state_import_button, " i_state", GREEN, 15.f);
+        DW::draw_text_button(sync_button, " state", GREEN, 15.f);
         DW::draw_text_button(change_mode_button, " mode", GREEN, 15.f);
         u_input.draw();
         ss.str("");
@@ -659,8 +732,8 @@ struct SnapStorage {
         bool fill_white_background = true;
         PPU::PixelMixingDebugView pixel_mixing_debug_view{};
         PPU::FetchStep current_step{};
-        SimpleDeque<PPU::Sprite, 8> secondary_oam_buffer{};
-        SimpleDeque<PPU::SpriteData, 8> secondary_oam{};
+        SimpleDequeTC<PPU::Sprite, 8> secondary_oam_buffer{};
+        SimpleDequeTC<PPU::SpriteData, 8> secondary_oam{};
 
         unsigned short current_scanline_cycle = 0;
         unsigned char nt_byte = 0;
@@ -735,7 +808,7 @@ struct SnapStorage {
         inline void to_ppu(Bus& bus, PPU& ppu){
             while(!write_addresses.empty()){
                 auto cur = write_addresses.back();
-                ppu.mem.write(bus, cur.first, cur.second);
+                bus.write_chr(cur.first, cur.second);
                 write_addresses.pop_back();
             }
             ppu.current_cycle = current_cycle;
