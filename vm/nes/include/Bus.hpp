@@ -3,11 +3,53 @@
 #include "Controller.hpp"
 #include "Mappers.h"
 #include "GameGenie.h"
+#include <Simple.h>
 struct Bus {
+    enum StateDMA: unsigned char {
+        Read,
+        Write,
+    } dma_state;
+    static inline constexpr StateDMA next[2]{Write, Read};
+    unsigned char value;
+    unsigned char alignment;
+    inline void tick_dma(){
+        if (alignment > 0){
+            --alignment;
+            return;
+        }
+        if (dma_state == Read){
+            value = read_prg(dma_address + dma_index);
+        } else {
+            oam[dma_index++] = value;
+            dma_active = (dma_index != 256);
+        }
+        dma_state = next[dma_state];
+    }
+
     Mapper mapper;
 #if GAME_GENIE_MODE
     GameGenie gg;
 #endif
+#if DEBUG_MODE
+    static inline std::bitset<0x4000> ppu_write_set_addresses{};
+    static inline std::bitset<0x4000> ppu_read_set_addresses{};
+    static inline std::bitset<0x4000> ppu_trigger_read_addresses{};
+    static inline std::bitset<0x4000> ppu_trigger_write_addresses{};
+
+    SimpleDequeTC<std::pair<unsigned short,unsigned char>,3> ppu_write_addresses;
+    bool ppu_addr_triggered_on_read = false;
+    bool ppu_addr_triggered_on_write = false;
+
+    static inline std::bitset<0x10000> cpu_write_set_addresses;
+    static inline std::bitset<0x10000> cpu_read_set_addresses;
+    static inline std::bitset<0x10000> cpu_trigger_write_addresses;
+    static inline std::bitset<0x10000> cpu_trigger_read_addresses;
+
+    SimpleDequeTC<std::pair<unsigned short,unsigned char>,5> cpu_write_addresses;
+    bool cpu_addr_triggered_on_read = false;
+    bool cpu_addr_triggered_on_write = false;
+#endif
+
     VEC_MODE unsigned char oam[0x100]{};
     VEC_MODE unsigned char cpu_map[0x10000]{};
     VEC_MODE unsigned char ppu_map[0x4000]{};
@@ -54,8 +96,11 @@ struct Bus {
     void unsafe_write(unsigned short addr, unsigned char val);
     unsigned char read_prg(unsigned short addr);
     unsigned char unsafe_read_prg(unsigned short addr);
-    void write_chr(unsigned short addr, unsigned char val);
     unsigned char read_chr(unsigned short addr);
+    unsigned char unsafe_read_chr(unsigned short addr);
+    void write_chr(unsigned short addr, unsigned char val);
+    void unsafe_write_chr(unsigned short addr, unsigned char val);
+
     void open_bus_decay();
     void reset();
 };

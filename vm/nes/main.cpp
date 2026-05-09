@@ -120,7 +120,7 @@ struct NESVM {
             if (dis.selected_move_active) {
                 dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
             } else if (dis.trigger_search) {
-                dis.trigger_search = cpu.debug_run = !(cpu.mem.triggered_on_write || cpu.mem.triggered_on_read);
+                dis.trigger_search = cpu.debug_run = !(bus.cpu_addr_triggered_on_write || bus.cpu_addr_triggered_on_read);
             } else if (reg_info.is_cpu_watching()){
                 cpu.debug_run = true;
             }
@@ -148,7 +148,7 @@ struct NESVM {
             } else if (dis.is_one_tick_ppu_active) {
                 dis.is_one_tick_ppu_active = false;
             } else if (dis.trigger_search) {
-                dis.trigger_search = !(ppu.mem.triggered_on_read || ppu.mem.triggered_on_write);
+                dis.trigger_search = !(bus.ppu_addr_triggered_on_read || bus.ppu_addr_triggered_on_write);
             }
             if (cpu_tick_count++ % 3 == 2) {
                 bus.tick(); cpu_tick();
@@ -368,7 +368,7 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, CPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // todo: debug
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/02.alignment.nes"}.run(); // todo: debug
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

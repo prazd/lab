@@ -33,7 +33,6 @@ inline unsigned char id_by_color(Color c) {
 }
 
 struct PPU {
-    struct Memory {
 // https://www.nesdev.org/wiki/PPU_memory_map
 //  $0000-$0FFF	$1000	Pattern table 0	Cartridge
 //  $1000-$1FFF	$1000	Pattern table 1	Cartridge
@@ -55,24 +54,6 @@ struct PPU {
 // Nametable - 32x30 tiles numbers (0 - 255)
 // Attribute - Attribute tables hold the upper two bits of
 // the colours for the tiles
-        unsigned char read(Bus& bus, unsigned short addr);
-        unsigned char unsafe_read(Bus& bus, unsigned short addr);
-        void write(Bus& bus, unsigned short addr, unsigned char value);
-#if DEBUG_MODE
-        static inline std::bitset<0x4000> write_set_addresses{};
-        static inline std::bitset<0x4000> read_set_addresses{};
-        SimpleDeque<std::pair<unsigned short,unsigned char>,3> write_addresses;
-
-        std::vector<unsigned short> write_trigger_addresses;
-        std::vector<unsigned short> read_trigger_addresses;
-        mutable bool triggered_on_write;
-        mutable bool triggered_on_read;
-        unsigned long cycles_count;
-#endif
-    };
-
-    VEC_MODE Memory mem;
-
     unsigned short last_address = constants::PATTERN_TABLE1_BEGIN;
 
     size_t current_cycle{};
@@ -123,7 +104,7 @@ struct PPU {
     struct SpriteData {
         unsigned char shift_l{};
         unsigned char shift_h{};
-        unsigned char x_count{};
+        unsigned char x_pos{};
         unsigned char attrib{};
         unsigned char oam_index{};
     };

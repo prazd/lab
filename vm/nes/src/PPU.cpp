@@ -4,32 +4,6 @@
 #include <bitset>
 #include <cassert>
 
-// todo: move to bus
-void PPU::Memory::write(Bus& bus, unsigned short addr, unsigned char value) {
-//#if DEBUG_MODE
-//    if (std::any_of(write_trigger_addresses.begin(), write_trigger_addresses.end(), [addr](auto val){return val == addr;}))
-//        triggered_on_write = true;
-//    if (addr >= 0x0000 && addr <= 0x3fff ||
-//            addr >= 0x0000 && addr <= 0x1FFF && ((bus.ppustatus >> 7) & 1 || !((bus.ppumask >> 3) & 1) || !((bus.ppumask >> 4) & 1))){
-//            write_addresses.push_back(std::pair{addr, read(bus, addr)});
-//            write_set_addresses[addr] = true;
-//    }
-//#endif
-    bus.write_chr(addr, value);
-}
-
-unsigned char PPU::Memory::read(Bus& bus, unsigned short addr)  {
-//#if DEBUG_MODE
-//    if (std::any_of(read_trigger_addresses.begin(), read_trigger_addresses.end(), [addr](auto val){return val == addr;}))
-//        triggered_on_read = true;
-//    if (addr >= 0x2000){ read_set_addresses[addr] = true;}
-//#endif
-    return bus.read_chr(addr);
-}
-
-unsigned char PPU::Memory::unsafe_read(Bus& bus, unsigned short addr)  {
-    return bus.read_chr(addr);
-}
 
 unsigned char PPU::tile_byte_from_addr(Bus& bus, unsigned short addr) {
 //    DCBA98 76543210
@@ -334,12 +308,12 @@ void PPU::draw_pixel(Bus &bus) {
     unsigned char oam_index{};
     unsigned char cur_oam_index = secondary_oam.size() > 0 ? secondary_oam[0].oam_index : 0;
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
-        if (secondary_oam[i].x_count == 0 && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
+        if (secondary_oam[i].x_pos <= (current_x % 256) && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
                 is_horizontal_flip = (secondary_oam[i].attrib >> 6) & 1;
                 auto l_sprite_data =
                         is_horizontal_flip ?
                         ((secondary_oam[i].shift_h & 1) << 1)  | (secondary_oam[i].shift_l  & 1)
-                                           : (((secondary_oam[i].shift_h >> 7) & 1) << 1)  | (secondary_oam[i].shift_l >> 7) & 1;
+                                           : (((secondary_oam[i].shift_h >> 7) & 1) << 1) | (secondary_oam[i].shift_l >> 7) & 1;
                 if (!l_sprite_data) continue;
                 if (cur_oam_index > (secondary_oam[i].oam_index)) continue;
                 oam_index = secondary_oam[i].oam_index;
@@ -380,6 +354,21 @@ void PPU::draw_pixel(Bus &bus) {
     unsigned char pixel_index = bus.read_chr( universal_background ? constants::IMAGE_PALETTE_BEGIN : (
                                          (is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN) + index));
 
+    shift_register_high <<= 1;
+    shift_register_low <<= 1;
+    attributes_low <<= 1;
+    attributes_high <<= 1;
+    for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
+        if (secondary_oam[i].x_pos <= (current_x % 256) && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
+            if ((secondary_oam[i].attrib >> 6) & 1){
+                secondary_oam[i].shift_l >>= 1;
+                secondary_oam[i].shift_h >>= 1;
+            } else {
+                secondary_oam[i].shift_l <<= 1;
+                secondary_oam[i].shift_h <<= 1;
+            }
+        }
+    }
 #if DEBUG_MODE
     if (bg_data == 0 && sprite_data != 0 && pixel_mixing_debug_view.get(PPU::PixelMixingDebugView::Mode::Bg))
         update_internal_display(ORANGE);
@@ -392,26 +381,9 @@ void PPU::draw_pixel(Bus &bus) {
     else
 #endif
     update_internal_display(palette[pixel_index]);
-
-    shift_register_high <<= 1;
-    shift_register_low <<= 1;
-    attributes_low <<= 1;
-    attributes_high <<= 1;
-    for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
-        if (secondary_oam[i].x_count == 0) {
-            if ((secondary_oam[i].attrib >> 6) & 1){
-                secondary_oam[i].shift_l >>= 1;
-                secondary_oam[i].shift_h >>= 1;
-            } else {
-                secondary_oam[i].shift_l <<= 1;
-                secondary_oam[i].shift_h <<= 1;
-            }
-        }
-    }
 }
 
 void PPU::tick(Bus& bus) {
-    // todo: update - should draw with 1 cycle delay
     bg_tick(bus);
     bus.mapper.tick();
     current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && (bus.ppumask >> 3) & 1 && !(frames_count & 1)); // todo: check
@@ -447,25 +419,20 @@ void PPU::tick(Bus& bus) {
                     current_index += (!is_vertical_flip);
                 }
                 auto addr =  pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8));
-                auto l = bus.read_chr( addr);
+                auto l = bus.read_chr(addr);
                 auto h = bus.read_chr( addr + 8);
                 last_address = addr;
 
                 secondary_oam.push_back(SpriteData{
                         .shift_l =  l,
                         .shift_h =  h,
-                        .x_count =  secondary_oam_buffer[i].x_pos,
+                        .x_pos =  secondary_oam_buffer[i].x_pos,
                         .attrib  =  secondary_oam_buffer[i].attrib,
                         .oam_index =  secondary_oam_buffer[i].sprite_index,
                 });
             }
         }
         secondary_oam_buffer.reset();
-    }
-    if (current_scanline_cycle >= 0 && current_scanline_cycle < 257) {
-        for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
-            if (secondary_oam[i].x_count > 0) {--secondary_oam[i].x_count;} // should dot every cycle
-        }
     }
     ++current_scanline_cycle;
 

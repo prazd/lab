@@ -31,11 +31,11 @@ struct DebugWindow {
     static void cpu_search(Bus& bus, CPU& cpu, PredF pred_f, HandlerF handler_f, Args&&... args) {
         unsigned l_pc = 0x8000;
         while(l_pc < 0xffff) {
-            if (cpu.mem.read(bus, l_pc) == 0xff){ // also skip ISC (0xff)
-                while(cpu.mem.read(bus, ++l_pc) == 0xff);
+            if (bus.unsafe_read_prg(l_pc) == 0xff){ // also skip ISC (0xff)
+                while(bus.unsafe_read_prg(++l_pc) == 0xff);
                 continue;
             }
-            auto decoded = cpu.decode(cpu.mem.read(bus, l_pc));
+            auto decoded = cpu.decode(bus.unsafe_read_prg(l_pc));
             if (!decoded.bytes) {++l_pc; continue;}
             auto asm_info = cpu.disassemble(bus, l_pc);
             if (pred_f(l_pc, decoded, asm_info))
@@ -211,8 +211,8 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                         auto x_tile_n = (i % 32);
                         auto y_tile_n = current_nt_y % 30;
                         auto pt_addr = ((base_pt_address + (16 * *(bus.ppu_map + nt + (y_tile_n * 32) + x_tile_n))));
-                        auto l_tile = bus.read_chr(pt_addr + z);
-                        auto h_tile = bus.read_chr(pt_addr + z + 8);
+                        auto l_tile = bus.unsafe_read_chr(pt_addr + z);
+                        auto h_tile = bus.unsafe_read_chr(pt_addr + z + 8);
                         auto val = bus.ppu_map[nt + 0x3c0 + (y_tile_n/4 * 8) + x_tile_n/4];
                         auto shift_y = (y_tile_n/2) % 2;
                         auto shift_x = (x_tile_n/2) % 2;
@@ -258,8 +258,8 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                         auto pt_addr = ((base_pt_address + (16 *
                                                             *(bus.ppu_map + (ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) +
                                                                              ((current_nt_y % 30) * 32) + (i % 32))))));
-                        auto l_tile = bus.read_chr(pt_addr + z);
-                        auto h_tile = bus.read_chr(pt_addr + z + 8);
+                        auto l_tile = bus.unsafe_read_chr(pt_addr + z);
+                        auto h_tile = bus.unsafe_read_chr(pt_addr + z + 8);
                         auto tile_row = get_tile_row(h_tile, l_tile);
                         for (int k = 0; k < 8; ++k){
                             DW::buffer[current++] = tile_row[k];
@@ -520,7 +520,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         else if (CheckCollisionPointRec(GetMousePosition(), button2) && run_mode == CPU_M && mouse_button_pred(pressed_mode)){
             selected_move_active = true;
         } else if (CheckCollisionPointRec(GetMousePosition(), button3)  && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
-            selected_line_pc = pc + cpu.decode(cpu.mem.unsafe_read(bus, pc)).bytes;
+            selected_line_pc = pc + cpu.decode(bus.unsafe_read_prg(pc)).bytes;
             selected_move_active = true;
         } else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             next = true;
@@ -529,16 +529,20 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             selected_move_active = true;
         // trigger search
         } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
-            cpu.mem.write_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
+            unsigned short addr = std::stoul(u_input.s, nullptr, 16);
+            bus.adjust_cpu_mirroring(addr);
+            bus.cpu_trigger_write_addresses[addr] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
-            cpu.mem.read_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
+            unsigned short addr = std::stoul(u_input.s, nullptr, 16);
+            bus.adjust_cpu_mirroring(addr);
+            bus.cpu_trigger_read_addresses[addr] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button7) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
-            cpu.mem.write_trigger_addresses.clear();
-            cpu.mem.read_trigger_addresses.clear();
+            bus.cpu_trigger_read_addresses = 0;
+            bus.cpu_trigger_write_addresses = 0;
         } else if (CheckCollisionPointRec(GetMousePosition(), button8) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             trigger_search = !trigger_search;
-            cpu.mem.triggered_on_write = !trigger_search;
-            cpu.mem.triggered_on_read = !trigger_search;
+            bus.cpu_addr_triggered_on_write = !trigger_search;
+            bus.cpu_addr_triggered_on_read = !trigger_search;
             ppu.fill_white_background = !trigger_search;
         } else if (CheckCollisionPointRec(GetMousePosition(), button1) && run_mode == PPU_M && mouse_button_pred(pressed_mode)){
             ppu.frame_start = false;
@@ -559,16 +563,20 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         }
         // trigger search
         else if (CheckCollisionPointRec(GetMousePosition(), button9) && run_mode == PPU_M  && IsMouseButtonPressed(0)) {
-            ppu.mem.write_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
+            unsigned short addr = std::stoul(u_input.s, nullptr, 16);
+            bus.adjust_ppu_mirroring(addr);
+            bus.ppu_trigger_write_addresses[addr] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button10) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
-            ppu.mem.read_trigger_addresses.push_back(std::stoul(u_input.s, nullptr, 16));
+            unsigned short addr = std::stoul(u_input.s, nullptr, 16);
+            bus.adjust_ppu_mirroring(addr);
+            bus.ppu_trigger_read_addresses[std::stoul(u_input.s, nullptr, 16)] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button11) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
-            ppu.mem.write_trigger_addresses.clear();
-            ppu.mem.read_trigger_addresses.clear();
+            bus.ppu_trigger_read_addresses = 0;
+            bus.ppu_trigger_write_addresses = 0;
         } else if (CheckCollisionPointRec(GetMousePosition(), button12) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
             trigger_search = !trigger_search;
-            ppu.mem.triggered_on_write = !trigger_search;
-            ppu.mem.triggered_on_read = !trigger_search;
+            bus.ppu_addr_triggered_on_write = !trigger_search;
+            bus.ppu_addr_triggered_on_read = !trigger_search;
             ppu.fill_white_background = !trigger_search;
         }
         else if (CheckCollisionPointRec(GetMousePosition(), sync_button) && IsMouseButtonPressed(0))
@@ -629,7 +637,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                 ss << " [" << asm_info.arg_addr <<"] ";
             }
             ss << "\n\n";
-            pc += cpu.decode(cpu.mem.unsafe_read(bus, pc)).bytes;
+            pc += cpu.decode(bus.unsafe_read_prg(pc)).bytes;
         }
         ss << "RunMode:";
         if (run_mode == CPU_M)
@@ -638,14 +646,21 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             ss << "PPU";
         ss << ' ' << (pressed_mode ? "PressedMode" : "DownMode");
 
-        const auto& write_trigger_address = run_mode == CPU_M ?  cpu.mem.write_trigger_addresses :  ppu.mem.write_trigger_addresses;
-        const auto& read_trigger_address =  run_mode == CPU_M ?  cpu.mem.read_trigger_addresses  :  ppu.mem.read_trigger_addresses;
-        ss << "\nWriteTrigger:";
-        for (auto el: write_trigger_address)
-            ss << std::hex << el << ',';
-        ss << "\nReadTrigger:";
-        for (auto el: read_trigger_address)
-            ss << std::hex << el << ',';
+        auto print_trigger_list = [](auto& ss, auto& read_trigger_address, auto& write_trigger_address){
+            ss << "\nWriteTrigger:";
+            for (size_t i = 0, e = std::size(write_trigger_address); i != e; ++i){
+                if (write_trigger_address[i]) ss << std::hex << i << ',';
+            }
+            ss << "\nReadTrigger:";
+            for (size_t i = 0, e = std::size(read_trigger_address); i != e; ++i){
+                if (read_trigger_address[i]) ss << std::hex << i << ',';
+            }
+        };
+
+        if (run_mode == CPU_M)
+            print_trigger_list(ss,  bus.cpu_trigger_read_addresses, bus.cpu_trigger_write_addresses);
+        else if (run_mode == PPU_M)
+            print_trigger_list(ss, bus.ppu_trigger_read_addresses, bus.ppu_trigger_write_addresses);
 
         auto str = ss.str();
         DW::draw(str.data(), 15.f);
@@ -692,20 +707,20 @@ struct SnapStorage {
         unsigned char value{};
         unsigned long cycles_count = 0;
         unsigned short pc_watch_address{};
-        SimpleDeque<std::pair<unsigned short, unsigned char>,5> write_addresses;
-        inline void from_cpu(const CPU& cpu){
+        SimpleDequeTC<std::pair<unsigned short, unsigned char>,5> write_addresses;
+        inline void from_cpu(const CPU& cpu, Bus& bus){
             x = cpu.x;
             y = cpu.y;
             a = cpu.a;
             pc = cpu.pc;
             sp = cpu.sp;
             cycles_count = cpu.cycles_count;
-            write_addresses = cpu.mem.write_addresses;
+            write_addresses = bus.cpu_write_addresses;
         }
         inline void to_cpu(Bus& bus, CPU& cpu){
             while(!write_addresses.empty()){
                 auto cur = write_addresses.back();
-                cpu.mem.unsafe_write(bus, cur.first, cur.second);
+               bus.unsafe_write(cur.first, cur.second);
                 write_addresses.pop_back();
             }
             cpu.x = x;
@@ -763,12 +778,12 @@ struct SnapStorage {
         bool address_increment_on_read_ppudata = false; //    RAM address increment per CPU read/write of PPUDATA
         bool vblank_nmi_enable = false;
 
-        SimpleDeque<std::pair<unsigned short, unsigned char>, 3> write_addresses;
+        SimpleDequeTC<std::pair<unsigned short, unsigned char>, 3> write_addresses;
 
         size_t current_x = 0;
         size_t current_y = 0;
 
-        inline void from_ppu(const PPU& ppu){
+        inline void from_ppu(const PPU& ppu, Bus& bus){
             current_cycle = ppu.current_cycle;
             frames_count = ppu.frames_count;
             frame_start = ppu.frame_start;
@@ -803,7 +818,7 @@ struct SnapStorage {
             attributes_high = ppu.attributes_high;
             current_x = ppu.current_x;
             current_y = ppu.current_y;
-            write_addresses = ppu.mem.write_addresses;
+            write_addresses = bus.ppu_write_addresses;
         }
         inline void to_ppu(Bus& bus, PPU& ppu){
             while(!write_addresses.empty()){
@@ -865,11 +880,12 @@ struct SnapStorage {
 
     void push_state(Bus& bus, CPU& cpu, PPU& ppu){
         State s;
-        s.cpus.from_cpu(cpu);
-        s.ppus.from_ppu(ppu);
+        s.cpus.from_cpu(cpu, bus);
+        s.ppus.from_ppu(ppu, bus);
         s.bus = bus;
-        cpu.mem.write_addresses.reset();
-        ppu.mem.write_addresses.reset();
+
+        bus.cpu_write_addresses.reset();
+        bus.ppu_write_addresses.reset();
         prev_states.push(std::move(s)); // todo: check
     }
 };
@@ -1073,8 +1089,7 @@ struct PaletteViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                         if (j > 0) ++current_palette_index;
                         DW::buffer[current_buffer_index++] = WHITE;
                     } else {
-                        unsigned char c_index = ppu.mem.read(bus,
-                                                             constants::IMAGE_PALETTE_BEGIN + current_palette_index);
+                        unsigned char c_index = bus.unsafe_read_chr(constants::IMAGE_PALETTE_BEGIN + current_palette_index);
                         DW::buffer[current_buffer_index++] = ppu.palette[c_index];
                     }
                 }
@@ -1276,7 +1291,7 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         std::ofstream file(path, std::ios::binary);
         if (!file.is_open()) return;
         for (int i = 0; i != sz; ++i)
-            file.put(r.mem.unsafe_read(bus, i));
+            file.put(mode == PPUm ? bus.unsafe_read_chr(i) : bus.unsafe_read_prg(i));
     }
 
     void mem_print(Bus& bus, auto& r, size_t sz){
@@ -1302,22 +1317,36 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 t_x = DW::rec.x;
             }
             if (current_address == target_address) ss << " [ ";
-            if (r.mem.write_set_addresses[adjusted_address] || r.mem.read_set_addresses[adjusted_address]){
+            // TODO
+            bool is_updated = mode == PPUm ? (bus.ppu_read_set_addresses[adjusted_address] || bus.ppu_write_set_addresses[adjusted_address]) :
+                                             (bus.cpu_read_set_addresses[adjusted_address] || bus.cpu_write_set_addresses[adjusted_address]);
+            if (is_updated){
                 tmp_str = ss.str();
                 size_t sz = tmp_str.size();
                 DrawText(tmp_str.c_str(), t_x, t_y, 10.f, BLACK);
                 ss.str("");
                 t_x += (sz * 5.f);
                 ss << std::hex;
-                ss  << (unsigned)r.mem.unsafe_read(bus, current_address) << ' ';
+                if (mode == PPUm) {
+                    ss  << (unsigned)bus.unsafe_read_chr(current_address) << ' ';
+                } else {
+                    ss  << (unsigned)bus.unsafe_read_prg( current_address) << ' ';
+                }
                 tmp_str = ss.str();
-                DrawText(tmp_str.c_str(), t_x, t_y, 10.f, r.mem.write_set_addresses[adjusted_address] ? RED : GREEN);
+                bool is_write = mode == PPUm ? (bus.ppu_write_set_addresses[adjusted_address]) : (bus.cpu_write_set_addresses[adjusted_address]);
+                DrawText(tmp_str.c_str(), t_x, t_y, 10.f, is_write ? RED : GREEN);
                 sz = tmp_str.size();
                 t_x += (sz * 5.f);
                 ss.str("");
                 ss << std::hex;
-            } else
-                ss  << (unsigned)r.mem.unsafe_read(bus, current_address) << ' ';
+            } else {
+                if (mode == PPUm) {
+                    ss  << (unsigned)bus.unsafe_read_chr(current_address) << ' ';
+                } else {
+                    ss  << (unsigned)bus.unsafe_read_prg( current_address) << ' ';
+                }
+            }
+
             if (current_address == target_address) ss << " ] ";
         }
         ss << "\n ";
@@ -1341,9 +1370,9 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
             start_address = target_address - (target_address % 16);
         } else if (CheckCollisionPointRec(GetMousePosition(), write_button) && IsMouseButtonPressed(0)) {
             if (mode == CPUm)
-                cpu.mem.unsafe_write(bus, target_address, std::stoul(u_input.s, nullptr, 16));
+                bus.unsafe_write( target_address, std::stoul(u_input.s, nullptr, 16));
             else
-                ppu.mem.write(bus, target_address, std::stoul(u_input.s, nullptr, 16));
+                bus.unsafe_write_chr(target_address, std::stoul(u_input.s, nullptr, 16));
         } else if (CheckCollisionPointRec(GetMousePosition(), dump_button) && IsMouseButtonPressed(0)){
             switch (mode) {
                 case PPUm: dump(bus, ppu, mode_str[mode], sizeof(bus.ppu_map)); break;
@@ -1499,10 +1528,8 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                                        ((bus.ppuctrl >> 3) & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN) :
                                 (pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN);
 
-                        unsigned char shift_l = ppu.mem.read(bus,
-                                                             pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (k % 8)) : (k % 8)));
-                        unsigned char shift_h = ppu.mem.read(bus,
-                                                             pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (k % 8)) : (k % 8)) + 8);
+                        unsigned char shift_l = bus.unsafe_read_chr(pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (k % 8)) : (k % 8)));
+                        unsigned char shift_h = bus.unsafe_read_chr(pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (k % 8)) : (k % 8)) + 8);
 
                         unsigned char attrib_high_bit = (attrib >> 3) & 1;
                         unsigned char attrib_low_bit = (attrib >> 2) & 1;
@@ -1512,7 +1539,7 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                                     ((shift_h & 1) << 1)  | (shift_l  & 1)
                                                        : (((shift_h >> 7) & 1) << 1)  | (shift_l >> 7) & 1;
                             unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
-                            unsigned char pixel_index = ppu.mem.read(bus, constants::SPRITE_PALETTE_BEGIN + index);
+                            unsigned char pixel_index = bus.unsafe_read_chr(constants::SPRITE_PALETTE_BEGIN + index);
                             DW::buffer[buffer_index++] = ppu.palette[pixel_index];
                             if (is_horizontal_flip){
                                 shift_l >>= 1;

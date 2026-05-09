@@ -3,7 +3,6 @@
 #include "Simple.h"
 #include <bitset>
 struct CPU {
-    struct Memory {
 // https://www.nesdev.org/wiki/CPU_memory_map
 //    $0000–$07FF	$0800	2 KB internal RAM
 //    $0800–$0FFF	$0800
@@ -16,43 +15,6 @@ struct CPU {
 //    $4020–$FFFF   $BFE0   Unmapped. Available for cartridge use.
 //    • $6000–$7FFF $2000   Usually cartridge RAM, when present.
 //    • $8000–$FFFF $8000   Usually cartridge ROM and mapper registers.
-        unsigned char read(Bus&, unsigned short addr);
-        unsigned char unsafe_read(Bus&, unsigned short addr);
-        void write(Bus&, unsigned short addr, unsigned char value);
-        void unsafe_write(Bus&, unsigned short addr, unsigned char value);
-
-        enum StateDMA: unsigned char {
-            Read,
-            Write,
-        } dma_state;
-        static inline constexpr StateDMA next[2]{Write, Read};
-        unsigned char value;
-        unsigned char alignment;
-        inline void tick_dma(Bus& bus){
-            if (alignment > 0){
-                --alignment;
-                return;
-            }
-            if (dma_state == Read){
-                value = read(bus, bus.dma_address + bus.dma_index);
-            } else {
-                bus.oam[bus.dma_index++] = value;
-                bus.dma_active = (bus.dma_index != 256);
-            }
-            dma_state = next[dma_state];
-        }
-#if DEBUG_MODE
-        mutable std::bitset<0x10000> write_set_addresses; // todo: maybe add to dump
-        mutable std::bitset<0x10000> read_set_addresses;
-        SimpleDeque<std::pair<unsigned short,unsigned char>,5> write_addresses;
-        std::vector<unsigned short> write_trigger_addresses;
-        std::vector<unsigned short> read_trigger_addresses;
-        mutable bool triggered_on_write;
-        mutable bool triggered_on_read;
-#endif
-    };
-
-    VEC_MODE Memory mem;
 
     // https://www.nesdev.org/NESDoc.pdf (page 12-13)
     // SPR
@@ -226,7 +188,7 @@ struct CPU {
     };
 
     inline AsmInfo disassemble(Bus& bus, unsigned short address) {
-        auto di = decode(mem.unsafe_read(bus, address));
+        auto di = decode(bus.unsafe_read_prg(address));
         switch (di.i) {
             case SYA:
             case SXA:
@@ -261,7 +223,7 @@ struct CPU {
             case SBC:
             {
                 auto arg = get_arg_by_addr(bus, di.addr_mode, address);
-                return {instruction_str[di.i], mem.unsafe_read(bus, arg.addr), arg.addr, arg.is_accumulator, false, true};
+                return {instruction_str[di.i], bus.unsafe_read_prg(arg.addr), arg.addr, arg.is_accumulator, false, true};
             }
 
             case BCC:
@@ -274,7 +236,7 @@ struct CPU {
             case BVS:
             {
                 auto arg = get_arg_by_addr(bus, di.addr_mode, address);
-                return {instruction_str[di.i], (unsigned short)(address + (char)mem.unsafe_read(bus, arg.addr) + di.bytes), arg.addr, arg.is_accumulator,
+                return {instruction_str[di.i], (unsigned short)(address + (char)bus.unsafe_read_prg(arg.addr) + di.bytes), arg.addr, arg.is_accumulator,
                         false, true};
             }
 
@@ -319,12 +281,12 @@ struct CPU {
                 { return {instruction_str[di.i], 0, 0, false, true, false}; }
             case JMP: {
                 if (di.addr_mode == Absolute) {
-                    return {instruction_str[di.i], (unsigned short)(mem.unsafe_read(bus, address + 1) | (mem.unsafe_read(bus, address + 2) << 8)), 0, false,
+                    return {instruction_str[di.i], (unsigned short)(bus.unsafe_read_prg( address + 1) | (bus.unsafe_read_prg( address + 2) << 8)), 0, false,
                             false, false};
                 } else { // Indirect
-                    unsigned short arg_addr = (mem.unsafe_read(bus, address + 1) | (mem.unsafe_read(bus, address + 2) << 8));
-                    unsigned char l = mem.unsafe_read(bus, arg_addr);
-                    unsigned char h = mem.unsafe_read(bus, (arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
+                    unsigned short arg_addr = (bus.unsafe_read_prg( address + 1) | (bus.unsafe_read_prg( address + 2) << 8));
+                    unsigned char l = bus.unsafe_read_prg( arg_addr);
+                    unsigned char h = bus.unsafe_read_prg( (arg_addr & 0xff) == 0xff ? (arg_addr & 0xff00) : arg_addr + 1);
                     return {instruction_str[di.i],(unsigned short)(l | (h << 8)), 0, false , false, false};
                 }
             }

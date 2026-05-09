@@ -2,6 +2,17 @@
 #include "Constants.hpp"
 void Bus::write(unsigned short addr, unsigned char value) {
     adjust_cpu_mirroring(addr);
+#if DEBUG_MODE
+    cpu_write_set_addresses[addr] = true;
+    cpu_write_addresses.push_back(std::pair<unsigned short, unsigned char>{addr, unsafe_read_prg(addr)});
+    cpu_addr_triggered_on_write = cpu_trigger_write_addresses[addr];
+#endif
+#if GAME_GENIE_MODE
+    if (addr >= 0x8000 && addr <= 0x800b){
+        gg.handle(addr, value);
+        return;
+    }
+#endif
     if (addr >= 0x8000 && addr <= 0xffff){
         mapper.handle(addr, value);
         return;
@@ -106,6 +117,14 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
 // All regs for debug
 unsigned char Bus::read_prg(unsigned short addr) {
     adjust_cpu_mirroring(addr);
+#if DEBUG_MODE
+    cpu_read_set_addresses[addr] = true;
+    cpu_addr_triggered_on_read = cpu_trigger_read_addresses[addr];
+#endif
+#if GAME_GENIE_MODE
+    if (auto i = gg.find_index(addr); i != -1)
+        return gg.get(i, unsafe_read_prg(addr)); // todo: check
+#endif
     if (addr >= 0x8000 && addr <= 0xffff){
         return mapper.read_prg_rom(addr);
     }
@@ -194,6 +213,18 @@ unsigned char Bus::unsafe_read_prg(unsigned short addr) {
 
 unsigned char Bus::read_chr(unsigned short addr) {
     adjust_ppu_mirroring(addr);
+#if DEBUG_MODE
+    ppu_read_set_addresses[addr] = true;
+    ppu_addr_triggered_on_read = ppu_trigger_read_addresses[addr];
+#endif
+    if (addr >= 0x0000 && addr <= 0x1FFF){
+        return mapper.read_chr_rom(addr);
+    }
+    return ppu_map[addr];
+}
+
+unsigned char Bus::unsafe_read_chr(unsigned short addr) {
+    adjust_ppu_mirroring(addr);
     if (addr >= 0x0000 && addr <= 0x1FFF){
         return mapper.read_chr_rom(addr);
     }
@@ -201,6 +232,20 @@ unsigned char Bus::read_chr(unsigned short addr) {
 }
 
 void Bus::write_chr(unsigned short addr, unsigned char value){
+    adjust_ppu_mirroring(addr);
+#if DEBUG_MODE
+    ppu_write_set_addresses[addr] = true;
+    ppu_write_addresses.push_back(std::pair<unsigned short, unsigned char>{addr, read_chr(addr)});
+    ppu_addr_triggered_on_write = ppu_trigger_write_addresses[addr];
+#endif
+    if (addr >= 0x0000 && addr <= 0x1FFF && ((ppustatus >> 7) & 1 || !((ppumask >> 3) & 1) || !((ppumask >> 4) & 1))) {
+        mapper.write_chr_ram(addr, value);
+    } else if (addr >= 0x0000 && addr <= 0x3fff){
+        ppu_map[addr] = value;
+    }
+}
+
+void Bus::unsafe_write_chr(unsigned short addr, unsigned char value){
     adjust_ppu_mirroring(addr);
     if (addr >= 0x0000 && addr <= 0x1FFF && ((ppustatus >> 7) & 1 || !((ppumask >> 3) & 1) || !((ppumask >> 4) & 1))) {
         mapper.write_chr_ram(addr, value);
