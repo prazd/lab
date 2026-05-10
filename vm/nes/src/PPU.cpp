@@ -140,7 +140,7 @@ void PPU::bg_tick(Bus &bus) {
 
     if (current_y < 240){
         // 1-256 cycles
-        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && (bus.ppumask >> 3) & 1) {
+        if (current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && (bus.ppumask >> 3) & 1) {
             fetch_tile_data_step(bus);
 
 #if DEBUG_MODE
@@ -155,13 +155,17 @@ void PPU::bg_tick(Bus &bus) {
                 v &= 0x8fff;
                 v |= y_fine_add_val << 12;
                 if (y_fine_add_prev == 7){
-                    auto prev = ((v >> 5) & 0x1f);
-                    // todo: check prev == 31 case
-                    auto add_val = ((((v >> 5) & 0x1f) + 1) % 30);
-                    if (prev == 29)
+                    auto y_coarse_val = ((v >> 5) & 0x1f);
+                    if (y_coarse_val == 29) {
                         v ^= 0x800;
-                    v &= 0xfc1f;
-                    v |= (add_val << 5);
+                        v = 0;
+                    } else if (y_coarse_val == 31) {
+                        v = 0;
+                    } else {
+                        auto add_val = ((y_coarse_val + 1) & 0x1f);
+                        v &= 0xfc1f;
+                        v |= (add_val << 5);
+                    }
                 }
             }
         } else if(current_scanline_cycle == 257 && (bus.ppumask >> 3) & 1) {
@@ -179,11 +183,11 @@ void PPU::bg_tick(Bus &bus) {
     } else if (current_y == 261){
         if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && (bus.ppumask >> 3) & 1) {
             // todo: check
-            fetch_tile_data_step(bus);
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
             attributes_high <<= 1;
+            fetch_tile_data_step(bus);
         } else if (current_scanline_cycle == 280 &&(bus.ppumask >> 3) & 1) {
             v &= 0x841f;
             v |= (t & 0x7be0);
@@ -307,8 +311,9 @@ void PPU::draw_pixel(Bus &bus) {
     bool universal_background = false;
     unsigned char oam_index{};
     unsigned char cur_oam_index = secondary_oam.size() > 0 ? secondary_oam[0].oam_index : 0;
+    size_t scanline_x = current_x % 256;
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
-        if (secondary_oam[i].x_pos <= (current_x % 256) && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
+        if (secondary_oam[i].x_pos <= scanline_x && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
                 is_horizontal_flip = (secondary_oam[i].attrib >> 6) & 1;
                 auto l_sprite_data =
                         is_horizontal_flip ?
@@ -354,21 +359,6 @@ void PPU::draw_pixel(Bus &bus) {
     unsigned char pixel_index = bus.read_chr( universal_background ? constants::IMAGE_PALETTE_BEGIN : (
                                          (is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN) + index));
 
-    shift_register_high <<= 1;
-    shift_register_low <<= 1;
-    attributes_low <<= 1;
-    attributes_high <<= 1;
-    for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
-        if (secondary_oam[i].x_pos <= (current_x % 256) && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
-            if ((secondary_oam[i].attrib >> 6) & 1){
-                secondary_oam[i].shift_l >>= 1;
-                secondary_oam[i].shift_h >>= 1;
-            } else {
-                secondary_oam[i].shift_l <<= 1;
-                secondary_oam[i].shift_h <<= 1;
-            }
-        }
-    }
 #if DEBUG_MODE
     if (bg_data == 0 && sprite_data != 0 && pixel_mixing_debug_view.get(PPU::PixelMixingDebugView::Mode::Bg))
         update_internal_display(ORANGE);
@@ -380,20 +370,37 @@ void PPU::draw_pixel(Bus &bus) {
         update_internal_display(GREEN);
     else
 #endif
-    update_internal_display(palette[pixel_index]);
+        update_internal_display(palette[pixel_index]);
+
+    shift_register_high <<= 1;
+    shift_register_low <<= 1;
+    attributes_low <<= 1;
+    attributes_high <<= 1;
+    for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
+        if (secondary_oam[i].x_pos <= scanline_x && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
+            if ((secondary_oam[i].attrib >> 6) & 1){
+                secondary_oam[i].shift_l >>= 1;
+                secondary_oam[i].shift_h >>= 1;
+            } else {
+                secondary_oam[i].shift_l <<= 1;
+                secondary_oam[i].shift_h <<= 1;
+            }
+        }
+    }
 }
 
 void PPU::tick(Bus& bus) {
+    current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && (bus.ppumask >> 3) & 1 && !(frames_count & 1)); // todo: debug
+    if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && (bus.ppumask >> 3) & 1) {
+        draw_pixel(bus);
+    }
+    sprite_evaluate_tick(bus);
     bg_tick(bus);
     bus.mapper.tick();
-    current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && (bus.ppumask >> 3) & 1 && !(frames_count & 1)); // todo: check
 #if DEBUG_MODE
     if (!is_sprite_off)
 #endif
-    sprite_evaluate_tick(bus);
-    if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && (bus.ppumask >> 3) & 1) {
-        draw_pixel(bus);
-    } else if (current_scanline_cycle == 257) {
+    if (current_scanline_cycle == 257) {
         // 257-320
         secondary_oam.reset();
         if ((bus.ppumask >> 3) & 1) {

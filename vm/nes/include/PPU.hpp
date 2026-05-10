@@ -186,7 +186,7 @@ struct PPU {
 #endif
     }
 
-    std::array<Color, 64> palette{
+    static constexpr inline std::array<Color, 64> palette{
         Color{0x75, 0x75,  0x75, 0xFF},
         Color{0x27, 0x1B,  0x8F, 0xFF},
         Color{0x00, 0x00,  0xAB, 0xFF},

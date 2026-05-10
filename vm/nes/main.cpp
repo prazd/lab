@@ -327,6 +327,10 @@ struct NESVM {
                     ppu.pixel_mixing_debug_view.m_switch(PPU::PixelMixingDebugView::Mode::BgSp);
                 if (IsKeyPressed(KEY_FOUR))
                     ppu.pixel_mixing_debug_view.m_switch(PPU::PixelMixingDebugView::Mode::NBgSp);
+                if (IsKeyPressed(KEY_C)){
+                    ppu.displays[0].fill(WHITE);
+                    ppu.displays[1].fill(WHITE);
+                }
             }
 
             if (grid_view_enable) dtg.draw(22.4f,22.4f);
@@ -368,7 +372,7 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, CPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/02.alignment.nes"}.run(); // todo: debug
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes"}.run(); // todo: debug
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

@@ -70,6 +70,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
             adjust_ppu_nt_mirroring(w_addr);
             adjust_ppu_mirroring(w_addr);
             write_chr(w_addr, value);
+//            ppudata = value; // todo: check
             ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
             return;}
         case constants::OAMDMA : {
