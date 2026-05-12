@@ -67,8 +67,6 @@ void Bus::write(unsigned short addr, unsigned char value) {
         }
         case constants::PPUDATA:   {
             unsigned short w_addr = ppu_v;
-            adjust_ppu_nt_mirroring(w_addr);
-            adjust_ppu_mirroring(w_addr);
             write_chr(w_addr, value);
 //            ppudata = value; // todo: check
             ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
@@ -136,15 +134,15 @@ unsigned char Bus::read_prg(unsigned short addr) {
         case constants::PPUADDR:  return open_bus_value;
 
         case constants::PPUSTATUS: {
-//            if (ppustatus & 0x80 && current_ppu_cycle - current_nmi_cycle == 1) {
+            ppu_w = false;
+            status_read_cycle = current_ppu_cycle;
+//            if (ppustatus & 0x80 && current_ppu_cycle - current_nmi_cycle == 0) { // todo: debug
 //                status_read_cycle = current_ppu_cycle;
 //                nmi_interrupt_flip_flop = false;
 //                auto tmp = ppustatus & 0x7f;
 //                ppustatus = 0;
-//                return tmp;
+//                return  tmp;
 //            }
-            ppu_w = false;
-            status_read_cycle = current_ppu_cycle;
             unsigned char current = (ppustatus & 0xe0) | (open_bus_value & 0x1f);
             ppustatus &= 0x60;
             return current;
@@ -174,8 +172,6 @@ unsigned char Bus::read_prg(unsigned short addr) {
             auto res = ppudata;
 
             unsigned short w_addr = ppu_v;
-            adjust_ppu_nt_mirroring(w_addr);
-            adjust_ppu_mirroring(w_addr);
             ppudata = read_chr(w_addr);
             ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
             return res;
@@ -279,6 +275,7 @@ void Bus::adjust_cpu_mirroring(unsigned short& addr) {
 }
 
 void Bus::adjust_ppu_mirroring(unsigned short& addr) {
+    adjust_ppu_nt_mirroring(addr);
     if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
         addr = constants::IMAGE_PALETTE_BEGIN + (addr % 32);
     else if (addr >= constants::TABLES_MIRROR_BEGIN && addr <= constants::TABLES_MIRROR_END)
@@ -302,7 +299,7 @@ unsigned short Bus::get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned c
 void Bus::adjust_ppu_nt_mirroring(unsigned short& address) {
     for (int i = 0; i < 4; ++i){
         auto current_nt = constants::NAME_TABLE0_BEGIN + (i * 0x400);
-        if (address >= current_nt  && address <= current_nt  + 0x3bf){
+        if (address >= current_nt && address <= current_nt + 0x3ff){
             auto r = get_nt_by_mirror_mode(mapper.current_screen_mirroring, i);
             address = r + (address - current_nt);
             return;
@@ -311,6 +308,8 @@ void Bus::adjust_ppu_nt_mirroring(unsigned short& address) {
 }
 
 void Bus::reset(){
+    memset(ppu_map, 0, sizeof(ppu_map));
+    memset(cpu_map, 0, sizeof(cpu_map));
     ppu_t = 0;
     ppu_v = 0;
     ppu_w = false;

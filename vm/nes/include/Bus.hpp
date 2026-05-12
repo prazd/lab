@@ -10,17 +10,17 @@ struct Bus {
         Write,
     } dma_state;
     static inline constexpr StateDMA next[2]{Write, Read};
-    unsigned char value;
-    unsigned char alignment;
+    unsigned char dma_value{};
+    unsigned char alignment{};
     inline void tick_dma(){
         if (alignment > 0){
             --alignment;
             return;
         }
         if (dma_state == Read){
-            value = read_prg(dma_address + dma_index);
+            dma_value = read_prg(dma_address + dma_index);
         } else {
-            oam[dma_index++] = value;
+            oam[dma_index++] = dma_value;
             dma_active = (dma_index != 256);
         }
         dma_state = next[dma_state];

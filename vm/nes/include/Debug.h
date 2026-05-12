@@ -359,6 +359,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     unsigned short selected_line_pc = 0;
     unsigned short base{};
     unsigned short pc{};
+    unsigned char selected_scanline{};
+    bool selected_scanline_active{};
 
     bool is_frame_jump_active = false;
     bool is_tile_line_jump_active = false;
@@ -554,10 +556,12 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         else if (CheckCollisionPointRec(GetMousePosition(), button3) && run_mode == PPU_M && mouse_button_pred(pressed_mode)){
             ppu.line_start = false;
             is_line_jump_active = true;
-        }
-        else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
+        } else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == PPU_M && mouse_button_pred(pressed_mode)) {
+            selected_scanline = (unsigned char)std::stoul(u_input.s, nullptr, 10);
+            selected_scanline_active = true;
+        } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
             is_one_tick_ppu_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == PPU_M && IsMouseButtonPressed(0)){
+        else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == PPU_M && IsMouseButtonPressed(0)){
             ppu.run = !ppu.run;
             ppu.fill_white_background = !ppu.run;
         }
@@ -680,8 +684,9 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button1, "frame", GREEN, 15.f);
             DW::draw_text_button(button2, " tile", GREEN, 15.f);
             DW::draw_text_button(button3, " line", GREEN, 15.f);
-            DW::draw_text_button(button4, " dot", GREEN, 15.f);
-            DW::draw_text_button(button5, " run", GREEN, 15.f);
+            DW::draw_text_button(button4, " linej", GREEN, 15.f);
+            DW::draw_text_button(button5, " dot", GREEN, 15.f);
+            DW::draw_text_button(button6, " run", GREEN, 15.f);
 
             DW::draw_text_button(button9, " wadd", GREEN, 15.f);
             DW::draw_text_button(button10, " radd", GREEN, 15.f);

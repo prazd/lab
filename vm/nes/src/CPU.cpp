@@ -1501,8 +1501,6 @@ void CPU::push_interrupts_ops(Bus& bus) {
     });
     iop.push_front([](Bus& bus, CPU& cpu){
         --cpu.sp;
-    });
-    iop.push_front([](Bus& bus, CPU& cpu){
         cpu.pc = (bus.read_prg(cpu.interrupt_addresses[cpu.as.interrupt]) | (bus.read_prg(cpu.interrupt_addresses[cpu.as.interrupt] + 1) << 8));
         cpu.interrupt_requests[cpu.as.interrupt] = false;
     });
@@ -1600,7 +1598,7 @@ void CPU::tick_step(Bus& bus){
             }
             istep = interrupt_in_progress ? Execute : Fetch;
 #if DEBUG_MODE
-            debug_run = false; // todo: check
+            if (!interrupt_in_progress) debug_run = false; // todo: check
 #endif
             break;
         }

@@ -84,6 +84,7 @@ struct NESVM {
     void reset(std::string_view path){
         auto tmp = NESVM(path);
         bus = tmp.bus;
+        bus.reset();
         cpu = std::move(tmp.cpu);
         ppu.reset();
         cartridge = std::move(tmp.cartridge);
@@ -134,8 +135,9 @@ struct NESVM {
     void ppu_debug_exec(){
         size_t current_tick = 0;
         static size_t cpu_tick_count = 0;
-        while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active
-                || dis.is_line_jump_active || dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLES) {
+        while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active ||
+                dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run ||
+                dis.selected_scanline_active || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLES) {
             if (!cpu.debug_run)
                 snap_storage.push_state(bus, cpu, ppu);
             cpu.debug_run = true;
@@ -149,6 +151,8 @@ struct NESVM {
                 dis.is_one_tick_ppu_active = false;
             } else if (dis.trigger_search) {
                 dis.trigger_search = !(bus.ppu_addr_triggered_on_read || bus.ppu_addr_triggered_on_write);
+            } else if (dis.selected_scanline_active) {
+                dis.selected_scanline_active = (ppu.current_y != dis.selected_scanline);
             }
             if (cpu_tick_count++ % 3 == 2) {
                 bus.tick(); cpu_tick();
@@ -163,6 +167,7 @@ struct NESVM {
             !dis.is_line_jump_active &&
             !dis.is_one_tick_ppu_active &&
             !dis.trigger_search &&
+            !dis.selected_scanline_active &&
             !reg_info.is_ppu_watching() &&
             !ppu.run) dis.handle(cpu);
     }
@@ -372,7 +377,7 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, CPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes"}.run(); // todo: debug
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/5.nmi_suppression.nes"}.run(); // todo: debug
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }
