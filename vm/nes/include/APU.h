@@ -28,11 +28,11 @@ struct PulseChan : Channel {
         --timer;
         if (!timer){
             current_duty_step = (current_duty_step + 1) % 8;
-            update_timer(cpu.mem.unsafe_read(bus, timer_l), cpu.mem.unsafe_read(bus, timer_h));
+            update_timer(bus.unsafe_read_prg(timer_l), bus.unsafe_read_prg(timer_h));
         }
     }
     inline unsigned char get_duty_cycle(Bus& bus, CPU& cpu) const {
-        switch((cpu.mem.unsafe_read(bus, duty_envelope) >> 6) & 0x3){
+        switch((bus.unsafe_read_prg(duty_envelope) >> 6) & 0x3){
             case 0:  return  0b0100'0000; // 12.5%
             case 1:  return  0b0110'0000; // 25%
             case 2:  return  0b0111'1000; // 50%

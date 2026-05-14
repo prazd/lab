@@ -5,6 +5,7 @@
 #include "GameGenie.h"
 #include <Simple.h>
 struct Bus {
+    size_t master_clock = 0;
     enum StateDMA: unsigned char {
         Read,
         Write,
@@ -66,6 +67,13 @@ struct Bus {
     size_t open_bus_value_cycles = 0;
     unsigned char open_bus_value {};
     unsigned short last_ppu_address = 0;
+
+    enum Regs: unsigned char {
+        PPUCTRL, PPUMASK, PPUSTATUS, PPUSCROLL, PPUADDR, PPUDATA,
+        PPU_V, PPU_T, PPU_X
+    };
+    SimpleDequeTC<std::pair<Regs, unsigned short>, 20> mmio_updates;
+    void write_reg(Regs r, unsigned short val);
 
     unsigned char ppuctrl{};
     unsigned char ppumask{};

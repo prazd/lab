@@ -37,7 +37,6 @@ void CPU::reset() {
 #if DEBUG_MODE
     cycles_count = 0;
 #endif
-//    memset(map, 0, 0x10000);
 }
 
 
@@ -1501,6 +1500,8 @@ void CPU::push_interrupts_ops(Bus& bus) {
     });
     iop.push_front([](Bus& bus, CPU& cpu){
         --cpu.sp;
+    });
+    iop.push_front([](Bus& bus, CPU& cpu){
         cpu.pc = (bus.read_prg(cpu.interrupt_addresses[cpu.as.interrupt]) | (bus.read_prg(cpu.interrupt_addresses[cpu.as.interrupt] + 1) << 8));
         cpu.interrupt_requests[cpu.as.interrupt] = false;
     });
@@ -1528,6 +1529,31 @@ void CPU::iop_exec_step(Bus& bus) {
         auto f = iop.back(); iop.pop_back();
         f(bus, *this);
     }
+}
+
+
+void CPU::interrupt_handle(Bus& bus) {
+    if (bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) {
+        interrupt_requests[NMI] = true;
+        sr.set(StatusReg::I, false);
+        bus.nmi_interrupt_flip_flop = false;
+    } else if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)) {
+        interrupt_requests[IRQ] = true;
+        bus.irq_interrupt_flip_flop = false;
+    }
+
+    bool interrupt_in_progress = false;
+    if (!sr.get(StatusReg::I)) {
+        for (int i = 0; i < InterruptsCount; ++i) {
+            if (interrupt_requests[i]) {
+                as.interrupt = static_cast<Interrupt>(i);
+                push_interrupts_ops(bus);
+                interrupt_in_progress = true;
+                break;
+            }
+        }
+    }
+    istep = interrupt_in_progress ? Execute : Fetch;
 }
 
 // todo: finish
@@ -1575,30 +1601,9 @@ void CPU::tick_step(Bus& bus){
                 --di.cycles;
                 if (!iop.empty()) return;
             }
-
-            if (bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) {
-                interrupt_requests[NMI] = true;
-                sr.set(StatusReg::I, false);
-                bus.nmi_interrupt_flip_flop = false;
-            } else if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)) {
-                interrupt_requests[IRQ] = true;
-                bus.irq_interrupt_flip_flop = false;
-            }
-
-            bool interrupt_in_progress = false;
-            if (!sr.get(StatusReg::I)) {
-                for (int i = 0; i < InterruptsCount; ++i) {
-                    if (interrupt_requests[i]) {
-                        as.interrupt = static_cast<Interrupt>(i);
-                        push_interrupts_ops(bus);
-                        interrupt_in_progress = true;
-                        break;
-                    }
-                }
-            }
-            istep = interrupt_in_progress ? Execute : Fetch;
+            interrupt_handle(bus);
 #if DEBUG_MODE
-            if (!interrupt_in_progress) debug_run = false; // todo: check
+            if (istep == Fetch) debug_run = false; // todo: check
 #endif
             break;
         }

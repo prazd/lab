@@ -172,8 +172,9 @@ struct CPU {
     void fill_exec_ops();
 
     DecodedInstruction decode(unsigned char v);
-    void tick(Bus& mem);
-    void tick_step(Bus& mem);
+    void tick(Bus&);
+    void tick_step(Bus&);
+    void interrupt_handle(Bus&);
     bool stop_requested = false;
     void push_interrupts_ops(Bus&);
     DecodedInstruction di{};

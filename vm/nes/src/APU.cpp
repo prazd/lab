@@ -28,17 +28,17 @@ void APU::frame_counter_step5(Bus& bus, CPU& cpu) {
 }
 
 void APU::frame_counter_quarter_update(Bus& bus, CPU& cpu) {
-    pulse_ch1.update_envelope(cpu.mem.unsafe_read(bus, constants::PULSE1_DUTY_ENVELOPE));
-    pulse_ch2.update_envelope(cpu.mem.unsafe_read(bus, constants::PULSE2_DUTY_ENVELOPE));
-    noise_ch.update_envelope(cpu.mem.unsafe_read(bus, constants::NOISE_CHAN_ENVELOPE));
+    pulse_ch1.update_envelope(bus.unsafe_read_prg(constants::PULSE1_DUTY_ENVELOPE));
+    pulse_ch2.update_envelope(bus.unsafe_read_prg(constants::PULSE2_DUTY_ENVELOPE));
+    noise_ch.update_envelope(bus.unsafe_read_prg(constants::NOISE_CHAN_ENVELOPE));
     // todo: update triangle linear counter
 }
 
 void APU::frame_counter_half_update(Bus& bus, CPU& cpu) {
-    pulse_ch1.update_length_counter(cpu.mem.unsafe_read(bus, constants::PULSE1_TIMER_HIGH));
-    pulse_ch2.update_length_counter(cpu.mem.unsafe_read(bus, constants::PULSE2_TIMER_HIGH));
-    noise_ch.update_length_counter(cpu.mem.unsafe_read(bus, constants::NOISE_CHAN_LENGTH_COUNTER));
-    triangle_ch.update_length_counter(cpu.mem.unsafe_read(bus, constants::TRIANGLE_CHAN_TIMER_HIGH));
+    pulse_ch1.update_length_counter(bus.unsafe_read_chr(constants::PULSE1_TIMER_HIGH));
+    pulse_ch2.update_length_counter(bus.unsafe_read_prg(constants::PULSE2_TIMER_HIGH));
+    noise_ch.update_length_counter(bus.unsafe_read_prg(constants::NOISE_CHAN_LENGTH_COUNTER));
+    triangle_ch.update_length_counter(bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH));
     // todo: update sweep
 }
 

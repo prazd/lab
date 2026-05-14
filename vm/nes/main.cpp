@@ -75,10 +75,13 @@ struct NESVM {
         bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
     }
 
-    // todo: check
     void ppu_init(){
         for (int i = 0; i < 4; ++i)
             ppu.tick(bus);
+    }
+
+    void cpu_init(){
+        cpu.interrupt_handle(bus);
     }
 
     void reset(std::string_view path){
@@ -95,6 +98,7 @@ struct NESVM {
         dis = std::move(tmp.dis);
         snap_storage = tmp.snap_storage;
 #endif
+        cpu_init();
         ppu_init();
     }
 
@@ -111,10 +115,12 @@ struct NESVM {
                 snap_storage.push_state(bus, cpu, ppu);
             while (cpu.debug_run) {
                 ppu_tick();
-                ppu_tick();
-                ppu_tick();
+                bus.tick();
 
-                cpu_tick();
+                ppu_tick();
+                bus.tick();
+
+                ppu_tick(); cpu_tick();
                 bus.tick();
                 ++current_tick;
             }
@@ -155,11 +161,12 @@ struct NESVM {
                 dis.selected_scanline_active = (ppu.current_y != dis.selected_scanline);
             }
             if (cpu_tick_count++ % 3 == 2) {
-                bus.tick(); cpu_tick();
+                cpu_tick();
                 if (dis.is_line_jump_active && ppu.line_start) {
                     dis.is_line_jump_active = false;
                 }
             }
+            bus.tick();
         }
         if (!dis.selected_move_active &&
             !dis.is_frame_jump_active &&
@@ -188,8 +195,13 @@ struct NESVM {
 #else
         if (cpu.stop_requested) return;
         for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
-             for (int j = 0; j < 3; ++j) ppu_tick();
-             cpu_tick();
+             ppu_tick();
+             bus.tick();
+
+             ppu_tick();
+             bus.tick();
+
+             ppu_tick(); cpu_tick();
              bus.tick();
         }
 #endif
@@ -279,6 +291,7 @@ struct NESVM {
         ppu.displays[0].fill(BLACK);
         ppu.displays[1].fill(BLACK);
         ppu_init();
+        cpu_init();
         while(!WindowShouldClose()){
             frame_execute();
             UpdateTexture(display_texture, ppu.get_active_display().data());
@@ -375,9 +388,9 @@ int main(){
     // /Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes - TODO: C20f
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, CPUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/5.nmi_suppression.nes"}.run(); // todo: debug
+    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // todo: try masterclock
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

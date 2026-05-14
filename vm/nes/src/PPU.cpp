@@ -1,9 +1,7 @@
 #include "PPU.hpp"
 #include "Constants.hpp"
-#include <algorithm>
 #include <bitset>
 #include <cassert>
-
 
 unsigned char PPU::tile_byte_from_addr(Bus& bus, unsigned short addr) {
 //    DCBA98 76543210
@@ -82,6 +80,7 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                 ++sprite_evaluation_index;
                 if (secondary_oam_buffer.size() == 8 && sprite_evaluation_index != 64) {
                     current_sprite_evaluation_step = SpriteOverflow;
+//                    bus.write_reg(Bus::PPUSTATUS,   bus.ppustatus | (1 << 5));
                     bus.ppustatus |= 1 << 5;
                 } else if (secondary_oam_buffer.size() <= 8 && sprite_evaluation_index == 64) {
                     current_sprite_evaluation_step = SpriteFinish;
@@ -123,8 +122,6 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
 
 void PPU::bg_tick(Bus &bus) {
     auto& v = bus.ppu_v;
-    auto& t = bus.ppu_t;
-
     bus.irq_interrupt_flip_flop = bus.mapper.is_irq_requested();
     // TODO: continue debug
 //    update_state(bus);
@@ -137,7 +134,6 @@ void PPU::bg_tick(Bus &bus) {
         line_start = true;
     }
 #endif
-
     if (current_y < 240){
         // 1-256 cycles
         if (current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && (bus.ppumask >> 3) & 1) {
@@ -155,7 +151,7 @@ void PPU::bg_tick(Bus &bus) {
                 v &= 0x8fff;
                 v |= y_fine_add_val << 12;
                 if (y_fine_add_prev == 7){
-                    auto y_coarse_val = ((v >> 5) & 0x1f);
+                    auto y_coarse_val = ((v >> 5) & 0x1f); // todo: check
                     if (y_coarse_val == 29) {
                         v ^= 0x800;
                         v = 0;
@@ -172,7 +168,7 @@ void PPU::bg_tick(Bus &bus) {
             // TODO: debug (oam_read test (v & 0x1f) == 2)
             // set coarse x + update ntx bit
             v &= 0xfbe0;
-            v |= (t & 0x41f);
+            v |= (bus.ppu_t & 0x41f);
         } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && (bus.ppumask >> 3) & 1) {
             shift_register_high <<= 1;
             shift_register_low <<= 1;
@@ -188,9 +184,9 @@ void PPU::bg_tick(Bus &bus) {
             attributes_low <<= 1;
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
-        } else if (current_scanline_cycle == 280 &&(bus.ppumask >> 3) & 1) {
+        } else if (current_scanline_cycle == 280 && (bus.ppumask >> 3) & 1) {
             v &= 0x841f;
-            v |= (t & 0x7be0);
+            v |= (bus.ppu_t & 0x7be0);
         } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && (bus.ppumask >> 3) & 1){
             shift_register_high <<= 1;
             shift_register_low <<= 1;
@@ -288,7 +284,6 @@ void PPU::fetch_tile_data_step(Bus& bus) {
                     v ^= 0x400;
                 v &= 0xffe0;
                 v |= add_val;
-
                 attributes_low &= 0xff00;
                 attributes_high &= 0xff00;
 
@@ -344,6 +339,7 @@ void PPU::draw_pixel(Bus &bus) {
     else if (bg_data != 0 && sprite_data != 0) {
         if (oam_index == 0 && (bus.ppumask >> 4) & 1 && (bus.ppumask >> 3) & 1 && ((current_x & 0xff) != 0xff)){
             bus.ppustatus |= (1 << 6);
+//            bus.write_reg(Bus::PPUSTATUS,  bus.ppustatus | (1 << 6));
         }
         res = (!is_bg_prio && (bus.ppumask >> 4) & 1) ? (is_sprite = true, sprite_data) : bg_data;
     } else {
@@ -446,13 +442,15 @@ void PPU::tick(Bus& bus) {
     // todo: timing debug
     if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1)) {
         bus.ppustatus |= 1 << 7;
-        bus.current_nmi_cycle = current_cycle;
+//        bus.write_reg(Bus::PPUSTATUS,bus.ppustatus | (1 << 7)); // todo: check
+        bus.current_nmi_cycle = bus.master_clock;
         bus.nmi_interrupt_flip_flop = true;
     }
 
     if (current_y == 261 && current_scanline_cycle == 1){
         if ((bus.ppumask >> 3) & 1) update_current_display(); // todo: check
         bus.nmi_interrupt_flip_flop = false; // todo: check
+//        bus.write_reg(Bus::PPUSTATUS,bus.ppustatus & 0x3f);
         bus.ppustatus &= 0x3f;
     }
 
