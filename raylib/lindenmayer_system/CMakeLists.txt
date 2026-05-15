@@ -4,9 +4,9 @@ project(LindenmayerSystem)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# set(SANITIZER_FLAGS "-fsanitize=address -fsanitize=undefined")
+set(SANITIZER_FLAGS "-O3")
 # set(SANITIZER_FLAGS "-fsanitize=undefined -fsanitize=thread")
-set(OPTIMIZE_FLAGS  "-O3")
+# set(OPTIMIZE_FLAGS  "-O3")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OPTIMIZE_FLAGS}")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OPTIMIZE_FLAGS}")
