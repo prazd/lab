@@ -4,7 +4,7 @@ project(SandSim)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(SANITIZER_FLAGS "-fsanitize=address")
+# set(SANITIZER_FLAGS "-fsanitize=address")
 set(OPTIMIZE_FLAGS "-O3 -march=native -fno-rtti")
 #set(OPTIMIZE_FLAGS "-g -O0")
 
