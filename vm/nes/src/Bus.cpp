@@ -145,16 +145,16 @@ unsigned char Bus::read_prg(unsigned short addr) {
         case constants::PPUSTATUS: {
             ppu_w = false;
             status_read_cycle = current_ppu_cycle;
-//            if (ppustatus & 0x80 && current_ppu_cycle - current_nmi_cycle == 0) { // todo: debug
-//                status_read_cycle = current_ppu_cycle;
-//                nmi_interrupt_flip_flop = false;
-//                auto tmp = ppustatus & 0x7f;
-//                ppustatus = 0;
-//                return  tmp;
-//            }
+            if (ppustatus & 0x80 && current_ppu_cycle - current_nmi_cycle == 0) { // todo: debug
+                status_read_cycle = current_ppu_cycle;
+                nmi_interrupt_flip_flop = false;
+                auto tmp = ppustatus & 0x7f;
+                ppustatus = 0;
+                return  tmp;
+            }
             unsigned char current = (ppustatus & 0xe0) | (open_bus_value & 0x1f);
-            //            ppustatus &= 0x60;
-            write_reg(PPUSTATUS, ppustatus & 0x60);
+            ppustatus &= 0x60;
+//            write_reg(PPUSTATUS, ppustatus & 0x60);
             return current;
         }
         case constants::OAMADDR:     return open_bus_value;
@@ -175,6 +175,7 @@ unsigned char Bus::read_prg(unsigned short addr) {
 
         case constants::PPUDATA:     {
             if (last_ppu_address >= constants::IMAGE_PALETTE_BEGIN){
+                ppudata = read_chr(ppu_v);
                 return (ppudata & 0x3f) | ((open_bus_value & 0xc0) & 0xff);
             }
             open_bus_value_cycles = 0;
@@ -217,33 +218,41 @@ unsigned char Bus::unsafe_read_prg(unsigned short addr) {
 unsigned char Bus::read_chr(unsigned short addr) {
     adjust_ppu_mirroring(addr);
 #if DEBUG_MODE
-    ppu_read_set_addresses[addr] = true;
-    ppu_addr_triggered_on_read = ppu_trigger_read_addresses[addr];
+    if (addr >= 0x0000 && addr <= 0x3fff) {
+        ppu_read_set_addresses[addr] = true;
+        ppu_addr_triggered_on_read = ppu_trigger_read_addresses[addr];
+    }
 #endif
     if (addr >= 0x0000 && addr <= 0x1FFF){
         return mapper.read_chr_rom(addr);
+    } else if (addr >= 0x2000 && addr <= 0x3fff) {
+        return ppu_map[addr];
     }
-    return ppu_map[addr];
+    return 0xff; // dummy
 }
 
 unsigned char Bus::unsafe_read_chr(unsigned short addr) {
     adjust_ppu_mirroring(addr);
     if (addr >= 0x0000 && addr <= 0x1FFF){
         return mapper.read_chr_rom(addr);
+    } else if (addr >= 0x2000 && addr <= 0x3fff) {
+        return ppu_map[addr];
     }
-    return ppu_map[addr];
+    return 0xff;
 }
 
 void Bus::write_chr(unsigned short addr, unsigned char value){
     adjust_ppu_mirroring(addr);
 #if DEBUG_MODE
-    ppu_write_set_addresses[addr] = true;
-    ppu_write_addresses.push_back(std::pair<unsigned short, unsigned char>{addr, read_chr(addr)});
-    ppu_addr_triggered_on_write = ppu_trigger_write_addresses[addr];
+    if (addr >= 0x0000 && addr <= 0x3fff){
+        ppu_write_set_addresses[addr] = true;
+        ppu_write_addresses.push_back(std::pair<unsigned short, unsigned char>{addr, read_chr(addr)});
+        ppu_addr_triggered_on_write = ppu_trigger_write_addresses[addr];
+    }
 #endif
     if (addr >= 0x0000 && addr <= 0x1FFF && ((ppustatus >> 7) & 1 || !((ppumask >> 3) & 1) || !((ppumask >> 4) & 1))) {
         mapper.write_chr_ram(addr, value);
-    } else if (addr >= 0x0000 && addr <= 0x3fff){
+    } else if (addr >= 0x2000 && addr <= 0x3fff){
         ppu_map[addr] = value;
     }
 }
@@ -252,7 +261,7 @@ void Bus::unsafe_write_chr(unsigned short addr, unsigned char value){
     adjust_ppu_mirroring(addr);
     if (addr >= 0x0000 && addr <= 0x1FFF && ((ppustatus >> 7) & 1 || !((ppumask >> 3) & 1) || !((ppumask >> 4) & 1))) {
         mapper.write_chr_ram(addr, value);
-    } else if (addr >= 0x0000 && addr <= 0x3fff){
+    } else if (addr >= 0x2000 && addr <= 0x3fff){
         ppu_map[addr] = value;
     }
 }
@@ -300,13 +309,13 @@ void Bus::adjust_cpu_mirroring(unsigned short& addr) {
 }
 
 void Bus::adjust_ppu_mirroring(unsigned short& addr) {
-    adjust_ppu_nt_mirroring(addr);
-    if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
+    if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
+        addr -= 0x10;
+    else if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
         addr = constants::IMAGE_PALETTE_BEGIN + (addr % 32);
     else if (addr >= constants::TABLES_MIRROR_BEGIN && addr <= constants::TABLES_MIRROR_END)
         addr = constants::NAME_TABLE0_BEGIN + (addr - constants::TABLES_MIRROR_BEGIN);
-    else if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
-        addr -= 0x10;
+    adjust_ppu_nt_mirroring(addr); // TODO: check
 }
 
 unsigned short Bus::get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n) {

@@ -339,7 +339,8 @@ struct Mapper {
 
     inline void write_chr_ram(unsigned short addr, unsigned char value){
         // todo: check
-        chr[addr] = value;
+        if (mtype != CNROM)
+            chr[addr] = value;
     }
 
     inline void handle(unsigned short addr, unsigned char value){

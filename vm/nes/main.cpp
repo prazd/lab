@@ -386,11 +386,10 @@ int main(){
     // /Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/dma_2007_read.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/instr_timing/instr_timing.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes - TODO: C20f
-
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, PPUm>{}.run();
+    MultiTest<NESVM, CPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // todo: try masterclock
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes"}.run(); // d799 + run debug
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }
