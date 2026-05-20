@@ -4,11 +4,11 @@
 #include <sstream>
 #include "raylib.h"
 
-constexpr size_t HEIGHT = 1000;
-constexpr size_t WIDTH = 1500;
+constexpr size_t HEIGHT = 1500;
+constexpr size_t WIDTH = 2000;
 
 template <size_t width, size_t height, size_t x, size_t y>
-struct Turtle {
+struct Turtle2D {
     float step = 1.f;
     float s_angle = 120;
     Texture2D target;
@@ -20,16 +20,21 @@ struct Turtle {
         float angle{0};
     } state;
     std::stack<State> s;
-    
-    Turtle():state({Vector2{x,y}}) {
+
+    Turtle2D(): state({Vector2{x,y}}) {
         Image img = GenImageColor(width, height, WHITE);
         target = LoadTextureFromImage(img);
         UnloadImage(img);
-        UpdateTexture(target, buffer.data());
         clear_texture();
     }
+
+    void update_texture(){
+        UpdateTexture(target, buffer.data());
+    }
+
     void clear_texture(){
         std::fill(std::begin(buffer), std::end(buffer), WHITE);
+        update_texture();
     }
 
     void draw_line(){
@@ -39,23 +44,21 @@ struct Turtle {
         if (current_x < width && current_y < height)
             buffer[(current_y * width) + current_x] = BLACK;
         state.vec = next;
-        UpdateTexture(target, buffer.data());
     }
     void handle(char sym){
         switch(sym) {
             case GDraw:
-            case ForwardDraw: {
-                    draw_line();            
-                break;}
-            case Forward: {state.vec = Vector2{state.vec.x - step * std::cos((PI * state.angle)/180), state.vec.y - step * std::sin((state.angle * PI)/180)}; break;}
-            case Plus:    {state.angle+=s_angle; break;}
-            case Minus:   {state.angle-=s_angle; break;}
-            case Push:    {s.push(state); break;}
-            case Pop:     {state = s.top(); s.pop(); break;}
+            case ForwardDraw: {draw_line(); break;}
+            case Forward:     {state.vec = Vector2{state.vec.x - step * std::cos((PI * state.angle)/180), state.vec.y - step * std::sin((state.angle * PI)/180)}; break;}
+            case Plus:        {state.angle+=s_angle; break;}
+            case Minus:       {state.angle-=s_angle; break;}
+            case Push:        {s.push(state); break;}
+            case Pop:         {state = s.top(); s.pop(); break;}
         }
     }
 };
 
+// TODO:
 // f+f++f+f
 // f
 // f+f++f+f
@@ -105,9 +108,13 @@ struct UserInput {
 
         if (IsKeyPressed(KEY_C) && IsKeyDown(KEY_LEFT_SUPER)) {SetClipboardText(selected_sub.c_str());}
     
-
         auto c = GetCharPressed();
         if (!c) return;
+        if (selected_begin != -1 && selected_end != -1){
+            cursor_pos = 0;
+            flush_select();
+            s.clear();
+        }
         s.insert(cursor_pos, 1, (char)c);
         cursor_pos+=1;
     }
@@ -152,7 +159,10 @@ struct UserInput {
 
             if (cursor_pos == i + 1 && cursor_pos == s.size() && CheckCollisionPointRec(GetMousePosition(), rec))
                 ss << "|";
-        }            
+        }
+        if (s.empty() && CheckCollisionPointRec(GetMousePosition(), rec)){
+            ss << " |";
+        }
         auto r_str = ss.str();
         DrawText(r_str.data(), rec.x, rec.y, wsize, BLACK);
         ss.str("");
@@ -170,7 +180,8 @@ struct LSystem {
     std::stringstream ss;
 
     bool ready = false;
-    Turtle<width,height,x,y> t;
+    Turtle2D<width,height,x,y> t;
+
     UserInput angle_input;
     Rectangle angle_button;
 
@@ -268,13 +279,15 @@ struct LSystem {
         draw_button(run_button, "run_button", RED);
 
         size_t e = lstr.size();
-        if (t_pos != e){
+        bool in_progress = t_pos != e;
+        if (in_progress){
             for (int j = 0; j < 10; ++j) {
                 if (t_pos != e){
                     t.handle(lstr[t_pos++]);
             }
            }
         }
+        if (in_progress) t.update_texture();
 
         ss << "Configuration:\n";
         ss << "Axiom:" << axiom_str << '\n';
@@ -284,21 +297,59 @@ struct LSystem {
             ss << el.first << " :" << el.second << '\n';
         }
         ss << "Angle:" << t.s_angle << '\n';
+        ss << "TurtlePosX:" << t.state.vec.x << '\n';
+        ss << "TurtlePosY:" << t.state.vec.y << '\n';
         auto s_ss = ss.str();
         DrawText(s_ss.c_str(), 500, 0, 15.f, BLACK);
         ss.str("");
     }
 };
 
+void sierpinski_triangle_seed(auto& l){
+    l.rules.push_back(std::pair{'F', "F-G+F+G-F"});
+    l.rules.push_back(std::pair{'G', "GG"});
+    l.axiom_str = "F-G-G";
+    l.t.s_angle = 120;
+    l.iterations = 7;
+}
+
+void sierpinski_carpet_seed(auto& l){
+    l.rules.push_back(std::pair{'F', "F+F-F-F-G+F+F+F-F"});
+    l.rules.push_back(std::pair{'G', "GGG"});
+    l.axiom_str = "F-G-G";
+    l.t.s_angle = 90;
+    l.iterations = 7;
+}
+
+void dragon_curve_seed(auto& l){
+    l.rules.push_back(std::pair{'X', "X+YF+"});
+    l.rules.push_back(std::pair{'Y', "-FX-Y"});
+    l.axiom_str = "FX";
+    l.t.s_angle = 90;
+    l.iterations = 7;
+}
+
+void koch_snowflake_seed(auto& l) {
+    l.rules.push_back(std::pair{'F', "F+F--F+F"});
+    l.axiom_str = "F--F--F";
+    l.t.s_angle = 60;
+    l.iterations = 5;
+}
 
 int main(){
     InitWindow(WIDTH, HEIGHT, "LindenmayerSystem");
-    LSystem<WIDTH, HEIGHT, WIDTH/2, HEIGHT/2> l;
     Rectangle origin_view{500, 500, 400, 400};
+    LSystem<WIDTH, HEIGHT, 200, 200> l;
+    
+    long x = 0;
+    long y = 0;
+
+    sierpinski_triangle_seed(l);
+
     while(!WindowShouldClose()){
         BeginDrawing();
                 ClearBackground(WHITE);
-                    DrawTexturePro(l.t.target, {0, 0, (float)l.t.target.width, (float)l.t.target.height}, origin_view, {0, 0},0, WHITE);
+                    DrawTexturePro(l.t.target, {float(x), float(y), (float)origin_view.width, (float)origin_view.height}, origin_view, {0, 0},0, WHITE);
                     DrawRectangleLinesEx(origin_view, 1.f, BLACK);
                     if (CheckCollisionPointRec(GetMousePosition(), origin_view) && IsMouseButtonDown(0)){
                         origin_view.x = GetMousePosition().x - origin_view.width/2;
@@ -308,11 +359,15 @@ int main(){
                         origin_view.width += 50.f;
                         origin_view.height += 50.f;
                     }
-                     if (CheckCollisionPointRec(GetMousePosition(), origin_view) && IsKeyPressed(KEY_MINUS) && origin_view.width > 200 && origin_view.height > 200){
+                    if (CheckCollisionPointRec(GetMousePosition(), origin_view) && IsKeyPressed(KEY_MINUS) && origin_view.width > 200 && origin_view.height > 200){
                         origin_view.width -= 50.f;
                         origin_view.height -= 50.f;
                     }
-                    l.handle();
+                    if (IsKeyDown(KEY_LEFT))      --x;
+                    if (IsKeyDown(KEY_RIGHT))     ++x;
+                    if (IsKeyDown(KEY_DOWN))      ++y;
+                    if (IsKeyDown(KEY_UP))        --y;
+                    l.handle(); 
                 DrawFPS(0,0);
         EndDrawing();
     }
