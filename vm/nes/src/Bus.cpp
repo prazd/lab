@@ -173,19 +173,20 @@ unsigned char Bus::read_prg(unsigned short addr) {
             return oam[oamaddr];
         }
 
+        // https://www.nesdev.org/wiki/PPU_registers#PPUDATA_-_VRAM_data_($2007_read/write)
         case constants::PPUDATA:     {
-            if (last_ppu_address >= constants::IMAGE_PALETTE_BEGIN){
-                ppudata = read_chr(ppu_v);
-                return (ppudata & 0x3f) | ((open_bus_value & 0xc0) & 0xff);
-            }
-            open_bus_value_cycles = 0;
-            open_bus_value = ppudata;
-            auto res = ppudata;
+            if (ppu_v >= constants::IMAGE_PALETTE_BEGIN){
+                auto res = read_chr(ppu_v) | (open_bus_value & 0xc0);
+                open_bus_value = res;
 
-            unsigned short w_addr = ppu_v;
-//            write_reg(PPUDATA, read_chr(w_addr));
-//            write_reg(PPU_V,  (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff);
-            ppudata = read_chr(w_addr);
+                //  $3000-$3EFF	$0F00	Table Mirror $2000-$2EFF
+                ppudata = read_chr(ppu_v-0x1000);
+                ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
+                return res;
+            }
+            auto res = ppudata;
+            open_bus_value = res;
+            ppudata = read_chr(ppu_v);
             ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
             return res;
         }
