@@ -1531,23 +1531,27 @@ struct SpriteInfo: DebugWindowText<x, y, w, h> {
             }
         } else if (info_version == SecondaryOAMV) {
             ss << "SecondaryOAMBuffer:\n";
-            for (int i = 0; i < 8; ++i){
+            for (int i = 0, e = ppu.secondary_oam_buffer.size(); i != e; ++i){
                 ss
                 << (unsigned)ppu.secondary_oam_buffer[i].y_pos << ' '
                 << (unsigned)ppu.secondary_oam_buffer[i].pt_index << ' '
-                << (unsigned)ppu.secondary_oam_buffer[i].attrib << ' '
+                << ((unsigned)ppu.secondary_oam_buffer[i].attrib & 0xe3)<< ' '
                 << (unsigned)ppu.secondary_oam_buffer[i].x_pos << ' '
                 << (unsigned)ppu.secondary_oam_buffer[i].sprite_index << '\n';
             }
         } else if (info_version == FullOAMV) {
             ss << "OAM:\n";
+            unsigned val{};
             for (int i = 0; i < 256; ++i){
-                ss << (unsigned)bus.oam[i] << ' ';
+                val = bus.oam[i] & ((i & 0x3) == 2 ? 0xe3 : 0xff);
+                ss << val << ' ';
                 if (i % 16 == 15) ss << '\n';
             }
         }
         auto s = ss.str();
         DW::draw(s.c_str(), 13.f);
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsMouseButtonPressed(0))
+            SetClipboardText(s.c_str());
         ss.str("");
     }
 };

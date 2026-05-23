@@ -75,6 +75,7 @@ struct Bus {
     SimpleDequeTC<std::pair<Regs, unsigned short>, 20> mmio_updates;
     void write_reg(Regs r, unsigned short val);
 
+    //  https://www.nesdev.org/wiki/PPU_registers
     unsigned char ppuctrl{};
     unsigned char ppumask{};
     unsigned char ppustatus{};

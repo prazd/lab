@@ -29,8 +29,6 @@ void Bus::write(unsigned short addr, unsigned char value) {
             ppu_t &= 0xf3ff;
             ppu_t |= ((ppuctrl & 0x3) << 10);
             sprite_mode = static_cast<SpriteMode>((ppuctrl >> 5) & 1);
-//            write_reg(PPUCTRL, value);
-//            write_reg(PPU_T, ((ppu_t & 0xf3ff) | ((value & 0x3) << 10)));
             return;}
         case constants::PPUMASK:   { ppumask = value; return;}
         case constants::OAMADDR:   { oamaddr = value; return;}
@@ -42,14 +40,11 @@ void Bus::write(unsigned short addr, unsigned char value) {
                 ppu_t &= 0x7fe0;
                 ppu_t |= ((ppuscroll >> 3) & 0x1f);
                 ppu_x = ppuscroll & 0x7;
-//                write_reg(PPU_T, (ppu_t & 0x7fe0) |  ((ppuscroll >> 3) & 0x1f));
-//                write_reg(PPU_X, ppuscroll & 0x7);
             } else {
                 // set y coarse + y fine
                 ppu_t &= 0xc1f;
                 ppu_t |= ((ppuscroll >> 3) & 0x1f) << 5;
                 ppu_t |= (ppuscroll & 0x7) << 12;
-//                write_reg(PPU_T, (ppu_t & 0xc1f) | (((ppuscroll >> 3) & 0x1f) << 5) | ((ppuscroll & 0x7) << 12));
             }
             ppu_w = !ppu_w;
             return;}
@@ -58,16 +53,14 @@ void Bus::write(unsigned short addr, unsigned char value) {
             if (ppu_w){
                 ppu_t &= 0x7f00;
                 ppu_t |= ppuaddr;
-//                write_reg(PPU_T, (ppu_t & 0x7f00) | ppuaddr);
             } else {
                 ppu_t &= 0xff;
                 ppu_t |= (((ppuaddr & 0x7f) << 8));
-//                write_reg(PPU_T, (ppu_t & 0xff) | (((ppuaddr & 0x7f) << 8)));
             }
             if (ppu_w){
+                ppu_t &= 0x3fff;
                 mapper.update_state(ppu_t, ppu_v);
                 ppu_v = ppu_t;
-//                write_reg(PPU_V, ppu_t);
                 last_ppu_address = ppu_v;
             }
             ppu_w = !ppu_w;
@@ -78,7 +71,6 @@ void Bus::write(unsigned short addr, unsigned char value) {
             write_chr(w_addr, value);
 //            ppudata = value; // todo: check
             ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
-//            write_reg(PPU_V, ((ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1))) & 0x3fff);
             return;}
         case constants::OAMDMA : {
             dma_address = value << 8;
@@ -154,23 +146,15 @@ unsigned char Bus::read_prg(unsigned short addr) {
             }
             unsigned char current = (ppustatus & 0xe0) | (open_bus_value & 0x1f);
             ppustatus &= 0x60;
-//            write_reg(PPUSTATUS, ppustatus & 0x60);
             return current;
         }
         case constants::OAMADDR:     return open_bus_value;
         case constants::OAMDATA: {
-            if (oamaddr == 0x2) {
-                open_bus_value = 0;
-                open_bus_value_cycles = 0;
-            }
             // 3 X
             // 2 Attrib
             // 1 Tile index
             // 0 Y
-            if (oamaddr % 4 == 2) { // for attrib
-                return oam[oamaddr] & 0xe3;
-            }
-            return oam[oamaddr];
+            return oam[oamaddr] & ((oamaddr & 0x3) == 2 ? 0xe3 : 0xff);
         }
 
         // https://www.nesdev.org/wiki/PPU_registers#PPUDATA_-_VRAM_data_($2007_read/write)
@@ -310,11 +294,11 @@ void Bus::adjust_cpu_mirroring(unsigned short& addr) {
 }
 
 void Bus::adjust_ppu_mirroring(unsigned short& addr) {
+    if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
+        addr = constants::IMAGE_PALETTE_BEGIN + (addr % 32);
     if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
         addr -= 0x10;
-    else if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
-        addr = constants::IMAGE_PALETTE_BEGIN + (addr % 32);
-    else if (addr >= constants::TABLES_MIRROR_BEGIN && addr <= constants::TABLES_MIRROR_END)
+    if (addr >= constants::TABLES_MIRROR_BEGIN && addr <= constants::TABLES_MIRROR_END)
         addr = constants::NAME_TABLE0_BEGIN + (addr - constants::TABLES_MIRROR_BEGIN);
     adjust_ppu_nt_mirroring(addr); // TODO: check
 }

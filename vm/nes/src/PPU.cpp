@@ -50,8 +50,6 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                                  ); // + sprite height
                          if (!copy_in_progress) {
                              current_sprite_evaluation_step = SpriteIncrement;
-                         } else {
-                             tmp_oam_value += 0;
                          }
                      } else {
                          tmp_oam_value = bus.oam[current_oam_index + copy_step_count];
@@ -80,7 +78,6 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                 ++sprite_evaluation_index;
                 if (secondary_oam_buffer.size() == 8 && sprite_evaluation_index != 64) {
                     current_sprite_evaluation_step = SpriteOverflow;
-//                    bus.write_reg(Bus::PPUSTATUS,   bus.ppustatus | (1 << 5));
                     bus.ppustatus |= 1 << 5;
                 } else if (secondary_oam_buffer.size() <= 8 && sprite_evaluation_index == 64) {
                     current_sprite_evaluation_step = SpriteFinish;
@@ -91,10 +88,11 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
             }
             case SpriteOverflow: {
                 if (current_scanline_cycle & 1){
-                    if (!copy_in_progress) {
-                        current_oam_index =  4 * sprite_evaluation_index; // y_pos
-                        copy_in_progress = (current_y >= tmp_oam_value  && current_y < tmp_oam_value + sprite_sz); // + sprite height
-                    }
+// todo: check
+//                    if (!copy_in_progress) {
+//                        current_oam_index =  4 * sprite_evaluation_index; // y_pos
+//                        copy_in_progress = (current_y >= tmp_oam_value  && current_y < tmp_oam_value + sprite_sz); // + sprite height
+//                    }
                 } else {
                     if (copy_in_progress) {
                         ++copy_step_count;
@@ -336,10 +334,9 @@ void PPU::draw_pixel(Bus &bus) {
         res = sprite_data;
     } else if (bg_data != 0 && sprite_data == 0)
         res = bg_data;
-    else if (bg_data != 0 && sprite_data != 0) {
-        if (oam_index == 0 && (bus.ppumask >> 4) & 1 && (bus.ppumask >> 3) & 1 && ((current_x & 0xff) != 0xff)){
+    else if (bg_data != 0 && sprite_data != 0) { // zero hit
+        if (oam_index == 0 && (bus.ppumask >> 4) & 1 && (bus.ppumask >> 3) & 1 && ((current_x & 0xff) != 0xff) && !(bus.ppustatus & (0x80))){
             bus.ppustatus |= (1 << 6);
-//            bus.write_reg(Bus::PPUSTATUS,  bus.ppustatus | (1 << 6));
         }
         res = (!is_bg_prio && (bus.ppumask >> 4) & 1) ? (is_sprite = true, sprite_data) : bg_data;
     } else {
@@ -441,8 +438,8 @@ void PPU::tick(Bus& bus) {
 
     // todo: timing debug
     if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1)) {
+        bus.ppustatus &= 0x1f;
         bus.ppustatus |= 1 << 7;
-//        bus.write_reg(Bus::PPUSTATUS,bus.ppustatus | (1 << 7)); // todo: check
         bus.current_nmi_cycle = bus.master_clock;
         bus.nmi_interrupt_flip_flop = true;
     }
@@ -450,7 +447,6 @@ void PPU::tick(Bus& bus) {
     if (current_y == 261 && current_scanline_cycle == 1){
         if ((bus.ppumask >> 3) & 1) update_current_display(); // todo: check
         bus.nmi_interrupt_flip_flop = false; // todo: check
-//        bus.write_reg(Bus::PPUSTATUS,bus.ppustatus & 0x3f);
         bus.ppustatus &= 0x3f;
     }
 
@@ -458,7 +454,7 @@ void PPU::tick(Bus& bus) {
     if (current_scanline_cycle == 341){
         current_sprite_evaluation_step = SpriteCopy;
         current_scanline_cycle = 0;
-        sprite_evaluation_index = 0;
+        current_oam_index = sprite_evaluation_index = 0;
         current_y = current_y == 261 ? (current_x = 0) : current_y + 1;
     }
 }
