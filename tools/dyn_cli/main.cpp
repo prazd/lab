@@ -19,7 +19,7 @@ void* load_lib(const std::string& s){
     return handle;
 }
 
-void* load_function(void* handle, const std::string& s){
+void* load_sym(void* handle, const std::string& s){
     auto res = dlsym(handle, s.c_str());
     if (!res){
         std::cout << "Error:" << dlerror() << '\n';
@@ -39,25 +39,36 @@ void mmap_execute(const std::vector<unsigned char>& instrs){
 }
 
 struct CLI {
-    enum Mode: unsigned char { DynLoad, DynCall, Help, Exit, ModeCount};
-    static constexpr std::string_view mode_str[4] = {
-        "DynLoad", "DynCall", "Help", "Exit"
+    enum Mode: unsigned char { DynLoad, DynCall, DynVarRead, Help, Exit, ModeCount};
+    static constexpr std::string_view mode_str[5] = {
+        "DynLoad", "DynCall", "DynVarRead", "Help", "Exit"
     };
     Mode mode = Help;
 
-    enum ArgType: unsigned char {Int,String,Float};
-    static constexpr std::string_view arg_type_str[3] = {
-        "Int", "String","Float"
+    enum ArgType: unsigned char {Int,String,Float,Double};
+    static constexpr std::string_view arg_type_str[4] = {
+        "Int", "String","Float","Double"
     };
 
-    enum IntRegs{RDI, RSI, RCX, RDX, R8, R9};
+    enum IntRegs{RDI, RSI, RDX, RCX, R8, R9};
         static constexpr std::string_view regs_int_str[6] = {
-        "RDI", "RSI", "RCX", "RDX", "R8", "R9"
+        "RDI", "RSI", "RDX", "RCX", "R8", "R9"
     };
 
     enum FloatRegs{XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
         static constexpr std::string_view regs_float_str[8] = {
         "XMM0","XMM1","XMM2","XMM3","XMM4","XMM5","XMM6","XMM7"
+    };
+
+    static constexpr unsigned char xmm_rax_instr[8]{
+            0xc0,  // xmm0_rax
+            0xc8,  // xmm1_rax
+            0xd0,  // xmm2_rax
+            0xd8,  // xmm3_rax
+            0xe0,  // xmm4_rax
+            0xe8,  // xmm5_rax
+            0xf0,  // xmm6_rax
+            0xf8,  // xmm7_rax
     };
 
     enum RegType{IntReg,FloatReg};
@@ -67,8 +78,8 @@ struct CLI {
         switch(i){
             case RDI: {res[0] = 0x48; res[1] = 0xbf; break;}
             case RSI: {res[0] = 0x48; res[1] = 0xbe; break;}
-            case RCX: {res[0] = 0x48; res[1] = 0xb9; break;}
             case RDX: {res[0] = 0x48; res[1] = 0xba; break;}
+            case RCX: {res[0] = 0x48; res[1] = 0xb9; break;}
             case R8:  {res[0] = 0x49; res[1] = 0xb8; break;}
             case R9:  {res[0] = 0x49; res[1] = 0xb9; break;}
         }
@@ -76,26 +87,39 @@ struct CLI {
         return res;
     }
 
-    static auto get_float_arg_obj(double imm, size_t i){
-        static constexpr unsigned char xmm_i_instr[8]{
-            0xc7,  // xmm0
-            0xcf,  // xmm1
-            0xd7,  // xmm2
-            0xdf,  // xmm3
-            0xe7,  // xmm4
-            0xef,  // xmm5
-            0xf7,  // xmm6
-            0xff,  // xmm7
-        };
+    static auto get_int_arg_rax_obj(size_t imm){
+        std::array<unsigned char, 10> res;
+        res[0] = 0x48;
+        res[1] = 0xb8;
+        memcpy(res.data()+2, &imm, sizeof(size_t));
+        return res;
+    }
+
+    static auto get_double_arg_obj(double imm, size_t i){
         std::array<unsigned char, 15> res;
-        auto i_imm = get_int_arg_obj(std::bit_cast<size_t>(imm), 0);
+        auto i_imm = get_int_arg_rax_obj(std::bit_cast<size_t>(imm));
         std::copy(i_imm.begin(), i_imm.end(), res.begin());
-        // 66 48 0f 7e * -> movq rdi, xmm(0-7)
+        // 66 48 0f 6e [*] -> movq rax, xmm(0-7)
         res[10] = 0x66;
         res[11] = 0x48;
         res[12] = 0x0f;
         res[13] = 0x6e;
-        res[14] = xmm_i_instr[i];
+        res[14] = xmm_rax_instr[i];
+        return res;
+    }
+
+    static auto get_float_arg_obj(float imm, size_t i){
+        std::array<unsigned char, 15> res;
+        size_t imm_i = 0;
+        memcpy(&imm_i, &imm, sizeof(float));
+        auto i_imm = get_int_arg_rax_obj(imm_i);
+        std::copy(i_imm.begin(), i_imm.end(), res.begin());
+        // 66 48 0f 6e * -> movq rax, xmm(0-7)
+        res[10] = 0x66;
+        res[11] = 0x48;
+        res[12] = 0x0f;
+        res[13] = 0x6e;
+        res[14] = xmm_rax_instr[i];
         return res;
     }
 
@@ -110,10 +134,26 @@ struct CLI {
         return res;
     }
 
-    // todo: finish + test
+    // todo: support args > 6int + 8float
     static auto generate_call_instructions(const std::string& s, void* function_addr){
         static std::vector<std::string> str_args;
         str_args.clear();
+
+        auto parse_int = [](std::string_view sv){
+            size_t res = 0;
+            if (std::any_of(sv.begin(), sv.end(), [](auto el){return el == 'x';})){
+                size_t i = 0;
+                for (size_t e = sv.size(); i != e; ++i){
+                    if (sv[i] == 'x') {++i; break;}
+                }
+                std::string s(sv.substr(i));
+                res = std::stoul(s, 0 , 16);                
+            } else {
+                std::string s(sv);
+                res = std::atoi(s.c_str());
+            }
+            return res;
+        };
 
         std::vector<unsigned char> res;
         res.push_back(0x55); // push rbp
@@ -129,10 +169,13 @@ struct CLI {
             const auto [t, sv] = *it;
             auto str = std::string(sv);
             if (t == Int){
-                auto ins = get_int_arg_obj(std::atoi(str.c_str()), i_count++);
+                auto ins = get_int_arg_obj(parse_int(sv), i_count++);
+                std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+            } else if (t == Double) {
+                auto ins = get_double_arg_obj(std::stod(str.c_str()), f_count++);
                 std::copy(ins.begin(), ins.end(), std::back_inserter(res));
             } else if (t == Float) {
-                auto ins = get_float_arg_obj(std::stod(str.c_str()), f_count++);
+                auto ins = get_float_arg_obj(std::stof(str.c_str()), f_count++);
                 std::copy(ins.begin(), ins.end(), std::back_inserter(res));
             } else if (t == String) {
                 str_args.push_back(str);
@@ -155,10 +198,14 @@ struct CLI {
     }
 
     static ArgType get_type(std::string_view sv){
-        if (std::any_of(sv.begin(), sv.end(),[](auto el){return el == '.';}))
-            return Float;
-        else if (std::any_of(sv.begin(), sv.end(),[](auto el){return el == '\"';}))
+        if (std::any_of(sv.begin(), sv.end(),[](auto el){return el == '\"';}))
             return String;
+        else if (std::any_of(sv.begin(), sv.end(),[](auto el){return el == 'x';}))
+            return Int;
+        else if (std::any_of(sv.begin(), sv.end(),[](auto el){return el == 'f';}))
+            return Float;
+        else if (std::any_of(sv.begin(), sv.end(),[](auto el){return el == 'd';}))
+            return Double;
         else 
             return Int;
     }
@@ -200,6 +247,7 @@ struct CLI {
     void* lib_handle = nullptr;
 
     void(*function_handler)(...) = nullptr; // todo: custom function
+    void* global_var_addr = nullptr;
 
     void update_mode(unsigned char s){
         if (s >= ModeCount){mode = Help; return;}
@@ -210,9 +258,10 @@ struct CLI {
         std::cout << "\nCurrentMode:";
         std::cout << mode_str[mode] << '\n';
         switch(mode){
-            case DynLoad: {std::cout << "path to lib:\n";break;}
-            case DynCall: {std::cout << "function sym\n";break;}
-            case Help:    {std::cout << "Pick mode:\n0: DynLoad\n1: DynCall\n2: Help\n3: Exit\n";break;}
+            case DynLoad:    {std::cout << "path to lib:\n";break;}
+            case DynCall:    {std::cout << "function sym\n";break;}
+            case DynVarRead: {std::cout << "variable sym and type: (WHITE int)\n"; break;}
+            case Help:       {std::cout << "Pick mode:\n0: DynLoad\n1: DynCall\n2: DynVarRead\n3: Help\n4: Exit\n";break;}
         }
     }
     
@@ -222,7 +271,7 @@ struct CLI {
         for (int i = 0, e = s.size(); i != e; ++i){
             if (s[i] == ' '){
                 vec.push_back(std::string(s.begin() + pos, s.begin() + pos + i));
-                pos = i;
+                pos = i + 1;
             }
         }
         vec.push_back(std::string(s.begin() + pos, s.end()));
@@ -239,11 +288,34 @@ struct CLI {
             case DynLoad: {lib_handle = nullptr; lib_handle = load_lib(strs[0]); if(lib_handle){current_lib_path = strs[0]; update_mode(DynCall);} break;}
             case DynCall: {
                 function_handler = nullptr; 
-                function_handler = (void(*)(...))load_function(lib_handle, strs[0]);
+                function_handler = (void(*)(...))load_sym(lib_handle, strs[0]);
                 if (function_handler)
                     mmap_execute(generate_call_instructions(s, (void*)function_handler));
                 break;                   
-                } 
+                }
+            case DynVarRead: {
+                    global_var_addr = nullptr;
+                    global_var_addr = load_sym(lib_handle, strs[0]);
+                    if (!global_var_addr) break;
+
+                    if (strs[1] == std::string_view{"int"}){
+                        unsigned i = 0;
+                        memcpy(&i, global_var_addr, sizeof(unsigned));
+                        std::cout << "Var:" << i << '\n';
+                    } else if (strs[1] == std::string_view{"long"}) {
+                        size_t i = 0;
+                        memcpy(&i, global_var_addr, sizeof(size_t));
+                        std::cout << "Var:" << i << '\n';
+                    } else if (strs[1] == std::string_view{"float"}){
+                        float f = 0;
+                        memcpy(&f, global_var_addr, sizeof(float));
+                        std::cout << "Var:" << f << '\n';
+                    } else if (strs[1] == std::string_view{"double"}){
+                        double d = 0;
+                        memcpy(&d, global_var_addr, sizeof(double));
+                        std::cout << "Var:" << d << '\n';
+                    }
+                }                 
             }
     }
 
