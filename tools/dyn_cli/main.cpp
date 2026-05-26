@@ -3,6 +3,12 @@
 #include <vector>
 #include <variant>
 #include <cstring>
+#include <array>
+#include <algorithm>
+#include <sys/mman.h>
+#include <unistd.h>
+
+#define DEBUG 0
 
 void* load_lib(const std::string& s){
     auto handle = dlopen(s.c_str(), RTLD_LAZY);
@@ -20,6 +26,16 @@ void* load_function(void* handle, const std::string& s){
         return nullptr;
     }
     return res;
+}
+
+void mmap_execute(const std::vector<unsigned char>& instrs){ 
+    void* addr = mmap(NULL, instrs.size(), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (addr != MAP_FAILED){
+        std::copy(instrs.begin(), instrs.end(), (unsigned char*)addr);
+        auto f = (void(*)())addr;
+        f();
+        munmap(addr, instrs.size());
+    }
 }
 
 struct CLI {
@@ -78,7 +94,7 @@ struct CLI {
         res[10] = 0x66;
         res[11] = 0x48;
         res[12] = 0x0f;
-        res[13] = 0x7e;
+        res[13] = 0x6e;
         res[14] = xmm_i_instr[i];
         return res;
     }
@@ -87,37 +103,54 @@ struct CLI {
         std::array<unsigned char, 12> res;
         res[0] = 0x48;
         res[1] = 0xb8; // mov rax, ptr
-        memcpy(res.data()+2, &ptr, sizeof(void*));
+        auto addr = std::bit_cast<std::array<unsigned char, sizeof(void*)>>(ptr);
+        std::copy(addr.begin(), addr.end(), res.data()+2);
         res[10] = 0xff;
         res[11] = 0xd0; // call rax
         return res;
     }
 
-
     // todo: finish + test
-    static auto generate_call_instructions(const std::string& s){
+    static auto generate_call_instructions(const std::string& s, void* function_addr){
+        static std::vector<std::string> str_args;
+        str_args.clear();
+
         std::vector<unsigned char> res;
         res.push_back(0x55); // push rbp
 
         res.push_back(0x48); 
         res.push_back(0x89);
-        res.push_back(0xe5); // push rpb, rsp
+        res.push_back(0xe5); // mov rpb, rsp
                     
+        unsigned char f_count = 0;
+        unsigned char i_count = 0;
         auto args = parse_args(s);
-        for (const auto [t, sv, rt, rv]: args) {
-            auto s = std::string(sv);
+        for (auto it = args.begin() + 1, ite = args.end(); it != ite; ++it){
+            const auto [t, sv] = *it;
+            auto str = std::string(sv);
             if (t == Int){
-                auto ins = get_int_arg_obj(std::atoi(s.c_str()), rv);
-                for (auto el: ins) res.push_back(el);
+                auto ins = get_int_arg_obj(std::atoi(str.c_str()), i_count++);
+                std::copy(ins.begin(), ins.end(), std::back_inserter(res));
             } else if (t == Float) {
-                auto ins = get_float_arg_obj(std::stof(s.c_str()), rv);
-                for (auto el: ins) res.push_back(el);
+                auto ins = get_float_arg_obj(std::stod(str.c_str()), f_count++);
+                std::copy(ins.begin(), ins.end(), std::back_inserter(res));
             } else if (t == String) {
-                auto ins = get_int_arg_obj((std::uintptr_t)s.c_str(), rv);
-                for (auto el: ins) res.push_back(el);
+                str_args.push_back(str);
+                auto ins = get_int_arg_obj((std::uintptr_t)str_args.back().data(), i_count++);
+                std::copy(ins.begin(), ins.end(), std::back_inserter(res));
             }
         }
+        auto f_call_ins = get_function_call_instr(function_addr);
+        for (auto el: f_call_ins) res.push_back(el);
+        res.push_back(0x5d); // pop rbp
         res.push_back(0xc3); // ret
+#if DEBUG
+        std::cout << "Size:" << std::dec << res.size() << '\n';
+        for (auto el: res){
+            std::cout << std::hex << (int)el << '\n';
+        }
+        std::cout << std::endl;
+#endif        
         return res;
     }
 
@@ -130,11 +163,10 @@ struct CLI {
             return Int;
     }
 
-    static std::vector<std::tuple<ArgType,std::string_view, RegType, unsigned char>> parse_args(std::string_view s) {
-        std::vector<std::tuple<ArgType,std::string_view, RegType, unsigned char>> res;
+    static std::vector<std::pair<ArgType,std::string_view>> parse_args(std::string_view s) {
+        std::vector<std::pair<ArgType,std::string_view>> res;
         unsigned char regs_int_count = 0;
         unsigned char regs_float_count = 0;
-
         size_t i = 0;
         size_t e = s.size();
         while(i<e){
@@ -143,19 +175,11 @@ struct CLI {
             auto res_sv = std::string_view{s.begin() + i, it};
             i+=res_sv.size()+1;
             auto t = get_type(res_sv);
-            if (t == Float){
-                res.push_back(std::tuple{t, res_sv, FloatReg, regs_float_count++});
-            } else {
-                res.push_back(std::tuple{t, res_sv, IntReg, regs_int_count++});
-            }
+            res.push_back(std::pair{t, res_sv});
         }
         auto res_sv = std::string_view{s.begin() + i, s.end()};
         auto t = get_type(res_sv);
-        if (t == Float){
-            res.push_back(std::tuple{t, res_sv, FloatReg, regs_float_count++});
-        } else {
-            res.push_back(std::tuple{t, res_sv, IntReg, regs_int_count++});
-        }
+        res.push_back(std::pair{t, res_sv});
         return res;
     }
 
@@ -210,35 +234,17 @@ struct CLI {
            return;
         }
         auto strs = split(s);
-
-        if (strs.size() > 1){
-            print_args(parse_args(std::string{std::find(s.begin(), s.end(), ' ') + 1, s.end()}));
-        }
-    
         switch(mode){
             case Help: {update_mode(std::atoi(strs[0].c_str())); break;}
             case DynLoad: {lib_handle = nullptr; lib_handle = load_lib(strs[0]); if(lib_handle){current_lib_path = strs[0]; update_mode(DynCall);} break;}
             case DynCall: {
                 function_handler = nullptr; 
                 function_handler = (void(*)(...))load_function(lib_handle, strs[0]);
-                if (function_handler){
-                    // todo: generalized
-                    if (strs.size() > 1){
-                        auto args = parse_args(std::string_view{std::find(s.begin(), s.end(), ' ') + 1, s.end()});
-                        if (args.size() == 1) {
-                            auto [t, sv, rt, rv] = args[0];
-                            std::string str(sv);
-                            switch(t){
-                                case Int:    function_handler(std::atoi(str.c_str())); break;
-                                case Float:  function_handler(std::stof(str.c_str())); break;
-                                case String: function_handler(str.c_str()); break;
-                            }
-                        }
-                    } else {
-                        function_handler();
-                    }
-                }; break;}
-        }
+                if (function_handler)
+                    mmap_execute(generate_call_instructions(s, (void*)function_handler));
+                break;                   
+                } 
+            }
     }
 
     void run(){
