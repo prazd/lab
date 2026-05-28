@@ -87,7 +87,27 @@ struct CLI {
         return res;
     }
 
-    static auto get_int_arg_rax_obj(size_t imm){
+    static std::array<unsigned char, 18> get_arg_rsp_obj(size_t imm, int rsp_index){
+        std::array<unsigned char, 18> res;
+        auto mov_rax_ins = get_int_arg_rax_obj(imm); // rax = imm
+        std::copy(std::begin(mov_rax_ins), std::end(mov_rax_ins), res.begin());
+        rsp_index *= 8;
+        res[10] = 0x48;
+        res[11] = 0x89;
+        res[12] = 0x84; 
+        res[13] = 0x24;// dword ptr[rsp + (rsp_index)] = rax
+        auto arr = std::bit_cast<std::array<unsigned char, sizeof(rsp_index)>>(rsp_index);
+        std::copy(std::begin(arr), std::end(arr), res.begin() + 14);
+        return res;
+    }
+
+    static auto get_arg_rsp_obj(double imm, int rsp_index){
+        size_t imm_i = 0;
+        memcpy(&imm_i, &imm, sizeof(imm_i));
+        return get_arg_rsp_obj(imm_i, rsp_index);
+    }
+
+    static std::array<unsigned char, 10> get_int_arg_rax_obj(size_t imm){
         std::array<unsigned char, 10> res;
         res[0] = 0x48;
         res[1] = 0xb8;
@@ -95,7 +115,7 @@ struct CLI {
         return res;
     }
 
-    static auto get_double_arg_obj(double imm, size_t i){
+    static std::array<unsigned char, 15> get_double_arg_obj(double imm, size_t i){
         std::array<unsigned char, 15> res;
         auto i_imm = get_int_arg_rax_obj(std::bit_cast<size_t>(imm));
         std::copy(i_imm.begin(), i_imm.end(), res.begin());
@@ -134,7 +154,35 @@ struct CLI {
         return res;
     }
 
-    // todo: support args > 6int + 8float
+    static auto add_rsp_ins(int offset){
+        std::array<unsigned char, 7> res;
+        res[0] = 0x48;
+        res[1] = 0x81;
+        res[2] = 0xc4;
+        memcpy(res.data() + 3, &offset, sizeof(offset));
+        return res;
+    }
+
+    static auto sub_rsp_ins(int offset){
+        std::array<unsigned char, 7> res;
+        res[0] = 0x48;
+        res[1] = 0x81;
+        res[2] = 0xec;
+        memcpy(res.data() + 3, &offset, sizeof(offset));
+        return res;
+    }
+
+    static auto count_ins_type(const auto& args){
+        size_t f_type = 0;
+        size_t i_type = 0;
+        for (auto it = args.begin() + 1, ite = args.end(); it != ite; ++it) {
+            auto [t, sv] = *it;
+            i_type += (t == Int || t == String) ? 1 : 0;
+            f_type += (t == Float || t == Double) ? 1 : 0;
+        }
+        return std::pair{f_type, i_type};
+    }
+
     static auto generate_call_instructions(const std::string& s, void* function_addr){
         static std::vector<std::string> str_args;
         str_args.clear();
@@ -164,27 +212,69 @@ struct CLI {
                     
         unsigned char f_count = 0;
         unsigned char i_count = 0;
+        size_t rsp_index = 0;
         auto args = parse_args(s);
+        auto [d_ins_count, i_ins_count] = count_ins_type(args);
+
+        bool stack_args = (i_ins_count > 6 || d_ins_count > 8);
+
+        int rsp_offset = 0;
+        if (stack_args){
+            if (i_ins_count > 6){
+                rsp_offset += i_ins_count - 6;
+            }
+            if (d_ins_count > 8){
+                rsp_offset += d_ins_count - 8;
+            }
+            rsp_offset *= 8;
+            auto ins = sub_rsp_ins(rsp_offset);
+            std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+        }
+
         for (auto it = args.begin() + 1, ite = args.end(); it != ite; ++it){
             const auto [t, sv] = *it;
             auto str = std::string(sv);
             if (t == Int){
-                auto ins = get_int_arg_obj(parse_int(sv), i_count++);
-                std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                if (i_count == 6) {
+                    auto ins = get_arg_rsp_obj(parse_int(sv), rsp_index++);
+                    std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                } else {
+                    auto ins = get_int_arg_obj(parse_int(sv), i_count++);
+                    std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                }
             } else if (t == Double) {
-                auto ins = get_double_arg_obj(std::stod(str.c_str()), f_count++);
-                std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                if (f_count == 8){
+                    auto ins = get_arg_rsp_obj(std::stod(str.c_str()), rsp_index++);
+                    std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                } else {
+                    auto ins = get_double_arg_obj(std::stod(str.c_str()), f_count++);
+                    std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                }
             } else if (t == Float) {
-                auto ins = get_float_arg_obj(std::stof(str.c_str()), f_count++);
-                std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                if (f_count == 8){
+                    auto ins = get_arg_rsp_obj(std::stod(str.c_str()), rsp_index++);
+                    std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                } else {
+                    auto ins = get_float_arg_obj(std::stof(str.c_str()), f_count++);
+                    std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                }
             } else if (t == String) {
                 str_args.push_back(str);
-                auto ins = get_int_arg_obj((std::uintptr_t)str_args.back().data(), i_count++);
-                std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                if (i_count == 6) {
+                    auto ins = get_arg_rsp_obj((std::uintptr_t)str_args.back().data(), rsp_index++);
+                    std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                } else {
+                    auto ins = get_int_arg_obj((std::uintptr_t)str_args.back().data(), i_count++);
+                    std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+                }
             }
         }
         auto f_call_ins = get_function_call_instr(function_addr);
         for (auto el: f_call_ins) res.push_back(el);
+        if (stack_args){
+            auto ins = add_rsp_ins(rsp_offset);
+            std::copy(ins.begin(), ins.end(), std::back_inserter(res));
+        }
         res.push_back(0x5d); // pop rbp
         res.push_back(0xc3); // ret
 #if DEBUG
@@ -332,7 +422,6 @@ struct CLI {
     }
 };
 
-// TODO: try mmap exec
 int main(){
     CLI cli;
     cli.run();

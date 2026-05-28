@@ -134,7 +134,7 @@ void PPU::bg_tick(Bus &bus) {
 #endif
     if (current_y < 240){
         // 1-256 cycles
-        if (current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && (bus.ppumask >> 3) & 1) {
+        if (current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
             fetch_tile_data_step(bus);
 
 #if DEBUG_MODE
@@ -162,12 +162,12 @@ void PPU::bg_tick(Bus &bus) {
                     }
                 }
             }
-        } else if(current_scanline_cycle == 257 && (bus.ppumask >> 3) & 1) {
+        } else if(current_scanline_cycle == 257 && ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
             // TODO: debug (oam_read test (v & 0x1f) == 2)
             // set coarse x + update ntx bit
             v &= 0xfbe0;
             v |= (bus.ppu_t & 0x41f);
-        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && (bus.ppumask >> 3) & 1) {
+        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
@@ -175,17 +175,17 @@ void PPU::bg_tick(Bus &bus) {
             fetch_tile_data_step(bus);
         }
     } else if (current_y == 261){
-        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && (bus.ppumask >> 3) & 1) {
+        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 &&  ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
             // todo: check
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
-        } else if (current_scanline_cycle == 280 && (bus.ppumask >> 3) & 1) {
+        } else if (current_scanline_cycle == 280 &&  ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
             v &= 0x841f;
             v |= (bus.ppu_t & 0x7be0);
-        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && (bus.ppumask >> 3) & 1){
+        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 &&  ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)){
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
@@ -384,7 +384,7 @@ void PPU::draw_pixel(Bus &bus) {
 
 void PPU::tick(Bus& bus) {
     current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && (bus.ppumask >> 3) & 1 && !(frames_count & 1)); // todo: debug
-    if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && (bus.ppumask >> 3) & 1) {
+    if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
         draw_pixel(bus);
     }
     sprite_evaluate_tick(bus);
@@ -438,7 +438,7 @@ void PPU::tick(Bus& bus) {
 
     // todo: timing debug
     if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1)) {
-        bus.ppustatus &= 0x1f;
+        bus.ppustatus &= 0x5f; // todo: check zero hit value set to zero
         bus.ppustatus |= 1 << 7;
         bus.current_nmi_cycle = bus.master_clock;
         bus.nmi_interrupt_flip_flop = true;

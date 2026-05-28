@@ -150,6 +150,10 @@ unsigned char Bus::read_prg(unsigned short addr) {
         }
         case constants::OAMADDR:     return open_bus_value;
         case constants::OAMDATA: {
+            if (oamaddr == 0x2) {
+                open_bus_value = 0;
+                open_bus_value_cycles = 0;
+            }
             // 3 X
             // 2 Attrib
             // 1 Tile index

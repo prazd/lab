@@ -364,7 +364,6 @@ struct NESVM {
 };
 
 // PPU tests:
-// - /Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes - todo (E224)
 // /Users/prazd/Desktop/dev/nes-test-roms/240pee/240pee.nes
 
 // VBL:
@@ -387,9 +386,9 @@ int main(){
     // /Users/prazd/Desktop/dev/nes-test-roms/instr_timing/instr_timing.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes - TODO: C20f
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, CPUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes"}.run(); // d799 + run debug
+    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d799 + run debug
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

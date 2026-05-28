@@ -63,12 +63,17 @@ extern "C" void print_if8(int i1, int i2, int i3, int i4, int i5, int i6, float 
 }
 
 // print_id8 1 2 3 4 5 6 0.1d 0.2d 0.3d 0.4d 0.5d 0.6d 0.7d 0.8d
-extern "C" void print_id8(int i1, int i2, int i3, int i4, int i5, int i6, double d1, double d2, double d3, double d4, double d5, double d6, double d7, double d8){
+extern "C" void print_i6d8(int i1, int i2, int i3, int i4, int i5, int i6, double d1, double d2, double d3, double d4, double d5, double d6, double d7, double d8){
     print_args(i1,i2,i3,i4,i5,i6,d1,d2,d3,d4,d5,d6,d7,d8);
 }
 
+// print_i12d12 1 2 3 4 5 6 0.1d 0.2d 0.3d 0.4d 0.5d 0.6d 0.7d 0.8d 7 0.9d 8 0.10d 9 10 11 12 0.11d 0.12d
+extern "C" void print_i12d12(int i1, int i2, int i3, int i4, int i5, int i6, double d1, double d2, double d3, double d4, double d5, double d6, double d7, double d8, int i7,double d9,int i8, double d10, int i9, int i10, int i11, int i12, double d11, double d12){
+    print_args(i1,i2,i3,i4,i5,i6,d1,d2,d3,d4,d5,d6,d7,d8,i7,d9,i8,d10,i9,i10,i11,i12,d11,d12);
+}
+
 // print_id8_2 1 0.1d 2 3 4 0.2d 0.3d 0.4d 5 0.5d 0.6d 0.7d 6 0.8d
-extern "C" void print_id8_2(int i1, double d1, int i2, int i3, int i4, double d2, double d3, double d4, int i5, double d5, double d6, double d7, int i6, double d8){
+extern "C" void print_i6d8_2(int i1, double d1, int i2, int i3, int i4, double d2, double d3, double d4, int i5, double d5, double d6, double d7, int i6, double d8){
     print_args(i1,i2,i3,i4,i5,i6,d1,d2,d3,d4,d5,d6,d7,d8);
 }
 

@@ -15,7 +15,6 @@ enum TestMode {
 constexpr static std::string_view cpu_tests[] = {
         "/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes",
-        "/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/cpu_timing_test6/cpu_timing_test.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/instr_test-v5/all_instrs.nes",
@@ -32,18 +31,17 @@ constexpr static std::string_view ppu_tests[] = {
         "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes",
-
         "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes",
-// TODO: debug
-//        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/01.basics.nes",
-//        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/02.alignment.nes",
-//        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/03.corners.nes",
-//        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/04.flip.nes",
-//        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/05.left_clip.nes",
-//        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/06.right_edge.nes",
-//        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/11.edge_timing.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/01.basics.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/02.alignment.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/03.corners.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/04.flip.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/05.left_clip.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/06.right_edge.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/11.edge_timing.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes"
 };
 
