@@ -352,6 +352,7 @@ void PPU::draw_pixel(Bus &bus) {
     unsigned char pixel_index = bus.read_chr( universal_background ? constants::IMAGE_PALETTE_BEGIN : (
                                          (is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN) + index));
 
+    if (bus.ppumask & 1) pixel_index &= 0x30;
 #if DEBUG_MODE
     if (bg_data == 0 && sprite_data != 0 && pixel_mixing_debug_view.get(PPU::PixelMixingDebugView::Mode::Bg))
         update_internal_display(ORANGE);

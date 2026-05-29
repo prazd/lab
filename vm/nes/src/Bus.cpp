@@ -141,11 +141,16 @@ unsigned char Bus::read_prg(unsigned short addr) {
                 status_read_cycle = current_ppu_cycle;
                 nmi_interrupt_flip_flop = false;
                 auto tmp = ppustatus & 0x7f;
+
                 ppustatus = 0;
+                open_bus_value &= 0x1f;
+                open_bus_value |= (tmp & 0xe0);
                 return  tmp;
             }
             unsigned char current = (ppustatus & 0xe0) | (open_bus_value & 0x1f);
             ppustatus &= 0x60;
+            open_bus_value &= 0x1f;
+            open_bus_value |= (current & 0xe0);
             return current;
         }
         case constants::OAMADDR:     return open_bus_value;
@@ -164,7 +169,9 @@ unsigned char Bus::read_prg(unsigned short addr) {
         // https://www.nesdev.org/wiki/PPU_registers#PPUDATA_-_VRAM_data_($2007_read/write)
         case constants::PPUDATA:     {
             if (ppu_v >= constants::IMAGE_PALETTE_BEGIN){
-                auto res = read_chr(ppu_v) | (open_bus_value & 0xc0);
+                auto val = read_chr(ppu_v);
+                if (ppumask & 1) val &= 0xf0;
+                auto res = (val & 0x3f) | (open_bus_value & 0xc0);
                 open_bus_value = res;
 
                 //  $3000-$3EFF	$0F00	Table Mirror $2000-$2EFF

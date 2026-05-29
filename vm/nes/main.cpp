@@ -73,6 +73,7 @@ struct NESVM {
         bus.mapper.chr.resize(chr_sz);
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.end(), bus.mapper.chr.begin());
         bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
+        bus.mapper.is_chr_ram = cartridge.chr_rom_sz == 0;
     }
 
     void ppu_init(){
@@ -388,7 +389,7 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, PPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d799 + run debug
+    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // fc3e
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }
