@@ -2,9 +2,36 @@
 #define DWARF_HPP
 #include <cassert>
 #include <climits>
+#include <sstream>
+#include <chrono>
+#include <thread>
 #include "Files.hpp"
 #include "Macho.hpp"
 
+#define DEBUG 1
+
+void print_hex(const char* it, size_t sz){
+    std::cout << "\n==========================\n";
+    std::stringstream val_ss;
+    std::stringstream ascii_ss;
+    std::string val_s;
+    std::string ascii_s;
+    size_t i = 0;
+    for (auto e = it + sz; it != e; ++i, ++it){
+        val_ss << std::hex << std::setw(2) << std::setfill('0')  <<  int((unsigned char)*it) << ' ';
+        
+        if (auto val = *it; val <= 32)ascii_ss << '.'; else ascii_ss << val;
+        if ((i & 0xf) == 0xf){
+            val_s = val_ss.str();
+            std::cout << val_s << '|';
+            ascii_s = ascii_ss.str();
+            std::cout << ascii_s << '\n';
+            ascii_ss.str("");
+            val_ss.str("");
+        }
+    }
+    std::cout << "\n==========================\n";
+}
 
 template <typename T, std::forward_iterator It>
 constexpr auto decode_leb128(It& it){
@@ -29,10 +56,11 @@ constexpr auto decode_leb128(It& it){
     return res;
 }
 
-template <std::forward_iterator It>
-constexpr unsigned read_uint32(It& it){
-    unsigned res{};
-    memcpy(&res, &it, sizeof(unsigned));
+template <typename T, std::forward_iterator It>
+constexpr unsigned read(It& it){
+    T res{};
+    memcpy(&res, &it, sizeof(T));
+    it+=sizeof(T);
     return res;
 }
 
@@ -48,37 +76,73 @@ struct DebugLineParseVM {
             std::vector<unsigned char> standart_opcode_len;
             std::vector<std::string> include_directories;
             std::vector<FileTableEntry> file_entries;
+            inline void print_standart_opcode_len(){
+                std::cout << "standart opcode len:\n";
+                for(auto el: standart_opcode_len)
+                    std::cout << (int)el << '\n';
+            }
+            inline void print_include_directories(){
+                std::cout << "include directories:\n";
+                for(const auto& s: include_directories)
+                    std::cout << s << '\n';
+            }
+            inline void print_file_entries(){
+                std::cout << "file entries:\n";
+                for(const auto& el: file_entries){
+                    std::cout << "____\n";
+                    std::cout << "Name:" << el.name << '\n';
+                    std::cout << "DirIndex:" << el.dir_index << '\n';
+                    std::cout << "Mtime:" << el.mtime << '\n';
+                    std::cout << "Len:" << el.length << '\n';
+                    std::cout << "____\n";
+                }
+            }
         } lists;
 
-        unsigned char min_inst_length = 0;
-
-
-        unsigned char* it = 0;
-        size_t address = 0;
-        size_t op_index = 0;
-        size_t file = 1; // index in filename table
-        size_t line = 1; 
-        size_t column = 0;
+        const unsigned char* finish_address = nullptr;
         size_t opcode_base = 0; // todo: check
+        size_t op_index = 0;
+
+        unsigned char min_inst_length = 0;
         size_t isa = 0;
 
-        char line_base = 0;
-        unsigned char line_reange = 0;
+        struct State {
+            size_t address = 0;
+            size_t file = 1; // index in filename table
+            size_t line = 1; 
+            size_t column = 0;
 
-        enum Flags: unsigned char {
-            IsStmt, BasicBlock, EndSequence, PrologueEnd, EpilogueBegin
-        };
-        unsigned char flags{};
-        void set_flag(Flags f, bool v){
-            flags &= (~(1 << f) & 0xff);
-            flags |= (v << f);
-        }
-        bool get_flag(Flags f){
-            return (flags >> f) & 1;
-        }
-        bool toggle_flag(Flags f){
-            return flags ^ (1 << f) ;
-        }
+            enum Flags: unsigned char {
+                IsStmt, BasicBlock, EndSequence, PrologueEnd, EpilogueBegin
+            };
+
+            unsigned char flags{};
+            inline void set_flag(Flags f, bool v){
+                flags &= (~(1 << f) & 0xff);
+                flags |= (v << f);
+            }
+            inline bool get_flag(Flags f){
+                return (flags >> f) & 1;
+            }
+            inline bool toggle_flag(Flags f){
+                return flags ^ (1 << f);
+            }
+            inline void print() const {
+                std::cout << " Address:" << address << '\n';
+                std::cout << " File:"    << file    << '\n';
+                std::cout << " Line:"    << line    << '\n';
+                std::cout << " Address:" << address << '\n';
+                std::cout << " Column:"  << address << '\n';
+                std::cout << " Flags:"   << flags   << '\n';
+            }
+        } state;
+        std::vector<State> commited_states;
+
+        unsigned char* it = 0;
+       
+        char line_base = 0;
+        unsigned char line_range = 0;
+   
         enum Opcodes {
             DW_LNS_copy=0x1,
             DW_LNS_advance_pc=0x2,
@@ -94,6 +158,21 @@ struct DebugLineParseVM {
             DW_LNS_set_isa=0xc
         };
 
+        static constexpr std::string_view opcodes_str[12]{
+            "DW_LNS_copy",
+            "DW_LNS_advance_pc",
+            "DW_LNS_advance_line",
+            "DW_LNS_set_file",
+            "DW_LNS_set_column",
+            "DW_LNS_negate_stmt",
+            "DW_LNS_set_basic_block",
+            "DW_LNS_const_add_pc",
+            "DW_LNS_fixed_advance_pc",
+            "DW_LNS_set_prologue_end",
+            "DW_LNS_set_epilogue_begin",
+            "DW_LNS_set_isa",
+        };
+
         // 00
         // uleb128 len (subcode + payload)
         // u8 subcode
@@ -102,25 +181,51 @@ struct DebugLineParseVM {
             DW_LNE_end_seq=0x1,
             DW_LNE_set_address=0x2,
             DW_LNE_define_file=0x3,
+            DW_LNE_set_discriminator=0x4,
         };
 
-        void exec(){
-            // TODO: finish
-            switch(*it){
-                case DW_LNS_copy:               {/*commit*/ break;}
-                case DW_LNS_advance_pc:         {address += min_inst_length * decode_leb128<unsigned long>(it); break;}
-                case DW_LNS_advance_line:       {line += decode_leb128<long>(it); break;}
-                case DW_LNS_set_file:           {file = decode_leb128<unsigned long>(it);   break;}
-                case DW_LNS_set_column:         {column = decode_leb128<unsigned long>(it); break;}
-                case DW_LNS_negate_stmt:        {toggle_flag(IsStmt);  ++it;  break;}
-                case DW_LNS_set_basic_block:    {set_flag(BasicBlock, true); ++it; break;}
-                case DW_LNS_const_add_pc:       {address += (opcode_base - 1) * min_inst_length; ++it; break;}
-                case DW_LNS_fixed_advance_pc:   {address += read_uint32(it); it += 4; break;}
-                case DW_LNS_set_prologue_end:   {set_flag(PrologueEnd, true); ++it; break;}
-                case DW_LNS_set_epilogue_begin: {set_flag(EpilogueBegin, true);++it;break;}
-                case DW_LNS_set_isa:            {isa = decode_leb128<unsigned long>(it); break;}
+        void exec(){            
+            while(it <= finish_address){
+#if DEBUG
+            std::cout << "Opcode:" << std::setw(2) << std::setfill('0') << unsigned(*it) << '(' << (*it <= 12 ? opcodes_str[*it] : "Special") << ')' << std::endl;
+#endif
+                switch(*it){
+                    case 0: {++it; extended_opcode_exec();};
+                    case DW_LNS_copy:               {commited_states.push_back(state); break;}
+                    case DW_LNS_advance_pc:         {state.address += min_inst_length * decode_leb128<unsigned long>(it); break;}
+                    case DW_LNS_advance_line:       {state.line += decode_leb128<long>(it); break;}
+                    case DW_LNS_set_file:           {state.file = decode_leb128<unsigned long>(it);   break;}
+                    case DW_LNS_set_column:         {state.column = decode_leb128<unsigned long>(it); break;}
+                    case DW_LNS_negate_stmt:        {state.toggle_flag(State::IsStmt);  ++it;  break;}
+                    case DW_LNS_set_basic_block:    {state.set_flag(State::BasicBlock, true); ++it; break;}
+                    case DW_LNS_const_add_pc:       {state.address += (opcode_base - 1) * min_inst_length; ++it; break;}
+                    case DW_LNS_fixed_advance_pc:   {state.address += read<unsigned>(it); it += 4; break;}
+                    case DW_LNS_set_prologue_end:   {state.set_flag(State::PrologueEnd, true); ++it; break;}
+                    case DW_LNS_set_epilogue_begin: {state.set_flag(State::EpilogueBegin, true);++it;break;}
+                    case DW_LNS_set_isa:            {isa = decode_leb128<unsigned long>(it); break;}
+                    default: {++it; special_opcode_exec(); ++it; break;}
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
-            // TODO: Extended logic
+        }
+
+        void extended_opcode_exec(){
+            size_t len = *it++;
+            switch(*it){
+                case DW_LNE_set_discriminator: {/*todo*/ break;}
+                case DW_LNE_end_seq: {/*todo*/ break;}
+                case DW_LNE_define_file: {/*todo*/ break;}
+                case DW_LNE_set_address: {state.address = read<unsigned long>(it); break;}
+            }
+        }
+
+        void special_opcode_exec(){
+            auto val = *it - opcode_base;
+            int line_inc = line_base + (val % line_range);
+            auto addr_inc = (val/line_range) * min_inst_length;
+            state.address += addr_inc;
+            state.line += line_inc;
+            commited_states.push_back(state);
         }
 };
 
@@ -158,17 +263,68 @@ inline void print_dwarf_cu_header(const std::vector<char>& f, Section64 sc){
 
 inline void print_dwarf_debug_line_header(const std::vector<char>& f, Section64 sc){
     auto ptr = f.data() + sc.offset;
+#if DEBUG    
+    print_hex(ptr, 128);
+#endif    
     DebugLineHeader dlh;
     memcpy(&dlh, ptr, sizeof(dlh));
     std::cout << std::hex;
     std::cout << " Unit length:" << dlh.unit_length << '\n';
-    std::cout << " Version:" << dlh.version << '\n';
+    std::cout << " Version:"     << dlh.version << '\n';
     std::cout << " PrologueLen:" << dlh.prologue_length << '\n';
-    std::cout << " MinInstLen:" << (int)dlh.min_inst_length << '\n';
-    std::cout << " MaxOpsLen:" << (int)dlh.max_ops_length << '\n';
-    std::cout << " DefIsStmt:" << (int)dlh.is_stmt << '\n';
-    std::cout << " LineBase:" << (int)dlh.line_base << '\n';
-    std::cout << " LineRange:" << (int)dlh.line_range << '\n';
-    std::cout << " OpcodeBase:" << (int)dlh.opcode_base << '\n';
+    std::cout << " MinInstLen:"  << (int)dlh.min_inst_length << '\n';
+    std::cout << " MaxOpsLen:"   << (int)dlh.max_ops_length << '\n';
+    std::cout << " DefIsStmt:"   << (int)dlh.is_stmt << '\n';
+    std::cout << " LineBase:"    << (int)dlh.line_base << '\n';
+    std::cout << " LineRange:"   << (int)dlh.line_range << '\n';
+    std::cout << " OpcodeBase:"  << (int)dlh.opcode_base << '\n';
+
+    auto vm_bytecode_ptr = dlh.prologue_length + ptr + 10;
+
+    DebugLineParseVM vm;
+    vm.finish_address = (unsigned char*)(ptr + dlh.unit_length + 4);
+    vm.state.set_flag(DebugLineParseVM::State::IsStmt, dlh.is_stmt);
+    vm.line_base = dlh.line_base;
+    vm.line_range = dlh.line_range;
+    vm.opcode_base = dlh.opcode_base;
+    ptr += sizeof(DebugLineHeader);
+#if DEBUG    
+    print_hex(ptr, 64);
+#endif    
+    for (int i = 0, e = vm.opcode_base-1; i != e; ++i)
+        vm.lists.standart_opcode_len.push_back(*ptr++);
+    std::string s;
+    for(;;){
+        s.clear();
+        while(*ptr) s += *ptr++;
+        if (s == "") {++ptr; s.clear(); break;};
+        vm.lists.include_directories.push_back(s);
+    }
+    s.clear();
+    while(*ptr){
+        while(*ptr) s += *ptr++;
+        std::cout << "Dir: " << (void*) ptr << '\n';
+        size_t dir_index = decode_leb128<size_t>(ptr);
+        std::cout << "modification_time: " << (void*) ptr << '\n';
+        size_t modification_time = decode_leb128<size_t>(ptr);
+        std::cout << "file_len: " << (void*) ptr << '\n';
+        size_t file_len = decode_leb128<size_t>(ptr);
+        vm.lists.file_entries.push_back({DebugLineParseVM::FileTableEntry{s, dir_index, modification_time, file_len}});
+    }
+    ++ptr;
+#if DEBUG
+    vm.lists.print_standart_opcode_len();
+    vm.lists.print_include_directories();
+    vm.lists.print_file_entries();
+#endif
+
+    assert(*ptr == 0);
+    ++ptr;
+    print_hex(ptr, 64);
+    assert(ptr == vm_bytecode_ptr);
+    vm.it = (unsigned char*)ptr;
+    vm.exec();
+    for (const auto& el: vm.commited_states) el.print();
+    std::cout << "FINISH!\n";
 }
 #endif
