@@ -2,36 +2,11 @@
 #define DWARF_HPP
 #include <cassert>
 #include <climits>
-#include <sstream>
-#include <chrono>
-#include <thread>
-#include "Files.hpp"
+#include <bit>
+#include <array>
+#include "Utils.hpp"
 #include "Macho.hpp"
-
 #define DEBUG 1
-
-void print_hex(const char* it, size_t sz){
-    std::cout << "\n==========================\n";
-    std::stringstream val_ss;
-    std::stringstream ascii_ss;
-    std::string val_s;
-    std::string ascii_s;
-    size_t i = 0;
-    for (auto e = it + sz; it != e; ++i, ++it){
-        val_ss << std::hex << std::setw(2) << std::setfill('0')  <<  int((unsigned char)*it) << ' ';
-        
-        if (auto val = *it; val <= 32)ascii_ss << '.'; else ascii_ss << val;
-        if ((i & 0xf) == 0xf){
-            val_s = val_ss.str();
-            std::cout << val_s << '|';
-            ascii_s = ascii_ss.str();
-            std::cout << ascii_s << '\n';
-            ascii_ss.str("");
-            val_ss.str("");
-        }
-    }
-    std::cout << "\n==========================\n";
-}
 
 template <typename T, std::forward_iterator It>
 constexpr auto decode_leb128(It& it){
@@ -55,15 +30,6 @@ constexpr auto decode_leb128(It& it){
     ++it;
     return res;
 }
-
-template <typename T, std::forward_iterator It>
-constexpr unsigned read(It& it){
-    T res{};
-    memcpy(&res, &it, sizeof(T));
-    it+=sizeof(T);
-    return res;
-}
-
 
 struct DebugLineParseVM {
         struct FileTableEntry {
@@ -103,6 +69,7 @@ struct DebugLineParseVM {
         size_t opcode_base = 0; // todo: check
         size_t op_index = 0;
 
+        bool is_stmt = false;
         unsigned char min_inst_length = 0;
         size_t isa = 0;
 
@@ -128,12 +95,13 @@ struct DebugLineParseVM {
                 return flags ^ (1 << f);
             }
             inline void print() const {
+                std::cout << "\n======================\n";
                 std::cout << " Address:" << address << '\n';
                 std::cout << " File:"    << file    << '\n';
                 std::cout << " Line:"    << line    << '\n';
-                std::cout << " Address:" << address << '\n';
-                std::cout << " Column:"  << address << '\n';
-                std::cout << " Flags:"   << flags   << '\n';
+                std::cout << " Column:"  << column << '\n';
+                std::cout << " Flags:"   << (int)flags   << '\n';
+                std::cout << "\n======================\n";
             }
         } state;
         std::vector<State> commited_states;
@@ -158,7 +126,8 @@ struct DebugLineParseVM {
             DW_LNS_set_isa=0xc
         };
 
-        static constexpr std::string_view opcodes_str[12]{
+        static constexpr std::string_view opcodes_str[13]{
+            "Extended",
             "DW_LNS_copy",
             "DW_LNS_advance_pc",
             "DW_LNS_advance_line",
@@ -184,42 +153,74 @@ struct DebugLineParseVM {
             DW_LNE_set_discriminator=0x4,
         };
 
-        void exec(){            
+        static constexpr std::string_view extended_opcodes_str[5]{
+            "",
+            "DW_LNE_end_seq",
+            "DW_LNE_set_address",
+            "DW_LNE_define_file",
+            "DW_LNE_set_discriminator"
+        };
+
+        inline void exec(){
+            state.set_flag(DebugLineParseVM::State::IsStmt, is_stmt);
             while(it <= finish_address){
 #if DEBUG
-            std::cout << "Opcode:" << std::setw(2) << std::setfill('0') << unsigned(*it) << '(' << (*it <= 12 ? opcodes_str[*it] : "Special") << ')' << std::endl;
+            std::cout << "Opcode:(" << std::setw(2) << std::setfill('0') << unsigned(*it) << ") - ";
+            std::cout <<  (*it <= 12 ? opcodes_str[*it] : "Special") << std::endl;
 #endif
                 switch(*it){
-                    case 0: {++it; extended_opcode_exec();};
-                    case DW_LNS_copy:               {commited_states.push_back(state); break;}
-                    case DW_LNS_advance_pc:         {state.address += min_inst_length * decode_leb128<unsigned long>(it); break;}
-                    case DW_LNS_advance_line:       {state.line += decode_leb128<long>(it); break;}
-                    case DW_LNS_set_file:           {state.file = decode_leb128<unsigned long>(it);   break;}
-                    case DW_LNS_set_column:         {state.column = decode_leb128<unsigned long>(it); break;}
-                    case DW_LNS_negate_stmt:        {state.toggle_flag(State::IsStmt);  ++it;  break;}
-                    case DW_LNS_set_basic_block:    {state.set_flag(State::BasicBlock, true); ++it; break;}
-                    case DW_LNS_const_add_pc:       {state.address += (opcode_base - 1) * min_inst_length; ++it; break;}
-                    case DW_LNS_fixed_advance_pc:   {state.address += read<unsigned>(it); it += 4; break;}
-                    case DW_LNS_set_prologue_end:   {state.set_flag(State::PrologueEnd, true); ++it; break;}
-                    case DW_LNS_set_epilogue_begin: {state.set_flag(State::EpilogueBegin, true);++it;break;}
-                    case DW_LNS_set_isa:            {isa = decode_leb128<unsigned long>(it); break;}
-                    default: {++it; special_opcode_exec(); ++it; break;}
+                    case 0: {++it;extended_opcode_exec(); break;};
+                    case DW_LNS_copy:               {++it;  commited_states.push_back(state); break;}
+                    case DW_LNS_advance_pc:         {++it;  state.address += min_inst_length * decode_leb128<unsigned long>(it); break;}
+                    case DW_LNS_advance_line:       {++it;  state.line += decode_leb128<long>(it); break;}
+                    case DW_LNS_set_file:           {++it;  state.file = decode_leb128<unsigned long>(it);   break;}
+                    case DW_LNS_set_column:         {++it;  state.column = decode_leb128<unsigned long>(it); break;}
+                    case DW_LNS_negate_stmt:        {++it;  state.toggle_flag(State::IsStmt); break;}
+                    case DW_LNS_set_basic_block:    {++it;  state.set_flag(State::BasicBlock, true); ++it; break;}
+                    case DW_LNS_const_add_pc:       {++it;  state.address += (opcode_base - 1) * min_inst_length; break;}
+                    case DW_LNS_fixed_advance_pc:   {++it;  state.address += read<unsigned>(it); break;}
+                    case DW_LNS_set_prologue_end:   {++it;  state.set_flag(State::PrologueEnd, true); break;}
+                    case DW_LNS_set_epilogue_begin: {++it;  state.set_flag(State::EpilogueBegin, true);break;}
+                    case DW_LNS_set_isa:            {++it;  isa = decode_leb128<unsigned long>(it); break;}
+                    default: {special_opcode_exec();++it; break;}
                 }
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
         }
 
-        void extended_opcode_exec(){
-            size_t len = *it++;
-            switch(*it){
+        inline void extended_opcode_exec(){
+            size_t len = decode_leb128<unsigned>(it);
+            auto ptr = it + len;
+#if DEBUG            
+            std::cout << "Opcode:(" << std::setw(2) << std::setfill('0') << unsigned(*it) << ") - ";
+            if ((*it <= 4)) std::cout << extended_opcodes_str[*it];
+            
+            std::cout <<  '\n';
+#endif
+            switch(*it++){
+                case DW_LNE_end_seq: {
+                    state.set_flag(State::EndSequence, true); 
+                    commited_states.push_back(state); state = State{}; 
+                    state.set_flag(DebugLineParseVM::State::IsStmt, is_stmt);
+                    break;}
                 case DW_LNE_set_discriminator: {/*todo*/ break;}
-                case DW_LNE_end_seq: {/*todo*/ break;}
-                case DW_LNE_define_file: {/*todo*/ break;}
-                case DW_LNE_set_address: {state.address = read<unsigned long>(it); break;}
+                case DW_LNE_define_file: {
+                    auto name = read_str(it);  
+                    size_t dir_index = decode_leb128<size_t>(it);
+                    size_t modification_time = decode_leb128<size_t>(it);
+                    size_t file_len = decode_leb128<size_t>(it);
+                    lists.file_entries.push_back(FileTableEntry{name, dir_index, modification_time, file_len});
+                    break;}
+                case DW_LNE_set_address: {
+                    state.address = read<unsigned long>(it);
+#if DEBUG                    
+                    std::cout << "Adress:" << state.address << '\n';
+#endif                
+                    break;}
             }
+            assert(it == ptr);
         }
 
-        void special_opcode_exec(){
+        inline void special_opcode_exec(){
             auto val = *it - opcode_base;
             int line_inc = line_base + (val % line_range);
             auto addr_inc = (val/line_range) * min_inst_length;
@@ -275,7 +276,7 @@ inline void print_dwarf_debug_line_header(const std::vector<char>& f, Section64 
     std::cout << " MinInstLen:"  << (int)dlh.min_inst_length << '\n';
     std::cout << " MaxOpsLen:"   << (int)dlh.max_ops_length << '\n';
     std::cout << " DefIsStmt:"   << (int)dlh.is_stmt << '\n';
-    std::cout << " LineBase:"    << (int)dlh.line_base << '\n';
+    std::cout << " LineBase:" << std::dec  << (int)dlh.line_base << std::hex << '\n';
     std::cout << " LineRange:"   << (int)dlh.line_range << '\n';
     std::cout << " OpcodeBase:"  << (int)dlh.opcode_base << '\n';
 
@@ -283,10 +284,11 @@ inline void print_dwarf_debug_line_header(const std::vector<char>& f, Section64 
 
     DebugLineParseVM vm;
     vm.finish_address = (unsigned char*)(ptr + dlh.unit_length + 4);
-    vm.state.set_flag(DebugLineParseVM::State::IsStmt, dlh.is_stmt);
+    vm.is_stmt = dlh.is_stmt;
     vm.line_base = dlh.line_base;
     vm.line_range = dlh.line_range;
     vm.opcode_base = dlh.opcode_base;
+    vm.min_inst_length = dlh.min_inst_length;
     ptr += sizeof(DebugLineHeader);
 #if DEBUG    
     print_hex(ptr, 64);
@@ -324,6 +326,7 @@ inline void print_dwarf_debug_line_header(const std::vector<char>& f, Section64 
     assert(ptr == vm_bytecode_ptr);
     vm.it = (unsigned char*)ptr;
     vm.exec();
+    std::cout << "CommitedStates:\n";
     for (const auto& el: vm.commited_states) el.print();
     std::cout << "FINISH!\n";
 }

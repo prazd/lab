@@ -2,10 +2,9 @@
 #include <iostream>
 #include <fstream>
 #include <cstring>
-#include "Files.hpp"
+#include "Utils.hpp"
 #include "Dwarf.hpp"
 #include "Macho.hpp"
-
 
 int main(int argc, char** argv){
     if (argc != 2) std::abort();
