@@ -8,6 +8,28 @@
 #include "Macho.hpp"
 #define DEBUG 1
 
+#pragma pack(push,1)
+struct CompilationUnitHeader {
+    unsigned unit_length;
+    unsigned short version;
+    unsigned debug_abbrev_offset;
+    unsigned char address_sz;
+};
+
+struct DebugLineHeader {
+    unsigned unit_length;
+    unsigned short version;
+    unsigned prologue_length;
+    unsigned char min_inst_length;
+    unsigned char max_ops_length;
+    unsigned char is_stmt;
+    char line_base;
+    unsigned char line_range;
+    unsigned char opcode_base;
+};
+#pragma pack(pop)
+
+
 template <typename T, std::forward_iterator It>
 constexpr auto decode_leb128(It& it){
     T res{};
@@ -42,6 +64,7 @@ struct DebugLineParseVM {
             std::vector<unsigned char> standart_opcode_len;
             std::vector<std::string> include_directories;
             std::vector<FileTableEntry> file_entries;
+
             inline void print_standart_opcode_len(){
                 std::cout << "standart opcode len:\n";
                 for(auto el: standart_opcode_len)
@@ -161,9 +184,95 @@ struct DebugLineParseVM {
             "DW_LNE_set_discriminator"
         };
 
+
+        inline void parse_header(const std::vector<char>& f, Section64 sc){
+            auto ptr = f.data() + sc.offset;
+        #if DEBUG    
+            print_hex(ptr, 128);
+        #endif    
+            DebugLineHeader dlh;
+            memcpy(&dlh, ptr, sizeof(dlh));
+            std::cout << std::hex;
+            std::cout << " Unit length:" << dlh.unit_length << '\n';
+            std::cout << " Version:"     << dlh.version << '\n';
+            std::cout << " PrologueLen:" << dlh.prologue_length << '\n';
+            std::cout << " MinInstLen:"  << (int)dlh.min_inst_length << '\n';
+            std::cout << " MaxOpsLen:"   << (int)dlh.max_ops_length << '\n';
+            std::cout << " DefIsStmt:"   << (int)dlh.is_stmt << '\n';
+            std::cout << " LineBase:" << std::dec  << (int)dlh.line_base << std::hex << '\n';
+            std::cout << " LineRange:"   << (int)dlh.line_range << '\n';
+            std::cout << " OpcodeBase:"  << (int)dlh.opcode_base << '\n';
+
+            auto vm_bytecode_ptr = dlh.prologue_length + ptr + 10;
+            finish_address = (unsigned char*)(ptr + dlh.unit_length + 4);
+            is_stmt = dlh.is_stmt;
+            line_base = dlh.line_base;
+            line_range = dlh.line_range;
+            opcode_base = dlh.opcode_base;
+            min_inst_length = dlh.min_inst_length;
+            ptr += sizeof(DebugLineHeader);
+        #if DEBUG    
+            print_hex(ptr, 64);
+        #endif    
+            for (int i = 0, e = opcode_base-1; i != e; ++i)
+                lists.standart_opcode_len.push_back(*ptr++);
+            std::string s;
+            for(;;){
+                s.clear();
+                while(*ptr) s += *ptr++;
+                if (s == "") {++ptr; s.clear(); break;};
+                lists.include_directories.push_back(s);
+            }
+            s.clear();
+            while(*ptr){
+                while(*ptr) s += *ptr++;
+                std::cout << "Dir: " << (void*) ptr << '\n';
+                size_t dir_index = decode_leb128<size_t>(ptr);
+                std::cout << "modification_time: " << (void*) ptr << '\n';
+                size_t modification_time = decode_leb128<size_t>(ptr);
+                std::cout << "file_len: " << (void*) ptr << '\n';
+                size_t file_len = decode_leb128<size_t>(ptr);
+                lists.file_entries.push_back({DebugLineParseVM::FileTableEntry{s, dir_index, modification_time, file_len}});
+            }
+            ++ptr;
+        #if DEBUG
+            lists.print_standart_opcode_len();
+            lists.print_include_directories();
+            lists.print_file_entries();
+        #endif
+
+            assert(*ptr == 0);
+            ++ptr;
+            print_hex(ptr, 64);
+            assert(ptr == vm_bytecode_ptr);
+            it = (unsigned char*)ptr;
+            exec();
+            std::cout << "Exec finish FileSize:" << lists.file_entries.size() << '\n';
+            std::cout << "CommitedStates:\n";
+            for (const auto& el: commited_states) el.print();
+            std::cout << "FINISH!\n";
+        }
+
+        void* get_address_by_file_and_line(const std::string& filename, size_t line){
+            int current_file_index = -1;
+            for (size_t i = 0, e = lists.file_entries.size(); i != e; ++i){
+                if (lists.file_entries[i].name == filename){
+                    current_file_index = i+1;
+                }
+            }
+            if (current_file_index == -1) return nullptr;
+            for (const auto& el: commited_states){
+                if (el.file == current_file_index && el.line == line){
+                    return (void*)el.address;
+                }
+            }
+            return nullptr;
+        }
+
         inline void exec(){
             state.set_flag(DebugLineParseVM::State::IsStmt, is_stmt);
             while(it <= finish_address){
+                std::cout << "Exec FileSize:" << lists.file_entries.size() << '\n';
 #if DEBUG
             std::cout << "Opcode:(" << std::setw(2) << std::setfill('0') << unsigned(*it) << ") - ";
             std::cout <<  (*it <= 12 ? opcodes_str[*it] : "Special") << std::endl;
@@ -185,6 +294,7 @@ struct DebugLineParseVM {
                     default: {special_opcode_exec();++it; break;}
                 }
             }
+            std::cout << "Exec finish FileSize:" << lists.file_entries.size() << '\n';
         }
 
         inline void extended_opcode_exec(){
@@ -230,27 +340,6 @@ struct DebugLineParseVM {
         }
 };
 
-#pragma pack(push,1)
-struct CompilationUnitHeader {
-    unsigned unit_length;
-    unsigned short version;
-    unsigned debug_abbrev_offset;
-    unsigned char address_sz;
-};
-
-struct DebugLineHeader {
-    unsigned unit_length;
-    unsigned short version;
-    unsigned prologue_length;
-    unsigned char min_inst_length;
-    unsigned char max_ops_length;
-    unsigned char is_stmt;
-    char line_base;
-    unsigned char line_range;
-    unsigned char opcode_base;
-};
-#pragma pack(pop)
-
 inline void print_dwarf_cu_header(const std::vector<char>& f, Section64 sc){
     auto ptr = f.data() + sc.offset;
     CompilationUnitHeader cuh;
@@ -260,74 +349,5 @@ inline void print_dwarf_cu_header(const std::vector<char>& f, Section64 sc){
     std::cout << " Version:" << cuh.version << '\n';
     std::cout << " DebugAbbrevOffset:" << cuh.debug_abbrev_offset << '\n';
     std::cout << " Address sz:" << (int)cuh.address_sz << "\n\n";
-}
-
-inline void print_dwarf_debug_line_header(const std::vector<char>& f, Section64 sc){
-    auto ptr = f.data() + sc.offset;
-#if DEBUG    
-    print_hex(ptr, 128);
-#endif    
-    DebugLineHeader dlh;
-    memcpy(&dlh, ptr, sizeof(dlh));
-    std::cout << std::hex;
-    std::cout << " Unit length:" << dlh.unit_length << '\n';
-    std::cout << " Version:"     << dlh.version << '\n';
-    std::cout << " PrologueLen:" << dlh.prologue_length << '\n';
-    std::cout << " MinInstLen:"  << (int)dlh.min_inst_length << '\n';
-    std::cout << " MaxOpsLen:"   << (int)dlh.max_ops_length << '\n';
-    std::cout << " DefIsStmt:"   << (int)dlh.is_stmt << '\n';
-    std::cout << " LineBase:" << std::dec  << (int)dlh.line_base << std::hex << '\n';
-    std::cout << " LineRange:"   << (int)dlh.line_range << '\n';
-    std::cout << " OpcodeBase:"  << (int)dlh.opcode_base << '\n';
-
-    auto vm_bytecode_ptr = dlh.prologue_length + ptr + 10;
-
-    DebugLineParseVM vm;
-    vm.finish_address = (unsigned char*)(ptr + dlh.unit_length + 4);
-    vm.is_stmt = dlh.is_stmt;
-    vm.line_base = dlh.line_base;
-    vm.line_range = dlh.line_range;
-    vm.opcode_base = dlh.opcode_base;
-    vm.min_inst_length = dlh.min_inst_length;
-    ptr += sizeof(DebugLineHeader);
-#if DEBUG    
-    print_hex(ptr, 64);
-#endif    
-    for (int i = 0, e = vm.opcode_base-1; i != e; ++i)
-        vm.lists.standart_opcode_len.push_back(*ptr++);
-    std::string s;
-    for(;;){
-        s.clear();
-        while(*ptr) s += *ptr++;
-        if (s == "") {++ptr; s.clear(); break;};
-        vm.lists.include_directories.push_back(s);
-    }
-    s.clear();
-    while(*ptr){
-        while(*ptr) s += *ptr++;
-        std::cout << "Dir: " << (void*) ptr << '\n';
-        size_t dir_index = decode_leb128<size_t>(ptr);
-        std::cout << "modification_time: " << (void*) ptr << '\n';
-        size_t modification_time = decode_leb128<size_t>(ptr);
-        std::cout << "file_len: " << (void*) ptr << '\n';
-        size_t file_len = decode_leb128<size_t>(ptr);
-        vm.lists.file_entries.push_back({DebugLineParseVM::FileTableEntry{s, dir_index, modification_time, file_len}});
-    }
-    ++ptr;
-#if DEBUG
-    vm.lists.print_standart_opcode_len();
-    vm.lists.print_include_directories();
-    vm.lists.print_file_entries();
-#endif
-
-    assert(*ptr == 0);
-    ++ptr;
-    print_hex(ptr, 64);
-    assert(ptr == vm_bytecode_ptr);
-    vm.it = (unsigned char*)ptr;
-    vm.exec();
-    std::cout << "CommitedStates:\n";
-    for (const auto& el: vm.commited_states) el.print();
-    std::cout << "FINISH!\n";
 }
 #endif
