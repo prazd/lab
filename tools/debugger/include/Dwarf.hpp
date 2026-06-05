@@ -8,6 +8,7 @@
 #include "Macho.hpp"
 #define DEBUG 1
 
+
 #pragma pack(push,1)
 struct CompilationUnitHeader {
     unsigned unit_length;
@@ -19,6 +20,11 @@ struct CompilationUnitHeader {
 struct DebugLineHeader {
     unsigned unit_length;
     unsigned short version;
+};
+
+struct DebugLineHeaderV4 {
+    unsigned unit_length;
+    unsigned short version;
     unsigned prologue_length;
     unsigned char min_inst_length;
     unsigned char max_ops_length;
@@ -26,9 +32,99 @@ struct DebugLineHeader {
     char line_base;
     unsigned char line_range;
     unsigned char opcode_base;
+    inline void print(){
+        PRINT(unit_length)
+        PRINT(version)
+        PRINT(prologue_length)
+        PRINT_INT(min_inst_length)
+        PRINT_INT(max_ops_length)
+        PRINT_INT(is_stmt)
+        PRINT_INT(line_base)
+        PRINT_INT(line_range)
+        PRINT_INT(opcode_base)
+    }   
+};
+
+struct DebugLineHeaderV5 {
+    unsigned unit_length;
+    unsigned short version;
+    unsigned char  address_size;
+    unsigned char  segment_selector_size;
+    unsigned prologue_length;
+    unsigned char  min_inst_length;
+    unsigned char  max_ops_length;
+    unsigned char  is_stmt;
+    char line_base;
+    unsigned char  line_range;
+    unsigned char  opcode_base;
+    inline void print(){
+        PRINT(unit_length)
+        PRINT(version)
+        PRINT_INT(address_size)
+        PRINT_INT(segment_selector_size)
+        PRINT(prologue_length)
+        PRINT_INT(min_inst_length)
+        PRINT_INT(max_ops_length)
+        PRINT_INT(is_stmt)
+        PRINT_INT(line_base)
+        PRINT_INT(line_range)
+        PRINT_INT(opcode_base)
+    }
 };
 #pragma pack(pop)
 
+enum ContentTypeV5 {
+    DW_LNCT_path      = 0x1,
+    DW_LNCT_dir_index = 0x2,
+    DW_LNCT_timestamp = 0x3,
+    DW_LNCT_size      = 0x4,
+    DW_LNCT_MD5       = 0x5,
+};
+
+std::string_view to_sv(ContentTypeV5 ct) {
+    switch(ct){
+        case DW_LNCT_path      : return "DW_LNCT_path";      
+        case DW_LNCT_dir_index : return "DW_LNCT_dir_index";
+        case DW_LNCT_timestamp : return "DW_LNCT_timestamp"; 
+        case DW_LNCT_size      : return "DW_LNCT_size";      
+        case DW_LNCT_MD5       : return "DW_LNCT_MD5";       
+        default:
+            return "";
+    }
+}
+
+enum FormV5 {
+    DW_FORM_addr      = 0x1,
+    DW_FORM_data1     = 0xb,
+    DW_FORM_data2     = 0x5,
+    DW_FORM_data4     = 0x6,
+    DW_FORM_data8     = 0x7,
+    DW_FORM_string    = 0x8,
+    DW_FORM_udata     = 0xf,
+    DW_FORM_strp      = 0xe,
+    DW_FORM_line_strp = 0x1f,
+};
+
+std::string_view to_sv(FormV5 f){
+    switch(f){
+        case DW_FORM_addr     : return "DW_FORM_addr";    
+        case DW_FORM_data1    : return "DW_FORM_data1";    
+        case DW_FORM_data2    : return "DW_FORM_data2";    
+        case DW_FORM_data4    : return "DW_FORM_data4";    
+        case DW_FORM_data8    : return "DW_FORM_data8";    
+        case DW_FORM_string   : return "DW_FORM_string";   
+        case DW_FORM_udata    : return "DW_FORM_udata";    
+        case DW_FORM_strp     : return "DW_FORM_strp";     
+        case DW_FORM_line_strp: return "DW_FORM_line_strp";
+        default:
+            return "";
+    }  
+}
+
+struct FieldV5 {
+    ContentTypeV5 content_type;
+    FormV5 form;
+};
 
 template <typename T, std::forward_iterator It>
 constexpr auto decode_leb128(It& it){
@@ -182,25 +278,12 @@ struct DebugLineParseVM {
             "DW_LNE_set_discriminator"
         };
 
-#if defined(__APPLE__)
-        inline void parse_header_macho(const std::vector<char>& f, Section64 sc){
-            auto ptr = f.data() + sc.offset;
-        #if DEBUG    
-            print_hex(ptr, 128);
-        #endif    
-            DebugLineHeader dlh;
+        inline void parse_header_v4(const std::vector<char>& f, size_t offset){
+            auto ptr = f.data() + offset;
+            DebugLineHeaderV4 dlh;
             memcpy(&dlh, ptr, sizeof(dlh));
-            std::cout << std::hex;
-            std::cout << " Unit length:" << dlh.unit_length << '\n';
-            std::cout << " Version:"     << dlh.version << '\n';
-            std::cout << " PrologueLen:" << dlh.prologue_length << '\n';
-            std::cout << " MinInstLen:"  << (int)dlh.min_inst_length << '\n';
-            std::cout << " MaxOpsLen:"   << (int)dlh.max_ops_length << '\n';
-            std::cout << " DefIsStmt:"   << (int)dlh.is_stmt << '\n';
-            std::cout << " LineBase:" << std::dec  << (int)dlh.line_base << std::hex << '\n';
-            std::cout << " LineRange:"   << (int)dlh.line_range << '\n';
-            std::cout << " OpcodeBase:"  << (int)dlh.opcode_base << '\n';
-
+            dlh.print();
+            
             auto vm_bytecode_ptr = dlh.prologue_length + ptr + 10;
             finish_address = (unsigned char*)(ptr + dlh.unit_length + 4);
             is_stmt = dlh.is_stmt;
@@ -208,7 +291,7 @@ struct DebugLineParseVM {
             line_range = dlh.line_range;
             opcode_base = dlh.opcode_base;
             min_inst_length = dlh.min_inst_length;
-            ptr += sizeof(DebugLineHeader);
+            ptr += sizeof(DebugLineHeaderV4);
         #if DEBUG    
             print_hex(ptr, 64);
         #endif    
@@ -250,7 +333,113 @@ struct DebugLineParseVM {
             for (const auto& el: commited_states) el.print();
             std::cout << "FINISH!\n";
         }
-#endif
+
+        inline void parse_header_v5(const std::vector<char>& f, size_t debug_line_offset, size_t debug_line_str_offset){
+            auto ptr = f.data() + debug_line_offset;
+            auto debug_str_ptr = f.data() + debug_line_str_offset;  
+        #if DEBUG
+            print_hex(ptr, 128);
+        #endif    
+            DebugLineHeaderV5 dlh;
+            memcpy(&dlh, ptr, sizeof(dlh));
+            dlh.print();
+            auto vm_bytecode_ptr = dlh.prologue_length + ptr + 10;
+            finish_address = (unsigned char*)(ptr + dlh.unit_length + 4);
+            is_stmt = dlh.is_stmt;
+            line_base = dlh.line_base;
+            line_range = dlh.line_range;
+            opcode_base = dlh.opcode_base;
+            min_inst_length = dlh.min_inst_length;
+            ptr += sizeof(DebugLineHeaderV5);
+        #if DEBUG    
+            print_hex(ptr, 64);
+        #endif
+            for (int i = 0, e = opcode_base-1; i != e; ++i)
+                lists.standart_opcode_len.push_back(*ptr++);
+        
+            unsigned char directory_entry_format_count = *ptr++;
+            std::cout << "directory_entry_format_count:" << (int)directory_entry_format_count << '\n';
+            
+            std::vector<FieldV5> dir_entry_struct;
+            for (size_t i = 0; i < directory_entry_format_count; ++i){
+                auto content_type = decode_leb128<unsigned>(ptr);
+                auto form = decode_leb128<unsigned>(ptr);
+                dir_entry_struct.push_back(FieldV5{(ContentTypeV5)content_type, (FormV5)form});
+            }
+            std::cout << "Entry:\n";
+            for (auto& el: dir_entry_struct){
+                std::cout << to_sv(el.content_type) << " " << to_sv(el.form) << '\n';
+            }
+
+            unsigned char directory_entry_sz = *ptr++;
+            std::cout << "directory_entry_size:" << (int)directory_entry_sz << '\n';
+            for (size_t i = 0; i < directory_entry_sz; ++i){
+                if (dir_entry_struct[0].form == DW_FORM_line_strp){
+                    unsigned str_offset = read<unsigned>(ptr); // todo: check sz
+                    lists.include_directories.emplace_back(std::string(f.data() + debug_line_str_offset + str_offset));
+                }
+            }
+
+            for (const auto& el: lists.include_directories){
+                std::cout << el << '\n';
+            }
+            
+            auto file_name_entry_format_count = decode_leb128<unsigned>(ptr);
+            std::cout << "file_name_entry_format_count:" << file_name_entry_format_count << '\n';
+            std::vector<FieldV5> file_entry_struct;
+            for (size_t i = 0; i < file_name_entry_format_count; ++i){
+                auto content_type = decode_leb128<unsigned>(ptr);
+                auto form = decode_leb128<unsigned>(ptr);
+                file_entry_struct.push_back(FieldV5{(ContentTypeV5)content_type, (FormV5)form});
+            }
+            std::cout << "File format:\n";
+            for (auto& el: file_entry_struct){
+                std::cout << to_sv(el.content_type) << " " << to_sv(el.form) << '\n';
+            }
+
+            unsigned char file_entry_sz = *ptr++;
+            std::cout << "file_entry_sz:" << (int)file_entry_sz << '\n';
+
+            FileTableEntry fte;
+            for (size_t i = 0; i < file_entry_sz; ++i){
+                for (auto& el: file_entry_struct){
+                    if (el.content_type == DW_LNCT_path && el.form == DW_FORM_line_strp){
+                        unsigned str_offset = read<unsigned>(ptr); // todo: check sz
+                        fte.name = (f.data() + debug_line_str_offset + str_offset);
+                    } else if (el.content_type == DW_LNCT_dir_index && el.form == DW_FORM_udata){
+                        fte.dir_index = decode_leb128<unsigned>(ptr);
+                    }
+                }
+                lists.file_entries.push_back(fte);
+            }
+
+            std::cout << "File entries:\n";
+            for (auto& el: lists.file_entries)
+                std::cout << "Name:" << el.name << " " << " Dir index:" << el.dir_index << '\n';
+
+        
+
+            ++ptr;
+            print_hex(ptr, 64);
+            // assert(ptr == vm_bytecode_ptr);
+            it = (unsigned char*)ptr;
+            exec();
+            std::cout << "Exec finish FileSize:" << lists.file_entries.size() << '\n';
+            std::cout << "CommitedStates:\n";
+            for (const auto& el: commited_states) el.print();
+            std::cout << "FINISH!\n";
+        }
+
+        inline void parse_header(const std::vector<char>& f, size_t debug_line_offset, size_t debug_line_str_offset = 0){
+            auto ptr = f.data() + debug_line_offset;
+            DebugLineHeader dlh;
+            memcpy(&dlh, ptr, sizeof(dlh));
+            if (dlh.version == 4){
+                parse_header_v4(f, debug_line_offset);
+            } else if (dlh.version == 5){
+                parse_header_v5(f, debug_line_offset, debug_line_str_offset);
+            }
+        }
 
         void* get_address_by_file_and_line(const std::string& filename, size_t line){
             int current_file_index = -1;
@@ -351,6 +540,4 @@ inline void print_dwarf_cu_header_macho(const std::vector<char>& f, Section64 sc
     std::cout << " Address sz:" << (int)cuh.address_sz << "\n\n";
 }
 #endif
-
-
 #endif

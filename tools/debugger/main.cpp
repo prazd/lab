@@ -30,9 +30,10 @@ struct CLI {
     
     CLI(const char* filename): filename(filename), f(read_file(filename)){
 #if defined(__APPLE__)        
-        vm.parse_header_macho(f, macho_find_section(f, "__DWARF", "__debug_line"));
-#endif        
-
+        vm.parse_header(f, macho_find_section(f, "__DWARF", "__debug_line").offset);
+#elif defined(__linux__)
+        vm.parse_header(f, elf_find_section_offset_by_name(f, ".debug_line"), elf_find_section_offset_by_name(f, ".debug_line_str"));
+#endif
     }
     enum Command{Run, Break, Unknown};
     Command parse_cmd(std::string_view sv){
@@ -223,8 +224,6 @@ int main(int argc, char** argv){
     seg.print();
     cli.run();
 #elif defined (__linux__)
-    print_elf_header(cli.f);
-    auto ptr = elf_find_section_offset_by_name(cli.f, ".init");
-    std::cout << "Ptr:" << ptr << '\n';
+    // print_elf_header(cli.f);
 #endif
 }
