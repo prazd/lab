@@ -3,6 +3,16 @@
 #include <vector>
 #include <filesystem>
 #include <sstream>
+
+#define PRINT(s) std::cout << std::hex << #s << ":" << s << '\n';
+
+template <typename T, typename U>
+T parse_to(U ptr){
+    T res;
+    memcpy(&res, ptr, sizeof(T));
+    return res;
+}
+
 inline auto read_file(const char* filepath){
     std::vector<char> res;
     size_t f_size = std::filesystem::file_size(filepath);

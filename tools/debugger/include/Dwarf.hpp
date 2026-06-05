@@ -118,13 +118,11 @@ struct DebugLineParseVM {
                 return flags ^ (1 << f);
             }
             inline void print() const {
-                std::cout << "\n======================\n";
-                std::cout << " Address:" << address << '\n';
-                std::cout << " File:"    << file    << '\n';
-                std::cout << " Line:"    << line    << '\n';
-                std::cout << " Column:"  << column << '\n';
-                std::cout << " Flags:"   << (int)flags   << '\n';
-                std::cout << "\n======================\n";
+                PRINT(address)
+                PRINT(file)
+                PRINT(line)
+                PRINT(column)
+                PRINT((int)flags)
             }
         } state;
         std::vector<State> commited_states;
@@ -184,8 +182,8 @@ struct DebugLineParseVM {
             "DW_LNE_set_discriminator"
         };
 
-
-        inline void parse_header(const std::vector<char>& f, Section64 sc){
+#if defined(__APPLE__)
+        inline void parse_header_macho(const std::vector<char>& f, Section64 sc){
             auto ptr = f.data() + sc.offset;
         #if DEBUG    
             print_hex(ptr, 128);
@@ -252,6 +250,7 @@ struct DebugLineParseVM {
             for (const auto& el: commited_states) el.print();
             std::cout << "FINISH!\n";
         }
+#endif
 
         void* get_address_by_file_and_line(const std::string& filename, size_t line){
             int current_file_index = -1;
@@ -340,7 +339,8 @@ struct DebugLineParseVM {
         }
 };
 
-inline void print_dwarf_cu_header(const std::vector<char>& f, Section64 sc){
+#if defined(__APPLE__)
+inline void print_dwarf_cu_header_macho(const std::vector<char>& f, Section64 sc){
     auto ptr = f.data() + sc.offset;
     CompilationUnitHeader cuh;
     memcpy(&cuh, ptr, sizeof(cuh));
@@ -350,4 +350,7 @@ inline void print_dwarf_cu_header(const std::vector<char>& f, Section64 sc){
     std::cout << " DebugAbbrevOffset:" << cuh.debug_abbrev_offset << '\n';
     std::cout << " Address sz:" << (int)cuh.address_sz << "\n\n";
 }
+#endif
+
+
 #endif

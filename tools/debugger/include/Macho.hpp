@@ -1,3 +1,4 @@
+#if defined(__APPLE__)
 #ifndef MACHO_HPP
 #define MACHO_HPP
 #include <chrono>
@@ -442,5 +443,5 @@ void macho_single_step_proc_set(size_t pid, bool v){
         }
     } 
 }
-
+#endif
 #endif

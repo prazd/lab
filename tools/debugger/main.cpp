@@ -5,10 +5,15 @@
 #include <filesystem>
 #include <chrono>
 #include <thread>
+#include <utility>
 #include <charconv>
 #include "Utils.hpp"
 #include "Dwarf.hpp"
+#if defined(__APPLE__)
 #include "Macho.hpp"
+#elif defined(__linux__)
+#include "Elf.hpp"
+#endif
 
 struct CLI {
     DebugLineParseVM vm;
@@ -24,7 +29,10 @@ struct CLI {
     unsigned char last_instr = 0;
     
     CLI(const char* filename): filename(filename), f(read_file(filename)){
-        vm.parse_header(f, macho_find_section(f, "__DWARF", "__debug_line"));
+#if defined(__APPLE__)        
+        vm.parse_header_macho(f, macho_find_section(f, "__DWARF", "__debug_line"));
+#endif        
+
     }
     enum Command{Run, Break, Unknown};
     Command parse_cmd(std::string_view sv){
@@ -77,11 +85,9 @@ struct CLI {
 
                 //     waitpid(pid, &status, 0);
                 //     posix_spawnattr_destroy(&attr);
-
                 const char* fn = "check";
                 std::cout << "prog:" << s.data() << '\n';
                 auto e_f = read_file(s.data());
-                
                 auto o_f = std::ofstream(fn, std::ios::binary);
                 if (!o_f.is_open()){std::cout << "file is not open"; return;}
                 unsigned char prev_value = patch_int3(e_f, 0xb00000004f3d8d48);
@@ -174,8 +180,7 @@ struct CLI {
 
             case Run:     {
 #if defined(__APPLE__)
-                macho_debug(args[1]);
-                
+                macho_debug(args[1]);  
 #endif
                 break;
             }
@@ -211,9 +216,15 @@ struct CLI {
 int main(int argc, char** argv){
     if (argc != 2) std::abort();
     CLI cli(argv[1]);
+#if defined(__APPLE__)
     print_macho_header(cli.f);
-    print_dwarf_cu_header(cli.f, macho_find_section(cli.f, "__DWARF", "__debug_info"));
+    print_dwarf_cu_header_macho(cli.f, macho_find_section(cli.f, "__DWARF", "__debug_info"));
     auto seg = macho_find_segment_header(cli.f, "__TEXT");
     seg.print();
     cli.run();
+#elif defined (__linux__)
+    print_elf_header(cli.f);
+    auto ptr = elf_find_section_offset_by_name(cli.f, ".init");
+    std::cout << "Ptr:" << ptr << '\n';
+#endif
 }
