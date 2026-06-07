@@ -20,8 +20,9 @@ struct CLI {
     const char* filename;
     std::vector<char> f;
 
+    uintptr_t base_image_address = 0;
     static inline std::vector<uintptr_t> br_addresses;
-    static inline std::vector<unsigned char> original_instr_value;
+    static inline std::vector<size_t> original_instr_value;
 
     static inline std::vector<char*> process_args_list = {nullptr};
     static inline std::vector<char*> process_env_list  = {nullptr};
@@ -73,9 +74,6 @@ struct CLI {
             proc_path += std::to_string(pid);
             proc_path += std::string("/maps");
             auto res = read_file_str(proc_path.c_str());
-            for (const auto& el: res){
-                std::cout << el << '\n';
-            }
             std::cout << "ProcMapEntry:\n";
             std::vector<ProcMapEntry> proc_map_entry;
             ProcMapEntry pme;
@@ -83,21 +81,58 @@ struct CLI {
                 pme.parse_from_line(el);
                 proc_map_entry.push_back(pme);
             }
-            for (const auto& el: proc_map_entry){el.print(); std::cout << '\n';}
 
-            // size_t header_begin{};
-            // memcpy(&header_begin, &elf_header, sizeof(header_begin));
-            // std::cout << "Header begin:" << header_begin << '\n';
-            // auto regs = linux_read_regs(pid);
-            // std::cout << "RIP:" << regs.rip << '\n';
+            unsigned long base_address = 0;
+            for (const auto& el: proc_map_entry){
+                if (el.permissions.get(1) && el.permissions.get(0x4) && el.path_name.contains(s)){
+                    base_address = el.vma_range.first - el.offset;
+                }
+            }
+            size_t header_begin{};
+            memcpy(&header_begin, &elf_header, sizeof(header_begin));
 
-            // auto base_addr = elf_base_image_address(pid, regs.rip, header_begin);
-            // std::cout << "BASE ADDR:" << base_addr << '\n';
-            // uintptr_t addr = base_addr - min_load_address + 0x1195;
-            // std::cout << "ADDR:" << addr << '\n';
+            size_t word = ptrace(PTRACE_PEEKDATA, pid, base_address, 0);
+            assert(word == header_begin);
 
-            // auto res = ptrace(PTRACE_PEEKDATA, pid, 0x55555555519f, NULL);
-            // std::cout << "DATA:" << std::hex << res << '\n';
+            base_image_address = base_address - min_load_address;
+            
+            for (auto el: br_addresses){
+                uintptr_t addr = base_image_address + el;
+                auto val = ptrace(PTRACE_PEEKDATA, pid, addr, 0);
+                original_instr_value.push_back(val);
+                val &= 0xffffffffffffff00;
+                val |= 0xcc; // int3
+                if (ptrace(PTRACE_POKEDATA, pid, addr, (void*)val) == -1)
+                    std::cout << "PTRACE_POKEDATA error\n";
+                auto updated_value = ptrace(PTRACE_PEEKDATA, pid, addr, 0);
+                assert(val == updated_value);
+            }
+        
+            ptrace(PTRACE_CONT, pid, 1, 0);
+            waitpid(pid, 0, 0);
+
+            // handle int3
+            // TODO: debug handler
+            std::cout << "Handling...\n";
+            auto regs = linux_read_regs(pid);
+            for (size_t i = 0, e = br_addresses.size(); i < e; ++i){
+                if (regs.rip-1 == base_image_address + br_addresses[i]){
+                    std::cout << "int3 address found\n";
+                    size_t current_ins_val = ptrace(PTRACE_PEEKDATA, pid, regs.rip-1, 0);
+                    auto prev_value = original_instr_value[i];
+                    int err = ptrace(PTRACE_POKEDATA, pid, regs.rip-1, (void*)prev_value);
+                    if (err == -1){std::cout << "PTRACE_POKEDATA error\n";}
+                    --regs.rip;
+                    linux_write_regs(pid, regs);
+                    auto update_regs = linux_read_regs(pid);
+                    assert(update_regs.rip == regs.rip);
+                    auto updated_ins_val = ptrace(PTRACE_PEEKDATA, pid, update_regs.rip, 0);
+                    assert(updated_ins_val == prev_value);
+                    break;
+                }
+            }
+            ptrace(PTRACE_CONT, pid, 1, 0);
+            waitpid(pid, 0, 0);
             ptrace(PTRACE_CONT, pid, 1, 0);
         }
     }
@@ -218,7 +253,8 @@ struct CLI {
                 }
                 size_t line{};
                 auto [ptr, ec] = std::from_chars(args[2].begin(), args[2].end(), line);
-                if (ec == std::errc()){
+                if (ec == std::errc{}){
+                    std::cout << "LINE:" << line << '\n';
                     auto addr = vm.get_address_by_file_and_line(std::string(args[1]), line);
                     std::cout << "Address:" << addr << '\n';
                     br_addresses.push_back((uintptr_t)addr);

@@ -109,7 +109,6 @@ inline unsigned long elf_find_section_offset_by_name(const std::vector<char>& f,
     auto shrtab_ptr = f.data() + shrtab_offset;
     for (size_t i = 0; i < elf_header.e_shnum; ++i){
         auto s_header = parse_to<ElfSectionHeader>(it);
-        std::cout << "Name:" << (shrtab_ptr + s_header.sh_name) << '\n';
         if (!strcmp((shrtab_ptr + s_header.sh_name), name)){
             return s_header.sh_offset;
         }
@@ -124,8 +123,6 @@ inline unsigned long elf_find_min_load_address(const std::vector<char>& f){
     for (size_t i = 0; i < elf_header.e_shnum; ++i){
         auto p_header = parse_to<ElfProgramHeader>(it);
         if ((ElfProgramType)p_header.p_type == PT_LOAD){
-            p_header.print();
-            std::cout << "Vaddr:" <<  p_header.p_vaddr << '\n';
             return p_header.p_vaddr & 0xfffffffffffff000;
         }
         it += elf_header.e_phentsize;
@@ -135,11 +132,14 @@ inline unsigned long elf_find_min_load_address(const std::vector<char>& f){
 
 inline user_regs_struct linux_read_regs(size_t pid){
     user_regs_struct regs;
-    int err = ptrace(PTRACE_GETREGS, pid, NULL, &regs);
-    if (err == -1){
-        std::cout << "PTRACE_GETREGS error\n";
-    }
+    if (ptrace(PTRACE_GETREGS, pid, NULL, &regs) == -1)
+        std::cout << "linux_read_regs error\n";
     return regs;
+}
+
+inline void linux_write_regs(size_t pid, const user_regs_struct& regs){
+    if (ptrace(PTRACE_SETREGS, pid, NULL, &regs) == -1)
+        std::cout << "linux_write_regs error\n";
 }
 
 inline unsigned long elf_base_image_address(size_t pid, uintptr_t rip, unsigned long header_begin){
@@ -156,16 +156,16 @@ inline unsigned long elf_base_image_address(size_t pid, uintptr_t rip, unsigned 
 
 struct ProcMapEntry {
     struct Permissions {
-        enum Flag {Read=0x1,Write=0x2,Execute=0x4,Private=0x8,Shared=0x10};
+        enum Flag: unsigned char {Read=0x1,Write=0x2,Execute=0x4,Private=0x8,Shared=0x10};
         unsigned char value{};
         void reset(){value = 0;}
-        void set(Flag m, bool v){
+        void set(unsigned char m, bool v){
             value |= v ? m : 0;
         }
-        bool get(Flag m){
+        bool get(unsigned char m) const {
             return value & m;
         }
-        void toggle(Flag m){
+        void toggle(unsigned char m){
             value ^= m;
         }
     };

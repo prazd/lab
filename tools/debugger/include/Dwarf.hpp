@@ -446,6 +446,7 @@ struct DebugLineParseVM {
             for (size_t i = 0, e = lists.file_entries.size(); i != e; ++i){
                 if (lists.file_entries[i].name == filename){
                     current_file_index = i+1;
+                    break;
                 }
             }
             if (current_file_index == -1) return nullptr;
