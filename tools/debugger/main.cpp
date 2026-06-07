@@ -54,6 +54,55 @@ struct CLI {
         return 0;
     }
 
+#if defined(__linux__)
+    void elf_debug(std::string_view arg){
+        auto s = std::string(arg);
+        auto pid = fork();
+        if (pid == 0){
+            ptrace(PTRACE_TRACEME,0,0,0);
+            execve(s.c_str(), process_args_list.data(), process_env_list.data());
+        } else {
+            waitpid(pid, 0, 0);
+            // use valid address
+            // slide = actual_load_address - mach_o_preffered_address
+            // valid_address = dwarf_address + slide
+            // 0x1195
+            auto min_load_address = elf_find_min_load_address(f);
+            auto elf_header = parse_to<Elf64Header>(f.data());
+            std::string proc_path = "/proc/";
+            proc_path += std::to_string(pid);
+            proc_path += std::string("/maps");
+            auto res = read_file_str(proc_path.c_str());
+            for (const auto& el: res){
+                std::cout << el << '\n';
+            }
+            std::cout << "ProcMapEntry:\n";
+            std::vector<ProcMapEntry> proc_map_entry;
+            ProcMapEntry pme;
+            for (const auto& el: res){
+                pme.parse_from_line(el);
+                proc_map_entry.push_back(pme);
+            }
+            for (const auto& el: proc_map_entry){el.print(); std::cout << '\n';}
+
+            // size_t header_begin{};
+            // memcpy(&header_begin, &elf_header, sizeof(header_begin));
+            // std::cout << "Header begin:" << header_begin << '\n';
+            // auto regs = linux_read_regs(pid);
+            // std::cout << "RIP:" << regs.rip << '\n';
+
+            // auto base_addr = elf_base_image_address(pid, regs.rip, header_begin);
+            // std::cout << "BASE ADDR:" << base_addr << '\n';
+            // uintptr_t addr = base_addr - min_load_address + 0x1195;
+            // std::cout << "ADDR:" << addr << '\n';
+
+            // auto res = ptrace(PTRACE_PEEKDATA, pid, 0x55555555519f, NULL);
+            // std::cout << "DATA:" << std::hex << res << '\n';
+            ptrace(PTRACE_CONT, pid, 1, 0);
+        }
+    }
+#endif
+
 #if defined(__APPLE__)
     void macho_debug(std::string_view arg){
         int status = 0;
@@ -182,7 +231,10 @@ struct CLI {
             case Run:     {
 #if defined(__APPLE__)
                 macho_debug(args[1]);  
+#elif defined(__linux__)
+                elf_debug(args[1]);
 #endif
+
                 break;
             }
         }
@@ -224,6 +276,6 @@ int main(int argc, char** argv){
     seg.print();
     cli.run();
 #elif defined (__linux__)
-    // print_elf_header(cli.f);
+    cli.run();
 #endif
 }

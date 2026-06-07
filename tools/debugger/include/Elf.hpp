@@ -2,6 +2,9 @@
 #ifndef ELF_HPP
 #define ELF_HPP
 #include <iostream>
+#include <sys/user.h>
+#include <sys/ptrace.h>
+#include <sys/wait.h>
 #include "Utils.hpp"
 
 #pragma pack(push, 1)
@@ -84,6 +87,17 @@ struct ElfSectionHeader {
 };
 #pragma pack(pop)
 
+enum ElfProgramType {
+    PT_NULL,
+    PT_LOAD,
+    PT_DYNAMIC,
+    PT_INTERP,
+    PT_NOTE,
+    PT_SHLIB,
+    PT_PHDR,
+    PT_TLS
+};
+
 inline void print_elf_header(const std::vector<char>& f) {
     parse_to<Elf64Header>(f.data()).print();
 }
@@ -103,5 +117,104 @@ inline unsigned long elf_find_section_offset_by_name(const std::vector<char>& f,
     }
     return 0;
 }
+
+inline unsigned long elf_find_min_load_address(const std::vector<char>& f){
+    auto elf_header = parse_to<Elf64Header>(f.data());
+    auto it = f.data() + elf_header.e_phoff;
+    for (size_t i = 0; i < elf_header.e_shnum; ++i){
+        auto p_header = parse_to<ElfProgramHeader>(it);
+        if ((ElfProgramType)p_header.p_type == PT_LOAD){
+            p_header.print();
+            std::cout << "Vaddr:" <<  p_header.p_vaddr << '\n';
+            return p_header.p_vaddr & 0xfffffffffffff000;
+        }
+        it += elf_header.e_phentsize;
+    }
+    return 0;
+}
+
+inline user_regs_struct linux_read_regs(size_t pid){
+    user_regs_struct regs;
+    int err = ptrace(PTRACE_GETREGS, pid, NULL, &regs);
+    if (err == -1){
+        std::cout << "PTRACE_GETREGS error\n";
+    }
+    return regs;
+}
+
+inline unsigned long elf_base_image_address(size_t pid, uintptr_t rip, unsigned long header_begin){
+    rip &= 0xfffffffffffff000;
+    for (;;){
+        auto word = ptrace(PTRACE_PEEKDATA, pid, rip, NULL);
+        if (word == header_begin){
+            return rip;
+        }
+        rip-=0x1000;
+    }
+    return 0;
+}
+
+struct ProcMapEntry {
+    struct Permissions {
+        enum Flag {Read=0x1,Write=0x2,Execute=0x4,Private=0x8,Shared=0x10};
+        unsigned char value{};
+        void reset(){value = 0;}
+        void set(Flag m, bool v){
+            value |= v ? m : 0;
+        }
+        bool get(Flag m){
+            return value & m;
+        }
+        void toggle(Flag m){
+            value ^= m;
+        }
+    };
+    std::pair<size_t, size_t> vma_range{};
+    Permissions permissions{};
+    size_t offset{};
+    std::pair<size_t, size_t> device;
+    size_t inode{};
+    std::string path_name;
+
+    void parse_permissions(std::string_view sv){
+        permissions.reset();
+        for (auto el: sv){
+            switch(el){
+                case 'r': {permissions.set(Permissions::Flag::Read,    true); break;}
+                case 'w': {permissions.set(Permissions::Flag::Write,   true); break;}
+                case 'x': {permissions.set(Permissions::Flag::Execute, true); break;}
+                case 'p': {permissions.set(Permissions::Flag::Private, true); break;}
+                case 's': {permissions.set(Permissions::Flag::Shared,  true); break;}
+                default: break;
+            }
+        }
+    }
+
+    void parse_from_line(const std::string_view line){
+        auto splited = split_str(line, ' ');
+        vma_range = parse_hex_to_u_pair(splited[0], '-');
+        parse_permissions(splited[1]);
+        if (auto [ptr, ec] = std::from_chars(splited[2].data(), splited[2].data() + splited[2].size(), offset, 16); ec != std::errc{}){
+            std::cout << "Offset:" << splited[2] << '\n';
+            std::cout << "offset parse error\n";
+            offset = 0;
+        }
+        device = parse_hex_to_u_pair(splited[3], ':');
+         if (auto [ptr, ec] = std::from_chars(splited[4].data(), splited[4].data() + splited[4].size(), inode, 16); ec != std::errc{}){
+            std::cout << "Inode:" << splited[4] << '\n';
+            std::cout << "inode parse error\n";
+            offset = 0;
+        }
+        path_name = std::string(splited[5]);
+    }
+
+    void print()const{
+        std::cout << vma_range.first << '-' << vma_range.second  << ' ' <<
+        (int)(permissions.value) << ' ' << 
+        offset << ' ' << 
+        device.first << ':' << device.second << ' ' << 
+        inode << ' ' << path_name;
+    }
+};
 #endif
 #endif

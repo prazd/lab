@@ -3,6 +3,7 @@
 #include <vector>
 #include <filesystem>
 #include <sstream>
+#include <charconv>
 
 #define PRINT(s)     std::cout << std::hex << #s << ":" << s << '\n';
 #define PRINT_INT(s) std::cout << std::hex << #s << ":" << int(s) << '\n';
@@ -23,6 +24,19 @@ inline auto read_file(const char* filepath){
     f.read(res.data(), f_size);
     return res;
 }
+
+inline auto read_file_str(const char* filepath){
+    std::vector<std::string> res;
+    std::string tmp;
+    auto f = std::ifstream(filepath);
+    while(std::getline(f, tmp)){
+        tmp += '\n';
+        res.push_back(tmp);
+        tmp.clear();
+    }
+    return res;
+}
+
 inline void print_hex(const char* it, size_t sz){
     std::cout << "\n==========================\n";
     std::stringstream val_ss;
@@ -59,5 +73,41 @@ inline std::string read_str(It& it){
     while(it) res += *it++;
     ++it;
     return res;
+}
+
+std::vector<std::string_view> split_str(const std::string_view s, char delimiter){
+    std::vector<std::string_view> res;
+    auto s_pos = s.begin();
+    for (size_t i = 0, e = s.size(); i != e; ++i){
+        if (s[i] == delimiter || i + 1 == e){
+            res.push_back(std::string_view{s_pos, s.begin() + i});
+            while(s[i] == delimiter) ++i;
+            s_pos = s.begin() + i;
+        }
+    }
+    return res;
+}
+
+std::pair<size_t,size_t> parse_hex_to_u_pair(std::string_view sv, char delimiter){
+    std::string_view f;
+    std::string_view s;
+    for (size_t i = 0, e = sv.size(); i != e; ++i){
+        if (sv[i] == delimiter){
+            f = std::string_view{sv.begin(), sv.begin() + i};
+            s = std::string_view{sv.begin() + i+1, sv.end()};
+            break;
+        }
+    }
+    size_t f_u{};
+    size_t s_u{};
+    if (auto [ptr, ec] = std::from_chars(f.data(), f.data() + f.size(), f_u, 16); ec != std::errc{}){
+        std::cout << "parse_hex_to_u_pair error\n";
+        f_u = 0;
+    }
+    if (auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), s_u, 16); ec != std::errc{}){
+        std::cout << "parse_hex_to_u_pair error\n";
+        s_u = 0;
+    }
+    return std::pair(f_u, s_u);
 }
 #endif
