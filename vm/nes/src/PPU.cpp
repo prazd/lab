@@ -134,7 +134,7 @@ void PPU::bg_tick(Bus &bus) {
 #endif
     if (current_y < 240){
         // 1-256 cycles
-        if (current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
+        if (current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && (bus.ppumask >> 3) & 0x3) {
             fetch_tile_data_step(bus);
 
 #if DEBUG_MODE
@@ -162,12 +162,13 @@ void PPU::bg_tick(Bus &bus) {
                     }
                 }
             }
-        } else if(current_scanline_cycle == 257 && ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
+        } else if(current_scanline_cycle == 257 && (bus.ppumask >> 3) & 0x3) {
             // TODO: debug (oam_read test (v & 0x1f) == 2)
             // set coarse x + update ntx bit
             v &= 0xfbe0;
             v |= (bus.ppu_t & 0x41f);
-        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
+            current_step = NT; // todo: check
+        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && (bus.ppumask >> 3) & 0x3) {
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
@@ -175,17 +176,17 @@ void PPU::bg_tick(Bus &bus) {
             fetch_tile_data_step(bus);
         }
     } else if (current_y == 261){
-        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 &&  ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
+        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && (bus.ppumask >> 3) & 0x3) {
             // todo: check
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
-        } else if (current_scanline_cycle == 280 &&  ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
+        } else if (current_scanline_cycle == 280 && (bus.ppumask >> 3) & 0x3) {
             v &= 0x841f;
             v |= (bus.ppu_t & 0x7be0);
-        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 &&  ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)){
+        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && (bus.ppumask >> 3) & 0x3){
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
@@ -234,8 +235,8 @@ void PPU::update_base_nt(Bus& bus) {
 unsigned short PPU::get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n) {
     using SM = Mapper::ScreenMirroring;
     switch (sm) {
-        case SM::Vertical: { return (n == 0 || n == 2) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
-        case SM::Horizontal: { return (n == 0 || n == 1) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
+        case SM::Vertical:   { return (n == 0 || n == 2) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
+        case SM::Horizontal: { return (n == 0 || n == 1) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE3_BEGIN;}
         case SM::SingleScreenLower: {return constants::NAME_TABLE0_BEGIN;}
         case SM::SingleScreenUpper: {return constants::NAME_TABLE1_BEGIN;}
         default:
@@ -397,7 +398,7 @@ void PPU::tick(Bus& bus) {
     if (current_scanline_cycle == 257) {
         // 257-320
         secondary_oam.reset();
-        if ((bus.ppumask >> 3) & 1) {
+        if ((bus.ppumask >> 3) & 0x3) {
             if (!secondary_oam_buffer.size()){
                 // dummy read for IRQ
                 bus.read_chr( last_address);

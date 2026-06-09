@@ -67,9 +67,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
             return;
         }
         case constants::PPUDATA:   {
-            unsigned short w_addr = ppu_v;
-            write_chr(w_addr, value);
-//            ppudata = value; // todo: check
+            write_chr(ppu_v, value);
             ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
             return;}
         case constants::OAMDMA : {

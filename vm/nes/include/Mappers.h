@@ -137,7 +137,7 @@ namespace mappers {
                     prg_banks_mode = (value >> 6) & 1;
                 }
             } else if (addr >= 0xa000 && addr <= 0xbffe) {
-                is_vertical = !(value & 1);
+                is_vertical = (value & 1);
             } else if (addr >= 0xc000 && addr <= 0xDFFF) {
                 if (addr & 1){
                     reload_flag = true;

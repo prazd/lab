@@ -1533,7 +1533,7 @@ void CPU::iop_exec_step(Bus& bus) {
 
 
 void CPU::interrupt_handle(Bus& bus) {
-    if (bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) {
+    if (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) {
         interrupt_requests[NMI] = true;
         sr.set(StatusReg::I, false);
         bus.nmi_interrupt_flip_flop = false;

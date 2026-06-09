@@ -20,9 +20,15 @@ struct CLI {
     const char* filename;
     std::vector<char> f;
 
+    size_t debug_pid = 0;
+
     uintptr_t base_image_address = 0;
-    static inline std::vector<uintptr_t> br_addresses;
-    static inline std::vector<size_t> original_instr_value;
+    std::vector<ProcMapEntry> proc_map_entry;
+
+    static inline std::vector<size_t>           br_lines;
+    static inline std::vector<uintptr_t>        br_addresses;
+    static inline std::vector<std::string>      br_file_names;
+    static inline std::vector<size_t>           original_instr_value;
 
     static inline std::vector<char*> process_args_list = {nullptr};
     static inline std::vector<char*> process_env_list  = {nullptr};
@@ -36,12 +42,28 @@ struct CLI {
         vm.parse_header(f, elf_find_section_offset_by_name(f, ".debug_line"), elf_find_section_offset_by_name(f, ".debug_line_str"));
 #endif
     }
-    enum Command{Run, Break, Unknown};
+    enum Command{
+        Run, Break, UnBreak, Next,
+        Regs,
+        Continue,
+        Unknown};
     Command parse_cmd(std::string_view sv){
-        if (sv == "break") return Break;
-        else if (sv == "run") return Run;
+        if      (sv == "break" || sv == "b")      return Break;
+        else if (sv == "unbreak" || sv == "unb")  return UnBreak;
+        else if (sv == "run" || sv == "r")        return Run;
+        else if (sv == "continue" || sv == "c")   return Continue;
+        else if (sv == "iregs" || sv == "ir")     return Regs;
+        else if (sv == "next" || sv == "n")       return Next;
         return Unknown;
     }
+
+    enum Mode {Main, Debug};
+    Mode mode = Main;
+
+    enum DebugProcState{
+        ProcRunning, ProcStopped, ProcFinish, 
+    };
+    DebugProcState debug_proc_state = ProcFinish;
 
     static unsigned char patch_int3(std::vector<char>& vec, size_t inst){
         auto ptr = vec.data();
@@ -54,16 +76,66 @@ struct CLI {
         }
         return 0;
     }
+    
 
 #if defined(__linux__)
-    void elf_debug(std::string_view arg){
-        auto s = std::string(arg);
-        auto pid = fork();
-        if (pid == 0){
+    void linux_signal_handler(){
+        for (;;){
+            int status{};
+            waitpid(debug_pid, &status, 0);
+            if (WIFSTOPPED(status)){
+                if (auto sig = WSTOPSIG(status); sig == SIGTRAP){
+                    std::cout << "Handling...\n";
+                    auto regs = linux_read_regs(debug_pid);
+                    for (size_t i = 0, e = br_addresses.size(); i < e; ++i){
+                        if (regs.rip-1 == base_image_address + br_addresses[i]){
+                            std::cout << "int3 address found\n";
+                            size_t current_ins_val = ptrace(PTRACE_PEEKDATA, debug_pid, regs.rip-1, 0);
+                            auto prev_value = original_instr_value[i];
+                            int err = ptrace(PTRACE_POKEDATA, debug_pid, regs.rip-1, (void*)prev_value);
+                            if (err == -1){std::cout << "PTRACE_POKEDATA error\n";}
+                            --regs.rip;
+                            linux_write_regs(debug_pid, regs);
+#if DEBUG                            
+                            auto update_regs = linux_read_regs(debug_pid);
+                            assert(update_regs.rip == regs.rip);
+                            auto updated_ins_val = ptrace(PTRACE_PEEKDATA, debug_pid, update_regs.rip, 0);
+                            assert(updated_ins_val == prev_value);
+#endif                            
+                            break;
+                        }
+                    }
+                    debug_proc_state = ProcStopped;
+                    break;
+                }
+            } else {
+                debug_proc_state = ProcFinish;
+                mode = Main;
+                std::cout << "Finish\n";
+                break;
+            }
+        }
+    }
+
+    void linux_patch_by_address(uintptr_t br_addr){
+        uintptr_t addr = base_image_address + br_addr;
+        auto val = ptrace(PTRACE_PEEKDATA, debug_pid, addr, 0);
+        original_instr_value.push_back(val);
+        val &= 0xffffffffffffff00;
+        val |= 0xcc; // int3
+        if (ptrace(PTRACE_POKEDATA, debug_pid, addr, (void*)val) == -1)
+            std::cout << "PTRACE_POKEDATA error\n";
+        auto updated_value = ptrace(PTRACE_PEEKDATA, debug_pid, addr, 0);
+        assert(val == updated_value);
+    }
+
+    void elf_start_debug(){
+        debug_pid = fork();
+        if (debug_pid == 0){
             ptrace(PTRACE_TRACEME,0,0,0);
-            execve(s.c_str(), process_args_list.data(), process_env_list.data());
+            execve(filename, process_args_list.data(), process_env_list.data());
         } else {
-            waitpid(pid, 0, 0);
+            waitpid(debug_pid, 0, 0);
             // use valid address
             // slide = actual_load_address - mach_o_preffered_address
             // valid_address = dwarf_address + slide
@@ -71,11 +143,11 @@ struct CLI {
             auto min_load_address = elf_find_min_load_address(f);
             auto elf_header = parse_to<Elf64Header>(f.data());
             std::string proc_path = "/proc/";
-            proc_path += std::to_string(pid);
+            proc_path += std::to_string(debug_pid);
             proc_path += std::string("/maps");
             auto res = read_file_str(proc_path.c_str());
             std::cout << "ProcMapEntry:\n";
-            std::vector<ProcMapEntry> proc_map_entry;
+            
             ProcMapEntry pme;
             for (const auto& el: res){
                 pme.parse_from_line(el);
@@ -84,66 +156,35 @@ struct CLI {
 
             unsigned long base_address = 0;
             for (const auto& el: proc_map_entry){
-                if (el.permissions.get(1) && el.permissions.get(0x4) && el.path_name.contains(s)){
+                if (el.permissions.get(1) && el.permissions.get(0x4) && el.path_name.contains(std::string_view(filename))){
                     base_address = el.vma_range.first - el.offset;
                 }
             }
             size_t header_begin{};
             memcpy(&header_begin, &elf_header, sizeof(header_begin));
 
-            size_t word = ptrace(PTRACE_PEEKDATA, pid, base_address, 0);
+            size_t word = ptrace(PTRACE_PEEKDATA, debug_pid, base_address, 0);
             assert(word == header_begin);
 
             base_image_address = base_address - min_load_address;
-            
-            for (auto el: br_addresses){
-                uintptr_t addr = base_image_address + el;
-                auto val = ptrace(PTRACE_PEEKDATA, pid, addr, 0);
-                original_instr_value.push_back(val);
-                val &= 0xffffffffffffff00;
-                val |= 0xcc; // int3
-                if (ptrace(PTRACE_POKEDATA, pid, addr, (void*)val) == -1)
-                    std::cout << "PTRACE_POKEDATA error\n";
-                auto updated_value = ptrace(PTRACE_PEEKDATA, pid, addr, 0);
-                assert(val == updated_value);
-            }
-        
-            ptrace(PTRACE_CONT, pid, 1, 0);
-            waitpid(pid, 0, 0);
 
-            // handle int3
-            // TODO: debug handler
-            std::cout << "Handling...\n";
-            auto regs = linux_read_regs(pid);
-            for (size_t i = 0, e = br_addresses.size(); i < e; ++i){
-                if (regs.rip-1 == base_image_address + br_addresses[i]){
-                    std::cout << "int3 address found\n";
-                    size_t current_ins_val = ptrace(PTRACE_PEEKDATA, pid, regs.rip-1, 0);
-                    auto prev_value = original_instr_value[i];
-                    int err = ptrace(PTRACE_POKEDATA, pid, regs.rip-1, (void*)prev_value);
-                    if (err == -1){std::cout << "PTRACE_POKEDATA error\n";}
-                    --regs.rip;
-                    linux_write_regs(pid, regs);
-                    auto update_regs = linux_read_regs(pid);
-                    assert(update_regs.rip == regs.rip);
-                    auto updated_ins_val = ptrace(PTRACE_PEEKDATA, pid, update_regs.rip, 0);
-                    assert(updated_ins_val == prev_value);
-                    break;
-                }
-            }
-            ptrace(PTRACE_CONT, pid, 1, 0);
-            waitpid(pid, 0, 0);
-            ptrace(PTRACE_CONT, pid, 1, 0);
+
+            for (auto el: br_addresses)
+                linux_patch_by_address(el);
+        
+            ptrace(PTRACE_CONT, debug_pid, 1, 0);
+            mode = Debug;
+            debug_proc_state = ProcRunning;
+            linux_signal_handler();
         }
     }
 #endif
 
 #if defined(__APPLE__)
-    void macho_debug(std::string_view arg){
+    void macho_start_debug(){
         int status = 0;
-        auto s = std::string(arg);
-        auto d_f = read_file(s.c_str());
-        // int pid{};
+        auto d_f = read_file(filename);
+                 // int pid{};
                 // posix_spawnattr_t attr;
                 // if (posix_spawnattr_init(&attr) != 0){
                 //     std::cout << "posix_spawnattr_init error\n";
@@ -171,8 +212,8 @@ struct CLI {
                 //     waitpid(pid, &status, 0);
                 //     posix_spawnattr_destroy(&attr);
                 const char* fn = "check";
-                std::cout << "prog:" << s.data() << '\n';
-                auto e_f = read_file(s.data());
+                std::cout << "prog:" << filename << '\n';
+                auto e_f = read_file(filename);
                 auto o_f = std::ofstream(fn, std::ios::binary);
                 if (!o_f.is_open()){std::cout << "file is not open"; return;}
                 unsigned char prev_value = patch_int3(e_f, 0xb00000004f3d8d48);
@@ -188,8 +229,8 @@ struct CLI {
                 );
                 std::cout << "Create file" << std::endl;
 
-                auto pid = fork();
-                if (pid == 0){
+                debug_pid = fork();
+                if (debug_pid == 0){
                     if (ptrace(PT_TRACE_ME, 0,0,0) == -1){
                         std::cout << "Error:" << errno  << '\n';
                         return;
@@ -204,28 +245,26 @@ struct CLI {
                     // slide = actual_load_address - mach_o_preffered_address
                     // valid_address = dwarf_address + slide
                     for (;;){
-                        waitpid(pid, &status, 0);
+                        waitpid(debug_pid, &status, 0);
                         std::cout << "Step" << std::endl;
-                        auto r = macho_read_proc_regs(pid);
-                        auto val = macho_read_proc_mem<size_t>(pid, r.__rip);
+                        auto r = macho_read_proc_regs(debug_pid);
+                        auto val = macho_read_proc_mem<size_t>(debug_pid, r.__rip);
                         if (val == 0xb00000004f3d8d){
-                            auto actual_load_address = macho_find_proc_base_address(pid, (uintptr_t)r.__rip);
+                            auto actual_load_address = macho_find_proc_base_address(debug_pid, (uintptr_t)r.__rip);
                             if (actual_load_address == 0){
                                 std::cout << "Addr not found\n";
                                 break;
                             }
                             std::cout << "Actual load address:" << actual_load_address << std::endl;
                             std::cout << "!!!FOUND!!!" << " Address:" << r.__rip << std::endl;
-                            macho_write_proc_mem_text(pid, prev_value, r.__rip-1);
+                            macho_write_proc_mem_text(debug_pid, prev_value, r.__rip-1);
                             break;
                         } else {
                             std::cout << "RIP:" << r.__rip << " val:" << val << std::endl;
 
                         }
-                        ptrace(PT_CONTINUE, pid, (caddr_t)1, 0);
+                        ptrace(PT_CONTINUE, debug_pid, (caddr_t)1, 0);
                     }
-                
-            
                     // auto ins_addr = find_instructions(pid, 0x480000000afc45c7,(uintptr_t)r.__rip);
                     // std::cout << "Ins addr:" << ins_addr << std::endl;
                     // // 100000000 - vm addr
@@ -242,35 +281,140 @@ struct CLI {
     }
 #endif
 
+    void add_to_break_list(size_t line, const std::string& filename){
+        auto addr = vm.get_address_by_file_and_line(filename, line);
+        if (addr != nullptr){
+            if (std::any_of(br_addresses.begin(), br_addresses.end(), [addr](auto el){return (uintptr_t)addr == el;})){
+                std::cout << "Already set\n";
+            } else {
+                std::cout << "Address:" << addr << '\n';
+                std::cout << "LINE:" << line << '\n';
+                br_addresses.push_back((uintptr_t)addr);
+                br_lines.push_back(line);
+                br_file_names.push_back(filename);
+            }
+        }  
+    }
+
+    void add_to_break_list(uintptr_t addr, size_t line, const std::string& filename){
+        if (std::any_of(br_addresses.begin(), br_addresses.end(), [addr](auto el){return (uintptr_t)addr == el;})){
+            std::cout << "Already set\n";
+        } else {
+            std::cout << "Address:" << addr << '\n';
+            std::cout << "LINE:" << line << '\n';
+            br_addresses.push_back((uintptr_t)addr);
+            br_lines.push_back(line);
+            br_file_names.push_back(filename);
+        }
+    }
+
     void handle_cmd(const std::vector<std::string_view>& args){
         if (args.empty()) return;
         auto cmd = parse_cmd(args[0]);
         switch(cmd) {
             case Break: {
                 if (args.size() != 3) {
-                    std::cout << "args sz parse error\n"; 
+                    std::cout << "args sz parse error\n";
+                    break;
+                }
+                size_t line{};
+                auto [ptr, ec] = std::from_chars(args[2].begin(), args[2].end(), line);
+                if (ec == std::errc{})
+                    add_to_break_list(line, std::string(args[1]));
+                else
+                    std::cout << "line parse error\n";
+                break;
+            }
+            case UnBreak: {
+                if (args.size() != 3) {
+                    std::cout << "args sz parse error\n";
                     break;
                 }
                 size_t line{};
                 auto [ptr, ec] = std::from_chars(args[2].begin(), args[2].end(), line);
                 if (ec == std::errc{}){
-                    std::cout << "LINE:" << line << '\n';
+#if DEBUG 
+                    assert(br_addresses.size() == br_lines.size());
+                    assert(br_addresses.size() == br_file_names.size());
+#endif                    
                     auto addr = vm.get_address_by_file_and_line(std::string(args[1]), line);
-                    std::cout << "Address:" << addr << '\n';
-                    br_addresses.push_back((uintptr_t)addr);
-                } else 
+                    if (addr != nullptr){
+                        for (size_t i = 0, e = br_addresses.size(); i != e; ++i){
+                            if (br_addresses[i] == (uintptr_t)addr && br_lines[i] == line){
+                                br_addresses.erase(std::remove(br_addresses.begin(), br_addresses.end(), br_addresses[i]), br_addresses.end());
+                                br_lines.erase(std::remove(br_lines.begin(), br_lines.end(), br_lines[i]), br_lines.end());
+                                br_file_names.erase(std::remove(br_file_names.begin(), br_file_names.end(), br_file_names[i]), br_file_names.end());
+                                std::cout << "del breakpoint\n";
+                                break;
+                            }
+                        }
+                    }
+                } else
                     std::cout << "line parse error\n";
                 break;
             }
+            case Next: {
+#if DEBUG
+                assert(br_addresses.size() == br_lines.size());
+#endif                    
+                auto regs = linux_read_regs(debug_pid);
+                for (size_t i = 0, e = br_addresses.size(); i < e; ++i){
+                    if (regs.rip == base_image_address + br_addresses[i]){
+                        std::cout << "Add!\n";
+                        if (auto addr = (uintptr_t)vm.get_address_by_file_and_line(br_file_names[i], br_lines[i] + 1); addr){
+                            add_to_break_list(addr, br_lines[i] + 1, br_file_names[i]);
+                            linux_patch_by_address(addr);
+                        }
+                        break;
+                    }
+                }
+                ptrace(PTRACE_CONT, debug_pid, 0, 0);
+                linux_signal_handler();
+                break;
+            }
             case Unknown: {std::cout << "Unknown cmd\n"; break;}
-
             case Run:     {
 #if defined(__APPLE__)
-                macho_debug(args[1]);  
+                macho_start_debug();
 #elif defined(__linux__)
-                elf_debug(args[1]);
+                elf_start_debug();
 #endif
-
+                break;
+            }
+            case Continue: {
+#if defined(__linux__)
+                if (mode == Debug && debug_proc_state == ProcStopped){
+                    ptrace(PTRACE_CONT, debug_pid, 0, 0);
+                    debug_proc_state = ProcRunning;
+                    linux_signal_handler();
+                }
+                break;
+#endif
+            }
+            case Regs: {
+#if defined(__linux__)                
+                if (mode == Debug && debug_proc_state == ProcStopped){
+                    auto regs = linux_read_regs(debug_pid);
+                    std::cout << std::hex;
+                    std::cout << "RIP:" << regs.rip << '\n';
+                    std::cout << "RAX:" << regs.rax << '\n';
+                    std::cout << "RBX:" << regs.rbx << '\n';
+                    std::cout << "RCX:" << regs.rcx << '\n';
+                    std::cout << "RDX:" << regs.rdx << '\n';
+                    std::cout << "RDI:" << regs.rdi << '\n';
+                    std::cout << "RSI:" << regs.rsi << '\n';
+                    std::cout << "RBP:" << regs.rbp << '\n';
+                    std::cout << "RSP:" << regs.rsp << '\n';
+                    std::cout << "R8:"  << regs.r8 << '\n';
+                    std::cout << "R9:"  << regs.r9 << '\n';
+                    std::cout << "R10:" << regs.r10 << '\n';
+                    std::cout << "R11:" << regs.r11 << '\n';
+                    std::cout << "R12:" << regs.r12 << '\n';
+                    std::cout << "R13:" << regs.r13 << '\n';
+                    std::cout << "R14:" << regs.r14 << '\n';
+                    std::cout << "R15:" << regs.r15 << '\n';
+                }
+#endif                
                 break;
             }
         }

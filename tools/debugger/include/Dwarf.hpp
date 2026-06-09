@@ -6,8 +6,7 @@
 #include <array>
 #include "Utils.hpp"
 #include "Macho.hpp"
-#define DEBUG 1
-
+#define DEBUG 0
 
 #pragma pack(push,1)
 struct CompilationUnitHeader {
@@ -282,7 +281,6 @@ struct DebugLineParseVM {
             auto ptr = f.data() + offset;
             DebugLineHeaderV4 dlh;
             memcpy(&dlh, ptr, sizeof(dlh));
-            dlh.print();
             
             auto vm_bytecode_ptr = dlh.prologue_length + ptr + 10;
             finish_address = (unsigned char*)(ptr + dlh.unit_length + 4);
@@ -307,31 +305,17 @@ struct DebugLineParseVM {
             s.clear();
             while(*ptr){
                 while(*ptr) s += *ptr++;
-                std::cout << "Dir: " << (void*) ptr << '\n';
                 size_t dir_index = decode_leb128<size_t>(ptr);
-                std::cout << "modification_time: " << (void*) ptr << '\n';
                 size_t modification_time = decode_leb128<size_t>(ptr);
-                std::cout << "file_len: " << (void*) ptr << '\n';
                 size_t file_len = decode_leb128<size_t>(ptr);
                 lists.file_entries.push_back({DebugLineParseVM::FileTableEntry{s, dir_index, modification_time, file_len}});
             }
             ++ptr;
-        #if DEBUG
-            lists.print_standart_opcode_len();
-            lists.print_include_directories();
-            lists.print_file_entries();
-        #endif
-
             assert(*ptr == 0);
             ++ptr;
-            print_hex(ptr, 64);
             assert(ptr == vm_bytecode_ptr);
             it = (unsigned char*)ptr;
             exec();
-            std::cout << "Exec finish FileSize:" << lists.file_entries.size() << '\n';
-            std::cout << "CommitedStates:\n";
-            for (const auto& el: commited_states) el.print();
-            std::cout << "FINISH!\n";
         }
 
         inline void parse_header_v5(const std::vector<char>& f, size_t debug_line_offset, size_t debug_line_str_offset){
@@ -342,7 +326,6 @@ struct DebugLineParseVM {
         #endif    
             DebugLineHeaderV5 dlh;
             memcpy(&dlh, ptr, sizeof(dlh));
-            dlh.print();
             auto vm_bytecode_ptr = dlh.prologue_length + ptr + 10;
             finish_address = (unsigned char*)(ptr + dlh.unit_length + 4);
             is_stmt = dlh.is_stmt;
@@ -358,7 +341,6 @@ struct DebugLineParseVM {
                 lists.standart_opcode_len.push_back(*ptr++);
         
             unsigned char directory_entry_format_count = *ptr++;
-            std::cout << "directory_entry_format_count:" << (int)directory_entry_format_count << '\n';
             
             std::vector<FieldV5> dir_entry_struct;
             for (size_t i = 0; i < directory_entry_format_count; ++i){
@@ -366,40 +348,25 @@ struct DebugLineParseVM {
                 auto form = decode_leb128<unsigned>(ptr);
                 dir_entry_struct.push_back(FieldV5{(ContentTypeV5)content_type, (FormV5)form});
             }
-            std::cout << "Entry:\n";
-            for (auto& el: dir_entry_struct){
-                std::cout << to_sv(el.content_type) << " " << to_sv(el.form) << '\n';
-            }
 
             unsigned char directory_entry_sz = *ptr++;
-            std::cout << "directory_entry_size:" << (int)directory_entry_sz << '\n';
             for (size_t i = 0; i < directory_entry_sz; ++i){
                 if (dir_entry_struct[0].form == DW_FORM_line_strp){
                     unsigned str_offset = read<unsigned>(ptr); // todo: check sz
                     lists.include_directories.emplace_back(std::string(f.data() + debug_line_str_offset + str_offset));
                 }
             }
-
-            for (const auto& el: lists.include_directories){
-                std::cout << el << '\n';
-            }
             
             auto file_name_entry_format_count = decode_leb128<unsigned>(ptr);
-            std::cout << "file_name_entry_format_count:" << file_name_entry_format_count << '\n';
             std::vector<FieldV5> file_entry_struct;
             for (size_t i = 0; i < file_name_entry_format_count; ++i){
                 auto content_type = decode_leb128<unsigned>(ptr);
                 auto form = decode_leb128<unsigned>(ptr);
                 file_entry_struct.push_back(FieldV5{(ContentTypeV5)content_type, (FormV5)form});
             }
-            std::cout << "File format:\n";
-            for (auto& el: file_entry_struct){
-                std::cout << to_sv(el.content_type) << " " << to_sv(el.form) << '\n';
-            }
+
 
             unsigned char file_entry_sz = *ptr++;
-            std::cout << "file_entry_sz:" << (int)file_entry_sz << '\n';
-
             FileTableEntry fte;
             for (size_t i = 0; i < file_entry_sz; ++i){
                 for (auto& el: file_entry_struct){
@@ -412,22 +379,9 @@ struct DebugLineParseVM {
                 }
                 lists.file_entries.push_back(fte);
             }
-
-            std::cout << "File entries:\n";
-            for (auto& el: lists.file_entries)
-                std::cout << "Name:" << el.name << " " << " Dir index:" << el.dir_index << '\n';
-
-        
-
             ++ptr;
-            print_hex(ptr, 64);
-            // assert(ptr == vm_bytecode_ptr);
             it = (unsigned char*)ptr;
             exec();
-            std::cout << "Exec finish FileSize:" << lists.file_entries.size() << '\n';
-            std::cout << "CommitedStates:\n";
-            for (const auto& el: commited_states) el.print();
-            std::cout << "FINISH!\n";
         }
 
         inline void parse_header(const std::vector<char>& f, size_t debug_line_offset, size_t debug_line_str_offset = 0){
@@ -461,7 +415,6 @@ struct DebugLineParseVM {
         inline void exec(){
             state.set_flag(DebugLineParseVM::State::IsStmt, is_stmt);
             while(it <= finish_address){
-                std::cout << "Exec FileSize:" << lists.file_entries.size() << '\n';
 #if DEBUG
             std::cout << "Opcode:(" << std::setw(2) << std::setfill('0') << unsigned(*it) << ") - ";
             std::cout <<  (*it <= 12 ? opcodes_str[*it] : "Special") << std::endl;
@@ -483,7 +436,6 @@ struct DebugLineParseVM {
                     default: {special_opcode_exec();++it; break;}
                 }
             }
-            std::cout << "Exec finish FileSize:" << lists.file_entries.size() << '\n';
         }
 
         inline void extended_opcode_exec(){
@@ -492,7 +444,6 @@ struct DebugLineParseVM {
 #if DEBUG            
             std::cout << "Opcode:(" << std::setw(2) << std::setfill('0') << unsigned(*it) << ") - ";
             if ((*it <= 4)) std::cout << extended_opcodes_str[*it];
-            
             std::cout <<  '\n';
 #endif
             switch(*it++){
