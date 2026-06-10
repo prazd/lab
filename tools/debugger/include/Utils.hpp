@@ -15,6 +15,16 @@ T parse_to(U ptr){
     return res;
 }
 
+inline auto read_file(const std::string& str){
+    std::vector<char> res;
+    size_t f_size = std::filesystem::file_size(str.c_str());
+    res.resize(f_size);
+    auto f = std::ifstream(str.c_str(), std::ios::binary);
+    if (!f.is_open()) std::abort();
+    f.read(res.data(), f_size);
+    return res;
+}
+
 inline auto read_file(const char* filepath){
     std::vector<char> res;
     size_t f_size = std::filesystem::file_size(filepath);

@@ -23,15 +23,28 @@ struct CLI {
     size_t debug_pid = 0;
 
     uintptr_t base_image_address = 0;
+#if defined(__linux__)    
     std::vector<ProcMapEntry> proc_map_entry;
-
-    static inline std::vector<size_t>           br_lines;
-    static inline std::vector<uintptr_t>        br_addresses;
-    static inline std::vector<std::string>      br_file_names;
-    static inline std::vector<size_t>           original_instr_value;
-
-    static inline std::vector<char*> process_args_list = {nullptr};
-    static inline std::vector<char*> process_env_list  = {nullptr};
+#endif
+    struct BreakEntry {
+        size_t line;
+        uintptr_t address;
+        std::string filename;
+        size_t filename_index;
+        size_t original_instruction_value;
+        bool operator==(const BreakEntry& rhs){
+            return rhs.line == line && address == rhs.address && filename_index == rhs.filename_index;
+        }
+        inline void print(){
+            PRINT(line)
+            PRINT(address)
+            PRINT(filename_index)
+            PRINT(original_instruction_value)
+        }
+    };
+    std::vector<BreakEntry> br_entries;
+    std::vector<char*> process_args_list = {nullptr};
+    std::vector<char*> process_env_list  = {nullptr};
 
     unsigned char last_instr = 0;
     
@@ -45,8 +58,13 @@ struct CLI {
     enum Command{
         Run, Break, UnBreak, Next,
         Regs,
+        List,
+        PrintBreakpoints,
+        PrintIncludeDirs,
+        PrintFileEntries,
         Continue,
         Unknown};
+
     Command parse_cmd(std::string_view sv){
         if      (sv == "break" || sv == "b")      return Break;
         else if (sv == "unbreak" || sv == "unb")  return UnBreak;
@@ -54,6 +72,11 @@ struct CLI {
         else if (sv == "continue" || sv == "c")   return Continue;
         else if (sv == "iregs" || sv == "ir")     return Regs;
         else if (sv == "next" || sv == "n")       return Next;
+        else if (sv == "list" || sv == "l")       return List;
+
+        else if (sv == "pbr")   return     PrintBreakpoints;
+        else if (sv == "pincd") return     PrintIncludeDirs;
+        else if (sv == "pfe")    return    PrintFileEntries;
         return Unknown;
     }
 
@@ -79,6 +102,23 @@ struct CLI {
     
 
 #if defined(__linux__)
+    void linux_print_current_source_line(){
+        auto regs = linux_read_regs(debug_pid);
+        for (size_t i = 0, e = br_entries.size(); i != e; ++i){
+            if (regs.rip == base_image_address + br_entries[i].address){
+                std::istringstream source_file(vm.lists.file_entries[br_entries[i].filename_index].fbuf.data());
+                size_t lines_count = 1;
+                std::string l_str;
+                while(std::getline(source_file, l_str)){
+                    if (lines_count == br_entries[i].line)
+                        std::cout << ' ' << lines_count << "   " << l_str << '\n';
+                    ++lines_count;
+                }
+                break;
+            }
+        }
+    }
+
     void linux_signal_handler(){
         for (;;){
             int status{};
@@ -87,15 +127,16 @@ struct CLI {
                 if (auto sig = WSTOPSIG(status); sig == SIGTRAP){
                     std::cout << "Handling...\n";
                     auto regs = linux_read_regs(debug_pid);
-                    for (size_t i = 0, e = br_addresses.size(); i < e; ++i){
-                        if (regs.rip-1 == base_image_address + br_addresses[i]){
+                    for (size_t i = 0, e = br_entries.size(); i < e; ++i){
+                        if (regs.rip-1 == base_image_address + br_entries[i].address){
                             std::cout << "int3 address found\n";
                             size_t current_ins_val = ptrace(PTRACE_PEEKDATA, debug_pid, regs.rip-1, 0);
-                            auto prev_value = original_instr_value[i];
+                            auto prev_value = br_entries[i].original_instruction_value;
                             int err = ptrace(PTRACE_POKEDATA, debug_pid, regs.rip-1, (void*)prev_value);
                             if (err == -1){std::cout << "PTRACE_POKEDATA error\n";}
                             --regs.rip;
                             linux_write_regs(debug_pid, regs);
+                            linux_print_current_source_line();
 #if DEBUG                            
                             auto update_regs = linux_read_regs(debug_pid);
                             assert(update_regs.rip == regs.rip);
@@ -120,7 +161,12 @@ struct CLI {
     void linux_patch_by_address(uintptr_t br_addr){
         uintptr_t addr = base_image_address + br_addr;
         auto val = ptrace(PTRACE_PEEKDATA, debug_pid, addr, 0);
-        original_instr_value.push_back(val);
+        auto it = std::find_if(br_entries.begin(), br_entries.end(),[br_addr](auto& el){return el.address == br_addr;});
+        if (it == std::end(br_entries)){
+            std::cout << "int3 patch error: breakpoint address not found\n";
+            return;
+        }
+        it->original_instruction_value = val;
         val &= 0xffffffffffffff00;
         val |= 0xcc; // int3
         if (ptrace(PTRACE_POKEDATA, debug_pid, addr, (void*)val) == -1)
@@ -168,9 +214,8 @@ struct CLI {
 
             base_image_address = base_address - min_load_address;
 
-
-            for (auto el: br_addresses)
-                linux_patch_by_address(el);
+            for (auto el: br_entries)
+                linux_patch_by_address(el.address);
         
             ptrace(PTRACE_CONT, debug_pid, 1, 0);
             mode = Debug;
@@ -274,9 +319,9 @@ struct CLI {
                     // ptrace(PT_CONTINUE, pid, (caddr_t)1, 0);
 
                 }
-                for (size_t i = 0, e = br_addresses.size(); i != e; ++i){
-                    std::cout << "Addr:" << br_addresses[i] << " Val:" << std::hex << 
-                        std::setw(2) << std::setfill('0') << (int)original_instr_value[i] << '\n';
+                for (size_t i = 0, e = br_entries.size(); i != e; ++i){
+                    std::cout << "Addr:" << br_entries[i].address << " Val:" << std::hex << 
+                        std::setw(2) << std::setfill('0') << (int)br_entries[i].original_instruction_value << '\n';
                 }
     }
 #endif
@@ -284,27 +329,27 @@ struct CLI {
     void add_to_break_list(size_t line, const std::string& filename){
         auto addr = vm.get_address_by_file_and_line(filename, line);
         if (addr != nullptr){
-            if (std::any_of(br_addresses.begin(), br_addresses.end(), [addr](auto el){return (uintptr_t)addr == el;})){
+            if (std::any_of(br_entries.begin(), br_entries.end(), [addr](auto& el){return (uintptr_t)el.address == (uintptr_t)addr;})){
                 std::cout << "Already set\n";
             } else {
-                std::cout << "Address:" << addr << '\n';
-                std::cout << "LINE:" << line << '\n';
-                br_addresses.push_back((uintptr_t)addr);
-                br_lines.push_back(line);
-                br_file_names.push_back(filename);
+                auto f_index = vm.lists.get_file_entries_index(filename);
+                if (f_index == -1)
+                    std::cout << "add to break list failed: file not found\n";
+                else 
+                    br_entries.push_back({line, (uintptr_t)addr, filename, (size_t)f_index});
             }
         }  
     }
 
     void add_to_break_list(uintptr_t addr, size_t line, const std::string& filename){
-        if (std::any_of(br_addresses.begin(), br_addresses.end(), [addr](auto el){return (uintptr_t)addr == el;})){
+        if (std::any_of(br_entries.begin(), br_entries.end(), [addr](auto& el){return (uintptr_t)el.address == (uintptr_t)addr;})){
             std::cout << "Already set\n";
         } else {
-            std::cout << "Address:" << addr << '\n';
-            std::cout << "LINE:" << line << '\n';
-            br_addresses.push_back((uintptr_t)addr);
-            br_lines.push_back(line);
-            br_file_names.push_back(filename);
+            auto f_index = vm.lists.get_file_entries_index(filename);
+            if (f_index == -1)
+                std::cout << "add to break list failed: file not found\n";
+            else 
+                br_entries.push_back({line, (uintptr_t)addr, filename, (size_t)f_index});
         }
     }
 
@@ -332,18 +377,12 @@ struct CLI {
                 }
                 size_t line{};
                 auto [ptr, ec] = std::from_chars(args[2].begin(), args[2].end(), line);
-                if (ec == std::errc{}){
-#if DEBUG 
-                    assert(br_addresses.size() == br_lines.size());
-                    assert(br_addresses.size() == br_file_names.size());
-#endif                    
+                if (ec == std::errc{}){               
                     auto addr = vm.get_address_by_file_and_line(std::string(args[1]), line);
                     if (addr != nullptr){
-                        for (size_t i = 0, e = br_addresses.size(); i != e; ++i){
-                            if (br_addresses[i] == (uintptr_t)addr && br_lines[i] == line){
-                                br_addresses.erase(std::remove(br_addresses.begin(), br_addresses.end(), br_addresses[i]), br_addresses.end());
-                                br_lines.erase(std::remove(br_lines.begin(), br_lines.end(), br_lines[i]), br_lines.end());
-                                br_file_names.erase(std::remove(br_file_names.begin(), br_file_names.end(), br_file_names[i]), br_file_names.end());
+                        for (size_t i = 0, e = br_entries.size(); i != e; ++i){
+                            if (br_entries[i].address == (uintptr_t)addr && br_entries[i].line == line){
+                                br_entries.erase(std::remove(br_entries.begin(), br_entries.end(), br_entries[i]), br_entries.end());                              
                                 std::cout << "del breakpoint\n";
                                 break;
                             }
@@ -354,15 +393,13 @@ struct CLI {
                 break;
             }
             case Next: {
-#if DEBUG
-                assert(br_addresses.size() == br_lines.size());
-#endif                    
+#if defined(__linux__)                             
                 auto regs = linux_read_regs(debug_pid);
-                for (size_t i = 0, e = br_addresses.size(); i < e; ++i){
-                    if (regs.rip == base_image_address + br_addresses[i]){
+                for (size_t i = 0, e = br_entries.size(); i < e; ++i){
+                    if (regs.rip == base_image_address + br_entries[i].address){
                         std::cout << "Add!\n";
-                        if (auto addr = (uintptr_t)vm.get_address_by_file_and_line(br_file_names[i], br_lines[i] + 1); addr){
-                            add_to_break_list(addr, br_lines[i] + 1, br_file_names[i]);
+                        if (auto addr = (uintptr_t)vm.get_address_by_file_and_line(br_entries[i].filename, br_entries[i].line + 1); addr){
+                            add_to_break_list(addr, br_entries[i].line + 1, br_entries[i].filename);
                             linux_patch_by_address(addr);
                         }
                         break;
@@ -370,6 +407,7 @@ struct CLI {
                 }
                 ptrace(PTRACE_CONT, debug_pid, 0, 0);
                 linux_signal_handler();
+#endif                
                 break;
             }
             case Unknown: {std::cout << "Unknown cmd\n"; break;}
@@ -415,6 +453,44 @@ struct CLI {
                     std::cout << "R15:" << regs.r15 << '\n';
                 }
 #endif                
+                break;
+            }
+            case PrintBreakpoints: {
+                std::cout << "\n====\n"; 
+                for (auto& el: br_entries) {el.print(); std::cout << "\n====\n";}
+                break;
+            }
+            case List: {
+#if defined(__linux__)      
+                if (debug_proc_state == ProcStopped){
+                    auto regs = linux_read_regs(debug_pid);
+                    for (size_t i = 0, e = br_entries.size(); i != e; ++i){
+                        if (regs.rip == base_image_address + br_entries[i].address){
+                            std::istringstream source_file(vm.lists.file_entries[br_entries[i].filename_index].fbuf.data());
+                            size_t lines_count = 1;
+                            std::string l_str;
+                            while(std::getline(source_file, l_str)){
+                                if (lines_count == br_entries[i].line)
+                                    std::cout << "==>";
+                                else 
+                                    std::cout << "   ";
+                                std::cout << ' ' << lines_count++ << "   " << l_str << '\n';
+                            }
+                        }
+                    }
+                }
+#endif
+                break;
+            }
+
+            case PrintFileEntries:{
+                for (auto& el: vm.lists.file_entries)
+                    el.print();
+                break;
+            }
+            case PrintIncludeDirs: {
+                for (size_t i = 0, e = vm.lists.include_directories.size(); i != e; ++i)
+                    std::cout <<  vm.lists.include_directories[i] << '\n';
                 break;
             }
         }

@@ -6,7 +6,7 @@
 #include <array>
 #include "Utils.hpp"
 #include "Macho.hpp"
-#define DEBUG 0
+#define DEBUG 1
 
 #pragma pack(push,1)
 struct CompilationUnitHeader {
@@ -154,11 +154,26 @@ struct DebugLineParseVM {
             size_t dir_index{};
             size_t mtime{};
             size_t length{};
+            std::vector<char> fbuf;
+            inline void print(){
+                PRINT(name)
+                PRINT(dir_index)
+                PRINT(mtime)
+                PRINT(length)
+                std::cout << '\n';
+            }
         };
         struct DebugLineHeaderLists {
             std::vector<unsigned char> standart_opcode_len;
             std::vector<std::string> include_directories;
             std::vector<FileTableEntry> file_entries;
+
+            ssize_t get_file_entries_index(const std::string& filename){
+                for (ssize_t i = 0, e = file_entries.size(); i != e; ++i){
+                    if (filename == file_entries[i].name) return i;
+                }
+                return -1;
+            }
 
             inline void print_standart_opcode_len(){
                 std::cout << "standart opcode len:\n";
@@ -308,6 +323,7 @@ struct DebugLineParseVM {
                 size_t dir_index = decode_leb128<size_t>(ptr);
                 size_t modification_time = decode_leb128<size_t>(ptr);
                 size_t file_len = decode_leb128<size_t>(ptr);
+                auto data = read_file(std::string(lists.include_directories[dir_index]) + std::string("/") + s);
                 lists.file_entries.push_back({DebugLineParseVM::FileTableEntry{s, dir_index, modification_time, file_len}});
             }
             ++ptr;
@@ -377,7 +393,8 @@ struct DebugLineParseVM {
                         fte.dir_index = decode_leb128<unsigned>(ptr);
                     }
                 }
-                lists.file_entries.push_back(fte);
+                fte.fbuf = std::move(read_file(std::string(lists.include_directories[fte.dir_index]) + std::string("/") + fte.name));
+                lists.file_entries.emplace_back(fte);
             }
             ++ptr;
             it = (unsigned char*)ptr;

@@ -2,8 +2,8 @@
 #include <unistd.h>
 int main(){
    printf("Start process...\n");
-   fflush(stdout);
-   sleep(2);
-   int x = 10;
-   printf("!!!abc!!!\n");
+   printf("1\n");
+   printf("2\n");
+   printf("3\n");
+   printf("!!!Finish!!!\n");
 }
