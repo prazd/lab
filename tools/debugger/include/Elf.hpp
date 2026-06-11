@@ -110,11 +110,28 @@ inline unsigned long elf_find_section_offset_by_name(const std::vector<char>& f,
     for (size_t i = 0; i < elf_header.e_shnum; ++i){
         auto s_header = parse_to<ElfSectionHeader>(it);
         if (!strcmp((shrtab_ptr + s_header.sh_name), name)){
+            std::cout << "Str:" << shrtab_ptr + s_header.sh_name << '\n';
             return s_header.sh_offset;
         }
         it += elf_header.e_shentsize;
     }
     return 0;
+}
+
+inline ElfSectionHeader elf_find_section_header_by_name(const std::vector<char>& f, const char* name){
+    auto elf_header = parse_to<Elf64Header>(f.data());
+    auto it = f.data() + elf_header.e_shoff;
+    auto shrtab_offset = parse_to<ElfSectionHeader>(it + elf_header.e_shentsize * elf_header.e_shstrndx).sh_offset;
+    auto shrtab_ptr = f.data() + shrtab_offset;
+    for (size_t i = 0; i < elf_header.e_shnum; ++i){
+        auto s_header = parse_to<ElfSectionHeader>(it);
+        if (!strcmp((shrtab_ptr + s_header.sh_name), name)){
+            std::cout << "Str:" << shrtab_ptr + s_header.sh_name << '\n';
+            return s_header;
+        }
+        it += elf_header.e_shentsize;
+    }
+    return ElfSectionHeader{};
 }
 
 inline unsigned long elf_find_min_load_address(const std::vector<char>& f){

@@ -42,6 +42,8 @@ struct CLI {
             PRINT(original_instruction_value)
         }
     };
+    bool next_br = false;
+    static inline BreakEntry next_br_entry;
     std::vector<BreakEntry> br_entries;
     std::vector<char*> process_args_list = {nullptr};
     std::vector<char*> process_env_list  = {nullptr};
@@ -62,6 +64,7 @@ struct CLI {
         PrintBreakpoints,
         PrintIncludeDirs,
         PrintFileEntries,
+        PrintCommitedDwarfVMState,
         Continue,
         Unknown};
 
@@ -76,7 +79,8 @@ struct CLI {
 
         else if (sv == "pbr")   return     PrintBreakpoints;
         else if (sv == "pincd") return     PrintIncludeDirs;
-        else if (sv == "pfe")    return    PrintFileEntries;
+        else if (sv == "pfe")    return     PrintFileEntries;
+        else if (sv == "pcds")    return    PrintCommitedDwarfVMState;
         return Unknown;
     }
 
@@ -102,20 +106,14 @@ struct CLI {
     
 
 #if defined(__linux__)
-    void linux_print_current_source_line(){
-        auto regs = linux_read_regs(debug_pid);
-        for (size_t i = 0, e = br_entries.size(); i != e; ++i){
-            if (regs.rip == base_image_address + br_entries[i].address){
-                std::istringstream source_file(vm.lists.file_entries[br_entries[i].filename_index].fbuf.data());
-                size_t lines_count = 1;
-                std::string l_str;
-                while(std::getline(source_file, l_str)){
-                    if (lines_count == br_entries[i].line)
-                        std::cout << ' ' << lines_count << "   " << l_str << '\n';
-                    ++lines_count;
-                }
-                break;
-            }
+    void linux_print_current_source_line(BreakEntry& br){
+        std::istringstream source_file(vm.lists.file_entries[br.filename_index].fbuf.data());
+        size_t lines_count = 1;
+        std::string l_str;
+        while(std::getline(source_file, l_str)){
+            if (lines_count == br.line)
+                std::cout << ' ' << lines_count << "   " << l_str << '\n';
+            ++lines_count;
         }
     }
 
@@ -125,31 +123,38 @@ struct CLI {
             waitpid(debug_pid, &status, 0);
             if (WIFSTOPPED(status)){
                 if (auto sig = WSTOPSIG(status); sig == SIGTRAP){
-                    std::cout << "Handling...\n";
                     auto regs = linux_read_regs(debug_pid);
-                    for (size_t i = 0, e = br_entries.size(); i < e; ++i){
-                        if (regs.rip-1 == base_image_address + br_entries[i].address){
-                            std::cout << "int3 address found\n";
-                            size_t current_ins_val = ptrace(PTRACE_PEEKDATA, debug_pid, regs.rip-1, 0);
-                            auto prev_value = br_entries[i].original_instruction_value;
-                            int err = ptrace(PTRACE_POKEDATA, debug_pid, regs.rip-1, (void*)prev_value);
-                            if (err == -1){std::cout << "PTRACE_POKEDATA error\n";}
-                            --regs.rip;
-                            linux_write_regs(debug_pid, regs);
-                            linux_print_current_source_line();
-#if DEBUG                            
-                            auto update_regs = linux_read_regs(debug_pid);
-                            assert(update_regs.rip == regs.rip);
-                            auto updated_ins_val = ptrace(PTRACE_PEEKDATA, debug_pid, update_regs.rip, 0);
-                            assert(updated_ins_val == prev_value);
-#endif                            
-                            break;
+                    BreakEntry* be_ptr = nullptr;
+                    if (next_br)
+                        be_ptr = &next_br_entry;
+                    else {
+                        for (size_t i = 0, e = br_entries.size(); i < e; ++i){
+                            if (regs.rip-1 == base_image_address + br_entries[i].address){
+                                be_ptr = &br_entries[i];
+                                break;
+                            }
                         }
-                    }
-                    debug_proc_state = ProcStopped;
-                    break;
+                }
+                std::cout << "Handling...\n";
+                std::cout << "int3 address found\n";
+                size_t current_ins_val = ptrace(PTRACE_PEEKDATA, debug_pid, regs.rip-1, 0);
+                auto prev_value = be_ptr->original_instruction_value;
+                int err = ptrace(PTRACE_POKEDATA, debug_pid, regs.rip-1, (void*)prev_value);
+                if (err == -1){std::cout << "PTRACE_POKEDATA error\n";}
+                --regs.rip;
+                linux_write_regs(debug_pid, regs);
+                linux_print_current_source_line(*be_ptr);
+#if DEBUG                            
+                auto update_regs = linux_read_regs(debug_pid);
+                assert(update_regs.rip == regs.rip);
+                auto updated_ins_val = ptrace(PTRACE_PEEKDATA, debug_pid, update_regs.rip, 0);
+                assert(updated_ins_val == prev_value);
+#endif                            
+                debug_proc_state = ProcStopped;
+                break;
                 }
             } else {
+                next_br = false;
                 debug_proc_state = ProcFinish;
                 mode = Main;
                 std::cout << "Finish\n";
@@ -167,6 +172,18 @@ struct CLI {
             return;
         }
         it->original_instruction_value = val;
+        val &= 0xffffffffffffff00;
+        val |= 0xcc; // int3
+        if (ptrace(PTRACE_POKEDATA, debug_pid, addr, (void*)val) == -1)
+            std::cout << "PTRACE_POKEDATA error\n";
+        auto updated_value = ptrace(PTRACE_PEEKDATA, debug_pid, addr, 0);
+        assert(val == updated_value);
+    }
+
+    void linux_patch_br_entry(uintptr_t br_addr){
+        uintptr_t addr = base_image_address + br_addr;
+        auto val = ptrace(PTRACE_PEEKDATA, debug_pid, addr, 0);
+        next_br_entry.original_instruction_value = val;
         val &= 0xffffffffffffff00;
         val |= 0xcc; // int3
         if (ptrace(PTRACE_POKEDATA, debug_pid, addr, (void*)val) == -1)
@@ -353,6 +370,14 @@ struct CLI {
         }
     }
 
+     void update_next_br_entry(uintptr_t addr, size_t line, const std::string& filename){
+        auto f_index = vm.lists.get_file_entries_index(filename);
+        if (f_index == -1)
+            std::cout << "add to break list failed: file not found\n";
+        else 
+            next_br_entry = BreakEntry({line, (uintptr_t)addr, filename, (size_t)f_index});
+    }
+
     void handle_cmd(const std::vector<std::string_view>& args){
         if (args.empty()) return;
         auto cmd = parse_cmd(args[0]);
@@ -394,17 +419,25 @@ struct CLI {
             }
             case Next: {
 #if defined(__linux__)                             
+                if (next_br){
+                    if (auto addr = (uintptr_t)vm.get_address_by_file_and_line(next_br_entry.filename, next_br_entry.line + 1); addr){
+                        update_next_br_entry(addr, next_br_entry.line + 1, next_br_entry.filename);
+                        linux_patch_br_entry(addr);
+                    }
+                } else {
                 auto regs = linux_read_regs(debug_pid);
-                for (size_t i = 0, e = br_entries.size(); i < e; ++i){
+                 for (size_t i = 0, e = br_entries.size(); i < e; ++i){
                     if (regs.rip == base_image_address + br_entries[i].address){
-                        std::cout << "Add!\n";
-                        if (auto addr = (uintptr_t)vm.get_address_by_file_and_line(br_entries[i].filename, br_entries[i].line + 1); addr){
-                            add_to_break_list(addr, br_entries[i].line + 1, br_entries[i].filename);
-                            linux_patch_by_address(addr);
+                            if (auto addr = (uintptr_t)vm.get_address_by_file_and_line(br_entries[i].filename, br_entries[i].line + 1); addr){
+                                update_next_br_entry(addr, br_entries[i].line + 1, br_entries[i].filename);
+                                linux_patch_br_entry(addr);
+                                next_br = true;
+                            }
+                            break;
                         }
-                        break;
                     }
                 }
+                
                 ptrace(PTRACE_CONT, debug_pid, 0, 0);
                 linux_signal_handler();
 #endif                
@@ -424,6 +457,7 @@ struct CLI {
                 if (mode == Debug && debug_proc_state == ProcStopped){
                     ptrace(PTRACE_CONT, debug_pid, 0, 0);
                     debug_proc_state = ProcRunning;
+                    next_br = false;
                     linux_signal_handler();
                 }
                 break;
@@ -488,6 +522,11 @@ struct CLI {
                     el.print();
                 break;
             }
+            case PrintCommitedDwarfVMState:{
+                for (auto& el: vm.commited_states)
+                    el.print();
+                break;
+            }
             case PrintIncludeDirs: {
                 for (size_t i = 0, e = vm.lists.include_directories.size(); i != e; ++i)
                     std::cout <<  vm.lists.include_directories[i] << '\n';
@@ -521,7 +560,6 @@ struct CLI {
     }
 };
 
-
 int main(int argc, char** argv){
     if (argc != 2) std::abort();
     CLI cli(argv[1]);
@@ -532,6 +570,18 @@ int main(int argc, char** argv){
     seg.print();
     cli.run();
 #elif defined (__linux__)
+#if 1
     cli.run();
+#else    
+    auto debug_abbrev_sh = elf_find_section_header_by_name(cli.f, ".debug_abbrev");
+    debug_abbrev_sh.print();
+    std::cout << "\n";
+    auto r = parse_debug_abbrev(cli.f, debug_abbrev_sh.sh_size, debug_abbrev_sh.sh_offset);
+    for (auto& el: r) {el.print(); std::cout << "\n=====\n";}
+    auto debug_info_sh = elf_find_section_header_by_name(cli.f, ".debug_info");
+    debug_info_sh.print();
+    std::cout << '\n';
+    parse_debug_info_cu(cli.f, r, debug_info_sh.sh_size, debug_info_sh.sh_offset);
+#endif    
 #endif
 }

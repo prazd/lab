@@ -16,9 +16,48 @@ struct CompilationUnitHeader {
     unsigned char address_sz;
 };
 
+struct CompilationUnitHeaderV5 {
+    unsigned unit_length;
+    unsigned short version;
+    unsigned char unit_type;
+    unsigned char address_sz;
+    unsigned debug_abbrev_offset;
+    inline void print(){
+        PRINT(unit_length)
+        PRINT(version)
+        PRINT_INT(unit_type)
+        PRINT_INT(address_sz)
+        PRINT(debug_abbrev_offset)
+    }
+};
+
 struct DebugLineHeader {
     unsigned unit_length;
     unsigned short version;
+};
+
+enum AbbrevTag {
+    DW_TAG_Base_type = 0x24,
+    DW_TAG_Compile_unit = 0x11,
+    DW_TAG_Formal_Parameter = 0x05,
+    DW_TAG_Function = 0x2e,
+    DW_TAG_Local_variable = 0x34
+};
+
+struct DebugAbbrev {
+    size_t abbrev_code;
+    size_t tag;
+    unsigned char has_children;
+    std::vector<std::pair<size_t, size_t>> attrib_spec;
+    inline void print(){
+        PRINT(abbrev_code)
+        PRINT(tag)
+        PRINT_INT(has_children)
+        std::cout << "attrib_spec:\n";
+        for (auto& el: attrib_spec){
+            std::cout << "name:" << el.first << " form:" << el.second << '\n';
+        }
+    }
 };
 
 struct DebugLineHeaderV4 {
@@ -381,7 +420,6 @@ struct DebugLineParseVM {
                 file_entry_struct.push_back(FieldV5{(ContentTypeV5)content_type, (FormV5)form});
             }
 
-
             unsigned char file_entry_sz = *ptr++;
             FileTableEntry fte;
             for (size_t i = 0; i < file_entry_sz; ++i){
@@ -427,6 +465,15 @@ struct DebugLineParseVM {
                 }
             }
             return nullptr;
+        }
+
+        uintptr_t get_next_instruction_address(uintptr_t address){
+            for (size_t i = 0, e = commited_states.size(); i != e; ++i){
+                if (commited_states[i].address == address && i + 1 != e){
+                    return commited_states[i + 1].address;
+                }
+            }
+            return 0; 
         }
 
         inline void exec(){
@@ -496,6 +543,60 @@ struct DebugLineParseVM {
             commited_states.push_back(state);
         }
 };
+
+auto parse_debug_abbrev(const std::vector<char>& f, size_t sz, size_t offset){
+    auto ptr = f.data() + offset;
+    auto end = ptr + sz;
+    std::vector<DebugAbbrev> res;
+    while(ptr < end){
+        DebugAbbrev da;
+        da.abbrev_code = decode_leb128<size_t>(ptr);
+        da.tag = decode_leb128<size_t>(ptr);
+        da.has_children = *ptr++;
+        for (;;){
+            auto name = decode_leb128<size_t>(ptr);
+            auto form = decode_leb128<size_t>(ptr);
+            if (!name && !form) break;
+            da.attrib_spec.push_back(std::pair{name, form});
+        }
+        res.push_back(da);
+    }
+    return res;
+}
+
+auto parse_debug_info_cu(const std::vector<char>& f, auto& debug_abbrev, size_t sz, size_t offset){
+    auto ptr = f.data() + offset;
+    auto end = ptr + sz;
+    CompilationUnitHeaderV5 cu;
+    enum State{CuStart, DieParse};
+    State s = CuStart;
+    size_t abbrev_code = 0;
+    // todo: finish
+    for(;;){
+        switch(s){
+            case CuStart: {
+                memcpy(&cu, ptr, sizeof(CompilationUnitHeaderV5));
+                cu.print();
+                ptr += sizeof(CompilationUnitHeaderV5);
+                s = DieParse;
+                break;
+            }
+            case DieParse: {
+                abbrev_code = decode_leb128<size_t>(ptr);
+                std::cout << "Abbrev:" << abbrev_code << '\n';
+                ptr += cu.unit_length + 4;
+                for (auto el: debug_abbrev){
+                    if (el.abbrev_code == abbrev_code){
+                        if (!el.has_children){
+                            s = CuStart;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+}
 
 #if defined(__APPLE__)
 inline void print_dwarf_cu_header_macho(const std::vector<char>& f, Section64 sc){
