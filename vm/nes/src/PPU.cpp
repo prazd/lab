@@ -167,7 +167,6 @@ void PPU::bg_tick(Bus &bus) {
             // set coarse x + update ntx bit
             v &= 0xfbe0;
             v |= (bus.ppu_t & 0x41f);
-            current_step = NT; // todo: check
         } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && (bus.ppumask >> 3) & 0x3) {
             shift_register_high <<= 1;
             shift_register_low <<= 1;
@@ -336,7 +335,7 @@ void PPU::draw_pixel(Bus &bus) {
     } else if (bg_data != 0 && sprite_data == 0)
         res = bg_data;
     else if (bg_data != 0 && sprite_data != 0) { // zero hit
-        if (oam_index == 0 && (bus.ppumask >> 4) & 1 && (bus.ppumask >> 3) & 1 && ((current_x & 0xff) != 0xff) && !(bus.ppustatus & (0x80))){
+        if (oam_index == 0 && (bus.ppumask >> 4) & 1 && (bus.ppumask >> 3) & 1 && ((current_x & 0xff) != 0xff) && !(bus.ppustatus & (0x80)) && !(bus.ppustatus & 0x40)){
             bus.ppustatus |= (1 << 6);
         }
         res = (!is_bg_prio && (bus.ppumask >> 4) & 1) ? (is_sprite = true, sprite_data) : bg_data;
@@ -458,5 +457,6 @@ void PPU::tick(Bus& bus) {
         current_scanline_cycle = 0;
         current_oam_index = sprite_evaluation_index = 0;
         current_y = current_y == 261 ? (current_x = 0) : current_y + 1;
+        if (current_y == 0) current_step = NT;
     }
 }

@@ -8,9 +8,12 @@ namespace mappers {
         enum Regs {
             R0, R1, R2, R3, R4,R5,R6,R7,RegsCount
         } selected_bank = R0;
+        std::array<unsigned char, RegsCount> regs_bank_value{};
+
         bool a12_inversion = true;
         bool prg_banks_mode = true;
         bool irq_requested = false;
+        bool update_counter_req = false;
 
         unsigned char irq_latch{};
         unsigned char irq_counter{};
@@ -21,8 +24,6 @@ namespace mappers {
 
         bool is_vertical = false;
 
-        // todo: debug + finish
-        std::array<unsigned char, RegsCount> regs_bank_value{};
         inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
             if (!prg_banks_mode){
                 if (addr >= 0x8000 && addr <= 0x9fff){
@@ -49,33 +50,39 @@ namespace mappers {
         }
 
         inline void tick_irq(unsigned short addr){
-                if ((addr >> 12) & 1 && !((last_address >> 12) & 1) && last_write_cycles >= 8){ // maybe add 8 ppu-cycles filter
+            if (addr & 0x1000 && !(last_address & 0x1000)){ // maybe add 8 ppu-cycles filter
+                if (update_counter_req){
+                    irq_counter = irq_latch;
+                    update_counter_req = false;
+                } else if (reload_flag){
+                    reload_flag = false;
+                    irq_counter = irq_latch;
+                } else {
                     if (irq_counter) --irq_counter;
                     if (!irq_counter) {
-                        if (reload_flag) {
-                            reload_flag = false;
-                        } else {
-                            if (irq_enable)
-                                irq_requested = true;
-                        }
-                        irq_counter = irq_latch;
+                        if (irq_enable) irq_requested = true;
+                        update_counter_req = true;
                     }
                 }
-                last_write_cycles = 0;
-                last_address = addr;
+            }
+            last_write_cycles = 0;
+            last_address = addr;
         }
 
         inline void tick_irq(unsigned short addr, unsigned short prev_addr){
-            if ((addr >> 12) & 1 && !((prev_addr >> 12) & 1) && last_write_cycles >= 8){ // maybe add 8 ppu-cycles filter
-                if (irq_counter) --irq_counter;
-                if (!irq_counter) {
-                    if (reload_flag) {
-                        reload_flag = false;
-                    } else {
-                        if (irq_enable)
-                            irq_requested = true;
-                    }
+            if (addr & 0x1000 && !(last_address & 0x1000)){ // maybe add 8 ppu-cycles filter
+                if (update_counter_req){
+                    update_counter_req = false;
                     irq_counter = irq_latch;
+                } else if (reload_flag){
+                    reload_flag = false;
+                    irq_counter = irq_latch;
+                } else {
+                    if (irq_counter) --irq_counter;
+                    if (!irq_counter) {
+                        if (irq_enable) irq_requested = true;
+                        update_counter_req = true;
+                    }
                 }
             }
             last_write_cycles = 0;
@@ -89,14 +96,13 @@ namespace mappers {
             irq_requested = false;
             a12_inversion = true;
             prg_banks_mode = true;
-            irq_requested = false;
             is_vertical = false;
             selected_bank = R0;
             regs_bank_value = {};
         }
 
         inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
-            if (!a12_inversion) {
+            if (!a12_inversion) { // todo: check
                 if (addr >= 0x0000 && addr <= 0x07ff){
                     return rom[((regs_bank_value[R0] & 0xfe) * 1024) + addr];
                 } else if (addr >= 0x800 && addr <= 0xfff) {
@@ -139,9 +145,10 @@ namespace mappers {
             } else if (addr >= 0xa000 && addr <= 0xbffe) {
                 is_vertical = (value & 1);
             } else if (addr >= 0xc000 && addr <= 0xDFFF) {
-                if (addr & 1){
+                if (addr == 0xc001){
+                    irq_counter = 0;
                     reload_flag = true;
-                } else {
+                } else if (addr == 0xc000){
                     irq_latch = value;
                 }
             } else if (addr >= 0xe000 && addr <= 0xffff) {

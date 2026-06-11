@@ -386,10 +386,12 @@ int main(){
     // /Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/dma_2007_read.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/instr_timing/instr_timing.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes - TODO: C20f
+    // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
+
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, PPUm>{}.run();
+    MultiTest<NESVM, CPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // fc3e
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes"}.run(); // fc3e
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }
