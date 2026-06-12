@@ -42,7 +42,10 @@ constexpr static std::string_view ppu_tests[] = {
         "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/05.left_clip.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/06.right_edge.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/11.edge_timing.nes",
-        "/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes"
+        "/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/2.Details.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/3.A12_clocking.nes",
 };
 
 template <typename VM, TestMode tm>
@@ -96,6 +99,8 @@ struct MultiTest{
     void run(){
         InitWindow(WIDTH, HEIGHT, "MultiTest");
         const auto& tests_paths = tm == CPUm ? cpu_tests : ppu_tests;
+        bool test_active[tm == CPUm ? std::size(cpu_tests) : std::size(ppu_tests)];
+        std::fill(std::begin(test_active), std::end(test_active), true);
 
         float x = 0.f;
         float y = 0.f;
@@ -117,22 +122,30 @@ struct MultiTest{
         WorkerPool<7, decltype(&step), VM&, FrameData&> wp;
         wp.run();
 
+        std::string task_sz_str = "Tasks sz:";
         while(!WindowShouldClose()) {
             move();
             for (int i = 0, e = tests_count; i < e; ++i){
-                if (!frame_data[i].in_progress.exchange(true, std::memory_order_acquire)) {wp.add(&step, vms[i], frame_data[i]);}
-                if (vms[i].ppu.update_display.exchange(false, std::memory_order_acquire))
+                if (test_active[i] && !frame_data[i].in_progress.exchange(true, std::memory_order_acquire)) {wp.add(&step, vms[i], frame_data[i]);}
+                if (test_active[i] && vms[i].ppu.update_display.exchange(false, std::memory_order_acquire))
                     UpdateTexture(frame_data[i].texture, vms[i].ppu.get_active_display().data());
+                if (CheckCollisionPointRec(GetMousePosition(), frame_data[i].rec) && IsKeyPressed(KEY_M))
+                    test_active[i] = !test_active[i];
+                if (CheckCollisionPointRec(GetMousePosition(), frame_data[i].rec) && IsMouseButtonPressed(0))
+                    SetClipboardText(tests_paths[i].data());
             }
             BeginDrawing();
                 ClearBackground(WHITE);
                 for (int i = 0, e = tests_count; i < e; ++i) {
-                    if (CheckCollisionPointRec(GetMousePosition(), frame_data[i].rec) && IsMouseButtonPressed(0))
-                        SetClipboardText(tests_paths[i].data());
+                    DrawRectangleLinesEx(Rectangle{ frame_data[i].rec.x,  frame_data[i].rec.y,
+                                                        frame_data[i].rec.width + 5,  frame_data[i].rec.height + 5}, 1.f, test_active[i] ? GREEN : RED);
                     DrawTexturePro(frame_data[i].texture, {0, 0, (float)frame_data[i].texture.width, (float) frame_data[i].texture.height},
-                                   {frame_data[i].rec}, {0, 0}, 0, WHITE);
+                                     {frame_data[i].rec}, {0, 0}, 0, WHITE);
                 }
+
                 DrawFPS(0,0);
+                auto task_sz_res = task_sz_str + std::to_string(wp.task_queue_sz());
+                DrawText(task_sz_res.c_str(), WIDTH/2, 0, 12.f, RED);
             EndDrawing();
         }
         CloseWindow();

@@ -259,6 +259,10 @@ private:
             std::lock_guard lg(mt);
             return tasks.empty();
         }
+        size_t size() const {
+            std::lock_guard lg(mt);
+            return tasks.size();
+        }
         std::optional<Task> get_task(){
             std::lock_guard lg(mt);
             if (tasks.empty()) return std::nullopt;
@@ -302,6 +306,9 @@ public:
     }
     void add(Func f, Args&& ... args){
         task_pool.add(Task{f, std::forward<Args>(args)...});
+    }
+    size_t task_queue_sz() const {
+        return task_pool.size();
     }
     void run(){
         for (auto& el: thread_status) {el.sleep.store(false);}

@@ -70,7 +70,7 @@ namespace mappers {
         }
 
         inline void tick_irq(unsigned short addr, unsigned short prev_addr){
-            if (addr & 0x1000 && !(last_address & 0x1000)){ // maybe add 8 ppu-cycles filter
+            if (addr & 0x1000 && !(prev_addr & 0x1000)){ // maybe add 8 ppu-cycles filter
                 if (update_counter_req){
                     update_counter_req = false;
                     irq_counter = irq_latch;
@@ -85,7 +85,6 @@ namespace mappers {
                     }
                 }
             }
-            last_write_cycles = 0;
             last_address = addr;
         }
 
@@ -148,6 +147,7 @@ namespace mappers {
                 if (addr == 0xc001){
                     irq_counter = 0;
                     reload_flag = true;
+                    update_counter_req = false;
                 } else if (addr == 0xc000){
                     irq_latch = value;
                 }
@@ -331,11 +331,11 @@ struct Mapper {
 
     inline unsigned char read_chr_rom(unsigned short addr){
         switch (mtype) {
-            case NROM:   return nrom.read_chr_rom(chr, addr);
-            case MMC1: { return mmc1.read_chr_rom(chr, addr);}
-            case UxROM: { return uxrom.read_chr_rom(chr, addr);}
-            case CNROM:  return cnrom.read_chr_rom(chr, addr);
-            case MMC3: return mmc3.read_chr_rom(chr,addr);
+            case NROM:  { return nrom.read_chr_rom(chr, addr);  }
+            case MMC1:  { return mmc1.read_chr_rom(chr, addr);  }
+            case UxROM: { return uxrom.read_chr_rom(chr, addr); }
+            case CNROM: { return cnrom.read_chr_rom(chr, addr); }
+            case MMC3:  { mmc3.tick_irq(addr); return mmc3.read_chr_rom(chr,addr);}
             default: return 0xff;
         }
     }

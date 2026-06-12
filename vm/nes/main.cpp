@@ -389,9 +389,9 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, CPUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes"}.run(); // fc3e
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes"}.run(); // fc3e
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

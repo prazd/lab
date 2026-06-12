@@ -92,6 +92,8 @@ struct PPU {
 
     void tick(Bus&);
 
+    void secondary_oam_fill(Bus& bus);
+
     struct Sprite {
         unsigned char y_pos{};
         unsigned char pt_index{}; //  Index number of the sprite in the pattern tables.

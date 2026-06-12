@@ -68,7 +68,8 @@ void Bus::write(unsigned short addr, unsigned char value) {
         }
         case constants::PPUDATA:   {
             write_chr(ppu_v, value);
-            ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
+            auto prev = std::exchange(ppu_v , (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff);
+            mapper.update_state(ppu_v, prev);
             return;}
         case constants::OAMDMA : {
             dma_address = value << 8;
@@ -174,13 +175,15 @@ unsigned char Bus::read_prg(unsigned short addr) {
 
                 //  $3000-$3EFF	$0F00	Table Mirror $2000-$2EFF
                 ppudata = read_chr(ppu_v-0x1000);
-                ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
+                auto prev = std::exchange(ppu_v , (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff);
+                mapper.update_state(ppu_v, prev);
                 return res;
             }
             auto res = ppudata;
             open_bus_value = res;
             ppudata = read_chr(ppu_v);
-            ppu_v = (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff;
+            auto prev = std::exchange(ppu_v , (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff);
+            mapper.update_state(ppu_v, prev);
             return res;
         }
         case constants::CONTROLLER1: return c.read_status1();

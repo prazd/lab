@@ -383,58 +383,62 @@ void PPU::draw_pixel(Bus &bus) {
     }
 }
 
+void PPU::secondary_oam_fill(Bus& bus){
+    secondary_oam.reset();
+    if ((bus.ppumask >> 3) & 0x3) {
+        if (secondary_oam_buffer.empty()){
+            // dummy read for IRQ
+            bus.read_chr( last_address);
+        }
+        for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
+            bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1;
+            auto pt_base = (bus.sprite_mode == Bus::SpriteMode::m8x8 ?
+                            (!((bus.ppuctrl >> 3) & 1) ? constants::PATTERN_TABLE0_BEGIN
+                                                       : constants::PATTERN_TABLE1_BEGIN) :
+                            (secondary_oam_buffer[i].pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN
+                                                                  : constants::PATTERN_TABLE0_BEGIN));
+            auto pt_index = (bus.sprite_mode == Bus::SpriteMode::m8x8 ?
+                             secondary_oam_buffer[i].pt_index :
+                             secondary_oam_buffer[i].pt_index & 0xfe);
+            auto diff =  (current_y - secondary_oam_buffer[i].y_pos);
+            unsigned char current_index = pt_index;
+            if (diff < 8){
+                current_index += (bus.sprite_mode == Bus::SpriteMode::m8x16 && is_vertical_flip);
+            } else {
+                current_index += (!is_vertical_flip);
+            }
+            auto addr =  pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8));
+            auto l = bus.read_chr(addr);
+            auto h = bus.read_chr( addr + 8);
+            last_address = addr;
+
+            secondary_oam.push_back(SpriteData{
+                    .shift_l =  l,
+                    .shift_h =  h,
+                    .x_pos =  secondary_oam_buffer[i].x_pos,
+                    .attrib  =  secondary_oam_buffer[i].attrib,
+                    .oam_index =  secondary_oam_buffer[i].sprite_index,
+            });
+        }
+    }
+    secondary_oam_buffer.reset();
+}
+
 void PPU::tick(Bus& bus) {
     current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && (bus.ppumask >> 3) & 1 && !(frames_count & 1)); // todo: debug
     if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && ((bus.ppumask >> 3) & 1 || (bus.ppumask >> 4) & 1)) {
         draw_pixel(bus);
+        sprite_evaluate_tick(bus);
     }
-    sprite_evaluate_tick(bus);
+    if (current_y < 240 && current_scanline_cycle == 257)
+        secondary_oam_fill(bus);
+
     bg_tick(bus);
     bus.mapper.tick();
 #if DEBUG_MODE
     if (!is_sprite_off)
 #endif
-    if (current_scanline_cycle == 257) {
-        // 257-320
-        secondary_oam.reset();
-        if ((bus.ppumask >> 3) & 0x3) {
-            if (!secondary_oam_buffer.size()){
-                // dummy read for IRQ
-                bus.read_chr( last_address);
-            }
-            for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
-                bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1;
-                auto pt_base = (bus.sprite_mode == Bus::SpriteMode::m8x8 ?
-                                (!((bus.ppuctrl >> 3) & 1) ? constants::PATTERN_TABLE0_BEGIN
-                                                                : constants::PATTERN_TABLE1_BEGIN) :
-                                (secondary_oam_buffer[i].pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN
-                                                                      : constants::PATTERN_TABLE0_BEGIN));
-                auto pt_index = (bus.sprite_mode == Bus::SpriteMode::m8x8 ?
-                        secondary_oam_buffer[i].pt_index :
-                        secondary_oam_buffer[i].pt_index & 0xfe);
-                auto diff =  (current_y - secondary_oam_buffer[i].y_pos);
-                unsigned char current_index = pt_index;
-                if (diff < 8){
-                    current_index += (bus.sprite_mode == Bus::SpriteMode::m8x16 && is_vertical_flip);
-                } else {
-                    current_index += (!is_vertical_flip);
-                }
-                auto addr =  pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (diff % 8)) : (diff % 8));
-                auto l = bus.read_chr(addr);
-                auto h = bus.read_chr( addr + 8);
-                last_address = addr;
 
-                secondary_oam.push_back(SpriteData{
-                        .shift_l =  l,
-                        .shift_h =  h,
-                        .x_pos =  secondary_oam_buffer[i].x_pos,
-                        .attrib  =  secondary_oam_buffer[i].attrib,
-                        .oam_index =  secondary_oam_buffer[i].sprite_index,
-                });
-            }
-        }
-        secondary_oam_buffer.reset();
-    }
     ++current_scanline_cycle;
 
     // todo: timing debug
@@ -445,10 +449,15 @@ void PPU::tick(Bus& bus) {
         bus.nmi_interrupt_flip_flop = true;
     }
 
-    if (current_y == 261 && current_scanline_cycle == 1){
-        if ((bus.ppumask >> 3) & 1) update_current_display(); // todo: check
-        bus.nmi_interrupt_flip_flop = false; // todo: check
-        bus.ppustatus &= 0x3f;
+    if (current_y == 261){
+        sprite_evaluate_tick(bus);
+        if (current_scanline_cycle == 1) {
+            if ((bus.ppumask >> 3) & 1) update_current_display(); // todo: check
+            bus.nmi_interrupt_flip_flop = false; // todo: check
+            bus.ppustatus &= 0x3f;
+        } else if (current_scanline_cycle == 257) {
+            secondary_oam_fill(bus);
+        }
     }
 
     bus.current_ppu_cycle = current_cycle;
