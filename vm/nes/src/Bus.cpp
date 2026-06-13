@@ -318,8 +318,8 @@ void Bus::adjust_ppu_mirroring(unsigned short& addr) {
 unsigned short Bus::get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n) {
     using SM = Mapper::ScreenMirroring;
     switch (sm) {
-        case SM::Vertical: { return (n == 0 || n == 2) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
-        case SM::Horizontal: { return (n == 0 || n == 1) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
+        case SM::Vertical:   { return (n == 0 || n == 2) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
+        case SM::Horizontal: { return (n == 0 || n == 1) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE2_BEGIN;}
         case SM::SingleScreenLower: {return constants::NAME_TABLE0_BEGIN;}
         case SM::SingleScreenUpper: {return constants::NAME_TABLE1_BEGIN;}
         default:

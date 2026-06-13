@@ -72,7 +72,7 @@ struct NESVM {
                         8192 * cartridge.chr_rom_sz;
         bus.mapper.chr.resize(chr_sz);
         std::copy(cartridge.buffer.begin() + tiles_index_start, cartridge.buffer.end(), bus.mapper.chr.begin());
-        bus.mapper.update_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
+        bus.mapper.set_screen_mirroring(cartridge.is_horizontal_arrangement, cartridge.is_alternative_nametable);
         bus.mapper.is_chr_ram = cartridge.chr_rom_sz == 0;
     }
 
@@ -391,7 +391,7 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, PPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes"}.run(); // fc3e
+    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros3.nes"}.run(); // fc3e
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

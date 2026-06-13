@@ -151,8 +151,8 @@ void PPU::bg_tick(Bus &bus) {
                 if (y_fine_add_prev == 7){
                     auto y_coarse_val = ((v >> 5) & 0x1f); // todo: check
                     if (y_coarse_val == 29) {
-                        v ^= 0x800;
                         v = 0;
+                        v ^= 0x800;
                     } else if (y_coarse_val == 31) {
                         v = 0;
                     } else {
@@ -228,19 +228,7 @@ void PPU::reset() {
 }
 
 void PPU::update_base_nt(Bus& bus) {
-    base_name_table_address = get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, ((bus.ppu_v >> 10) & 0x3));
-}
-
-unsigned short PPU::get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n) {
-    using SM = Mapper::ScreenMirroring;
-    switch (sm) {
-        case SM::Vertical:   { return (n == 0 || n == 2) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE1_BEGIN;}
-        case SM::Horizontal: { return (n == 0 || n == 1) ? constants::NAME_TABLE0_BEGIN : constants::NAME_TABLE3_BEGIN;}
-        case SM::SingleScreenLower: {return constants::NAME_TABLE0_BEGIN;}
-        case SM::SingleScreenUpper: {return constants::NAME_TABLE1_BEGIN;}
-        default:
-            return constants::NAME_TABLE0_BEGIN;
-    }
+    base_name_table_address = bus.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, ((bus.ppu_v >> 10) & 0x3));
 }
 
 void PPU::fetch_tile_data_step(Bus& bus) {

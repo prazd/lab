@@ -142,9 +142,9 @@ namespace mappers {
                     prg_banks_mode = (value >> 6) & 1;
                 }
             } else if (addr >= 0xa000 && addr <= 0xbffe) {
-                is_vertical = (value & 1);
+                if (!(addr & 1)) is_vertical = !(value & 1);
             } else if (addr >= 0xc000 && addr <= 0xDFFF) {
-                if (addr == 0xc001){
+                if (addr & 1){
                     irq_counter = 0;
                     reload_flag = true;
                     update_counter_req = false;
@@ -296,7 +296,30 @@ struct Mapper {
     mappers::UXROM uxrom;
     mappers::MMC3 mmc3;
 
-    inline void update_screen_mirroring(bool is_horizontal_arrangement, bool is_alternative_nametable) {
+    inline void set_screen_mirroring(bool is_horizontal_arrangement, bool is_alternative_nametable) {
+        switch (mtype) {
+            case MMC1: {
+                switch (mmc1.get_screen_mirroring_value()) {
+                    case 0b00: current_screen_mirroring = SingleScreenLower; break;
+                    case 0b01: current_screen_mirroring = SingleScreenUpper; break;
+                    case 0b10: current_screen_mirroring = Vertical;          break;
+                    case 0b11: current_screen_mirroring = Horizontal;        break;
+                }
+                break;
+            }
+            case MMC3: {
+                mmc3.is_vertical = !is_horizontal_arrangement;
+                current_screen_mirroring = mmc3.is_vertical ? Vertical: Horizontal;
+                break;
+            }
+            default: {
+                current_screen_mirroring = is_horizontal_arrangement ? Horizontal : Vertical;
+                break;
+            }
+        }
+    }
+
+    inline void update_screen_mirroring(bool is_horizontal_arrangement) {
         switch (mtype) {
             case MMC1: {
                 switch (mmc1.get_screen_mirroring_value()) {
@@ -352,11 +375,11 @@ struct Mapper {
     inline void handle(unsigned short addr, unsigned char value){
         switch (mtype) {
             case MMC1: {
-                if (mmc1.handle(addr, value)) update_screen_mirroring(false,false); break;}
+                if (mmc1.handle(addr, value)) update_screen_mirroring(false); break;}
             case UxROM:
                 uxrom.handle(addr, value); break;
             case CNROM: {cnrom.handle(addr, value);  break;}
-            case MMC3:  {mmc3.tick_irq(addr); mmc3.handle(addr, value); update_screen_mirroring(false, false); break;}
+            case MMC3:  {mmc3.tick_irq(addr); mmc3.handle(addr, value); update_screen_mirroring(false); break;}
             default: return;
         }
     }

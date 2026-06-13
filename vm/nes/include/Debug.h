@@ -207,7 +207,7 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                             DW::buffer[current++] = RED;
                             ++current_nt;
                         }
-                        auto nt =  ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt);
+                        auto nt =  bus.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt);
                         auto x_tile_n = (i % 32);
                         auto y_tile_n = current_nt_y % 30;
                         auto pt_addr = ((base_pt_address + (16 * *(bus.ppu_map + nt + (y_tile_n * 32) + x_tile_n))));
@@ -256,7 +256,7 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                             ++current_nt;
                         }
                         auto pt_addr = ((base_pt_address + (16 *
-                                                            *(bus.ppu_map + (ppu.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) +
+                                                            *(bus.ppu_map + (bus.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, current_nt) +
                                                                              ((current_nt_y % 30) * 32) + (i % 32))))));
                         auto l_tile = bus.unsafe_read_chr(pt_addr + z);
                         auto h_tile = bus.unsafe_read_chr(pt_addr + z + 8);

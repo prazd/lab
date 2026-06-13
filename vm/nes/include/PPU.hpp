@@ -256,7 +256,6 @@ struct PPU {
     };
 
     void update_base_nt(Bus& bus);
-    unsigned short get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n);
 
     unsigned char tile_byte_from_addr(Bus& bus, unsigned short addr);
 
