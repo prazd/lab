@@ -15,6 +15,8 @@
 #define GAME_GENIE_MODE 0
 #endif
 
+#define HEX_COUT(val, n) std::setw(n) << std::setfill('0') << val
+
 namespace constants {
     constexpr float WIDTH = 600.f;
     constexpr float HEIGHT = 600.f;
