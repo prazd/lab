@@ -2019,7 +2019,7 @@ struct Snapshot: DebugWindowText<x, y, w, h> {
         }
 
         auto draw_diff = [](auto& ss, auto text, auto a, auto b, int rx, int ry){
-            ss << ' ' << text << ':' << a << "         " << text << ':' << b;
+            ss << ' ' << text << ':' << HEX_COUT(a, 4) << "         " << text << ':' << HEX_COUT(b, 4);
             auto s = ss.str();
             DrawText(s.c_str(), rx, ry,12.f, a == b ? BLACK : RED);
             ss.str("");

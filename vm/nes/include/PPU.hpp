@@ -77,6 +77,8 @@ struct PPU {
             Sp = 1,
             BgSp = 2,
             NBgSp = 3,
+            SpriteOnly = 4,
+            BgOnly = 5,
         };
         unsigned char data{};
         inline void set(bool val, Mode m){ data &= ((~(1 << m)) & 0x7); data |= (val << m);}

@@ -247,7 +247,7 @@ void Bus::write_chr(unsigned short addr, unsigned char value){
         ppu_addr_triggered_on_write = ppu_trigger_write_addresses[addr];
     }
 #endif
-    if (addr >= 0x0000 && addr <= 0x1FFF && ((ppustatus >> 7) & 1 || !((ppumask >> 3) & 1) || !((ppumask >> 4) & 1))) {
+    if (addr >= 0x0000 && addr <= 0x1FFF && ((ppustatus >> 7) & 1 || !(ppumask & 0x8) || !(ppumask & 0x10))) {
         mapper.write_chr_ram(addr, value);
     } else if (addr >= 0x2000 && addr <= 0x3fff){
         ppu_map[addr] = value;
@@ -256,7 +256,7 @@ void Bus::write_chr(unsigned short addr, unsigned char value){
 
 void Bus::unsafe_write_chr(unsigned short addr, unsigned char value){
     adjust_ppu_mirroring(addr);
-    if (addr >= 0x0000 && addr <= 0x1FFF && ((ppustatus >> 7) & 1 || !((ppumask >> 3) & 1) || !((ppumask >> 4) & 1))) {
+    if (addr >= 0x0000 && addr <= 0x1FFF && ((ppustatus >> 7) & 1 || !(ppumask & 0x8) || !(ppumask & 0x10))) {
         mapper.write_chr_ram(addr, value);
     } else if (addr >= 0x2000 && addr <= 0x3fff){
         ppu_map[addr] = value;

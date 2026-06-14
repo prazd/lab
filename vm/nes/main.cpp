@@ -338,14 +338,16 @@ struct NESVM {
                     cpu.stop_requested = !cpu.stop_requested;
                 if (IsKeyPressed(KEY_X))
                     grid_view_enable = !grid_view_enable;
-                if (IsKeyPressed(KEY_ONE))
-                    ppu.pixel_mixing_debug_view.m_switch(PPU::PixelMixingDebugView::Mode::Bg);
-                if (IsKeyPressed(KEY_TWO))
-                    ppu.pixel_mixing_debug_view.m_switch(PPU::PixelMixingDebugView::Mode::Sp);
-                if (IsKeyPressed(KEY_THREE))
-                    ppu.pixel_mixing_debug_view.m_switch(PPU::PixelMixingDebugView::Mode::BgSp);
-                if (IsKeyPressed(KEY_FOUR))
-                    ppu.pixel_mixing_debug_view.m_switch(PPU::PixelMixingDebugView::Mode::NBgSp);
+
+                if (IsKeyPressed(KEY_ONE) ||
+                    IsKeyPressed(KEY_TWO) ||
+                    IsKeyPressed(KEY_THREE) ||
+                    IsKeyPressed(KEY_FOUR) ||
+                    IsKeyPressed(KEY_FIVE) ||
+                    IsKeyPressed(KEY_SIX)
+                ){
+                    ppu.pixel_mixing_debug_view.m_switch(static_cast<PPU::PixelMixingDebugView::Mode>(GetKeyPressed() - KEY_ONE));
+                }
                 if (IsKeyPressed(KEY_C)){
                     ppu.displays[0].fill(WHITE);
                     ppu.displays[1].fill(WHITE);
@@ -391,7 +393,7 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, PPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros3.nes"}.run(); // fc3e
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes"}.run(); // fc3e
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }
