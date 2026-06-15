@@ -1,6 +1,7 @@
 #ifndef NES_CONSTANTS_HPP
 #define NES_CONSTANTS_HPP
 #include <iostream>
+#define HIDE_OVERSCAN 1
 #define DEBUG_MODE 1
 #define GAME_GENIE_MODE 0
 #define MULTI_TEST_MODE 0
@@ -15,7 +16,7 @@
 #define GAME_GENIE_MODE 0
 #endif
 
-#define HEX_COUT(val, n) std::setw(n) << std::setfill('0') << val
+#define HEX_COUT(val, n) std::hex << std::setw(n) << std::setfill('0') << val
 
 namespace constants {
     constexpr float WIDTH = 600.f;

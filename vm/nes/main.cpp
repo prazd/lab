@@ -393,7 +393,7 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, PPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/scrolltest/scroll.nes"}.run(); // fc3e
+    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros3.nes"}.run(); // fc3e
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

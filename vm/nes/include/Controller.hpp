@@ -20,6 +20,12 @@ struct Controller {
         KEY_UP,KEY_DOWN,
         KEY_LEFT, KEY_RIGHT
     };
+    KeyboardKey keys2[8] = {
+            KEY_LEFT_BRACKET,KEY_RIGHT_BRACKET,
+            KEY_SPACE,KEY_ENTER,
+            KEY_W,KEY_S,
+            KEY_A, KEY_D
+    };
 #if DEBUG_MODE
     unsigned char custom_status{};
     static void cs_switch(Controller& c, int i, bool dir){
@@ -43,10 +49,10 @@ struct Controller {
             for (int i = 0; i < 8; ++i)
                 status1 |=
 #if DEBUG_MODE
-                        ((custom_status & (1 << i)) | (IsKeyDown(keys1[i]) << i));
+                        ((custom_status & (1 << i)) | (IsKeyDown(keys1[i]) || IsKeyDown(keys2[i])) << i);
 #else
 
-                        (IsKeyDown(keys1[i]) << i);
+                        ((IsKeyDown(keys1[i]) || IsKeyDown(keys2[i])) << i);
 #endif
             current1 = 0;
             latch1 = false;

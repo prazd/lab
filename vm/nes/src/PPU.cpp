@@ -134,7 +134,7 @@ void PPU::bg_tick(Bus &bus) {
 #endif
     if (current_y < 240){
         // 1-256 cycles
-        if (current_scanline_cycle >= 1 && current_scanline_cycle <= 256 && bus.ppumask & 0x1f) {
+        if (current_scanline_cycle >= 1 && current_scanline_cycle <= 256) {
             fetch_tile_data_step(bus);
 
 #if DEBUG_MODE
@@ -143,7 +143,7 @@ void PPU::bg_tick(Bus &bus) {
                 update_shifts = false;
             }
 #endif
-            if (current_scanline_cycle == 256){
+            if (current_scanline_cycle == 256 && bus.ppumask & 0x18){
                 unsigned char y_fine_add_prev = ((v >> 12) & 0x7);
                 unsigned char y_fine_add_val = ((((v >> 12) & 0x7) + 1) & 0x7);
                 v &= 0x8fff;
@@ -162,12 +162,12 @@ void PPU::bg_tick(Bus &bus) {
                     }
                 }
             }
-        } else if(current_scanline_cycle == 257 && bus.ppumask & 0x1f) {
+        } else if(current_scanline_cycle == 257 && bus.ppumask & 0x18) {
             // TODO: debug (oam_read test (v & 0x1f) == 2)
             // set coarse x + update ntx bit
             v &= 0xfbe0;
             v |= (bus.ppu_t & 0x41f);
-        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && bus.ppumask & 0x1f) {
+        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336) {
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
@@ -175,17 +175,17 @@ void PPU::bg_tick(Bus &bus) {
             fetch_tile_data_step(bus);
         }
     } else if (current_y == 261){
-        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257 && bus.ppumask & 0x1f) {
+        if (current_scanline_cycle >= 1 && current_scanline_cycle < 257) {
             // todo: check
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
-        } else if (current_scanline_cycle == 280 && bus.ppumask & 0x1f) {
+        } else if (current_scanline_cycle == 280 && bus.ppumask & 0x18) {
             v &= 0x841f;
             v |= (bus.ppu_t & 0x7be0);
-        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336 && bus.ppumask & 0x1f){
+        } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336){
             shift_register_high <<= 1;
             shift_register_low <<= 1;
             attributes_low <<= 1;
@@ -231,55 +231,80 @@ void PPU::update_base_nt(Bus& bus) {
     base_name_table_address = bus.get_nt_by_mirror_mode(bus.mapper.current_screen_mirroring, ((bus.ppu_v >> 10) & 0x3));
 }
 
-void PPU::fetch_tile_data_step(Bus& bus) {
+void PPU::tile_data_fetch(Bus& bus) {
     auto& v = bus.ppu_v;
-    auto& t = bus.ppu_t;
+    unsigned char x_tile_n = (v & 0x1f);
+    unsigned char y_tile_n = ((v >> 5) & 0x1f);
+    update_base_nt(bus);
+    switch (current_step) {
+        case NT:  {
+            nt_byte = bus.read_chr(  base_name_table_address + (y_tile_n * 32) + x_tile_n);
+            current_step = AT;
+            break;} // 42
+        case AT:  {
+            auto val = bus.read_chr(   base_name_table_address + 0x3c0 + (y_tile_n/4 * 8) + x_tile_n/4);
+            // TODO: check
+            //  3 3 2 2
+            //  3 3 2 2
+            //  1 1 0 0
+            //  1 1 0 0
+            auto shift_y = (y_tile_n/2) % 2;
+            auto shift_x = (x_tile_n/2) % 2;
+            attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
+            current_step = PTL;
+            break;}  // fetch attribute table byte
+        case PTL: {
+            pattern_table_l = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, false, (bus.ppuctrl >> 4) & 1));
+            current_step = PTH; break;}     // pattern table tile low
+        case PTH: {
+            pattern_table_h = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, true, (bus.ppuctrl >> 4) & 1));
+            shift_register_low &= 0xff00;
+            shift_register_low |=  pattern_table_l;
+            shift_register_high &= 0xff00;
+            shift_register_high |= pattern_table_h;
 
-    if (!(current_scanline_cycle & 1)) {
-        unsigned char x_tile_n = (v & 0x1f);
-        unsigned char y_tile_n = ((v >> 5) & 0x1f);
-        update_base_nt(bus);
-        switch (current_step) {
-            case NT:  {
-                nt_byte = bus.read_chr(  base_name_table_address + (y_tile_n * 32) + x_tile_n); current_step = AT;  break;} // 42
-            case AT:  {
-                auto val = bus.read_chr(   base_name_table_address + 0x3c0 + (y_tile_n/4 * 8) + x_tile_n/4);
-                // TODO: check
-                //  3 3 2 2
-                //  3 3 2 2
-                //  1 1 0 0
-                //  1 1 0 0
-                auto shift_y = (y_tile_n/2) % 2;
-                auto shift_x = (x_tile_n/2) % 2;
-                attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
-                current_step = PTL;
-                break;}  // fetch attribute table byte
-            case PTL: {
-                pattern_table_l = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, false, (bus.ppuctrl >> 4) & 1));
-                current_step = PTH; break;}     // pattern table tile low
-            case PTH: {
-                pattern_table_h = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, true, (bus.ppuctrl >> 4) & 1));
-                shift_register_low &= 0xff00;
-                shift_register_low |=  pattern_table_l;
-                shift_register_high &= 0xff00;
-                shift_register_high |= pattern_table_h;
+            unsigned char prev = (v & 0x1f);
+            unsigned char add_val = (((v & 0x1f) + 1) % 32);
+            if (prev == 31)
+                v ^= 0x400;
+            v &= 0xffe0;
+            v |= add_val;
+            attributes_low &= 0xff00;
+            attributes_high &= 0xff00;
 
-                unsigned char prev = (v & 0x1f);
-                unsigned char add_val = (((v & 0x1f) + 1) % 32);
-                if (prev == 31)
-                    v ^= 0x400;
-                v &= 0xffe0;
-                v |= add_val;
-                attributes_low &= 0xff00;
-                attributes_high &= 0xff00;
-
-                attributes_low |= (attrib_value & 0x1) ? 0xff : 0;
-                attributes_high |= (attrib_value & 0x2) ? 0xff : 0;
+            attributes_low |= (attrib_value & 0x1) ? 0xff : 0;
+            attributes_high |= (attrib_value & 0x2) ? 0xff : 0;
 #if DEBUG_MODE
-                update_shifts = true;
+            update_shifts = true;
 #endif
-                current_step = NT;  break;}  // pattern table tile high
-        }
+            current_step = NT;
+            break;}  // pattern table tile high
+    }
+}
+
+void PPU::tile_data_dummy_fetch(Bus& bus) {
+    switch (current_step) {
+        case NT: {
+            current_step = AT;
+            break;}
+        case AT:  {
+            current_step = PTL;
+            break;}
+        case PTL: {
+            current_step = PTH;
+            break;}
+        case PTH: {
+            current_step = NT;
+            break;}
+    }
+}
+
+void PPU::fetch_tile_data_step(Bus& bus) {
+    if (!(current_scanline_cycle & 1)) {
+        if (bus.ppumask & 0x18)
+            tile_data_fetch(bus);
+        else
+            tile_data_dummy_fetch(bus);
     }
 }
 
@@ -317,16 +342,16 @@ void PPU::draw_pixel(Bus &bus) {
     // clipping
     if (current_x % 256 <= 7) { bg_data *= (bus.ppumask >> 1) & 1; sprite_data *= (bus.ppumask >> 2) & 1;}
 
-    if (bg_data == 0 && (sprite_data != 0 && (bus.ppumask >> 4) & 1)){
+    if (bg_data == 0 && (sprite_data != 0 && bus.ppumask & 0x10)){
         is_sprite = true;
         res = sprite_data;
     } else if (bg_data != 0 && sprite_data == 0)
         res = bg_data;
     else if (bg_data != 0 && sprite_data != 0) { // zero hit
-        if (oam_index == 0 && (bus.ppumask >> 4) & 1 && (bus.ppumask >> 3) & 1 && ((current_x & 0xff) != 0xff) && !(bus.ppustatus & (0x80)) && !(bus.ppustatus & 0x40)){
+        if (oam_index == 0 && bus.ppumask & 0x10 && bus.ppumask & 0x8 && ((current_x & 0xff) != 0xff) && !(bus.ppustatus & (0x80)) && !(bus.ppustatus & 0x40)){
             bus.ppustatus |= (1 << 6);
         }
-        res = (!is_bg_prio && (bus.ppumask >> 4) & 1) ? (is_sprite = true, sprite_data) : bg_data;
+        res = (!is_bg_prio && (bus.ppumask & 0x10)) ? (is_sprite = true, sprite_data) : bg_data;
     } else {
         universal_background = true;
     }
@@ -351,6 +376,10 @@ void PPU::draw_pixel(Bus &bus) {
                                          (is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN) + index));
 
     if (bus.ppumask & 1) pixel_index &= 0x30;
+#if !HIDE_OVERSCAN
+    if (current_y <= 7 || current_y >= 232 || current_x % 256 <= 15 || current_x % 256 >= 240)
+        pixel_index = 13; // BLACK
+#endif
 #if DEBUG_MODE
     if (bg_data == 0 && sprite_data != 0 && pixel_mixing_debug_view.get(PPU::PixelMixingDebugView::Mode::Bg))
         update_internal_display(ORANGE);
@@ -383,7 +412,7 @@ void PPU::draw_pixel(Bus &bus) {
 
 void PPU::secondary_oam_fill(Bus& bus){
     secondary_oam.reset();
-    if (bus.ppumask & 0x1f) {
+    if (bus.ppumask & 0x18) {
         if (secondary_oam_buffer.empty()){
             // dummy read for IRQ
             bus.read_chr( last_address);
@@ -440,7 +469,7 @@ void PPU::tick(Bus& bus) {
     ++current_scanline_cycle;
 
     // todo: timing debug
-    if (current_y == 241 && current_scanline_cycle == 1) {
+    if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1)) {
         bus.ppustatus &= 0x5f; // todo: check zero hit value set to zero
         bus.ppustatus |= 1 << 7;
         bus.current_nmi_cycle = bus.master_clock;
@@ -464,6 +493,8 @@ void PPU::tick(Bus& bus) {
         current_scanline_cycle = 0;
         current_oam_index = sprite_evaluation_index = 0;
         current_y = current_y == 261 ? (current_x = 0) : current_y + 1;
-        if (current_y == 0) current_step = NT;
+#if DEBUG_MODE
+        assert(current_step == NT);
+#endif
     }
 }
