@@ -79,7 +79,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
             return;
         }
         case constants::CONTROLLER1: { if (value) c.latch1 = true; else c.update_status1(); return; }
-        case constants::CONTROLLER2_AND_APU_FC: { apufc = value; return; }
+        case constants::CONTROLLER2_AND_APU_FC: { apufc_requested = true; apufc = value; return; }
     }
     cpu_map[addr] = value;
 }

@@ -1,6 +1,8 @@
 #include <iostream>
 #include <iterator>
+#include <SDL.h>
 #include "raylib.h"
+#include "APU.h"
 #include "PPU.hpp"
 #include "CPU.hpp"
 #include "Cartridge.h"
@@ -8,6 +10,8 @@
 #include "MultiTest.h"
 
 struct NESVM {
+    APU apu{};
+    Uint32 audio_dev;
     Bus bus{};
     CPU cpu{};
     PPU ppu{};
@@ -25,6 +29,12 @@ struct NESVM {
 #endif
     {};
 
+    void apu_tick(){
+        apu.tick(bus);
+        if (apu.buffer_i % 512 == 0){
+            SDL_QueueAudio(audio_dev, apu.buffer, 256);
+        }
+    }
     void cpu_tick(){
         cpu.tick_step(bus);
         ++cpu.cycles_count;
@@ -121,7 +131,7 @@ struct NESVM {
                 ppu_tick();
                 bus.tick();
 
-                ppu_tick(); cpu_tick();
+                ppu_tick(); cpu_tick(); apu_tick();
                 bus.tick();
                 ++current_tick;
             }
@@ -163,6 +173,7 @@ struct NESVM {
             }
             if (cpu_tick_count++ % 3 == 2) {
                 cpu_tick();
+                apu_tick();
                 if (dis.is_line_jump_active && ppu.line_start) {
                     dis.is_line_jump_active = false;
                 }
@@ -288,7 +299,21 @@ struct NESVM {
         auto display_texture = LoadTextureFromImage(img);
         Rectangle display_rec = {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f};
         UnloadImage(img);
+#if APU_ON
+        SDL_Init(SDL_INIT_AUDIO);
+        SDL_AudioSpec want{};
+        want.freq = 44100;
+        want.format = AUDIO_S16LSB;
+        want.channels = 2;
+        want.samples = 256;
 
+        audio_dev = SDL_OpenAudioDevice(nullptr, 0, &want, nullptr, 0);
+        if (!audio_dev){
+            std::cout << "SDL_OpenAudioDevice error\n";
+            std::abort();
+        }
+        SDL_PauseAudioDevice(audio_dev, 0);
+#endif
         ppu.displays[0].fill(BLACK);
         ppu.displays[1].fill(BLACK);
         ppu_init();
@@ -362,6 +387,10 @@ struct NESVM {
             DrawFPS(0,0);
             EndDrawing();
         }
+#if APU_ON
+        SDL_CloseAudioDevice(audio_dev);
+        SDL_Quit();
+#endif
         CloseWindow();
     }
 };
@@ -393,7 +422,7 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, PPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros3.nes"}.run(); // fc3e
+    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // fc3e
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

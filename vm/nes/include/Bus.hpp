@@ -94,6 +94,7 @@ struct Bus {
     unsigned char ppu_x{};
 
     unsigned char apufc{};
+    bool apufc_requested = false;
     Controller c;
 
     void adjust_ppu_mirroring(unsigned short&);

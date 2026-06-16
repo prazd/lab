@@ -425,6 +425,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     unsigned short pc{};
     unsigned char selected_scanline{};
     bool selected_scanline_active{};
+    bool dump_state_request = 0;
 
     bool is_frame_jump_active = false;
     bool is_tile_line_jump_active = false;
@@ -502,6 +503,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         res_ptr += Mapper::prg.size();
         memcpy(res_ptr, Mapper::chr.data(), Mapper::chr.size());
         DW::save_data_to_file("state_dump", (const char*)res.data(), res.size());
+        dump_state_request = false;
     }
 
     void import_state(Bus& bus, CPU& cpu, PPU& ppu) {
@@ -685,11 +687,13 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             auto s = lss.str();
             DW::save_data_to_file(u_input.s, (char*)s.c_str(), (long)s.size());
         }  else if (CheckCollisionPointRec(GetMousePosition(), state_dump_button) && IsMouseButtonPressed(0)){
-            dump_state(bus, cpu, ppu);
+            dump_state_request = true;
         } else if  (CheckCollisionPointRec(GetMousePosition(), state_import_button) && IsMouseButtonPressed(0)){
             import_state(bus, cpu, ppu);
         }
 
+        if (dump_state_request && cpu.istep == CPU::Fetch && cpu.iop.empty())
+            dump_state(bus, cpu, ppu);
 
         for (int i = 0; i < 10; ++i){
             auto r = Rectangle{line_button.x, line_button.y + i * (line_button.height + 25.f), line_button.width, line_button.height};

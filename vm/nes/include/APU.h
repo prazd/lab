@@ -1,7 +1,6 @@
 #ifndef NES_APU_H
 #define NES_APU_H
 #include "Bus.hpp"
-#include "CPU.hpp"
 struct Channel {
     unsigned short timer{};
     unsigned char envelope{};
@@ -24,14 +23,14 @@ template <unsigned short timer_l,
           unsigned short duty_envelope>
 struct PulseChan : Channel {
     unsigned char current_duty_step{};
-    inline void tick_timer(Bus& bus, CPU& cpu){
+    inline void tick_timer(Bus& bus){
         --timer;
         if (!timer){
             current_duty_step = (current_duty_step + 1) % 8;
             update_timer(bus.unsafe_read_prg(timer_l), bus.unsafe_read_prg(timer_h));
         }
     }
-    inline unsigned char get_duty_cycle(Bus& bus, CPU& cpu) const {
+    inline unsigned char get_duty_cycle(Bus& bus) const {
         switch((bus.unsafe_read_prg(duty_envelope) >> 6) & 0x3){
             case 0:  return  0b0100'0000; // 12.5%
             case 1:  return  0b0110'0000; // 25%
@@ -39,11 +38,11 @@ struct PulseChan : Channel {
             default: return  0b1001'1111; // 25% (negated)
         }
     }
-    inline unsigned char get_duty_value(Bus& bus, CPU& cpu) const {
-        return (get_duty_cycle(bus, cpu) >> current_duty_step) & 1;
+    inline unsigned char get_duty_value(Bus& bus) const {
+        return (get_duty_cycle(bus) >> current_duty_step) & 1;
     }
-    inline unsigned char get_dac(Bus& bus, CPU& cpu) const {
-        return get_duty_value(bus, cpu) ? envelope & 0xf : 0;
+    inline unsigned char get_dac(Bus& bus) const {
+        return get_duty_value(bus) ? envelope & 0xf : 0;
     }
 };
 
@@ -60,6 +59,11 @@ struct DMCChan : Channel {
 };
 
 struct APU {
+    short buffer[1024]{};
+    size_t buffer_i = 0;
+    size_t current_tick = 0;
+    size_t sample_acc = 0;
+
     PulseChan<constants::PULSE1_TIMER_LOW,
             constants::PULSE1_TIMER_HIGH,
             constants::PULSE1_DUTY_ENVELOPE> pulse_ch1{};
@@ -79,11 +83,12 @@ struct APU {
         Step4, Step5
     } frame_counter_mode = Step4;
 
-    void tick(Bus& bus, CPU& cpu);
-    void handle_frame_counter_update(Bus& bus, CPU& cpu);
-    void frame_counter_step4(Bus& bus, CPU& cpu);
-    void frame_counter_step5(Bus& bus, CPU& cpu);
-    void frame_counter_quarter_update(Bus& bus, CPU& cpu);
-    void frame_counter_half_update(Bus& bus, CPU& cpu);
+    void tick(Bus& bus);
+    void handle_frame_counter_update(Bus& bus);
+    void frame_counter_step4(Bus& bus);
+    void frame_counter_step5(Bus& bus);
+    void frame_counter_quarter_update(Bus& bus);
+    void frame_counter_half_update(Bus& bus);
+    float gen_sample(Bus& bus);
 };
 #endif
