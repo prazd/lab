@@ -79,7 +79,16 @@ void Bus::write(unsigned short addr, unsigned char value) {
             return;
         }
         case constants::CONTROLLER1: { if (value) c.latch1 = true; else c.update_status1(); return; }
-        case constants::CONTROLLER2_AND_APU_FC: { apufc_requested = true; apufc = value; return; }
+        case constants::CONTROLLER2_AND_APU_FC: {if (value == 0x80) apu_clock_len_counter = true; apufc_requested = true; apufc = value; return; }
+        case constants::APU_CONTROL: {
+            apu_enable_req = true;
+            apu_enable = value; return;}
+    }
+    if (addr == constants::PULSE1_DUTY_ENVELOPE){
+        apu_pulse1_envelope_update = true;
+    } else if (addr == constants::PULSE1_TIMER_HIGH){
+        apu_pulse1_start_flag = true;
+        apu_pulse1_timer_update = true;
     }
     cpu_map[addr] = value;
 }
@@ -188,6 +197,7 @@ unsigned char Bus::read_prg(unsigned short addr) {
         }
         case constants::CONTROLLER1: return c.read_status1();
         case constants::CONTROLLER2_AND_APU_FC: return 0;
+        case constants::APU_CONTROL: return apu_control;
     }
 
     return cpu_map[addr];

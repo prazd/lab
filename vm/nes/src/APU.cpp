@@ -9,7 +9,7 @@ void APU::frame_counter_step4(Bus& bus) {
     } else if (cycle_counter == 7457 * 4) {
         frame_counter_quarter_update(bus);
         frame_counter_half_update(bus);
-        if (!irq_inhibit) bus.irq_interrupt_flip_flop = true;
+        if (!irq_inhibit) {bus.irq_interrupt_flip_flop = true; bus.apu_control |= 0x80;}
     }
     cycle_counter = (cycle_counter + 1) % ((7457 * 4) + 1);
 }
@@ -28,18 +28,13 @@ void APU::frame_counter_step5(Bus& bus) {
 }
 
 void APU::frame_counter_quarter_update(Bus& bus) {
-    pulse_ch1.update_envelope(bus.unsafe_read_prg(constants::PULSE1_DUTY_ENVELOPE));
-    pulse_ch2.update_envelope(bus.unsafe_read_prg(constants::PULSE2_DUTY_ENVELOPE));
-    noise_ch.update_envelope(bus.unsafe_read_prg(constants::NOISE_CHAN_ENVELOPE));
-    // todo: update triangle linear counter
+    if (bus.apu_is_enable(Bus::APUChan::Pulse1))
+        pulse_ch1.envelope_tick(bus);
 }
 
 void APU::frame_counter_half_update(Bus& bus) {
-    pulse_ch1.update_length_counter(bus.unsafe_read_chr(constants::PULSE1_TIMER_HIGH));
-    pulse_ch2.update_length_counter(bus.unsafe_read_prg(constants::PULSE2_TIMER_HIGH));
-    noise_ch.update_length_counter(bus.unsafe_read_prg(constants::NOISE_CHAN_LENGTH_COUNTER));
-    triangle_ch.update_length_counter(bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH));
-    // todo: update sweep
+    if (bus.apu_is_enable(Bus::APUChan::Pulse1) && pulse_ch1.length_counter && bus.unsafe_read_prg(constants::PULSE1_DUTY_ENVELOPE) & 0x20)
+        --pulse_ch1.length_counter;
 }
 
 void APU::handle_frame_counter_update(Bus& bus) {
@@ -62,10 +57,36 @@ float APU::gen_sample(Bus &bus) {
     return res;
 }
 
+void APU::update_control(Bus& bus){
+    bus.apu_control = 0;
+    bus.apu_control |= (pulse_ch1.length_counter > 0) << 1;
+}
+
 void APU::tick(Bus& bus) {
 #if !APU_ON
     return;
 #endif
+    if (bus.apu_enable_req){
+        pulse_ch1.length_counter = bus.apu_is_enable(Bus::Pulse1) ? 0 : pulse_ch1.length_counter;
+        bus.apu_enable_req = false;
+    }
+
+    if (bus.apu_pulse1_envelope_update){
+        pulse_ch1.update_envelope(bus, bus.read_prg(bus.unsafe_read_prg(constants::PULSE1_DUTY_ENVELOPE)));
+        bus.apu_pulse1_envelope_update = false;
+    }
+    if (bus.apu_clock_len_counter){
+        frame_counter_half_update(bus);
+        bus.apu_clock_len_counter = false;
+    }
+    if (bus.apu_pulse1_timer_update){
+        if (bus.apu_is_enable(Bus::Pulse1)) {
+            pulse_ch1.length_counter = length_table[((bus.unsafe_read_prg(constants::PULSE1_TIMER_HIGH) >> 3) & 0x1f)];
+            pulse_ch1.current_duty_step = 0;
+            pulse_ch1.envelope = 15; // set start flag
+        }
+        bus.apu_pulse1_timer_update = false;
+    }
     handle_frame_counter_update(bus);
     if (current_tick & 1){
         if (frame_counter_mode == Step4)
@@ -73,7 +94,6 @@ void APU::tick(Bus& bus) {
         else
             frame_counter_step5(bus);
         pulse_ch1.tick_timer(bus);
-        //    pulse_ch2.tick_timer(bus, cpu);
     }
     sample_acc += 44100;
     if (sample_acc >= constants::CPU_SPEED){
@@ -84,4 +104,5 @@ void APU::tick(Bus& bus) {
         buffer_i = buffer_i + 2 == 1024 ? 0 : buffer_i + 2;
     }
     ++current_tick;
+    update_control(bus);
 }

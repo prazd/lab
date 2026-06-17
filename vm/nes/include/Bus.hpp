@@ -93,8 +93,21 @@ struct Bus {
     bool ppu_w{};
     unsigned char ppu_x{};
 
+
     unsigned char apufc{};
     bool apufc_requested = false;
+    bool apu_enable_req = false;
+    unsigned char apu_enable = 0;
+    enum APUChan {Pulse1 = 0x1, Pulse2 = 0x2, Triangle = 0x4, Noise = 0x8, DMC = 0x10 };
+    inline bool apu_is_enable(APUChan c){
+        return apu_enable & c;
+    }
+    unsigned char apu_control = 0;
+
+    bool apu_pulse1_timer_update = false;
+    bool apu_clock_len_counter = false;
+    bool apu_pulse1_envelope_update = false;
+    bool apu_pulse1_start_flag = false;
     Controller c;
 
     void adjust_ppu_mirroring(unsigned short&);

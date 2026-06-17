@@ -1,27 +1,56 @@
 #ifndef NES_APU_H
 #define NES_APU_H
 #include "Bus.hpp"
+
+struct Envelope {
+    unsigned char prev_divider{};
+    unsigned char divider{};
+    unsigned char decay_lvl = 15;
+    unsigned char envelope{};
+    bool is_volume_const = false;
+    unsigned char volume_const_val = 0;
+    bool is_infinite_play = false;
+    inline void update_envelope(Bus& bus, unsigned char val){
+        is_volume_const = val & 0x10;
+        volume_const_val = val & 0xf;
+        is_infinite_play = val & 0x20;
+        prev_divider = val & 0xf;
+    }
+
+    inline unsigned char get_volume(Bus& bus){
+        return is_volume_const ? volume_const_val : decay_lvl;
+    }
+    inline void envelope_tick(Bus& bus){
+        if (bus.apu_pulse1_start_flag){
+            divider = prev_divider;
+            decay_lvl = 15;
+            bus.apu_pulse1_start_flag = false;
+            return;
+        }
+        if (divider) --divider;
+        if (!divider){
+            divider = prev_divider;
+            if (decay_lvl) --decay_lvl;
+            if (!decay_lvl) {
+                if (is_infinite_play) decay_lvl = 15;
+            }
+        }
+    }
+};
+
 struct Channel {
     unsigned short timer{};
-    unsigned char envelope{};
     unsigned char length_counter{};
     unsigned char sweep_shift{};
-
     inline void update_timer(unsigned char l, unsigned short h){
         timer = (((h & 0x7) << 8) | l);
-    }
-    inline void update_envelope(unsigned char val){
-        envelope = (val & 0xf);
-    }
-    inline void update_length_counter(unsigned char val) {
-        length_counter = (val >> 3) & 0x1f;
     }
 };
 
 template <unsigned short timer_l,
           unsigned short timer_h,
           unsigned short duty_envelope>
-struct PulseChan : Channel {
+struct PulseChan : Channel, Envelope {
     unsigned char current_duty_step{};
     inline void tick_timer(Bus& bus){
         --timer;
@@ -90,5 +119,41 @@ struct APU {
     void frame_counter_quarter_update(Bus& bus);
     void frame_counter_half_update(Bus& bus);
     float gen_sample(Bus& bus);
+    void update_control(Bus& bus);
+
+    static constexpr unsigned char length_table[32]{
+        10,
+        254,
+        20,
+        2,
+        40,
+        4,
+        80,
+        6,
+        160,
+        8,
+        60,
+        10,
+        14,
+        12,
+        26,
+        14,
+        12,
+        16,
+        24,
+        18,
+        48,
+        20,
+        96,
+        22,
+        192,
+        24,
+        72,
+        26,
+        16,
+        28,
+        32,
+        30
+    };
 };
 #endif
