@@ -4,9 +4,9 @@ project(NES)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# set(SANITIZER_FLAGS "-fsanitize=address -fsanitize=undefined")
-# set(OPTIMIZE_FLAGS "-O2 -march=native -flto=thin -fno-rtti")
-set(OPTIMIZE_FLAGS "-O0")
+#set(SANITIZER_FLAGS "-fsanitize=undefined")
+#set(OPTIMIZE_FLAGS "-O3 -march=native -fno-rtti")
+set(OPTIMIZE_FLAGS "-g -O0")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZER_FLAGS} ${OPTIMIZE_FLAGS}")
 set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} ${SANITIZER_FLAGS} ${OPTIMIZE_FLAGS}")
@@ -17,13 +17,15 @@ set(RAYLIB_DIR "/usr/local/Cellar/raylib/")
 include_directories(include)
 
 find_package(raylib REQUIRED HINTS ${RAYLIB_DIR})
+find_package(SDL2 REQUIRED COMPONENTS SDL2)
 
 set(SOURCES
-   src/Bus.cpp
+    src/Bus.cpp
     src/PPU.cpp
+    src/APU.cpp
     src/CPU.cpp
     main.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
-target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
+target_link_libraries(${PROJECT_NAME} PRIVATE raylib SDL2::SDL2)
