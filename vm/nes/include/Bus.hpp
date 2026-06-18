@@ -103,6 +103,7 @@ struct Bus {
         return apu_enable & c;
     }
     unsigned char apu_control = 0;
+    bool apu_clear_frame_irq_req = false;
 
     bool apu_pulse1_timer_update = false;
     bool apu_clock_len_counter = false;

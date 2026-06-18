@@ -107,6 +107,8 @@ struct APU {
 
     size_t cycle_counter{};
     bool irq_inhibit = false;
+    bool frame_counter_reset = false;
+    unsigned char frame_counter_reset_ticks = 0;
 
     enum FrameCounterMode {
         Step4, Step5

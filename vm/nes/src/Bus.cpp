@@ -197,7 +197,10 @@ unsigned char Bus::read_prg(unsigned short addr) {
         }
         case constants::CONTROLLER1: return c.read_status1();
         case constants::CONTROLLER2_AND_APU_FC: return 0;
-        case constants::APU_CONTROL: return apu_control;
+        case constants::APU_CONTROL: {
+            apu_clear_frame_irq_req = true;
+            return apu_control;
+        }
     }
 
     return cpu_map[addr];

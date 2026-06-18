@@ -31,9 +31,11 @@ struct NESVM {
 
     void apu_tick(){
         apu.tick(bus);
+#if APU_ON
         if (apu.buffer_i % 512 == 0){
             SDL_QueueAudio(audio_dev, apu.buffer, 256);
         }
+#endif
     }
     void cpu_tick(){
         cpu.tick_step(bus);
