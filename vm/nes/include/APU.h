@@ -83,8 +83,80 @@ struct TriangleChan : Channel{
     // todo
 };
 
+// TODO: finish
 struct DMCChan : Channel {
-    // todo
+    static constexpr unsigned short ntsc_rates[] = {
+        428,380,340,320,286,254,226,214,190,160,142,128,106,84,72,54
+    };
+    bool is_loop{};
+    bool irq_enable{};
+    unsigned char rate_index{};
+
+    unsigned short rate_counter{};
+    unsigned short dma_address{};
+    unsigned short bytes_remaining{};
+
+    bool sample_ready{};
+    unsigned char sample_buffer{};
+    unsigned char shift_reg{};
+    unsigned char shift_count{};
+    char output_level{};
+
+    unsigned char dmc_dma_counter = 0;
+
+    inline void restart(Bus& bus){
+        auto chan_freq_val = bus.unsafe_read_prg(constants::DMC_CHAN_FREQ);
+        auto chan_direct_load_val = bus.unsafe_read_prg(constants::DMC_CHAN_DIRECT_LOAD);
+        output_level = (char)(chan_direct_load_val & 0x7f);
+        rate_index = chan_freq_val & 0xf;
+        rate_counter = ntsc_rates[rate_index];
+        is_loop = chan_freq_val & 0x10;
+        irq_enable = chan_freq_val & 0x20;
+        dma_address = 0xc000;
+        auto s_addr = bus.unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
+        dma_address |= s_addr << 6;
+        auto s_len = bus.unsafe_read_prg(constants::DMC_CHAN_SAMPLE_LENGTH);
+        bytes_remaining = (s_len << 4) | 1;
+        if (!sample_ready){
+            // dma req
+            dmc_dma_counter = 4;
+            bus.dmc_dma_in_progress = true;
+        }
+    }
+
+    inline void tick(Bus& bus){
+        if (dmc_dma_counter) {
+            --dmc_dma_counter;
+            if (!dmc_dma_counter){
+                sample_ready = true;
+                sample_buffer = bus.unsafe_read_prg(dma_address);
+                dma_address = dma_address == 0xffff ? 0x8000 : dma_address + 1;
+                if (bytes_remaining) --bytes_remaining;
+                bus.dmc_dma_in_progress = false;
+            } else {
+                // todo: check
+                return;
+            }
+        }
+
+        if (rate_counter) --rate_counter;
+        if (!rate_counter){
+            output_level += (shift_reg & 1) ? 2 : -2;
+            shift_reg >>= 1;
+            --shift_reg;
+            output_level = std::clamp(output_level, (char)127, (char)0);
+            rate_counter = ntsc_rates[rate_index];
+            if (!shift_count){
+                // todo: sample_buffer not ready -> dma gen
+                shift_reg = sample_buffer;
+                // todo: check put/get cycle
+                bus.dmc_dma_in_progress = true;
+                sample_ready = false;
+                dmc_dma_counter = 4;
+                shift_count = 8;
+            }
+        }
+    }
 };
 
 struct APU {

@@ -1563,6 +1563,8 @@ void CPU::tick_step(Bus& bus){
 #endif
     switch (istep) {
         case Fetch: {
+            if (bus.dmc_dma_in_progress)
+                return;
             if (bus.dma_active) {
                 if (bus.dma_start){
                     bus.dma_start = false;
@@ -1586,16 +1588,18 @@ void CPU::tick_step(Bus& bus){
             break;
         }
         case Execute: {
-            if (!iop.empty()){
-                if (bus.dma_active) {
-                    if (bus.dma_start){
-                        bus.dma_start = false;
-                        bus.alignment = !(cycles_count & 1); // todo: check
-                        return;
-                    }
-                    bus.tick_dma();
+            if (bus.dma_active) {
+                if (bus.dma_start){
+                    bus.dma_start = false;
+                    bus.alignment = !(cycles_count & 1); // todo: check
                     return;
                 }
+                bus.tick_dma();
+                return;
+            }
+            if (bus.dmc_dma_in_progress)
+                return;
+            if (!iop.empty()){
                 iop_exec_step(bus);
                 ++current_iop_index;
                 --di.cycles;

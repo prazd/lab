@@ -422,7 +422,7 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, PPUm>{}.run();
+    MultiTest<NESVM, CPUm>{}.run();
 #else
     NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // fc3e
 //    std::cout << std::is_trivially_copyable_v<CPU>;

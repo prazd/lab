@@ -93,7 +93,7 @@ struct Bus {
     bool ppu_w{};
     unsigned char ppu_x{};
 
-
+    bool dmc_dma_in_progress = false;
     unsigned char apufc{};
     bool apufc_requested = false;
     bool apu_enable_req = false;
@@ -106,7 +106,6 @@ struct Bus {
     bool apu_clear_frame_irq_req = false;
 
     bool apu_pulse1_timer_update = false;
-    bool apu_clock_len_counter = false;
     bool apu_pulse1_envelope_update = false;
     bool apu_pulse1_start_flag = false;
     Controller c;

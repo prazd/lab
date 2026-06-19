@@ -43,8 +43,12 @@ void APU::frame_counter_half_update(Bus& bus) {
 void APU::handle_frame_counter_update(Bus& bus) {
     if (bus.apufc_requested) {
         frame_counter_mode = static_cast<FrameCounterMode>((bus.apufc >> 7) & 1);
+        if (frame_counter_mode == Step5){
+            frame_counter_quarter_update(bus);
+            frame_counter_half_update(bus);
+        }
         irq_inhibit = (bus.apufc >> 6) & 1;
-        if (irq_inhibit && frame_counter_mode != Step5) bus.apu_control &= 0xbf;
+        if (irq_inhibit && frame_counter_mode == Step4) bus.apu_control &= 0xbf;
         frame_counter_reset = true;
         frame_counter_reset_ticks = (cycle_counter & 1) ? 3 : 4;
         bus.apufc_requested = false;
@@ -71,6 +75,7 @@ void APU::update_control(Bus& bus){
 void APU::tick(Bus& bus) {
     if (bus.apu_enable_req){
         pulse_ch1.length_counter = bus.apu_is_enable(Bus::Pulse1) ? 0 : pulse_ch1.length_counter;
+        if(bus.apu_is_enable(Bus::DMC)) dmc_ch.restart(bus);
         bus.apu_enable_req = false;
     }
 
@@ -78,11 +83,7 @@ void APU::tick(Bus& bus) {
         pulse_ch1.update_envelope(bus, bus.unsafe_read_prg(constants::PULSE1_DUTY_ENVELOPE));
         bus.apu_pulse1_envelope_update = false;
     }
-    if (bus.apu_clock_len_counter){
-        frame_counter_quarter_update(bus);
-        frame_counter_half_update(bus);
-        bus.apu_clock_len_counter = false;
-    }
+
     if (bus.apu_pulse1_timer_update){
         if (bus.apu_is_enable(Bus::Pulse1)) {
             pulse_ch1.length_counter = length_table[((bus.unsafe_read_prg(constants::PULSE1_TIMER_HIGH) >> 3) & 0x1f)];
@@ -90,14 +91,6 @@ void APU::tick(Bus& bus) {
             pulse_ch1.envelope = 15; // set start flag
         }
         bus.apu_pulse1_timer_update = false;
-    }
-
-    if (frame_counter_reset){
-        if (frame_counter_reset_ticks) {--frame_counter_reset_ticks;}
-        if (!frame_counter_reset_ticks){
-            cycle_counter = 0;
-            frame_counter_reset = false;
-        }
     }
 
     if (current_tick & 1){
@@ -108,6 +101,13 @@ void APU::tick(Bus& bus) {
         }
     }
 
+    if (frame_counter_reset){
+        if (frame_counter_reset_ticks) {--frame_counter_reset_ticks;}
+        if (!frame_counter_reset_ticks){
+            cycle_counter = 0;
+            frame_counter_reset = false;
+        }
+    }
     handle_frame_counter_update(bus);
 #if APU_ON
     sample_acc += 44100;
