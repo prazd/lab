@@ -104,6 +104,7 @@ struct Bus {
     }
     unsigned char apu_control = 0;
     bool apu_clear_frame_irq_req = false;
+    unsigned short apu_dmc_bytes_remaining = 0;
 
     bool apu_pulse1_timer_update = false;
     bool apu_pulse1_envelope_update = false;

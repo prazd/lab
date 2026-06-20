@@ -68,14 +68,17 @@ float APU::gen_sample(Bus &bus) {
 }
 
 void APU::update_control(Bus& bus){
-    bus.apu_control &= 0xfe;
-    bus.apu_control |= (pulse_ch1.length_counter > 0);
+    bus.apu_control &= 0xee;
+    bus.apu_control |= (!!pulse_ch1.length_counter);
+    bus.apu_control |= (!!dmc_ch.bytes_remaining) << 4;
 }
 
 void APU::tick(Bus& bus) {
     if (bus.apu_enable_req){
         pulse_ch1.length_counter = bus.apu_is_enable(Bus::Pulse1) ? 0 : pulse_ch1.length_counter;
-        if(bus.apu_is_enable(Bus::DMC)) dmc_ch.restart(bus);
+        if (bus.apu_is_enable(Bus::DMC)) dmc_ch.restart(bus);
+        else dmc_ch.bytes_remaining = 0;
+        bus.apu_control &= 0x7f;
         bus.apu_enable_req = false;
     }
 
@@ -100,6 +103,7 @@ void APU::tick(Bus& bus) {
             bus.apu_clear_frame_irq_req = false;
         }
     }
+    if (bus.apu_is_enable(Bus::DMC)) dmc_ch.tick(bus);
 
     if (frame_counter_reset){
         if (frame_counter_reset_ticks) {--frame_counter_reset_ticks;}
