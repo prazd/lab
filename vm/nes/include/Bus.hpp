@@ -1,9 +1,9 @@
 #ifndef NES_BUS_HPP
 #define NES_BUS_HPP
 #include "Controller.hpp"
-#include "Mappers.h"
-#include "GameGenie.h"
-#include <Simple.h>
+#include "Mappers.hpp"
+#include "GameGenie.hpp"
+#include <Simple.hpp>
 struct Bus {
     size_t master_clock = 0;
     enum StateDMA: unsigned char {

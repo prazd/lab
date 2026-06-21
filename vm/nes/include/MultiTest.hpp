@@ -1,10 +1,10 @@
-#ifndef NES_MULTITEST_H
-#define NES_MULTITEST_H
+#ifndef NES_MULTITEST_HPP
+#define NES_MULTITEST_HPP
 #include <iostream>
 #include "raylib.h"
 #include <vector>
 #include <thread>
-#include "Simple.h"
+#include "Simple.hpp"
 #include "Constants.hpp"
 #include "PPU.hpp"
 
@@ -151,4 +151,4 @@ struct MultiTest{
         CloseWindow();
     }
 };
-#endif //NES_MULTITEST_H
+#endif //NES_MULTITEST_HPP

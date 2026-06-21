@@ -1,5 +1,5 @@
-#ifndef NES_MAPPERS_H
-#define NES_MAPPERS_H
+#ifndef NES_MAPPERS_HPP
+#define NES_MAPPERS_HPP
 #include <vector>
 #include <array>
 #include "Constants.hpp"
@@ -400,4 +400,4 @@ struct Mapper {
     }
 };
 
-#endif //NES_MAPPERS_H
+#endif //NES_MAPPERS_HPP

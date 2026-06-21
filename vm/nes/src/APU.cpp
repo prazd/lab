@@ -1,4 +1,4 @@
-#include  "APU.h"
+#include  "APU.hpp"
 
 void APU::frame_counter_step4(Bus& bus) {
     if (cycle_counter == 7457 || cycle_counter == 7457 * 3) {

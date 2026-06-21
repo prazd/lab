@@ -1,5 +1,5 @@
-#ifndef NES_GAMEGENIE_H
-#define NES_GAMEGENIE_H
+#ifndef NES_GAMEGENIE_HPP
+#define NES_GAMEGENIE_HPP
 #include "Constants.hpp"
 #if GAME_GENIE_MODE
 #include "Simple.h"
@@ -139,4 +139,4 @@ struct GameGenie {
     }
 };
 #endif
-#endif //NES_GAMEGENIE_H
+#endif //NES_GAMEGENIE_HPP

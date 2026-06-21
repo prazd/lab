@@ -1,12 +1,13 @@
-#ifndef NES_DEBUG_H
-#define NES_DEBUG_H
+#ifndef NES_DEBUG_HPP
+#define NES_DEBUG_HPP
 #if DEBUG_MODE
 #include <sstream>
 #include <iomanip>
 #include "raylib.h"
 #include "PPU.hpp"
-#include "Cartridge.h"
-#include "Simple.h"
+#include "APU.hpp"
+#include "Cartridge.hpp"
+#include "Simple.hpp"
 #include <algorithm>
 
 template <size_t x, size_t y, size_t w, size_t h>
@@ -69,6 +70,9 @@ struct DebugWindow {
         if (!fs.is_open()) std::abort();
         fs.read(reinterpret_cast<char*>(res.data()),sz);
         return res;
+    }
+    static inline unsigned short hex_to_ushort(const std::string& str, int base){
+       return str.empty() ? 0 : std::stoul(str, nullptr, base);
     }
 };
 
@@ -425,7 +429,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     unsigned short pc{};
     unsigned char selected_scanline{};
     bool selected_scanline_active{};
-    bool dump_state_request = 0;
+    bool dump_state_request = false;
 
     bool is_frame_jump_active = false;
     bool is_tile_line_jump_active = false;
@@ -480,9 +484,9 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       {}
 
 
-    void dump_state(Bus& bus, CPU& cpu, PPU& ppu) {
+    void dump_state(Bus& bus, CPU& cpu, PPU& ppu, APU& apu) {
         std::vector<unsigned char> res;
-        res.resize(sizeof(ppu) + sizeof(cpu) + sizeof(bus) +
+        res.resize(sizeof(ppu) + sizeof(cpu) + sizeof(apu) + sizeof(bus) +
                        sizeof(Bus::cpu_map) + sizeof(Bus::ppu_map) + sizeof(Bus::oam) +
                          Mapper::prg.size() + Mapper::chr.size()
                        );
@@ -491,6 +495,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         res_ptr += sizeof(ppu);
         memcpy(res_ptr, &cpu,  sizeof(cpu));
         res_ptr += sizeof(cpu);
+        memcpy(res_ptr, &apu,  sizeof(apu));
+        res_ptr += sizeof(apu);
         memcpy(res_ptr, &bus,  sizeof(bus));
         res_ptr += sizeof(bus);
         memcpy(res_ptr, Bus::ppu_map,  sizeof(Bus::ppu_map));
@@ -506,7 +512,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         dump_state_request = false;
     }
 
-    void import_state(Bus& bus, CPU& cpu, PPU& ppu) {
+    void import_state(Bus& bus, CPU& cpu, PPU& ppu, APU& apu) {
         auto res = DW::read_data_from_file("state_dump");
         unsigned char* res_ptr = res.data();
 
@@ -514,6 +520,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         res_ptr += sizeof(ppu);
         memcpy(&cpu, res_ptr,  sizeof(cpu));
         res_ptr += sizeof(cpu);
+        memcpy(&apu, res_ptr,  sizeof(apu));
+        res_ptr += sizeof(apu);
         memcpy(&bus, res_ptr,  sizeof(bus));
         res_ptr += sizeof(bus);
         memcpy(Bus::ppu_map, res_ptr,   sizeof(Bus::ppu_map));
@@ -559,7 +567,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         }
     }
 
-    void draw(CPU& cpu, PPU& ppu, Bus& bus) {
+    void draw(CPU& cpu, PPU& ppu, Bus& bus, APU& apu) {
         line_button = {DW::rec.x - 20, DW::rec.y, 10, 10};
         button1 = {DW::rec.x, DW::rec.y + h, 40, 40};
         button2 = {DW::rec.x + 40, DW::rec.y + h, 40, 40};
@@ -592,16 +600,17 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             selected_move_active = true;
         } else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             next = true;
-            auto val = std::stoul(u_input.s, nullptr, 16);
+            auto val = DW::hex_to_ushort(u_input.s, 16);
             selected_line_pc = (unsigned short) val;
-            selected_move_active = true;
+            selected_move_active = !selected_move_active;
+            ppu.fill_white_background = !selected_move_active;
         // trigger search
         } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
-            unsigned short addr = std::stoul(u_input.s, nullptr, 16);
+            unsigned short addr = DW::hex_to_ushort(u_input.s, 16);
             bus.adjust_cpu_mirroring(addr);
             bus.cpu_trigger_write_addresses[addr] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
-            unsigned short addr = std::stoul(u_input.s, nullptr, 16);
+            unsigned short addr = DW::hex_to_ushort(u_input.s, 16);
             bus.adjust_cpu_mirroring(addr);
             bus.cpu_trigger_read_addresses[addr] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button7) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
@@ -623,7 +632,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             ppu.line_start = false;
             is_line_jump_active = true;
         } else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == PPU_M && mouse_button_pred(pressed_mode)) {
-            selected_scanline = (unsigned char)std::stoul(u_input.s, nullptr, 10);
+            selected_scanline = (unsigned char)DW::hex_to_ushort(u_input.s, 10);
             selected_scanline_active = true;
         } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
             is_one_tick_ppu_active = true;
@@ -633,11 +642,11 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         }
         // trigger search
         else if (CheckCollisionPointRec(GetMousePosition(), button9) && run_mode == PPU_M  && IsMouseButtonPressed(0)) {
-            unsigned short addr = std::stoul(u_input.s, nullptr, 16);
+            unsigned short addr = DW::hex_to_ushort(u_input.s, 16);
             bus.adjust_ppu_mirroring(addr);
             bus.ppu_trigger_write_addresses[addr] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button10) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
-            unsigned short addr = std::stoul(u_input.s, nullptr, 16);
+            unsigned short addr = DW::hex_to_ushort(u_input.s, 16);
             bus.adjust_ppu_mirroring(addr);
             bus.ppu_trigger_read_addresses[std::stoul(u_input.s, nullptr, 16)] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button11) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
@@ -689,11 +698,11 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         }  else if (CheckCollisionPointRec(GetMousePosition(), state_dump_button) && IsMouseButtonPressed(0)){
             dump_state_request = true;
         } else if  (CheckCollisionPointRec(GetMousePosition(), state_import_button) && IsMouseButtonPressed(0)){
-            import_state(bus, cpu, ppu);
+            import_state(bus, cpu, ppu, apu);
         }
 
         if (dump_state_request && cpu.istep == CPU::Fetch && cpu.iop.empty())
-            dump_state(bus, cpu, ppu);
+            dump_state(bus, cpu, ppu, apu);
 
         for (int i = 0; i < 10; ++i){
             auto r = Rectangle{line_button.x, line_button.y + i * (line_button.height + 25.f), line_button.width, line_button.height};
@@ -1439,7 +1448,7 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         if (CheckCollisionPointRec(GetMousePosition(), mode_button) && IsMouseButtonPressed(0))
             mode = static_cast<Mode>((mode + 1) % ModeCount);
         else if (CheckCollisionPointRec(GetMousePosition(), update_target_button) && IsMouseButtonPressed(0)){
-            target_address = std::stoul(u_input.s, nullptr, 16);
+            target_address = DW::hex_to_ushort(u_input.s, 16);
             start_address = target_address - (target_address % 16);
         } else if (CheckCollisionPointRec(GetMousePosition(), write_button) && IsMouseButtonPressed(0)) {
             if (mode == CPUm)
@@ -1453,7 +1462,7 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 default: break;
             }
         } else if (CheckCollisionPointRec(GetMousePosition(), pc_watch_address_button) && IsMouseButtonPressed(0)){
-            cpu.pc_watch_address = std::stoul(u_input.s, nullptr, 16);
+            cpu.pc_watch_address = DW::hex_to_ushort(u_input.s, 16);
             cpu.pc_watch_count = 0;
         } else if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyDown(KEY_UP)){
             start_address = (start_address - 16) & 0xffff;
@@ -2052,4 +2061,4 @@ struct Snapshot: DebugWindowText<x, y, w, h> {
 };
 
 #endif
-#endif //NES_DEBUG_H
+#endif //NES_DEBUG_HPP

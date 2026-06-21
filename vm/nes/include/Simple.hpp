@@ -1,5 +1,5 @@
-#ifndef NES_SIMPLE_H
-#define NES_SIMPLE_H
+#ifndef NES_SIMPLE_HPP
+#define NES_SIMPLE_HPP
 #include <iostream>
 #include <optional>
 #include <thread>

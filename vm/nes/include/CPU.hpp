@@ -1,6 +1,6 @@
 #include "Constants.hpp"
 #include "Bus.hpp"
-#include "Simple.h"
+#include "Simple.hpp"
 #include <bitset>
 struct CPU {
 // https://www.nesdev.org/wiki/CPU_memory_map

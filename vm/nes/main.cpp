@@ -2,12 +2,12 @@
 #include <iterator>
 #include <SDL.h>
 #include "raylib.h"
-#include "APU.h"
+#include "APU.hpp"
 #include "PPU.hpp"
 #include "CPU.hpp"
-#include "Cartridge.h"
-#include "Debug.h"
-#include "MultiTest.h"
+#include "Cartridge.hpp"
+#include "Debug.hpp"
+#include "MultiTest.hpp"
 
 struct NESVM {
     APU apu{};
@@ -145,10 +145,8 @@ struct NESVM {
                 cpu.debug_run = true;
             }
         } while((dis.selected_move_active || dis.trigger_search || reg_info.is_cpu_watching()) && current_tick < constants::CPU_FRAME_CYCLES);
-        if (!dis.selected_move_active || !dis.trigger_search || !reg_info.is_cpu_watching()) {
+        if (!dis.selected_move_active || !dis.trigger_search || !reg_info.is_cpu_watching())
             dis.handle(cpu);
-            ppu.fill_white_background = true;
-        }
     }
 
     void ppu_debug_exec(){
@@ -340,7 +338,7 @@ struct NESVM {
             BeginDrawing();
             ClearBackground(WHITE);
 #if DEBUG_MODE
-            dis.draw(cpu, ppu, bus);
+            dis.draw(cpu, ppu, bus, apu);
             dis.snap_handle(cpu, ppu, bus, snap_storage);
 #endif
 

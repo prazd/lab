@@ -1,5 +1,5 @@
-#ifndef NES_CARTRIDGE_H
-#define NES_CARTRIDGE_H
+#ifndef NES_CARTRIDGE_HPP
+#define NES_CARTRIDGE_HPP
 #include <iostream>
 #include <fstream>
 struct Cartridge {
