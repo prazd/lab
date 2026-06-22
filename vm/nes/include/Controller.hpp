@@ -12,7 +12,9 @@ struct Controller {
 
     unsigned char status1{};
     unsigned char current1 = 0;
+    bool prev_res = false;
     bool latch1 = false;
+    bool shift_req = false;
 
     KeyboardKey keys1[8] = {
         KEY_Q,KEY_E,
@@ -55,15 +57,14 @@ struct Controller {
                         ((IsKeyDown(keys1[i]) || IsKeyDown(keys2[i])) << i);
 #endif
             current1 = 0;
-            latch1 = false;
         }
     }
 
     inline bool read_status1(){
-        if (current1++ < 8) {
-            auto res = status1 & 1;
-            status1 >>= 1;
-            return res;
+        if (latch1) return IsKeyDown(keys1[0]) || IsKeyDown(keys2[0]);
+        if (current1 < 8){
+            prev_res = status1 & 1;
+            return prev_res;
         }
         return true;
     }

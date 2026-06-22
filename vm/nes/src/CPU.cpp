@@ -1583,6 +1583,7 @@ void CPU::tick_step(Bus& bus){
             pc_watch_count += (pc == pc_watch_address);
 #endif
             istep = Execute;
+            ++bus.instructions_count;
 // todo: finish
             --di.cycles;
             break;

@@ -29,6 +29,12 @@ struct NESVM {
 #endif
     {};
 
+    void controller_tick() {
+        if (cpu.cycles_count & 1)
+            bus.controller_write_tick();
+        bus.controller_read_tick();
+    }
+
     void apu_tick(){
         apu.tick(bus);
 #if APU_ON
@@ -134,6 +140,7 @@ struct NESVM {
                 bus.tick();
 
                 ppu_tick(); cpu_tick(); apu_tick();
+                controller_tick();
                 bus.tick();
                 ++current_tick;
             }
@@ -173,6 +180,7 @@ struct NESVM {
             }
             if (cpu_tick_count++ % 3 == 2) {
                 cpu_tick();
+                controller_tick();
                 apu_tick();
                 if (dis.is_line_jump_active && ppu.line_start) {
                     dis.is_line_jump_active = false;
@@ -213,7 +221,9 @@ struct NESVM {
              ppu_tick();
              bus.tick();
 
-             ppu_tick(); cpu_tick();
+             ppu_tick(); cpu_tick(); apu_tick();
+             controller_tick();
+
              bus.tick();
         }
 #endif
@@ -405,6 +415,7 @@ int main(){
     // /Users/prazd/Desktop/dev/BattleCity.nes - TODO: https://www.nesdev.org/wiki/Vs._System
     // /Users/prazd/Desktop/dev/DonkeyKong.nes
     // /Users/prazd/Desktop/dev/DonkeyKongJU.nes (NROM)
+    // /Users/prazd/Desktop/dev/KirbysAdventure.nes
     // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: 0x8082/0x80e4/0x80c3/0x8eb6
     // palette_ram.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
@@ -422,7 +433,7 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, CPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // fc3e
+    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // e08a
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

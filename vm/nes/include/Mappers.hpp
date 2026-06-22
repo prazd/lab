@@ -363,6 +363,17 @@ struct Mapper {
         }
     }
 
+    inline unsigned char unsafe_read_chr_rom(unsigned short addr){
+        switch (mtype) {
+            case NROM:  { return nrom.read_chr_rom(chr, addr);  }
+            case MMC1:  { return mmc1.read_chr_rom(chr, addr);  }
+            case UxROM: { return uxrom.read_chr_rom(chr, addr); }
+            case CNROM: { return cnrom.read_chr_rom(chr, addr); }
+            case MMC3:  { return mmc3.read_chr_rom(chr,addr);}
+            default: return 0xff;
+        }
+    }
+
     inline bool is_irq_requested() {
         return mmc3.irq_requested;
     }

@@ -67,6 +67,10 @@ struct Bus {
     size_t open_bus_value_cycles = 0;
     unsigned char open_bus_value {};
     unsigned short last_ppu_address = 0;
+    unsigned short last_read_address = 0;
+
+    size_t instructions_count = 0;
+    size_t last_instruction_num_read = 0;
 
     enum Regs: unsigned char {
         PPUCTRL, PPUMASK, PPUSTATUS, PPUSCROLL, PPUADDR, PPUDATA,
@@ -110,12 +114,16 @@ struct Bus {
     bool apu_pulse1_envelope_update = false;
     bool apu_pulse1_start_flag = false;
     Controller c;
+    bool latch_req = false;
+    unsigned char latch_val = 0;
 
     void adjust_ppu_mirroring(unsigned short&);
     void adjust_cpu_mirroring(unsigned short&);
     void adjust_ppu_nt_mirroring(unsigned short& address);
     unsigned short get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n);
     void tick();
+    void controller_read_tick();
+    void controller_write_tick();
     void write(unsigned short addr, unsigned char val);
     void unsafe_write(unsigned short addr, unsigned char val);
     unsigned char read_prg(unsigned short addr);

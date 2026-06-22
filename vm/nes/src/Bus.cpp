@@ -78,7 +78,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
             dma_index = 0;
             return;
         }
-        case constants::CONTROLLER1: { if (value) c.latch1 = true; else c.update_status1(); return; }
+        case constants::CONTROLLER1: { latch_req = true; latch_val = value; return; }
         case constants::CONTROLLER2_AND_APU_FC: {apufc_requested = true; apufc = value; return; }
         case constants::APU_CONTROL: {
             apu_enable_req = true;
@@ -125,6 +125,7 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
 // All regs for debug
 unsigned char Bus::read_prg(unsigned short addr) {
     adjust_cpu_mirroring(addr);
+    last_read_address = addr;
 #if DEBUG_MODE
     cpu_read_set_addresses[addr] = true;
     cpu_addr_triggered_on_read = cpu_trigger_read_addresses[addr];
@@ -195,8 +196,20 @@ unsigned char Bus::read_prg(unsigned short addr) {
             mapper.update_state(ppu_v, prev);
             return res;
         }
-        case constants::CONTROLLER1: return c.read_status1();
-        case constants::CONTROLLER2_AND_APU_FC: return 0;
+        case constants::CONTROLLER1:{
+            bool res = false;
+            if (instructions_count - last_instruction_num_read){
+                c.shift_req = true;
+                res = c.read_status1();
+            } else {
+                res = c.prev_res;
+            }
+            last_instruction_num_read = instructions_count;
+            return res;
+        }
+
+        case constants::CONTROLLER2_AND_APU_FC:
+            return open_bus_value & 0xfe;
         case constants::APU_CONTROL: {
             apu_clear_frame_irq_req = true;
             return apu_control;
@@ -247,7 +260,7 @@ unsigned char Bus::read_chr(unsigned short addr) {
 unsigned char Bus::unsafe_read_chr(unsigned short addr) {
     adjust_ppu_mirroring(addr);
     if (addr >= 0x0000 && addr <= 0x1FFF){
-        return mapper.read_chr_rom(addr);
+        return mapper.unsafe_read_chr_rom(addr);
     } else if (addr >= 0x2000 && addr <= 0x3fff) {
         return ppu_map[addr];
     }
@@ -281,6 +294,21 @@ void Bus::unsafe_write_chr(unsigned short addr, unsigned char value){
 
 void Bus::write_reg(Regs r, unsigned short val) {
     mmio_updates.push_front(std::pair{r, val});
+}
+
+void Bus::controller_write_tick() {
+    if (latch_req){
+        if (latch_val & 1) {c.latch1 = true;} else {c.update_status1(); c.latch1 = false;}
+        latch_req = false;
+    }
+
+}
+void Bus::controller_read_tick() {
+    if (c.shift_req){
+        ++c.current1;
+        c.status1 >>= 1;
+        c.shift_req = false;
+    }
 }
 
 void Bus::tick() {
