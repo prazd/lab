@@ -1091,7 +1091,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
                 << "  T:" << (unsigned)(bus.ppu_t) << '\n'
                 << "  W:" << (unsigned)(bus.ppu_w) << '\n'
         << "  VBLank:" << (unsigned)((bus.ppustatus>> 7) & 1) << "   Bus VBLank:" << (unsigned)(bus.ppustatus & 0x80) << '\n'
-        << "  OpenBus:" <<  (int)bus.open_bus_value << '\n'
+        << "  OpenBus:" <<  (int)bus.ppu_open_bus_value << '\n'
         << std::dec << "  Cycles:" << ppu.current_scanline_cycle
         << "  Scanline:" << ppu.current_y << '\n'
         << " DrawX:" << ppu.current_x%256 << '\n'

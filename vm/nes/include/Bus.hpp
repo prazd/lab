@@ -65,7 +65,8 @@ struct Bus {
     size_t current_ppu_cycle = 0;
     bool irq_interrupt_flip_flop = false;
     size_t open_bus_value_cycles = 0;
-    unsigned char open_bus_value {};
+    unsigned char cpu_open_bus_value{};
+    unsigned char ppu_open_bus_value{};
     unsigned short last_ppu_address = 0;
     unsigned short last_read_address = 0;
 
@@ -127,6 +128,7 @@ struct Bus {
     void write(unsigned short addr, unsigned char val);
     void unsafe_write(unsigned short addr, unsigned char val);
     unsigned char read_prg(unsigned short addr);
+    unsigned char read_prg_internal(unsigned short addr);
     unsigned char unsafe_read_prg(unsigned short addr);
     unsigned char read_chr(unsigned short addr);
     unsigned char unsafe_read_chr(unsigned short addr);

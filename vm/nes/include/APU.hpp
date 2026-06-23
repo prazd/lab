@@ -150,7 +150,7 @@ struct DMCChan : Channel {
             if (!dmc_dma_counter){
                 sample_ready = true;
                 sample_buffer = bus.read_prg(dma_address);
-                bus.open_bus_value = sample_buffer;
+                bus.cpu_open_bus_value = sample_buffer;
                 dma_address = dma_address == 0xffff ? 0x8000 : dma_address + 1;
                 if (bytes_remaining)
                     --bytes_remaining;

@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <cassert>
 #include "CPU.hpp"
 #include "Constants.hpp"
 
@@ -1183,9 +1184,15 @@ void CPU::fill_exec_ops() {
             break;
         }
         case NOP:
-        case DOP:
+        case DOP:{
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc+=cpu.di.bytes;
+            });
+            break;}
+
         case TOP:{
             iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.dummy_read(bus, cpu.arg);
                 cpu.pc+=cpu.di.bytes;
             });
             break;}
@@ -1568,10 +1575,13 @@ void CPU::tick_step(Bus& bus){
             if (bus.dma_active) {
                 if (bus.dma_start){
                     bus.dma_start = false;
-                    bus.alignment = !(cycles_count & 1); // todo: check
+                    bus.alignment = !(cycles_count & 1);
                     return;
                 }
                 bus.tick_dma();
+#if DEBUG_MODE
+                if (!bus.dma_active) assert(cycles_count & 1);
+#endif
                 return;
             }
             di = decode(bus.read_prg( pc));
@@ -1592,10 +1602,13 @@ void CPU::tick_step(Bus& bus){
             if (bus.dma_active) {
                 if (bus.dma_start){
                     bus.dma_start = false;
-                    bus.alignment = !(cycles_count & 1); // todo: check
+                    bus.alignment = !(cycles_count & 1);
                     return;
                 }
                 bus.tick_dma();
+#if DEBUG_MODE
+                if (!bus.dma_active) assert(cycles_count & 1);
+#endif
                 return;
             }
             if (bus.dmc_dma_in_progress)

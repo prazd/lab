@@ -20,7 +20,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
 
     if (addr >= 0x2000 && addr <= 0x2007){
         open_bus_value_cycles = 0;
-        open_bus_value = value;
+        ppu_open_bus_value = value;
     }
 
     switch (addr) {
@@ -122,8 +122,12 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
     cpu_map[addr] = value;
 }
 
-// All regs for debug
 unsigned char Bus::read_prg(unsigned short addr) {
+    return cpu_open_bus_value = read_prg_internal(addr);
+}
+
+// All regs for debug
+unsigned char Bus::read_prg_internal(unsigned short addr) {
     adjust_cpu_mirroring(addr);
     last_read_address = addr;
 #if DEBUG_MODE
@@ -141,7 +145,7 @@ unsigned char Bus::read_prg(unsigned short addr) {
         case constants::PPUCTRL:
         case constants::PPUMASK:
         case constants::PPUSCROLL:
-        case constants::PPUADDR:  return open_bus_value;
+        case constants::PPUADDR:  return ppu_open_bus_value;
 
         case constants::PPUSTATUS: {
             ppu_w = false;
@@ -150,22 +154,21 @@ unsigned char Bus::read_prg(unsigned short addr) {
                 status_read_cycle = current_ppu_cycle;
                 nmi_interrupt_flip_flop = false;
                 auto tmp = ppustatus & 0x7f;
-
                 ppustatus = 0;
-                open_bus_value &= 0x1f;
-                open_bus_value |= (tmp & 0xe0);
-                return  tmp;
+                ppu_open_bus_value &= 0x1f;
+                ppu_open_bus_value |= (tmp & 0xe0);
+                return tmp;
             }
-            unsigned char current = (ppustatus & 0xe0) | (open_bus_value & 0x1f);
+            unsigned char current = (ppustatus & 0xe0) | (ppu_open_bus_value & 0x1f);
             ppustatus &= 0x60;
-            open_bus_value &= 0x1f;
-            open_bus_value |= (current & 0xe0);
+            ppu_open_bus_value &= 0x1f;
+            ppu_open_bus_value |= (current & 0xe0);
             return current;
         }
-        case constants::OAMADDR:     return open_bus_value;
+        case constants::OAMADDR:     return ppu_open_bus_value;
         case constants::OAMDATA: {
             if (oamaddr == 0x2) {
-                open_bus_value = 0;
+                ppu_open_bus_value = 0;
                 open_bus_value_cycles = 0;
             }
             // 3 X
@@ -180,8 +183,8 @@ unsigned char Bus::read_prg(unsigned short addr) {
             if (ppu_v >= constants::IMAGE_PALETTE_BEGIN){
                 auto val = read_chr(ppu_v);
                 if (ppumask & 1) val &= 0xf0;
-                auto res = (val & 0x3f) | (open_bus_value & 0xc0);
-                open_bus_value = res;
+                auto res = (val & 0x3f) | (ppu_open_bus_value & 0xc0);
+                ppu_open_bus_value = res;
 
                 //  $3000-$3EFF	$0F00	Table Mirror $2000-$2EFF
                 ppudata = read_chr(ppu_v-0x1000);
@@ -190,7 +193,7 @@ unsigned char Bus::read_prg(unsigned short addr) {
                 return res;
             }
             auto res = ppudata;
-            open_bus_value = res;
+            ppu_open_bus_value = res;
             ppudata = read_chr(ppu_v);
             auto prev = std::exchange(ppu_v , (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff);
             mapper.update_state(ppu_v, prev);
@@ -209,15 +212,18 @@ unsigned char Bus::read_prg(unsigned short addr) {
         }
 
         case constants::CONTROLLER2_AND_APU_FC:
-            return open_bus_value & 0xfe;
+            return cpu_open_bus_value & 0xfe;
         case constants::APU_CONTROL: {
             apu_clear_frame_irq_req = true;
             return apu_control;
         }
         case constants::PULSE1_DUTY_ENVELOPE:{
-            return open_bus_value;
+            return cpu_open_bus_value;
         }
     }
+
+    if (addr >= 0x4000 && addr <= 0x7fff)
+        return cpu_open_bus_value;
 
     return cpu_map[addr];
 }
@@ -331,9 +337,9 @@ void Bus::tick() {
 }
 
 void Bus::open_bus_decay() {
-    if (open_bus_value && open_bus_value_cycles++ == 5'000){ // todo: check
+    if (ppu_open_bus_value && open_bus_value_cycles++ == 5'000){ // todo: check
         open_bus_value_cycles = 0;
-        open_bus_value = 0;
+        ppu_open_bus_value = 0;
     }
 }
 
@@ -398,7 +404,8 @@ void Bus::reset(){
     ppuscroll = 0;
     ppuaddr = 0;
     ppudata = 0;
-    open_bus_value = 0;
+    ppu_open_bus_value = 0;
+    cpu_open_bus_value = 0;
     dma_active = false;
     dma_index = 0;
     dma_address = 0;
