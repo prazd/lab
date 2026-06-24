@@ -63,7 +63,8 @@ struct Bus {
     size_t status_read_cycle = 0;
     size_t current_nmi_cycle = 0;
     size_t current_ppu_cycle = 0;
-    bool irq_interrupt_flip_flop = false;
+    bool ppu_irq_interrupt_flip_flop = false;
+    bool apu_irq_interrupt_flip_flop = false;
     size_t open_bus_value_cycles = 0;
     unsigned char cpu_open_bus_value{};
     unsigned char ppu_open_bus_value{};

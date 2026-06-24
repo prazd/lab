@@ -10,7 +10,7 @@ void APU::frame_counter_step4(Bus& bus) {
         frame_counter_quarter_update(bus);
         frame_counter_half_update(bus);
         if (!irq_inhibit) {
-            bus.irq_interrupt_flip_flop = true;
+            bus.apu_irq_interrupt_flip_flop = true;
             bus.apu_control |= 0x40;
         }
     }

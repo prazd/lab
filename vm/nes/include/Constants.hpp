@@ -1,6 +1,7 @@
 #ifndef NES_CONSTANTS_HPP
 #define NES_CONSTANTS_HPP
 #include <iostream>
+#define APU_TICK_ON 1
 #define APU_ON 0
 #define HIDE_OVERSCAN 1
 #define DEBUG_MODE 1

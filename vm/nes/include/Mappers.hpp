@@ -352,6 +352,14 @@ struct Mapper {
         }
     }
 
+    inline bool is_prg_ram() const {
+        switch (mtype) {
+            case MMC1:
+            case MMC3:  { return true; }
+            default: return false;
+        }
+    }
+
     inline unsigned char read_chr_rom(unsigned short addr){
         switch (mtype) {
             case NROM:  { return nrom.read_chr_rom(chr, addr);  }

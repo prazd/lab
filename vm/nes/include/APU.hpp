@@ -134,7 +134,7 @@ struct DMCChan : Channel {
             auto s_addr = bus.unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
             dma_address |= s_addr << 6;
             if (!sample_ready){
-                bus.irq_interrupt_flip_flop = true;
+                bus.apu_irq_interrupt_flip_flop = true;
                 sample_ready = false;
                 dmc_dma_counter = 4;
                 need_sample_update = true;
@@ -168,7 +168,7 @@ struct DMCChan : Channel {
                 } else if (!bytes_remaining && !is_loop && irq_enable){
                     bus.apu_control &= 0x7f;
                     bus.apu_control |= 0x80;
-                    bus.irq_interrupt_flip_flop = true;
+                    bus.apu_irq_interrupt_flip_flop = true;
                 }
             }
         }

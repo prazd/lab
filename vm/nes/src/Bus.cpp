@@ -2,6 +2,7 @@
 #include "Constants.hpp"
 void Bus::write(unsigned short addr, unsigned char value) {
     adjust_cpu_mirroring(addr);
+    cpu_open_bus_value = value;
 #if DEBUG_MODE
     cpu_write_set_addresses[addr] = true;
     cpu_write_addresses.push_back(std::pair<unsigned short, unsigned char>{addr, unsafe_read_prg(addr)});
@@ -123,7 +124,9 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
 }
 
 unsigned char Bus::read_prg(unsigned short addr) {
-    return cpu_open_bus_value = read_prg_internal(addr);
+    auto res = read_prg_internal(addr);
+    if (addr != 0x4015) cpu_open_bus_value = res;
+    return res;
 }
 
 // All regs for debug
@@ -200,32 +203,34 @@ unsigned char Bus::read_prg_internal(unsigned short addr) {
             return res;
         }
         case constants::CONTROLLER1:{
-            bool res = false;
+            unsigned char res = false;
             if (instructions_count - last_instruction_num_read){
                 c.shift_req = true;
                 res = c.read_status1();
             } else {
                 res = c.prev_res;
             }
+            res &= 0x1f;
+            res |= cpu_open_bus_value & 0xe0;
             last_instruction_num_read = instructions_count;
             return res;
         }
-
         case constants::CONTROLLER2_AND_APU_FC:
             return cpu_open_bus_value & 0xfe;
         case constants::APU_CONTROL: {
             apu_clear_frame_irq_req = true;
-            return apu_control;
+            return (apu_control & 0xdf) | (cpu_open_bus_value & 0x20);
         }
         case constants::PULSE1_DUTY_ENVELOPE:{
             return cpu_open_bus_value;
         }
     }
 
-    if (addr >= 0x4000 && addr <= 0x7fff)
-        return cpu_open_bus_value;
+    if ((addr >= 0 && addr <= 0x7FF) ||
+        (mapper.is_prg_ram() && addr >= 0x6000 && addr <= 0x7fff))
+        return cpu_map[addr];
 
-    return cpu_map[addr];
+    return cpu_open_bus_value;
 }
 
 unsigned char Bus::unsafe_read_prg(unsigned short addr) {
@@ -243,8 +248,26 @@ unsigned char Bus::unsafe_read_prg(unsigned short addr) {
         case constants::PPUADDR:     return ppuaddr;
         case constants::PPUDATA:     return ppudata;
         case constants::CONTROLLER1: return c.read_status1();
+        case constants::CONTROLLER2_AND_APU_FC:
+            return cpu_open_bus_value & 0xfe;
+        case constants::APU_CONTROL: {
+            apu_clear_frame_irq_req = true;
+            return (apu_control & 0xdf) | (cpu_open_bus_value & 0x20);
+        }
+        case constants::PULSE1_DUTY_ENVELOPE:{
+            return cpu_open_bus_value;
+        }
     }
-    return cpu_map[addr];
+
+    // TODO: check
+    if (addr >= 0x4000 && addr <= 0x4019) // APU regs
+        return cpu_map[addr];
+
+    if ((addr >= 0 && addr <= 0x7FF) ||
+        (mapper.is_prg_ram() && addr >= 0x6000 && addr <= 0x7fff))
+        return cpu_map[addr];
+
+    return cpu_open_bus_value;
 }
 
 unsigned char Bus::read_chr(unsigned short addr) {
@@ -410,7 +433,8 @@ void Bus::reset(){
     dma_index = 0;
     dma_address = 0;
     nmi_interrupt_flip_flop = false;
-    irq_interrupt_flip_flop = false;
+    apu_irq_interrupt_flip_flop = false;
+    ppu_irq_interrupt_flip_flop = false;
     open_bus_value_cycles = 0;
     last_ppu_address = 0;
     mapper.reset();

@@ -36,7 +36,9 @@ struct NESVM {
     }
 
     void apu_tick(){
+#if APU_TICK_ON
         apu.tick(bus);
+#endif
 #if APU_ON
         if (apu.buffer_i % 512 == 0){
             SDL_QueueAudio(audio_dev, apu.buffer, 256);
@@ -431,7 +433,7 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, CPUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #else
     NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // e08a
 //    std::cout << std::is_trivially_copyable_v<CPU>;

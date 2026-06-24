@@ -487,6 +487,7 @@ void CPU::fill_address_ops() {
             TXA,
             TXS,
             TYA,
+            JSR,
     };
     if (std::any_of(std::begin(cmds), std::end(cmds), [i = di.i](auto el){return i == el;})) return;
 
@@ -1051,7 +1052,12 @@ void CPU::fill_exec_ops() {
             break;
         }
         case JSR:{
-            // TODO: maybe check
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.as.arg1 = bus.read_prg(cpu.pc + 1);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                bus.read_prg(cpu.sp + 0x100); // dummy read
+            });
             iop.push_front([](Bus& bus, CPU& cpu){
                 bus.write(0x100 + cpu.sp, ((cpu.pc + 2) >> 8) & 0xff); --cpu.sp;
             });
@@ -1059,7 +1065,8 @@ void CPU::fill_exec_ops() {
                 bus.write(0x100 + cpu.sp, (cpu.pc + 2) & 0xff); --cpu.sp;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.pc = cpu.arg.addr;
+                auto h = bus.read_prg(cpu.pc + 2);
+                cpu.pc = ((cpu.as.arg1) | h << 8);
             });
             break;
         }
@@ -1544,9 +1551,11 @@ void CPU::interrupt_handle(Bus& bus) {
         interrupt_requests[NMI] = true;
         sr.set(StatusReg::I, false);
         bus.nmi_interrupt_flip_flop = false;
-    } else if (bus.irq_interrupt_flip_flop && !sr.get(StatusReg::I)) {
+    } else if ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop) && !sr.get(StatusReg::I)) {
+        // TODO: check
         interrupt_requests[IRQ] = true;
-        bus.irq_interrupt_flip_flop = false;
+        bus.apu_irq_interrupt_flip_flop = false;
+        bus.ppu_irq_interrupt_flip_flop = false;
     }
 
     bool interrupt_in_progress = false;
