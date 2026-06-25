@@ -165,6 +165,7 @@ struct CPU {
         unsigned char arg2{};
         unsigned short result{};
         Interrupt interrupt = RESET;
+        StatusReg::Flag flag = StatusReg::Flag::Unused;
     } as;
 
     void push_addr_step(AddressingStep);
@@ -178,6 +179,31 @@ struct CPU {
     bool stop_requested = false;
     void push_interrupts_ops(Bus&);
     DecodedInstruction di{};
+
+    template<StatusReg::Flag f, bool expect>
+    void push_branch_ops() {
+        iop.push_front([](Bus& bus, CPU& cpu){
+            cpu.pc += cpu.di.bytes;
+            if (cpu.sr.get(f) == expect){
+                cpu.iop.push_front([](Bus& bus, CPU& cpu){
+                    char add_val = (char)(cpu.read(bus, cpu.arg));
+                    cpu.as.tmp_l = cpu.pc;
+                    cpu.as.tmp_h = (cpu.pc & 0xff00) | ((cpu.pc + add_val) & 0xff);
+                    unsigned char h = (cpu.pc >> 8) & 0xff;
+                    cpu.pc += add_val;
+                    bus.read_prg(cpu.as.tmp_l); // dummy read
+                    if (h != ((cpu.pc >> 8) & 0xff)) {
+                        ++cpu.di.cycles;
+                        cpu.iop.push_back([](Bus &bus, CPU &cpu) {
+                            bus.read_prg(cpu.as.tmp_h); // dummy read
+                        }); // PageCross
+                    }
+                });
+            }
+        });
+    };
+
+
 //
     struct AsmInfo {
         std::string_view mnemonic{};

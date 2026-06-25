@@ -109,10 +109,11 @@ struct NESVM {
         auto tmp = NESVM(path);
         bus = tmp.bus;
         bus.reset();
-        cpu = std::move(tmp.cpu);
+        cpu = tmp.cpu;
         ppu.reset();
         cartridge = std::move(tmp.cartridge);
         rom_path = tmp.rom_path;
+        apu = APU{};
 
 #if DEBUG_MODE
         reg_info = std::move(tmp.reg_info);
@@ -389,10 +390,10 @@ struct NESVM {
                     ppu.displays[0].fill(WHITE);
                     ppu.displays[1].fill(WHITE);
                 }
+                if (IsKeyPressed(KEY_R)) reset(rom_path);
             }
 
             if (grid_view_enable) dtg.draw(22.4f,22.4f);
-            if (IsKeyPressed(KEY_R)) reset(rom_path);
 #else
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,constants::WIDTH, constants::HEIGHT}, {0, 0},0, WHITE);
 #endif
@@ -433,9 +434,9 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, PPUm>{}.run();
+    MultiTest<NESVM, CPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // e08a
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/mmc3_test_2/rom_singles/5-MMC3.nes"}.run(); // e08a
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

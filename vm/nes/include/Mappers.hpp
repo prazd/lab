@@ -148,7 +148,7 @@ namespace mappers {
                     irq_counter = 0;
                     reload_flag = true;
                     update_counter_req = false;
-                } else if (addr == 0xc000){
+                } else {
                     irq_latch = value;
                 }
             } else if (addr >= 0xe000 && addr <= 0xffff) {

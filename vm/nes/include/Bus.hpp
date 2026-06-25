@@ -66,6 +66,7 @@ struct Bus {
     bool ppu_irq_interrupt_flip_flop = false;
     bool apu_irq_interrupt_flip_flop = false;
     size_t open_bus_value_cycles = 0;
+    unsigned char cpu_internal_bus_value{};
     unsigned char cpu_open_bus_value{};
     unsigned char ppu_open_bus_value{};
     unsigned short last_ppu_address = 0;
@@ -78,8 +79,6 @@ struct Bus {
         PPUCTRL, PPUMASK, PPUSTATUS, PPUSCROLL, PPUADDR, PPUDATA,
         PPU_V, PPU_T, PPU_X
     };
-    SimpleDequeTC<std::pair<Regs, unsigned short>, 20> mmio_updates;
-    void write_reg(Regs r, unsigned short val);
 
     //  https://www.nesdev.org/wiki/PPU_registers
     unsigned char ppuctrl{};
@@ -128,6 +127,7 @@ struct Bus {
     void controller_write_tick();
     void write(unsigned short addr, unsigned char val);
     void unsafe_write(unsigned short addr, unsigned char val);
+    unsigned char dmc_dma_read_prg(unsigned short addr);
     unsigned char read_prg(unsigned short addr);
     unsigned char read_prg_internal(unsigned short addr);
     unsigned char unsafe_read_prg(unsigned short addr);

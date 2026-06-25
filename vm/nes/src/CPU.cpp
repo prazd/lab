@@ -739,134 +739,14 @@ void CPU::fill_exec_ops() {
             });
             break;
         }
-        case BCC:{
-            iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.pc += cpu.di.bytes;
-                if (!cpu.sr.get(StatusReg::C)){
-                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        unsigned char h = (cpu.pc >> 8) & 0xff;
-                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (h != ((cpu.pc >> 8) & 0xff)) {
-                            ++cpu.di.cycles;
-                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
-                        }
-                    });
-                }
-            });
-            break;
-        }
-        case BCS:{
-            iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.pc += cpu.di.bytes;
-                if (cpu.sr.get(StatusReg::C)){
-                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        unsigned char h = (cpu.pc >> 8) & 0xff;
-                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (h != ((cpu.pc >> 8) & 0xff)) {
-                            ++cpu.di.cycles;
-                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
-                        }
-                    });
-                }
-            });
-            break;
-        }
-        case BEQ:{
-            iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.pc += cpu.di.bytes;
-                if (cpu.sr.get(StatusReg::Z)){
-                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        unsigned char h = (cpu.pc >> 8) & 0xff;
-                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (h != ((cpu.pc >> 8) & 0xff)) {
-                            ++cpu.di.cycles;
-                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
-                        }
-                    });
-                }
-            });
-            break;
-        }
-        case BMI: {
-            iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.pc += cpu.di.bytes;
-                if (cpu.sr.get(StatusReg::N)){
-                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        unsigned char h = (cpu.pc >> 8) & 0xff;
-                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (h != ((cpu.pc >> 8) & 0xff)) {
-                            ++cpu.di.cycles;
-                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
-                        }
-                    });
-                }
-            });
-            break;
-        }
-        case BNE:{
-            iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.pc += cpu.di.bytes;
-                if (!cpu.sr.get(StatusReg::Z)){
-                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        unsigned char h = (cpu.pc >> 8) & 0xff;
-                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (h != ((cpu.pc >> 8) & 0xff)) {
-                            ++cpu.di.cycles;
-                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
-                        }
-                    });
-                }
-            });
-            break;
-        }
-        case BPL:{
-            iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.pc += cpu.di.bytes;
-                if (!cpu.sr.get(StatusReg::N)){
-                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        unsigned char h = (cpu.pc >> 8) & 0xff;
-                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (h != ((cpu.pc >> 8) & 0xff)) {
-                            ++cpu.di.cycles;
-                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
-                        }
-                    });
-                }
-            });
-            break;
-        }
-        case BVC:{
-            iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.pc += cpu.di.bytes;
-                if (!cpu.sr.get(StatusReg::V)){
-                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        unsigned char h = (cpu.pc >> 8) & 0xff;
-                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (h != ((cpu.pc >> 8) & 0xff)) {
-                            ++cpu.di.cycles;
-                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
-                        }
-                    });
-                }
-            });
-            break;
-        }
-        case BVS:{
-            iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.pc += cpu.di.bytes;
-                if (cpu.sr.get(StatusReg::V)){
-                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        unsigned char h = (cpu.pc >> 8) & 0xff;
-                        cpu.pc += (char)(cpu.read(bus, cpu.arg));
-                        if (h != ((cpu.pc >> 8) & 0xff)) {
-                            ++cpu.di.cycles;
-                            cpu.iop.push_back([](Bus &bus, CPU &cpu) {}); // PageCross
-                        }
-                    });
-                }
-            });
-            break;
-        }
+        case BCC: { push_branch_ops<StatusReg::C, false>(); break;}
+        case BCS: { push_branch_ops<StatusReg::C, true>();  break;}
+        case BNE: { push_branch_ops<StatusReg::Z, false>(); break;}
+        case BEQ: { push_branch_ops<StatusReg::Z, true>();  break;}
+        case BPL: { push_branch_ops<StatusReg::N, false>(); break;}
+        case BMI: { push_branch_ops<StatusReg::N, true>();  break;}
+        case BVC: { push_branch_ops<StatusReg::V, false>(); break;}
+        case BVS: { push_branch_ops<StatusReg::V, true>();  break;}
         case BIT:{
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char val = cpu.read(bus, cpu.arg);

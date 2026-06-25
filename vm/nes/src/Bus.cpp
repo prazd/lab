@@ -3,6 +3,7 @@
 void Bus::write(unsigned short addr, unsigned char value) {
     adjust_cpu_mirroring(addr);
     cpu_open_bus_value = value;
+    cpu_internal_bus_value = value;
 #if DEBUG_MODE
     cpu_write_set_addresses[addr] = true;
     cpu_write_addresses.push_back(std::pair<unsigned short, unsigned char>{addr, unsafe_read_prg(addr)});
@@ -126,9 +127,15 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
 unsigned char Bus::read_prg(unsigned short addr) {
     auto res = read_prg_internal(addr);
     if (addr != 0x4015) cpu_open_bus_value = res;
+    cpu_internal_bus_value = res;
     return res;
 }
 
+unsigned char Bus::dmc_dma_read_prg(unsigned short addr) {
+    auto res = read_prg_internal(addr);
+    if (addr != 0x4015) cpu_open_bus_value = res;
+    return res;
+}
 // All regs for debug
 unsigned char Bus::read_prg_internal(unsigned short addr) {
     adjust_cpu_mirroring(addr);
@@ -219,7 +226,7 @@ unsigned char Bus::read_prg_internal(unsigned short addr) {
             return cpu_open_bus_value & 0xfe;
         case constants::APU_CONTROL: {
             apu_clear_frame_irq_req = true;
-            return (apu_control & 0xdf) | (cpu_open_bus_value & 0x20);
+            return (apu_control & 0xdf) | (cpu_internal_bus_value & 0x20);
         }
         case constants::PULSE1_DUTY_ENVELOPE:{
             return cpu_open_bus_value;
@@ -321,10 +328,6 @@ void Bus::unsafe_write_chr(unsigned short addr, unsigned char value){
     }
 }
 
-void Bus::write_reg(Regs r, unsigned short val) {
-    mmio_updates.push_front(std::pair{r, val});
-}
-
 void Bus::controller_write_tick() {
     if (latch_req){
         if (latch_val & 1) {c.latch1 = true;} else {c.update_status1(); c.latch1 = false;}
@@ -343,20 +346,6 @@ void Bus::controller_read_tick() {
 void Bus::tick() {
     ++master_clock;
     open_bus_decay();
-    while(!mmio_updates.empty()){
-        auto u = mmio_updates.back(); mmio_updates.pop_back();
-        switch (u.first) {
-            case PPUCTRL:   ppuctrl =   (unsigned char)u.second; break;
-            case PPUMASK:   ppumask =   (unsigned char)u.second; break;
-            case PPUSTATUS: ppustatus = (unsigned char)u.second; break;
-            case PPUSCROLL: ppuscroll = (unsigned char)u.second; break;
-            case PPUADDR:   ppuaddr =   (unsigned char)u.second; break;
-            case PPUDATA:   ppudata =   (unsigned char)u.second; break;
-            case PPU_V:     ppu_v = u.second; break;
-            case PPU_T:     ppu_t = u.second; break;
-            case PPU_X:     ppu_x = (unsigned char)u.second; break;
-        }
-    }
 }
 
 void Bus::open_bus_decay() {
