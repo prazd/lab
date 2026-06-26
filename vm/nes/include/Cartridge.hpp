@@ -55,6 +55,8 @@ struct Cartridge {
     unsigned char chr_ram_sz = 0;
     bool is_chr_nvram = false;
     unsigned chr_nvram_sz = 0;
+    std::string rom_path{};
+    std::string save_path = "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/sav/";
 
     inline void parse_header() {
         unsigned char nes_id = (buffer[Flag7] >> 2) & 0x3;
@@ -95,13 +97,40 @@ struct Cartridge {
         }
     }
 
-    void read(std::string_view rom_path){
+    void read(std::string_view rp){
+        rom_path = rp;
         auto sz = std::filesystem::file_size(rom_path);
         buffer.resize(sz);
         auto fs = std::ifstream(rom_path, std::ios::binary);
         if (!fs.is_open()) std::abort();
         fs.read(reinterpret_cast<char*>(buffer.data()),sz);
         parse_header();
+    }
+
+    std::string filename_from_path() const {
+        auto it = rom_path.end() - 1;
+        while(*std::prev(it) != '/') --it;
+        return std::string(it, rom_path.end());
+    }
+
+    template <bool save>
+    void update_game_state(char* buf){
+        auto fname = filename_from_path();
+        auto sz = fname.size();
+        fname[sz-1] = 'v';
+        fname[sz-2] = 'a';
+        fname[sz-3] = 's';
+        if constexpr (save){
+            std::ofstream f(save_path + fname, std::ios::binary);
+            if (!f.is_open()) {std::cout << "Save error\n"; return;}
+            f.write(buf, 8192);
+            f.close();
+        } else {
+            std::ifstream f(save_path + fname, std::ios::binary);
+            if (!f.is_open()) {return;}
+            f.read(buf, 8192);
+            f.close();
+        }
     }
 };
 #endif

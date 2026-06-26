@@ -14,7 +14,7 @@ namespace mappers {
         bool prg_banks_mode = true;
         bool irq_requested = false;
         bool update_counter_req = false;
-
+        bool irq_tick = false;
         unsigned char irq_latch{};
         unsigned char irq_counter{};
         bool reload_flag = false;
@@ -49,23 +49,31 @@ namespace mappers {
             return 0;
         }
 
-        inline void tick_irq(unsigned short addr){
-            if (addr & 0x1000 && !(last_address & 0x1000)){ // maybe add 8 ppu-cycles filter
-                if (update_counter_req){
-                    irq_counter = irq_latch;
-                    update_counter_req = false;
-                } else if (reload_flag){
-                    reload_flag = false;
-                    irq_counter = irq_latch;
-                } else {
-                    if (irq_counter) --irq_counter;
-                    if (!irq_counter) {
-                        if (irq_enable) irq_requested = true;
-                        update_counter_req = true;
-                    }
+        inline void handle_irq(){
+            if (update_counter_req){
+                irq_counter = irq_latch;
+                update_counter_req = false;
+            } else if (reload_flag){
+                reload_flag = false;
+                irq_counter = irq_latch;
+                if (!irq_counter) {
+                    if (irq_enable) irq_requested = true;
+                    update_counter_req = true;
+                }
+            } else {
+                if (irq_counter) --irq_counter;
+                if (!irq_counter) {
+                    if (irq_enable) irq_requested = true;
+                    update_counter_req = true;
                 }
             }
             last_write_cycles = 0;
+        }
+
+        inline void tick_irq(unsigned short addr){
+            if (addr & 0x1000 && !(last_address & 0x1000) && last_write_cycles > 8){ // maybe add 8 ppu-cycles filter
+                if (!irq_tick) irq_tick = true;
+            }
             last_address = addr;
         }
 
@@ -77,6 +85,10 @@ namespace mappers {
                 } else if (reload_flag){
                     reload_flag = false;
                     irq_counter = irq_latch;
+                    if (!irq_counter) {
+                        if (irq_enable) irq_requested = true;
+                        update_counter_req = true;
+                    }
                 } else {
                     if (irq_counter) --irq_counter;
                     if (!irq_counter) {
@@ -295,6 +307,22 @@ struct Mapper {
     mappers::CNROM cnrom;
     mappers::UXROM uxrom;
     mappers::MMC3 mmc3;
+
+    inline bool has_battery(){
+        switch (mtype) {
+            case MMC3:
+            case MMC1:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    inline void irq_handle(){
+        if (mtype == MMC3){
+            mmc3.handle_irq();
+        }
+    }
 
     inline void set_screen_mirroring(bool is_horizontal_arrangement, bool is_alternative_nametable) {
         switch (mtype) {

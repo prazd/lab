@@ -331,6 +331,9 @@ struct NESVM {
         ppu.displays[1].fill(BLACK);
         ppu_init();
         cpu_init();
+#if !DEBUG_MODE && !MULTI_TEST_MODE
+        cartridge.update_game_state<false>((char*)(bus.cpu_map + constants::CARTRIDGE_RAM_BEGIN));
+#endif
         while(!WindowShouldClose()){
             frame_execute();
             UpdateTexture(display_texture, ppu.get_active_display().data());
@@ -351,7 +354,7 @@ struct NESVM {
             BeginDrawing();
             ClearBackground(WHITE);
 #if DEBUG_MODE
-            dis.draw(cpu, ppu, bus, apu);
+            dis.draw(cpu, ppu, bus, apu, cartridge);
             dis.snap_handle(cpu, ppu, bus, snap_storage);
 #endif
 
@@ -406,6 +409,12 @@ struct NESVM {
 #endif
         CloseWindow();
     }
+
+    ~NESVM(){
+#if !DEBUG_MODE && !MULTI_TEST_MODE
+        if (bus.mapper.has_battery()) cartridge.update_game_state<true>((char*)(bus.cpu_map + constants::CARTRIDGE_RAM_BEGIN));
+#endif
+    }
 };
 
 // PPU tests:
@@ -434,9 +443,10 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, CPUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/mmc3_test_2/rom_singles/5-MMC3.nes"}.run(); // e08a
+    NESVM{"/Users/prazd/Desktop/dev/KirbysAdventure.nes"}.run(); // e08a
+
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
 }

@@ -1,7 +1,7 @@
 #ifndef NES_CONSTANTS_HPP
 #define NES_CONSTANTS_HPP
 #include <iostream>
-#define APU_TICK_ON 1
+#define APU_TICK_ON 0
 #define APU_ON 0
 #define HIDE_OVERSCAN 1
 #define DEBUG_MODE 1
@@ -53,6 +53,8 @@ namespace constants {
 
     constexpr unsigned short PPU_REGS_BEGIN = 0x2000;
     constexpr unsigned short PPU_REGS_END = 0x2007;
+
+    constexpr unsigned short CARTRIDGE_RAM_BEGIN = 0x6000;
 
     constexpr unsigned short PPU_REGS_MIRROR_BEGIN = 0x2008;
     constexpr unsigned short PPU_REGS_MIRROR_END = 0x3FFF;
