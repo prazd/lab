@@ -32,6 +32,7 @@ void CPU::reset() {
     x = 0;
     y = 0;
     interrupt_requests[CPU::RESET] = true;
+    interrupt_requested = true;
     sr.set(StatusReg::I, false);
     stop_requested = false;
     pc = 0;
@@ -1427,27 +1428,29 @@ void CPU::iop_exec_step(Bus& bus) {
 
 
 void CPU::interrupt_handle(Bus& bus) {
-    if (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) {
-        interrupt_requests[NMI] = true;
-        sr.set(StatusReg::I, false);
-        bus.nmi_interrupt_flip_flop = false;
-    } else if ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop) && !sr.get(StatusReg::I)) {
-        // TODO: check
-        interrupt_requests[IRQ] = true;
-        bus.apu_irq_interrupt_flip_flop = false;
-        bus.ppu_irq_interrupt_flip_flop = false;
-    }
-
     bool interrupt_in_progress = false;
-    if (!sr.get(StatusReg::I)) {
-        for (int i = 0; i < InterruptsCount; ++i) {
-            if (interrupt_requests[i]) {
-                as.interrupt = static_cast<Interrupt>(i);
-                push_interrupts_ops(bus);
-                interrupt_in_progress = true;
-                break;
+    if (interrupt_requested){
+        if (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) {
+            interrupt_requests[NMI] = true;
+            sr.set(StatusReg::I, false);
+            bus.nmi_interrupt_flip_flop = false;
+        } else if ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop) && !sr.get(StatusReg::I)) {
+            // TODO: check
+            interrupt_requests[IRQ] = true;
+            bus.apu_irq_interrupt_flip_flop = false;
+            bus.ppu_irq_interrupt_flip_flop = false;
+        }
+        if (!sr.get(StatusReg::I)) {
+            for (int i = 0; i < InterruptsCount; ++i) {
+                if (interrupt_requests[i]) {
+                    as.interrupt = static_cast<Interrupt>(i);
+                    push_interrupts_ops(bus);
+                    interrupt_in_progress = true;
+                    break;
+                }
             }
         }
+        interrupt_requested = false;
     }
     istep = interrupt_in_progress ? Execute : Fetch;
 }
@@ -1488,6 +1491,13 @@ void CPU::tick_step(Bus& bus){
             break;
         }
         case Execute: {
+            if (di.cycles == 1 && !interrupt_requested){
+                if (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.master_clock - bus.current_nmi_cycle > 1) { // TODO: check
+                    interrupt_requested = true;
+                } else if ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop) && !sr.get(StatusReg::I)) {
+                    interrupt_requested = true;
+                }
+            }
             if (bus.dma_active) {
                 if (bus.dma_start){
                     bus.dma_start = false;

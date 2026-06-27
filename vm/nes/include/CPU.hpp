@@ -58,6 +58,8 @@ struct CPU {
     bool debug_run = true;
 #endif
 
+    bool interrupt_requested = true;
+
     // request RESET interrupt on start (https://www.nesdev.org/NESDoc.pdf - page 13)
     bool interrupt_requests[3]{true,false,false};
     unsigned short interrupt_addresses[3] = {
@@ -176,6 +178,7 @@ struct CPU {
     void tick(Bus&);
     void tick_step(Bus&);
     void interrupt_handle(Bus&);
+    void interrupt_handle_with_delay(Bus&);
     bool stop_requested = false;
     void push_interrupts_ops(Bus&);
     DecodedInstruction di{};

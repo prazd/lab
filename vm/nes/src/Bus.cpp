@@ -408,7 +408,6 @@ void Bus::reset(){
     ppu_w = false;
     ppu_x = 0;
     ppuctrl = 0;
-    ppuctrl = 0;
     ppumask = 0;
     ppustatus = 0;
     oamaddr = 0;

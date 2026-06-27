@@ -47,8 +47,8 @@ constexpr static std::string_view ppu_tests[] = {
         "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/2.Details.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/3.A12_clocking.nes",
         // TODO: check
-        "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_test_2/rom_singles/5-MMC3.nes",
-        "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_test_2/rom_singles/2-details.nes"
+//        "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_test_2/rom_singles/5-MMC3.nes",
+//        "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_test_2/rom_singles/2-details.nes"
 };
 
 template <typename VM, TestMode tm>

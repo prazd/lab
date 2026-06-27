@@ -75,11 +75,6 @@ struct Bus {
     size_t instructions_count = 0;
     size_t last_instruction_num_read = 0;
 
-    enum Regs: unsigned char {
-        PPUCTRL, PPUMASK, PPUSTATUS, PPUSCROLL, PPUADDR, PPUDATA,
-        PPU_V, PPU_T, PPU_X
-    };
-
     //  https://www.nesdev.org/wiki/PPU_registers
     unsigned char ppuctrl{};
     unsigned char ppumask{};

@@ -124,6 +124,8 @@ struct PPU {
     unsigned char pattern_table_l = 0;
     unsigned char pattern_table_h = 0;
 
+    unsigned char prev_ppuctrl_val = 0;
+
     void fetch_tile_data_step(Bus& bus);
     void tile_data_fetch(Bus& bus);
     void tile_data_dummy_fetch(Bus& bus);

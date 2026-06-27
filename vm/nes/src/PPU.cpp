@@ -470,17 +470,22 @@ void PPU::tick(Bus& bus) {
 
     ++current_scanline_cycle;
 
-    // todo: timing debug
     if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1)) {
         bus.ppustatus &= 0x5f; // todo: check zero hit value set to zero
         bus.ppustatus |= 1 << 7;
+        bus.current_nmi_cycle = bus.master_clock;
+        if (bus.ppuctrl & 0x80) bus.nmi_interrupt_flip_flop = true;
+    }
+
+    if (((current_y == 241 && current_scanline_cycle > 1) || current_y >= 242) && current_y < 261
+     && bus.ppuctrl & 0x80 && !(prev_ppuctrl_val & 0x80) && bus.ppustatus & 0x80) {
         bus.current_nmi_cycle = bus.master_clock;
         bus.nmi_interrupt_flip_flop = true;
     }
 
     if (current_y == 261){
         sprite_evaluate_tick(bus);
-        if (current_scanline_cycle == 1) {
+        if (current_scanline_cycle == 1) { // todo: debug (2)
             if ((bus.ppumask >> 3) & 1) update_current_display(); // todo: check
             bus.nmi_interrupt_flip_flop = false; // todo: check
             bus.ppustatus &= 0x3f;
@@ -499,4 +504,5 @@ void PPU::tick(Bus& bus) {
         assert(current_step == NT);
 #endif
     }
+    prev_ppuctrl_val = bus.ppuctrl;
 }
