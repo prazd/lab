@@ -443,7 +443,7 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, CPUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #else
     NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // e08a
 

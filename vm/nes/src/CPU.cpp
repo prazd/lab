@@ -141,8 +141,8 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xAC: {return {Absolute, LDY,  3, 4};}
         case 0xBC: {return {AbsoluteX, LDY, 3, 4, CrossPageM};}  // 5 if page crossed
 
-
         case 0x6B: {return {Immediate, ARR, 2, 2};}
+        case 0x8B: {return {Immediate, ANE,  2, 2};}
 
         case 0xAB: {return {Immediate, ATX, 2, 2};}
         case 0xCB: {return {Immediate, AXS, 2, 2};}
@@ -193,7 +193,6 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x81: {return {IndexedIndirectX, STA,  2, 6, DummyReadM};}
         case 0x91: {return {IndexedIndirectY, STA,  2, 6, DummyReadM};}
 
-
         case 0x07: {return {ZeroPage,  SLO,    2, 5};}
         case 0x17: {return {ZeroPageX,  SLO,    2, 6};}
         case 0x0F: {return {Absolute,  SLO,    3, 6};}
@@ -232,6 +231,13 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0x97: {return {ZeroPageY,  AAX,    2, 4};}
         case 0x83: {return {IndexedIndirectX, AAX,  2, 6};}
 
+        case 0x9F: {return {AbsoluteY,  SHA,    3, 5};}
+        case 0x93: {return {IndexedIndirectY,  SHA,    2, 6};}
+        case 0x9B: {return {AbsoluteY,  SHS,    3, 5};}
+        case 0x9C: {return {AbsoluteX,  SYA,    3, 5, DummyReadM};}
+        case 0x9E: {return {AbsoluteY,  SXA,    3, 5, DummyReadM};}
+        case 0xBB: {return {AbsoluteY,  LAE,    3, 4, CrossPageM};}
+
         case 0xA7: {return {ZeroPage,  LAX,    2, 3};}
         case 0xB7: {return {ZeroPageY,  LAX,    2, 4};}
         case 0xAF: {return {Absolute,  LAX,    3, 4};}
@@ -255,9 +261,6 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
         case 0xFB: {return {AbsoluteY,  ISC,    3, 7, DummyReadM};}
         case 0xE3: {return {IndexedIndirectX, ISC,  2, 8};}
         case 0xF3: {return {IndexedIndirectY, ISC,  2, 8, DummyReadM};}
-
-        case 0x9C: {return {AbsoluteX,  SYA,    3, 5, DummyReadM};}
-        case 0x9E: {return {AbsoluteY,  SXA,    3, 5, DummyReadM};}
 
         case 0x86: {return {ZeroPage, STX, 2, 3};}
         case 0x96: {return {ZeroPageY, STX, 2, 4};}
@@ -382,7 +385,6 @@ void CPU::push_addr_step(AddressingStep step) {
                     cpu.as.result = args_as_addr;
                     cpu.as.addr_to_add = cpu.x;
                     ++cpu.di.cycles;
-                    cpu.update_arg();
                     cpu.iop.push_back([](Bus& bus, CPU& cpu){
                         auto arg = cpu.dummy_read(bus, cpu.arg);
                         cpu.as.result = arg.addr;
@@ -392,7 +394,6 @@ void CPU::push_addr_step(AddressingStep step) {
                     cpu.as.addr_to_add = 0;
                 }
             });
-
             break;
         }
         case AbsY: {
@@ -404,7 +405,6 @@ void CPU::push_addr_step(AddressingStep step) {
                     cpu.as.result = args_as_addr;
                     cpu.as.addr_to_add = cpu.y;
                     ++cpu.di.cycles;
-                    cpu.update_arg();
                     cpu.iop.push_back([](Bus& bus, CPU& cpu){
                         auto arg = cpu.dummy_read(bus, cpu.arg);
                         cpu.as.result = arg.addr;
@@ -449,7 +449,6 @@ void CPU::push_addr_step(AddressingStep step) {
                     cpu.as.result = addr;
                     cpu.as.addr_to_add = cpu.y;
                     ++cpu.di.cycles;
-                    cpu.update_arg();
                     cpu.iop.push_back([](Bus& bus, CPU& cpu){
                         auto arg = cpu.dummy_read(bus, cpu.arg);
                         cpu.as.result = arg.addr;
@@ -708,6 +707,7 @@ void CPU::fill_exec_ops() {
             });
             break;
         }
+        // TODO: debug
         case SYA:{
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char res = cpu.y & (((cpu.arg.addr >> 8) & 0xff) + 1);
@@ -1060,6 +1060,58 @@ void CPU::fill_exec_ops() {
             });
             break;
         }
+        case ANE: {
+            iop.push_front([](Bus& bus, CPU& cpu){
+                unsigned char val = cpu.read(bus, cpu.arg);
+                cpu.a = (cpu.a | 0xee) & cpu.x & val;
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+
+        // TODO: debug
+        case SHA: {
+            iop.push_front([](Bus& bus, CPU& cpu){});
+            iop.push_front([](Bus& bus, CPU& cpu){});
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.as.write_value = ((cpu.a & (cpu.x)) & (std::min(((cpu.arg.addr >> 8) + 1) & 0xff, 0x1f)));
+                cpu.arg.addr = ((cpu.a & cpu.x & ((cpu.arg.addr >> 8) & 0xff)) << 8) | (cpu.arg.addr & 0xff);
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case SHS: {
+            iop.push_front([](Bus& bus, CPU& cpu){});
+            iop.push_front([](Bus& bus, CPU& cpu){});
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.sp = cpu.a & cpu.x;
+                cpu.as.write_value = ((cpu.a & (cpu.x)) & (std::min(((cpu.arg.addr >> 8) + 1) & 0xff, 0x1f)));
+                cpu.arg.addr = ((cpu.a & cpu.x & ((cpu.arg.addr >> 8) & 0xff)) << 8) | (cpu.arg.addr & 0xff);
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+
+        case LAE: {
+            iop.push_front([](Bus& bus, CPU& cpu){
+                auto val = cpu.read(bus, cpu.arg);
+                unsigned char res = val & cpu.sp;
+                cpu.a = res;
+                cpu.x = res;
+                cpu.sp = res;
+                cpu.sr.set(StatusReg::Z, cpu.a == 0);
+                cpu.sr.set(StatusReg::N, cpu.a & 0x80);
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+
         case AAC:{
             iop.push_front([](Bus& bus, CPU& cpu){
                 unsigned char val =  cpu.read(bus, cpu.arg);

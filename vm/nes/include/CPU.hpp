@@ -109,18 +109,18 @@ struct CPU {
         RTS, SBC, SEC,SED, SEI,	STA, STX, STY, TAX,	TAY, TSX, TXA,
         //
         TXS, TYA,DOP, AAC, ASR, ARR, ATX, AXS, SLO, RLA, SRE, RRA,AAX,LAX,DCP,ISC,
-        TOP, SYA, SXA
+        TOP, SYA, SXA, ANE, SHA, SHS, LAE
     };
 
     AddressingResult dummy_read(Bus& bus, AddressingResult);
 
-    static constexpr inline std::string_view instruction_str[73] = {
+    static constexpr inline std::string_view instruction_str[77] = {
         "ADC", "AND", "ASL","BCC", "BCS","BEQ", "BIT", "BMI", "BNE","BPL", "BRK", "BVC", "BVS",	"CLC",
         "CLD", "CLI", "CLV","CMP", "CPX","CPY", "DEC", "DEX", "DEY","EOR", "INC", "INX", "INY",	"JMP",
         "JSR", "LDA", "LDX","LDY", "LSR","NOP", "ORA", "PHA", "PHP","PLA", "PLP", "ROL", "ROR",	"RTI",
         "RTS", "SBC", "SEC","SED", "SEI","STA", "STX", "STY", "TAX","TAY", "TSX", "TXA", "TXS",	"TYA",
         "DOP", "AAC", "ASR", "ARR", "ATX", "AXS", "SLO", "RLA", "SRE", "RRA", "AAX", "LAX","DCP", "ISC",
-        "TOP", "SYA", "SXA"
+        "TOP", "SYA", "SXA", "ANE", "SHA", "SHS", "LAE"
     };
 
     enum IPenaltyMode: unsigned char {
