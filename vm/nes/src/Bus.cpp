@@ -70,8 +70,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
         }
         case constants::PPUDATA:   {
             write_chr(ppu_v, value);
-            auto prev = std::exchange(ppu_v , (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff);
-            mapper.update_state(ppu_v, prev);
+            inc_by_ppudata();
             return;}
         case constants::OAMDMA : {
             dma_address = value << 8;
@@ -136,6 +135,36 @@ unsigned char Bus::dmc_dma_read_prg(unsigned short addr) {
     if (addr != 0x4015) cpu_open_bus_value = res;
     return res;
 }
+
+void Bus::inc_ppu_v_x() {
+    unsigned char prev = (ppu_v & 0x1f);
+    unsigned char add_val = (((ppu_v & 0x1f) + 1) % 32);
+    if (prev == 31)
+        ppu_v ^= 0x400;
+    ppu_v &= 0xffe0;
+    ppu_v |= add_val;
+}
+
+void Bus::inc_ppu_v_y() {
+    unsigned char y_fine_add_prev = ((ppu_v >> 12) & 0x7);
+    unsigned char y_fine_add_val = ((((ppu_v >> 12) & 0x7) + 1) & 0x7);
+    ppu_v &= 0x8fff;
+    ppu_v |= y_fine_add_val << 12;
+    if (y_fine_add_prev == 7){
+        auto y_coarse_val = ((ppu_v >> 5) & 0x1f); // todo: check
+        if (y_coarse_val == 29) {
+            ppu_v = 0;
+            ppu_v ^= 0x800;
+        } else if (y_coarse_val == 31) {
+            ppu_v = 0;
+        } else {
+            auto add_val = ((y_coarse_val + 1) & 0x1f);
+            ppu_v &= 0xfc1f;
+            ppu_v |= (add_val << 5);
+        }
+    }
+}
+
 // All regs for debug
 unsigned char Bus::read_prg_internal(unsigned short addr) {
     adjust_cpu_mirroring(addr);
@@ -198,15 +227,13 @@ unsigned char Bus::read_prg_internal(unsigned short addr) {
 
                 //  $3000-$3EFF	$0F00	Table Mirror $2000-$2EFF
                 ppudata = read_chr(ppu_v-0x1000);
-                auto prev = std::exchange(ppu_v , (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff);
-                mapper.update_state(ppu_v, prev);
+                inc_by_ppudata();
                 return res;
             }
             auto res = ppudata;
             ppu_open_bus_value = res;
             ppudata = read_chr(ppu_v);
-            auto prev = std::exchange(ppu_v , (ppu_v + ((ppuctrl >> 2) & 1 ? 32 : 1)) & 0x3fff);
-            mapper.update_state(ppu_v, prev);
+            inc_by_ppudata();
             return res;
         }
         case constants::CONTROLLER1:{
@@ -238,6 +265,18 @@ unsigned char Bus::read_prg_internal(unsigned short addr) {
         return cpu_map[addr];
 
     return cpu_open_bus_value;
+}
+
+void Bus::inc_by_ppudata() {
+    if (ppumask & 0x18 && ppu_current_y < 241){
+        auto prev = ppu_v;
+        inc_ppu_v_x();
+        inc_ppu_v_y();
+        mapper.update_state(ppu_v, prev);
+    } else {
+        auto prev = std::exchange(ppu_v, (ppu_v + ((ppuctrl & 0x4) ? 32 : 1)) & 0x3fff);
+        mapper.update_state(ppu_v, prev);
+    }
 }
 
 unsigned char Bus::unsafe_read_prg(unsigned short addr) {

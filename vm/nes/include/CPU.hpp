@@ -174,6 +174,8 @@ struct CPU {
     void fill_address_ops();
     void fill_exec_ops();
 
+    void update_interrupt_request(Bus& bus);
+
     DecodedInstruction decode(unsigned char v);
     void tick(Bus&);
     void tick_step(Bus&);

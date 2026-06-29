@@ -143,25 +143,8 @@ void PPU::bg_tick(Bus &bus) {
                 update_shifts = false;
             }
 #endif
-            if (current_scanline_cycle == 256 && bus.ppumask & 0x18){
-                unsigned char y_fine_add_prev = ((v >> 12) & 0x7);
-                unsigned char y_fine_add_val = ((((v >> 12) & 0x7) + 1) & 0x7);
-                v &= 0x8fff;
-                v |= y_fine_add_val << 12;
-                if (y_fine_add_prev == 7){
-                    auto y_coarse_val = ((v >> 5) & 0x1f); // todo: check
-                    if (y_coarse_val == 29) {
-                        v = 0;
-                        v ^= 0x800;
-                    } else if (y_coarse_val == 31) {
-                        v = 0;
-                    } else {
-                        auto add_val = ((y_coarse_val + 1) & 0x1f);
-                        v &= 0xfc1f;
-                        v |= (add_val << 5);
-                    }
-                }
-            }
+            if (current_scanline_cycle == 256 && bus.ppumask & 0x18)
+                bus.inc_ppu_v_y();
         } else if(current_scanline_cycle == 257 && bus.ppumask & 0x18) {
             // TODO: debug (oam_read test (v & 0x1f) == 2)
             // set coarse x + update ntx bit
@@ -265,12 +248,8 @@ void PPU::tile_data_fetch(Bus& bus) {
             shift_register_high &= 0xff00;
             shift_register_high |= pattern_table_h;
 
-            unsigned char prev = (v & 0x1f);
-            unsigned char add_val = (((v & 0x1f) + 1) % 32);
-            if (prev == 31)
-                v ^= 0x400;
-            v &= 0xffe0;
-            v |= add_val;
+            bus.inc_ppu_v_x();
+
             attributes_low &= 0xff00;
             attributes_high &= 0xff00;
 
@@ -504,5 +483,6 @@ void PPU::tick(Bus& bus) {
         assert(current_step == NT);
 #endif
     }
+    bus.ppu_current_y = current_y;
     prev_ppuctrl_val = bus.ppuctrl;
 }

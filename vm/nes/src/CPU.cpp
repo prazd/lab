@@ -1442,7 +1442,7 @@ void CPU::push_interrupts_ops(Bus& bus) {
     iop.push_front([](Bus& bus, CPU& cpu){
         cpu.sr.set(StatusReg::B, false);
         cpu.sr.set(StatusReg::Unused, true);
-        bus.write(0x100 + cpu.sp, cpu.sr.reg);
+        bus.write(0x100 + cpu.sp, cpu.sr.reg); // TODO: debug
         cpu.sr.set(StatusReg::I, true);
     });
     iop.push_front([](Bus& bus, CPU& cpu){
@@ -1478,7 +1478,6 @@ void CPU::iop_exec_step(Bus& bus) {
     }
 }
 
-
 void CPU::interrupt_handle(Bus& bus) {
     bool interrupt_in_progress = false;
     if (interrupt_requested){
@@ -1486,8 +1485,8 @@ void CPU::interrupt_handle(Bus& bus) {
             interrupt_requests[NMI] = true;
             sr.set(StatusReg::I, false);
             bus.nmi_interrupt_flip_flop = false;
-        } else if ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop) && !sr.get(StatusReg::I)) {
-            // TODO: check
+        } else if ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop)) { // todo: check !sr.get(StatusReg::I)
+            sr.set(StatusReg::I, false); // TODO: check
             interrupt_requests[IRQ] = true;
             bus.apu_irq_interrupt_flip_flop = false;
             bus.ppu_irq_interrupt_flip_flop = false;
@@ -1505,6 +1504,17 @@ void CPU::interrupt_handle(Bus& bus) {
         interrupt_requested = false;
     }
     istep = interrupt_in_progress ? Execute : Fetch;
+}
+
+
+void CPU::update_interrupt_request(Bus& bus){
+    if (di.cycles == 1 && !interrupt_requested){
+        if (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.master_clock - bus.current_nmi_cycle > 2) { // todo: check
+            interrupt_requested = true;
+        } else if ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop) && !sr.get(StatusReg::I)) { // todo: check
+            interrupt_requested = true;
+        }
+    }
 }
 
 // todo: finish
@@ -1543,13 +1553,7 @@ void CPU::tick_step(Bus& bus){
             break;
         }
         case Execute: {
-            if (di.cycles == 1 && !interrupt_requested){
-                if (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.master_clock - bus.current_nmi_cycle > 1) { // TODO: check
-                    interrupt_requested = true;
-                } else if ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop) && !sr.get(StatusReg::I)) {
-                    interrupt_requested = true;
-                }
-            }
+            update_interrupt_request(bus);
             if (bus.dma_active) {
                 if (bus.dma_start){
                     bus.dma_start = false;

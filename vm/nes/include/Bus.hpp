@@ -60,6 +60,7 @@ struct Bus {
     bool dma_active = false;
     unsigned dma_index = 0;
     bool nmi_interrupt_flip_flop = false;
+    size_t ppu_current_y = 0;
     size_t status_read_cycle = 0;
     size_t current_nmi_cycle = 0;
     size_t current_ppu_cycle = 0;
@@ -89,6 +90,9 @@ struct Bus {
         m8x16
     } sprite_mode = m8x8;
     unsigned short ppu_v{};
+    void inc_ppu_v_x();
+    void inc_ppu_v_y();
+    void inc_by_ppudata();
     unsigned short ppu_t{};
     bool ppu_w{};
     unsigned char ppu_x{};
