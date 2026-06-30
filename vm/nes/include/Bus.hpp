@@ -37,7 +37,7 @@ struct Bus {
     static inline std::bitset<0x4000> ppu_trigger_read_addresses{};
     static inline std::bitset<0x4000> ppu_trigger_write_addresses{};
 
-    SimpleDequeTC<std::pair<unsigned short,unsigned char>,3> ppu_write_addresses;
+    SimpleDequeTC<std::pair<unsigned short,unsigned char>,10> ppu_write_addresses;
     bool ppu_addr_triggered_on_read = false;
     bool ppu_addr_triggered_on_write = false;
 
@@ -46,7 +46,7 @@ struct Bus {
     static inline std::bitset<0x10000> cpu_trigger_write_addresses;
     static inline std::bitset<0x10000> cpu_trigger_read_addresses;
 
-    SimpleDequeTC<std::pair<unsigned short,unsigned char>,5> cpu_write_addresses;
+    SimpleDequeTC<std::pair<unsigned short,unsigned char>, 10> cpu_write_addresses;
     bool cpu_addr_triggered_on_read = false;
     bool cpu_addr_triggered_on_write = false;
 #endif

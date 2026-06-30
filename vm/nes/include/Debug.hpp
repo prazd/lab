@@ -568,6 +568,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         if (CheckCollisionPointRec(GetMousePosition(), button14) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             snap_storage.step_back(bus, cpu, ppu);
             handle(cpu);
+            cpu.debug_run = false;
         }
     }
 
@@ -793,123 +794,28 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
 
 struct SnapStorage {
     struct CPUs {
-        unsigned char x{},y{},a{};
-        unsigned short pc, sp;
-        CPU::StatusReg sr{};
-        unsigned char value{};
-        unsigned long cycles_count = 0;
-        unsigned short pc_watch_address{};
-        SimpleDequeTC<std::pair<unsigned short, unsigned char>,5> write_addresses;
+        // TODO: check
+        SimpleDequeTC<std::pair<unsigned short, unsigned char>,10> write_addresses;
+        CPU cpu_state;
         inline void from_cpu(const CPU& cpu, Bus& bus){
-            x = cpu.x;
-            y = cpu.y;
-            a = cpu.a;
-            pc = cpu.pc;
-            sp = cpu.sp;
-            cycles_count = cpu.cycles_count;
+            cpu_state = cpu;
             write_addresses = bus.cpu_write_addresses;
         }
         inline void to_cpu(Bus& bus, CPU& cpu){
             while(!write_addresses.empty()){
                 auto cur = write_addresses.back();
-               bus.unsafe_write(cur.first, cur.second);
+                bus.unsafe_write(cur.first, cur.second);
                 write_addresses.pop_back();
             }
-            cpu.x = x;
-            cpu.y = y;
-            cpu.a = a;
-            cpu.pc = pc;
-            cpu.sp = sp;
-            cpu.cycles_count = cycles_count;
+            cpu = cpu_state;
         }
     };
 
     struct PPUs{
-        size_t current_cycle{};
-        size_t frames_count{};
-
-        bool frame_start = false;
-        bool tile_start = false;
-        bool update_shifts = false;
-        bool line_start = false;
-        size_t last_line_x{};
-        size_t current_line_x{};
-        bool is_sprite_off = false;
-        bool run = false;
-        bool fill_white_background = true;
-        PPU::PixelMixingDebugView pixel_mixing_debug_view{};
-        PPU::FetchStep current_step{};
-        SimpleDequeTC<PPU::Sprite, 8> secondary_oam_buffer{};
-        SimpleDequeTC<PPU::SpriteData, 8> secondary_oam{};
-
-        unsigned short current_scanline_cycle = 0;
-        unsigned char nt_byte = 0;
-        unsigned char attrib_value = 0;
-        unsigned char pattern_table_l = 0;
-        unsigned char pattern_table_h = 0;
-
-        unsigned short base_name_table_address{};
-        unsigned short bg_pattern_table_address{};
-        unsigned short base_attrib_address{};
-        unsigned short sprite_pattern_table_address8x8{};
-
-        PPU::SpriteEvaluationState current_sprite_evaluation_step;
-        bool copy_in_progress = false;
-        unsigned char tmp_oam_value = 0;
-
-        size_t copy_step_count = 0;
-        PPU::Sprite tmp_sprite;
-
-        size_t current_oam_index = 0;
-        size_t sprite_evaluation_index = 0;
-        unsigned short shift_register_low{};
-        unsigned short shift_register_high{};
-
-        unsigned short attributes_low{};
-        unsigned short attributes_high{};
-        bool address_increment_on_read_ppudata = false; //    RAM address increment per CPU read/write of PPUDATA
-        bool vblank_nmi_enable = false;
-
-        SimpleDequeTC<std::pair<unsigned short, unsigned char>, 3> write_addresses;
-
-        size_t current_x = 0;
-        size_t current_y = 0;
-
+        SimpleDequeTC<std::pair<unsigned short, unsigned char>, 10> write_addresses;
+        PPU ppu_state;
         inline void from_ppu(const PPU& ppu, Bus& bus){
-            current_cycle = ppu.current_cycle;
-            frames_count = ppu.frames_count;
-            frame_start = ppu.frame_start;
-            tile_start = ppu.tile_start;
-            update_shifts = ppu.update_shifts;
-            line_start = ppu.line_start;
-            last_line_x = ppu.last_line_x;
-            current_line_x = ppu.current_x;
-            is_sprite_off = ppu.is_sprite_off;
-            run = ppu.run;
-            fill_white_background = ppu.fill_white_background;
-            pixel_mixing_debug_view = ppu.pixel_mixing_debug_view;
-            current_step = ppu.current_step;
-            secondary_oam_buffer = ppu.secondary_oam_buffer;
-            secondary_oam = ppu.secondary_oam;
-            current_scanline_cycle = ppu.current_scanline_cycle;
-            nt_byte = ppu.nt_byte;
-            attrib_value = ppu.attrib_value;
-            pattern_table_l = ppu.pattern_table_l;
-            pattern_table_h = ppu.pattern_table_h;
-            base_name_table_address = ppu.base_name_table_address;
-            current_sprite_evaluation_step = ppu.current_sprite_evaluation_step;
-            copy_in_progress = ppu.copy_in_progress;
-            tmp_oam_value = ppu.tmp_oam_value;
-            copy_step_count = ppu.copy_step_count;
-            tmp_sprite = ppu.tmp_sprite;
-            current_oam_index = ppu.current_oam_index;
-            sprite_evaluation_index = ppu.sprite_evaluation_index;
-            shift_register_low = ppu.shift_register_low;
-            shift_register_high = ppu.shift_register_high;
-            attributes_low = ppu.attributes_low;
-            attributes_high = ppu.attributes_high;
-            current_x = ppu.current_x;
-            current_y = ppu.current_y;
+            ppu_state = ppu;
             write_addresses = bus.ppu_write_addresses;
         }
         inline void to_ppu(Bus& bus, PPU& ppu){
@@ -918,47 +824,16 @@ struct SnapStorage {
                 bus.write_chr(cur.first, cur.second);
                 write_addresses.pop_back();
             }
-            ppu.current_cycle = current_cycle;
-            ppu.frames_count = frames_count;
-            ppu.frame_start = frame_start;
-            ppu.tile_start = tile_start;
-            ppu.update_shifts = update_shifts;
-            ppu.line_start = line_start;
-            ppu.last_line_x = last_line_x;
-            ppu.current_line_x = current_x;
-            ppu.is_sprite_off = is_sprite_off;
-            ppu.run = run;
-            ppu.fill_white_background = fill_white_background;
-            ppu.pixel_mixing_debug_view = pixel_mixing_debug_view;
-            ppu.current_step = current_step;
-            ppu.secondary_oam_buffer = secondary_oam_buffer;
-            ppu.secondary_oam = secondary_oam;
-            ppu.current_scanline_cycle = current_scanline_cycle;
-            ppu.nt_byte = nt_byte;
-            ppu.attrib_value = attrib_value;
-            ppu.pattern_table_l = pattern_table_l;
-            ppu.pattern_table_h = pattern_table_h;
-            ppu.base_name_table_address = base_name_table_address;
-            ppu.current_sprite_evaluation_step = current_sprite_evaluation_step;
-            ppu.copy_in_progress = copy_in_progress;
-            ppu.tmp_oam_value = tmp_oam_value;
-            ppu.copy_step_count = copy_step_count;
-            ppu.tmp_sprite = tmp_sprite;
-            ppu.current_oam_index = current_oam_index;
-            ppu.sprite_evaluation_index = sprite_evaluation_index;
-            ppu.shift_register_low = shift_register_low;
-            ppu.shift_register_high = shift_register_high;
-            ppu.attributes_low = attributes_low;
-            ppu.attributes_high = attributes_high;
-            ppu.current_x = current_x;
-            ppu.current_y = current_y;
+            ppu = ppu_state;
         }
     };
+
     struct State {
         CPUs cpus;
         PPUs ppus;
         Bus bus;
     };
+    State next;
     CircleStack<State,10> prev_states;
     void step_back(Bus& bus, CPU& cpu, PPU& ppu){
         if (!prev_states.empty()){
@@ -970,15 +845,18 @@ struct SnapStorage {
         }
     }
 
-    void push_state(Bus& bus, CPU& cpu, PPU& ppu){
-        State s;
-        s.cpus.from_cpu(cpu, bus);
-        s.ppus.from_ppu(ppu, bus);
-        s.bus = bus;
+    void update_state(Bus& bus, CPU& cpu, PPU& ppu){
+        next.cpus.from_cpu(cpu, bus);
+        next.ppus.from_ppu(ppu, bus);
+        next.bus = bus;
+    }
 
+    void push_state(Bus& bus){
+        next.cpus.write_addresses = bus.cpu_write_addresses;
+        next.ppus.write_addresses = bus.ppu_write_addresses;
         bus.cpu_write_addresses.reset();
         bus.ppu_write_addresses.reset();
-        prev_states.push(std::move(s)); // todo: check
+        prev_states.push(std::move(next)); // todo: check
     }
 };
 

@@ -134,7 +134,7 @@ struct NESVM {
         do {
             bool snap_update = cpu.debug_run;
             if (snap_update)
-                snap_storage.push_state(bus, cpu, ppu);
+                snap_storage.update_state(bus, cpu, ppu);
             while (cpu.debug_run) {
                 ppu_tick();
                 bus.tick();
@@ -147,6 +147,8 @@ struct NESVM {
                 bus.tick();
                 ++current_tick;
             }
+            if (snap_update)
+                snap_storage.push_state(bus);
             if (dis.selected_move_active) {
                 dis.selected_move_active = cpu.debug_run = (cpu.pc != dis.selected_line_pc);
             } else if (dis.trigger_search) {
@@ -165,8 +167,7 @@ struct NESVM {
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active ||
                 dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run ||
                 dis.selected_scanline_active || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLES) {
-            if (!cpu.debug_run)
-                snap_storage.push_state(bus, cpu, ppu);
+            if (!cpu.debug_run) snap_storage.update_state(bus, cpu, ppu); // todo: check
             cpu.debug_run = true;
             ppu_tick();
             if (dis.is_frame_jump_active && ppu.frame_start){
@@ -188,6 +189,7 @@ struct NESVM {
                 if (dis.is_line_jump_active && ppu.line_start) {
                     dis.is_line_jump_active = false;
                 }
+                if (!cpu.debug_run) snap_storage.push_state(bus);
             }
             bus.tick();
         }
@@ -236,6 +238,7 @@ struct NESVM {
 #if DEBUG_MODE
         InitWindow(constants::DEBUG_WIDTH, constants::DEBUG_HEIGHT, "NES");
 #else
+        SetConfigFlags(FLAG_WINDOW_RESIZABLE);
         InitWindow(constants::WIDTH, constants::HEIGHT, "NES");
 #endif
 
@@ -398,7 +401,7 @@ struct NESVM {
 
             if (grid_view_enable) dtg.draw(22.4f,22.4f);
 #else
-            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,constants::WIDTH, constants::HEIGHT}, {0, 0},0, WHITE);
+            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,(float)GetScreenWidth(), (float)GetScreenHeight()}, {0, 0},0, WHITE);
 #endif
             DrawFPS(0,0);
             EndDrawing();
@@ -443,9 +446,9 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, PPUm>{}.run();
+    MultiTest<NESVM, CPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // e08a
+    NESVM{"/Users/prazd/Desktop/dev/Zelda.nes"}.run(); // e08a
 
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif

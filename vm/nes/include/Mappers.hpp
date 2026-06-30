@@ -274,8 +274,10 @@ namespace mappers {
             }
         }
         inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr){
-            // todo: check
-            return rom[addr];
+            // TODO: check
+            if (!(control_register & 0x10)) return rom[addr];
+            bool b0 = (addr >= 0 && addr <= 0x0fff);
+            return rom[((b0 ? chr_bank0 : chr_bank1) * 0x1000) + (addr - (b0 ? 0 : 0x1000))];
         }
     };
 }
