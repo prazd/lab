@@ -21,7 +21,9 @@
     asm("movq %%r13, %0" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::R13]));\
     asm("movq %%r14, %0" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::R14]));\
     asm("movq %%r15, %0" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::R15]));\
-    asm("movq 8(%%rsp), %0" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::RIP]));\
+    asm("call *%0" :: "r"((uintptr_t)Coro::save_rip) : "memory");\
+    asm("leave");\
+    asm("ret");\
 
 struct Coro {
     struct State {
@@ -39,6 +41,32 @@ struct Coro {
     };
     static inline void(*current_coro)() = nullptr;
     static inline std::unordered_map<void(*)(),  State> f_s;
+    static void restore(){
+        asm("movq %0,%%rax" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::RAX]));\
+        asm("movq %0,%%rbx" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::RBX]));\
+        asm("movq %0,%%rcx" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::RCX]));\
+        asm("movq %0,%%rdx" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::RDX]));\
+        asm("movq %0,%%rdi" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::RDI]));\
+        asm("movq %0,%%rsi" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::RSI]));\
+        asm("movq %0,%%rbp" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::RBP]));\
+        asm("movq %0,%%rsp" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::RSP]));\
+        asm("movq %0,%%r8" :   "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::R8]));\
+        asm("movq %0,%%r9" :   "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::R9]));\
+        asm("movq %0,%%r10" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::R10]));\
+        asm("movq %0,%%r11" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::R11]));\
+        asm("movq %0,%%r12" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::R12]));\
+        asm("movq %0,%%r13" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::R13]));\
+        asm("movq %0,%%r14" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::R14]));\
+        asm("movq %0,%%r15" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::R15]));\
+        asm("movq %0,%%rsp" :  "=r"(Coro::f_s[Coro::current_coro].begin)); \
+        asm("movq %0,%%rbp" :  "=r"(Coro::f_s[Coro::current_coro].end)); \
+        asm("movq %0,8(%%rsp)" : "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::RIP]));\
+    }
+    // TODO: debug
+    static void save_rip(){
+        asm("movq 8(%%rsp), %0" :  "=r"(Coro::f_s[Coro::current_coro].regs[Coro::State::RIP]));\
+        Coro::f_s[Coro::current_coro].regs[Coro::State::RIP] += 2;
+    }
     static void dump_stack(){
         memcpy(f_s[current_coro].stack, (void*)(f_s[current_coro].begin), f_s[current_coro].end-f_s[current_coro].begin);
         f_s[current_coro].top = f_s[current_coro].end-f_s[current_coro].begin;
@@ -51,9 +79,11 @@ void foo(){
     Coro::dump_stack();
     Coro::f_s[Coro::current_coro].print_stack();
     int z = 20;
+    printf("!!!!");
 }
 
 int main(){
     Coro::f_s[foo] = Coro::State{};
     foo();
+    // Coro::restore();
 }
