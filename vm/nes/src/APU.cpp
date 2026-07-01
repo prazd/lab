@@ -1,12 +1,12 @@
 #include  "APU.hpp"
 
 void APU::frame_counter_step4(Bus& bus) {
-    if (cycle_counter == 7457 || cycle_counter == 7457 * 3) {
+    if (cycle_counter == 7457 || cycle_counter == (7457 * 3)) {
         frame_counter_quarter_update(bus);
-    } else if (cycle_counter == 7457 * 2){
+    } else if (cycle_counter == 14913){
         frame_counter_quarter_update(bus);
         frame_counter_half_update(bus);
-    } else if (cycle_counter == 7457 * 4) {
+    } else if (cycle_counter == 29829) {
         frame_counter_quarter_update(bus);
         frame_counter_half_update(bus);
         if (!irq_inhibit) {
@@ -14,20 +14,21 @@ void APU::frame_counter_step4(Bus& bus) {
             bus.apu_control |= 0x40;
         }
     }
-    cycle_counter = (cycle_counter + 1) % ((7457 * 4) + 1);
+    cycle_counter = (cycle_counter + 1) % (29830);
 }
 
 void APU::frame_counter_step5(Bus& bus) {
-    if (cycle_counter == 7457 || cycle_counter == 7457 * 3) {
+    // todo: debug
+    if (cycle_counter == 7457 || cycle_counter == (7457 * 3)) {
         frame_counter_quarter_update(bus);
-    } else if (cycle_counter == 7457 * 2){
+    } else if (cycle_counter == 14913){
         frame_counter_quarter_update(bus);
         frame_counter_half_update(bus);
-    } else if (cycle_counter == 7457 * 5) {
+    } else if (cycle_counter == 29829) {
         frame_counter_quarter_update(bus);
         frame_counter_half_update(bus);
     }
-    cycle_counter = (cycle_counter + 1) % ((7457 * 5) + 1);
+    cycle_counter = (cycle_counter + 1) % (37282);
 }
 
 void APU::frame_counter_quarter_update(Bus& bus) {
@@ -47,10 +48,10 @@ void APU::handle_frame_counter_update(Bus& bus) {
             frame_counter_quarter_update(bus);
             frame_counter_half_update(bus);
         }
-        irq_inhibit = (bus.apufc >> 6) & 1;
+        irq_inhibit = (bus.apufc & 0x40);
         if (irq_inhibit && frame_counter_mode == Step4) bus.apu_control &= 0xbf;
         frame_counter_reset = true;
-        frame_counter_reset_ticks = (current_tick & 1) ? 2 : 3; // todo: check (3,4)
+        frame_counter_reset_ticks = (current_tick & 1) ? 2 : 3;
         bus.apufc_requested = false;
     } else {
         if (frame_counter_mode == Step4)
@@ -121,7 +122,7 @@ void APU::tick(Bus& bus) {
                 frame_counter_step5(bus);
         }
     }
-    handle_frame_counter_update(bus);
+
 #if APU_ON
     sample_acc += 44100;
     if (sample_acc >= constants::CPU_SPEED){
@@ -134,4 +135,5 @@ void APU::tick(Bus& bus) {
 #endif
     ++current_tick;
     update_control(bus);
+    handle_frame_counter_update(bus);
 }

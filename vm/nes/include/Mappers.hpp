@@ -224,7 +224,7 @@ namespace mappers {
         inline bool handle(unsigned short address, unsigned char val) {
             if (val & 0x80) {
                 mmc1_sr = 0x10;
-                control_register = 0; // todo: check
+                control_register |= 0xc;
                 return false;
             }
 

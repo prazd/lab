@@ -1703,7 +1703,7 @@ template <size_t x, size_t y, size_t w, size_t h>
 struct CustomController: DebugWindowText<x,y,w,h> {
     using DW = DebugWindowText<x,y,w,h>;
     const char* dir_buttons_text[4]={" u"," d", " l", " r"};
-    const char* select_buttons_text[4]={" q"," e", " s", " e"};
+    const char* select_buttons_text[4]={" a"," b", " s", " e"};
     std::stringstream ss;
 
     enum Mode {

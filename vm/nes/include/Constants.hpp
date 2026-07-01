@@ -1,12 +1,12 @@
 #ifndef NES_CONSTANTS_HPP
 #define NES_CONSTANTS_HPP
 #include <iostream>
-#define APU_TICK_ON 0
+#define APU_TICK_ON 1
 #define APU_ON 0
 #define HIDE_OVERSCAN 1
 #define DEBUG_MODE 1
 #define GAME_GENIE_MODE 0
-#define MULTI_TEST_MODE 0
+#define MULTI_TEST_MODE 1
 
 #if !MULTI_TEST_MODE
 #define VEC_MODE static inline
@@ -131,6 +131,5 @@ namespace constants {
     constexpr unsigned short DMC_CHAN_SAMPLE_LENGTH = 0x4013;
 
     constexpr unsigned short APU_CONTROL = 0x4015;
-    constexpr unsigned short APU_FRAME_COUNTER = 0x4017;
 }
 #endif //NES_CONSTANTS_HPP

@@ -9,7 +9,15 @@
 #include "PPU.hpp"
 
 enum TestMode {
-    CPUm, PPUm
+    CPUm, PPUm, APUm
+};
+
+constexpr static std::string_view apu_tests[] = {
+        "/Users/prazd/Desktop/dev/nes-test-roms/blargg_apu_2005.07.30/01.len_ctr.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/blargg_apu_2005.07.30/02.len_table.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/blargg_apu_2005.07.30/03.irq_flag.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/blargg_apu_2005.07.30/04.clock_jitter.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/blargg_apu_2005.07.30/05.len_timing_mode0.nes",
 };
 
 constexpr static std::string_view cpu_tests[] = {
@@ -57,6 +65,7 @@ struct MultiTest{
         switch (tm) {
             case CPUm: return std::size(cpu_tests);
             case PPUm: return std::size(ppu_tests);
+            case APUm: return std::size(apu_tests);
             default: return 0ul;
         }
     }();
@@ -81,6 +90,9 @@ struct MultiTest{
             for (int j = 0; j < 3; ++j) {
                 vm.ppu_tick();
             }
+#if APU_TICK_ON
+            vm.apu_tick();
+#endif
             vm.cpu_tick();
             vm.bus.tick();
         }
@@ -101,7 +113,13 @@ struct MultiTest{
 
     void run(){
         InitWindow(WIDTH, HEIGHT, "MultiTest");
-        const auto& tests_paths = tm == CPUm ? cpu_tests : ppu_tests;
+        const auto tests_paths = []{
+            switch (tm) {
+                case CPUm : return cpu_tests;
+                case PPUm : return ppu_tests;
+                case APUm : return apu_tests;
+            }
+        }();
         bool test_active[tm == CPUm ? std::size(cpu_tests) : std::size(ppu_tests)];
         std::fill(std::begin(test_active), std::end(test_active), true);
 
