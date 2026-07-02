@@ -219,6 +219,7 @@ struct APU {
 
     size_t cycle_counter{};
     bool irq_inhibit = false;
+    size_t irq_set_counter = 0;
     bool frame_counter_reset = false;
     unsigned char frame_counter_reset_ticks = 0;
 

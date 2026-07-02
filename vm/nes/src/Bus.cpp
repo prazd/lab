@@ -252,7 +252,8 @@ unsigned char Bus::read_prg_internal(unsigned short addr) {
         case constants::CONTROLLER2_AND_APU_FC:
             return cpu_open_bus_value & 0xfe;
         case constants::APU_CONTROL: {
-            apu_clear_frame_irq_req = true;
+            if (master_clock - apu_fc_irq_set_cycle > 3) // TODO: check
+                apu_clear_frame_irq_req = true;
             return (apu_control & 0xdf) | (cpu_internal_bus_value & 0x20);
         }
         case constants::PULSE1_DUTY_ENVELOPE:{

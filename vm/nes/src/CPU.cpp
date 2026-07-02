@@ -1486,8 +1486,8 @@ void CPU::interrupt_handle(Bus& bus) {
             sr.set(StatusReg::I, false);
             bus.nmi_interrupt_flip_flop = false;
         } else if ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop)) { // todo: check !sr.get(StatusReg::I)
-            sr.set(StatusReg::I, false); // TODO: check
-            interrupt_requests[IRQ] = true;
+            if (!sr.get(StatusReg::I))
+                interrupt_requests[IRQ] = true;
             bus.apu_irq_interrupt_flip_flop = false;
             bus.ppu_irq_interrupt_flip_flop = false;
         }
@@ -1509,11 +1509,8 @@ void CPU::interrupt_handle(Bus& bus) {
 
 void CPU::update_interrupt_request(Bus& bus){
     if (di.cycles == 1 && !interrupt_requested){
-        if (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.master_clock - bus.current_nmi_cycle > 2) { // todo: check
-            interrupt_requested = true;
-        } else if ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop) && !sr.get(StatusReg::I)) { // todo: check
-            interrupt_requested = true;
-        }
+        interrupt_requested = ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.master_clock - bus.current_nmi_cycle > 2) ||
+                ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop) && bus.master_clock - bus.apu_fc_irq_set_cycle > 2));
     }
 }
 

@@ -18,6 +18,7 @@ constexpr static std::string_view apu_tests[] = {
         "/Users/prazd/Desktop/dev/nes-test-roms/blargg_apu_2005.07.30/03.irq_flag.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/blargg_apu_2005.07.30/04.clock_jitter.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/blargg_apu_2005.07.30/05.len_timing_mode0.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/blargg_apu_2005.07.30/06.len_timing_mode1.nes",
 };
 
 constexpr static std::string_view cpu_tests[] = {

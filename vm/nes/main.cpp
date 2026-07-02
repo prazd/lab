@@ -448,7 +448,7 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, APUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/blargg_apu_2005.07.30/06.len_timing_mode1.nes"}.run(); // e08a
+    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // e08a
 
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
