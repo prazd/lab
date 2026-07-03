@@ -3,9 +3,16 @@
 #include <cstring>
 #include <iomanip>
 
+// TODO: add scheduler
+#define PROLOGUE\
+    static bool init = false;\
+    if (!init) init = true; else {RESTORE}\
+
 #define YIELD \
     asm("movq %%rsp, %0" : "=r"(Coro::f_s.begin)); \
     asm("movq %%rbp, %0" : "=r"(Coro::f_s.end)); \
+    memcpy(Coro::f_s.stack, (void*)(Coro::f_s.begin), Coro::f_s.end-Coro::f_s.begin);\
+    Coro::f_s.top = Coro::f_s.end-Coro::f_s.begin;\
     asm("movq %%rax, %0" : "=r"(Coro::f_s.regs[Coro::State::RAX]));\
     asm("movq %%rbx, %0" : "=r"(Coro::f_s.regs[Coro::State::RBX]));\
     asm("movq %%rcx, %0" : "=r"(Coro::f_s.regs[Coro::State::RCX]));\
@@ -27,6 +34,9 @@
     asm("ret");\
 
 #define RESTORE \
+        size_t rsp = 0;\
+        asm("movq %%rsp, %0" : "=r"(rsp));\
+        memcpy((void*)rsp, Coro::f_s.stack, Coro::f_s.top);\
         asm("movq %0,%%rbx" :: "m"(Coro::f_s.regs[Coro::State::RBX]) : "rbx");\
         asm("movq %0,%%rcx" :: "m"(Coro::f_s.regs[Coro::State::RCX]) : "rcx");\
         asm("movq %0,%%rdx" :: "m"(Coro::f_s.regs[Coro::State::RDX]) : "rdx");\
@@ -76,30 +86,28 @@ struct Coro {
         asm("movq 8(%%rsp), %0" :  "=r"(Coro::f_s.regs[Coro::State::RIP]));
         Coro::f_s.regs[Coro::State::RIP] += 2;
     }
-    static void dump_stack(){
-        memcpy(f_s.stack, (void*)(f_s.begin), f_s.end-f_s.begin);
-        f_s.top = f_s.end-f_s.begin;
-    }
 };
 
-void foo(bool first){
-    if (!first){
-        RESTORE
-    }
-    // int x = 10;
-    // Coro::dump_stack();
-    printf("1");
+
+// TODO: debug gcc
+__attribute__((optimize("-fno-omit-frame-pointer")))
+void foo(){
+    PROLOGUE
+    int x = 2;
+    printf("1\n");
     YIELD
-    printf("3");
+    int y = 3;
+    printf("3\n");
     YIELD
-    printf("5");
+    int z = x + y;
+    printf("%d\n", z);
 }
 
 int main(){
-    foo(true);
-    printf("2");
-    foo(false);
-    printf("4");
-    foo(false);
-    printf("6");
+    foo();
+    printf("2\n");
+    foo();
+    printf("4\n");
+    foo();
+    printf("6\n");
 }
