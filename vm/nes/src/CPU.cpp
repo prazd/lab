@@ -350,6 +350,13 @@ CPU::DecodedInstruction CPU::decode(unsigned char i) {
     return {};
 }
 
+void CPU::set_next_write_by_push_addr() {
+    static constexpr Instruction write_list[] = { // TODO: check + maybe add ASL
+            STA, STX, STY, AAX
+    };
+    as.next_write = std::any_of(std::begin(write_list), std::end(write_list), [i=di.i](auto el){return i == el;});
+}
+
 void CPU::push_addr_step(AddressingStep step) {
     switch (step) {
         case LowByte: {
@@ -367,12 +374,14 @@ void CPU::push_addr_step(AddressingStep step) {
         case AddrPlusX: {
             iop.push_front([](Bus &bus, CPU& cpu){
                 cpu.as.result = (unsigned short)((cpu.as.arg1 + cpu.x) % 256);
+                cpu.set_next_write_by_push_addr();
             });
             break;
         }
         case AddrPlusY: {
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.as.result = (unsigned short)((cpu.as.arg1 + cpu.y) % 256);
+                cpu.set_next_write_by_push_addr();
             });
             break;
         }
@@ -393,6 +402,7 @@ void CPU::push_addr_step(AddressingStep step) {
                     cpu.as.result = addr;
                     cpu.as.addr_to_add = 0;
                 }
+                cpu.set_next_write_by_push_addr();
             });
             break;
         }
@@ -413,6 +423,7 @@ void CPU::push_addr_step(AddressingStep step) {
                     cpu.as.result = addr;
                     cpu.as.addr_to_add = 0;
                 }
+                cpu.set_next_write_by_push_addr();
             });
             break;
         }
@@ -431,6 +442,7 @@ void CPU::push_addr_step(AddressingStep step) {
         case IndXRes: {
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.as.result = cpu.as.ind_low + cpu.as.tmp_h;
+                cpu.set_next_write_by_push_addr();
             });
             break;
         }
@@ -457,6 +469,7 @@ void CPU::push_addr_step(AddressingStep step) {
                     cpu.as.result = res_addr;
                     cpu.as.addr_to_add = 0;
                 }
+                cpu.set_next_write_by_push_addr();
             });
             break;
         }
@@ -464,12 +477,14 @@ void CPU::push_addr_step(AddressingStep step) {
             iop.push_front([](Bus& bus, CPU& cpu){
                 auto h = bus.read_prg(cpu.pc + 2);
                 cpu.as.result = ((cpu.as.arg1) | h << 8);
+                cpu.set_next_write_by_push_addr();
             });
             break;
         }
         case Zp: {
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.as.result = bus.read_prg(cpu.pc + 1);
+                cpu.set_next_write_by_push_addr();
             });
             break;
         }
@@ -546,6 +561,7 @@ void CPU::fill_exec_ops() {
                 iop.push_front([](Bus& bus, CPU& cpu){
                     unsigned char val =  cpu.read(bus, cpu.arg);
                     cpu.as.write_value = val; // RMW
+                    cpu.as.next_write = true;
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
                     cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -554,6 +570,7 @@ void CPU::fill_exec_ops() {
                     cpu.sr.set(StatusReg::Z, res == 0);
                     cpu.sr.set(StatusReg::N, res & 0x80);
                     cpu.as.write_value = res & 0xff;
+                    cpu.as.next_write = true;
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
                     cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -572,9 +589,11 @@ void CPU::fill_exec_ops() {
                 cpu.sr.set(StatusReg::N, cpu.a & 0x80);
                 cpu.as.write_value = res & 0xff;
                 cpu.as.old_value = val;
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.old_value); // RMW
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -592,9 +611,11 @@ void CPU::fill_exec_ops() {
                 cpu.sr.set(StatusReg::N, cpu.a & 0x80);
                 cpu.as.write_value = res & 0xff;
                 cpu.as.old_value = val;
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.old_value); // RMW
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -612,9 +633,11 @@ void CPU::fill_exec_ops() {
                 cpu.sr.set(StatusReg::N, cpu.a & 0x80);
                 cpu.as.write_value = res & 0xff;
                 cpu.as.old_value = val;
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.old_value); // RMW
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -638,9 +661,11 @@ void CPU::fill_exec_ops() {
                 cpu.sr.set(StatusReg::V, (res ^ cpu.a) & (res ^ val) & 0x80);
                 cpu.sr.set(StatusReg::N, res & 0x80);
                 cpu.a = res & 0xff;
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.old_value); // RMW
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value); // RMW
@@ -675,9 +700,11 @@ void CPU::fill_exec_ops() {
                 cpu.sr.set(StatusReg::N, (cpu.a - res) & 0x80);
                 cpu.as.write_value = res & 0xff;
                 cpu.as.old_value = val;
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.old_value); // RMW
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -697,9 +724,11 @@ void CPU::fill_exec_ops() {
                 cpu.sr.set(StatusReg::V, (((res & 0xff) ^ cpu.a) & ((res & 0xff) ^ (~val))) & 0x80);
                 cpu.sr.set(StatusReg::N, res & 0x80);
                 cpu.a = res & 0xff;
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.old_value);
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -713,6 +742,7 @@ void CPU::fill_exec_ops() {
                 unsigned char res = cpu.y & (((cpu.arg.addr >> 8) & 0xff) + 1);
                 if (res > 0){
                      cpu.as.write_value = res & 0xff;
+                     cpu.as.next_write = true;
                      cpu.iop.push_front([](Bus& bus, CPU& cpu){
                          ++cpu.di.cycles;
                          cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -729,6 +759,7 @@ void CPU::fill_exec_ops() {
                 unsigned char res = cpu.x & (((cpu.arg.addr >> 8) & 0xff) + 1);
                 if (res > 0){
                     cpu.as.write_value = res & 0xff;
+                    cpu.as.next_write = true;
                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
                         cpu.write(bus, cpu.arg, cpu.as.write_value);
                         ++cpu.di.cycles;
@@ -765,12 +796,14 @@ void CPU::fill_exec_ops() {
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 --cpu.sp;
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 bus.write(0x100 + cpu.sp, (cpu.pc + 2) & 0xff);
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 --cpu.sp;
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.sr.set(StatusReg::B, true);
@@ -828,9 +861,11 @@ void CPU::fill_exec_ops() {
                 cpu.sr.set(StatusReg::N, res & 0x80);
                 cpu.as.write_value = res & 0xff;
                 cpu.as.old_value = val; // RMW
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.old_value);
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -877,9 +912,11 @@ void CPU::fill_exec_ops() {
                 cpu.sr.set(StatusReg::N, res & 0x80);
                 cpu.as.write_value = res & 0xff;
                 cpu.as.old_value = val;
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.old_value);// RMW
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -938,9 +975,11 @@ void CPU::fill_exec_ops() {
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 bus.read_prg(cpu.sp + 0x100); // dummy read
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 bus.write(0x100 + cpu.sp, ((cpu.pc + 2) >> 8) & 0xff); --cpu.sp;
+                cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 bus.write(0x100 + cpu.sp, (cpu.pc + 2) & 0xff); --cpu.sp;
@@ -993,6 +1032,7 @@ void CPU::fill_exec_ops() {
                 iop.push_front([](Bus& bus, CPU& cpu){
                     unsigned char val = cpu.read(bus, cpu.arg);
                     cpu.as.write_value = val; // RMW
+                    cpu.as.next_write = true;
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
                     cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -1001,6 +1041,7 @@ void CPU::fill_exec_ops() {
                     cpu.sr.set(StatusReg::Z, res == 0);
                     cpu.sr.set(StatusReg::N, 0);
                     cpu.as.write_value = res & 0xff;
+                    cpu.as.next_write = true;
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
                     cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -1074,7 +1115,7 @@ void CPU::fill_exec_ops() {
         // TODO: debug
         case SHA: {
             iop.push_front([](Bus& bus, CPU& cpu){});
-            iop.push_front([](Bus& bus, CPU& cpu){});
+            iop.push_front([](Bus& bus, CPU& cpu){cpu.as.next_write = true;});
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.as.write_value = ((cpu.a & (cpu.x)) & (std::min(((cpu.arg.addr >> 8) + 1) & 0xff, 0x1f)));
                 cpu.arg.addr = ((cpu.a & cpu.x & ((cpu.arg.addr >> 8) & 0xff)) << 8) | (cpu.arg.addr & 0xff);
@@ -1085,7 +1126,7 @@ void CPU::fill_exec_ops() {
         }
         case SHS: {
             iop.push_front([](Bus& bus, CPU& cpu){});
-            iop.push_front([](Bus& bus, CPU& cpu){});
+            iop.push_front([](Bus& bus, CPU& cpu){cpu.as.next_write = true;});
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.sp = cpu.a & cpu.x;
                 cpu.as.write_value = ((cpu.a & (cpu.x)) & (std::min(((cpu.arg.addr >> 8) + 1) & 0xff, 0x1f)));
@@ -1211,6 +1252,7 @@ void CPU::fill_exec_ops() {
                 iop.push_front([](Bus& bus, CPU& cpu){
                     unsigned char val = cpu.read(bus, cpu.arg);
                     cpu.as.write_value = val; // RMW
+                    cpu.as.next_write = true;
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
                     cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -1220,6 +1262,7 @@ void CPU::fill_exec_ops() {
                     cpu.sr.set(StatusReg::Z, res == 0);
                     cpu.sr.set(StatusReg::N, res & 0x80);
                     cpu.as.write_value = res & 0xff;
+                    cpu.as.next_write = true;
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
                     cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -1244,6 +1287,7 @@ void CPU::fill_exec_ops() {
                 iop.push_front([](Bus& bus, CPU& cpu){
                     unsigned char val = cpu.read(bus, cpu.arg);
                     cpu.as.write_value = val;
+                    cpu.as.next_write = true;
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
                     cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -1253,6 +1297,7 @@ void CPU::fill_exec_ops() {
                     cpu.sr.set(StatusReg::Z, res == 0);
                     cpu.sr.set(StatusReg::N, res & 0x80);
                     cpu.as.write_value = res & 0xff;
+                    cpu.as.next_write = true;
                 });
                 iop.push_front([](Bus& bus, CPU& cpu){
                     cpu.write(bus, cpu.arg, cpu.as.write_value);
@@ -1471,11 +1516,14 @@ void CPU::update_arg() {
 }
 
 void CPU::iop_exec_step(Bus& bus) {
+    as.next_write = false;
     update_arg();
     if (!iop.empty()){
         auto f = iop.back(); iop.pop_back();
         f(bus, *this);
     }
+    bus.next_write = as.next_write;
+    bus.last_arg_addr = as.result; // TODO: check
 }
 
 void CPU::interrupt_handle(Bus& bus) {
@@ -1575,6 +1623,7 @@ void CPU::tick_step(Bus& bus){
 #if DEBUG_MODE
             if (istep == Fetch) debug_run = false; // todo: check
 #endif
+            if (istep == Fetch) {bus.last_arg_addr = as.result = pc;}
             break;
         }
     }

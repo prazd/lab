@@ -103,6 +103,8 @@ struct DMCChan : Channel {
     unsigned char shift_count{};
     char output_level{};
 
+    unsigned char dmc_delay = 0;
+
     unsigned char dmc_dma_counter = 0;
 
     inline void restart(Bus& bus){
@@ -114,10 +116,10 @@ struct DMCChan : Channel {
         rate_counter = ntsc_rates[rate_index];
         dma_address = 0xc000;
         auto s_addr = bus.unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
+        dmc_delay = 4;
         dma_address |= s_addr << 6;
         dmc_dma_counter = 4;
         sample_ready = false;
-        bus.dmc_dma_in_progress = true;
     }
 
     inline void tick(Bus& bus){
@@ -143,9 +145,12 @@ struct DMCChan : Channel {
             return;
         }
 
-        if (dmc_dma_counter) {
+        if (dmc_delay){
+            --dmc_delay;
+            if (!dmc_delay) bus.dmc_dma_in_progress = true;
+        } else if (dmc_dma_counter) {
             --dmc_dma_counter;
-            bus.dmc_dma_read_prg(bus.dma_address); // dummy read
+            bus.dmc_dma_read_prg(bus.last_arg_addr); // dummy read
             if (!dmc_dma_counter){
                 sample_ready = true;
                 sample_buffer = bus.dmc_dma_read_prg(dma_address);
@@ -190,9 +195,14 @@ struct DMCChan : Channel {
                 }
                 // todo: check put/get cycle
 //                if (!bus.dmc_dma_in_progress){
-                    bus.dmc_dma_in_progress = true;
                     sample_ready = false;
+
                     dmc_dma_counter = 4;
+                    if (bus.next_write) {
+                        dmc_delay = 1; // TODO: check
+                    } else {
+                        bus.dmc_dma_in_progress = true;
+                    }
 //                }
             }
         }

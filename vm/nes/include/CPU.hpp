@@ -155,6 +155,10 @@ struct CPU {
     void iop_exec_step(Bus& bus);
     size_t current_iop_index{};
 
+    unsigned short last_read_addr = 0;
+
+    void set_next_write_by_push_addr();
+
     struct InstructionState {
         unsigned short tmp_l{};
         unsigned short tmp_h{};
@@ -166,6 +170,8 @@ struct CPU {
         unsigned char arg1{};
         unsigned char arg2{};
         unsigned short result{};
+        bool next_write = false;
+        bool next_read = false;
         Interrupt interrupt = RESET;
         StatusReg::Flag flag = StatusReg::Flag::Unused;
     } as;

@@ -55,6 +55,8 @@ struct Bus {
     VEC_MODE unsigned char cpu_map[0x10000]{};
     VEC_MODE unsigned char ppu_map[0x4000]{};
 
+    unsigned short last_arg_addr{};
+    bool next_write{};
     unsigned short dma_address{};
     bool dma_start = false;
     bool dma_active = false;
