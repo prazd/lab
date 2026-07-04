@@ -45,6 +45,8 @@ struct CPU {
     unsigned char x{};
     unsigned char y{};
 
+    bool dmc_dma_stop = false;
+
     enum Interrupt: unsigned char {
         RESET, NMI, IRQ, InterruptsCount
     };

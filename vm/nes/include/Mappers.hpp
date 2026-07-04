@@ -412,6 +412,9 @@ struct Mapper {
         }
     }
 
+    inline bool is_irq_enabled(){
+        return mmc3.irq_enable;
+    }
     inline bool is_irq_requested() {
         return mmc3.irq_requested;
     }

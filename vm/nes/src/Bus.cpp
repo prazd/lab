@@ -123,6 +123,10 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
     cpu_map[addr] = value;
 }
 
+bool Bus::is_apu_irq_enable() {
+    return !(apufc & 0x40);
+}
+
 unsigned char Bus::read_prg(unsigned short addr) {
     auto res = read_prg_internal(addr);
     if (addr != 0x4015) cpu_open_bus_value = res;

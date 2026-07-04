@@ -1111,13 +1111,12 @@ void CPU::fill_exec_ops() {
             });
             break;
         }
-
-        // TODO: debug
         case SHA: {
             iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){cpu.as.next_write = true;});
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.as.write_value = ((cpu.a & (cpu.x)) & (std::min(((cpu.arg.addr >> 8) + 1) & 0xff, 0x1f)));
+                cpu.as.write_value = ((cpu.a & (cpu.x)) &
+                            (cpu.dmc_dma_stop ? 0xff : (std::min(((cpu.arg.addr >> 8) + 1) & 0xff, 0x1f)))); // TODO: check (RDY line goes low 2 cycles before the write cycle)
                 cpu.arg.addr = ((cpu.a & cpu.x & ((cpu.arg.addr >> 8) & 0xff)) << 8) | (cpu.arg.addr & 0xff);
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
                 cpu.pc += cpu.di.bytes;
@@ -1129,7 +1128,8 @@ void CPU::fill_exec_ops() {
             iop.push_front([](Bus& bus, CPU& cpu){cpu.as.next_write = true;});
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.sp = cpu.a & cpu.x;
-                cpu.as.write_value = ((cpu.a & (cpu.x)) & (std::min(((cpu.arg.addr >> 8) + 1) & 0xff, 0x1f)));
+                cpu.as.write_value = ((cpu.a & (cpu.x)) &
+                                      (cpu.dmc_dma_stop ? 0xff : (std::min(((cpu.arg.addr >> 8) + 1) & 0xff, 0x1f)))); // TODO: check (RDY line goes low 2 cycles before the write cycle)
                 cpu.arg.addr = ((cpu.a & cpu.x & ((cpu.arg.addr >> 8) & 0xff)) << 8) | (cpu.arg.addr & 0xff);
                 cpu.write(bus, cpu.arg, cpu.as.write_value);
                 cpu.pc += cpu.di.bytes;
@@ -1531,22 +1531,21 @@ void CPU::interrupt_handle(Bus& bus) {
     if (interrupt_requested){
         if (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) {
             interrupt_requests[NMI] = true;
-            sr.set(StatusReg::I, false);
             bus.nmi_interrupt_flip_flop = false;
-        } else if ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop)) { // todo: check !sr.get(StatusReg::I)
-            if (!sr.get(StatusReg::I))
+        } else if ((bus.apu_irq_interrupt_flip_flop && bus.is_apu_irq_enable()) || (bus.ppu_irq_interrupt_flip_flop && bus.mapper.is_irq_enabled())) { // todo: check !sr.get(StatusReg::I)
+            if (!sr.get(StatusReg::I) && !interrupt_requests[IRQ])
                 interrupt_requests[IRQ] = true;
-            bus.apu_irq_interrupt_flip_flop = false;
-            bus.ppu_irq_interrupt_flip_flop = false;
         }
-        if (!sr.get(StatusReg::I)) {
-            for (int i = 0; i < InterruptsCount; ++i) {
-                if (interrupt_requests[i]) {
-                    as.interrupt = static_cast<Interrupt>(i);
-                    push_interrupts_ops(bus);
-                    interrupt_in_progress = true;
-                    break;
+        for (int i = 0; i < InterruptsCount; ++i) {
+            if (interrupt_requests[i]) {
+                as.interrupt = static_cast<Interrupt>(i);
+                push_interrupts_ops(bus);
+                interrupt_in_progress = true;
+                if (interrupt_requests[IRQ]){ // TODO: check
+                    bus.apu_irq_interrupt_flip_flop = false;
+                    bus.ppu_irq_interrupt_flip_flop = false;
                 }
+                break;
             }
         }
         interrupt_requested = false;
@@ -1569,8 +1568,10 @@ void CPU::tick_step(Bus& bus){
 #endif
     switch (istep) {
         case Fetch: {
-            if (bus.dmc_dma_in_progress)
+            if (bus.dmc_dma_in_progress){
+                if (!dmc_dma_stop) dmc_dma_stop = true;
                 return;
+            }
             if (bus.dma_active) {
                 if (bus.dma_start){
                     bus.dma_start = false;
@@ -1611,8 +1612,10 @@ void CPU::tick_step(Bus& bus){
 #endif
                 return;
             }
-            if (bus.dmc_dma_in_progress)
+            if (bus.dmc_dma_in_progress){
+                if (!dmc_dma_stop) dmc_dma_stop = true;
                 return;
+            }
             if (!iop.empty()){
                 iop_exec_step(bus);
                 ++current_iop_index;
@@ -1624,6 +1627,7 @@ void CPU::tick_step(Bus& bus){
             if (istep == Fetch) debug_run = false; // todo: check
 #endif
             if (istep == Fetch) {bus.last_arg_addr = as.result = pc;}
+            dmc_dma_stop = false;
             break;
         }
     }

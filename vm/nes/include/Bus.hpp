@@ -99,6 +99,7 @@ struct Bus {
     bool ppu_w{};
     unsigned char ppu_x{};
 
+    bool is_apu_irq_enable();
     size_t apu_fc_irq_set_cycle = 0;
     bool dmc_dma_in_progress = false;
     unsigned char apufc{};
