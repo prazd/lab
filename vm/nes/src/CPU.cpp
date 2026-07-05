@@ -736,41 +736,6 @@ void CPU::fill_exec_ops() {
             });
             break;
         }
-        // TODO: debug
-        case SYA:{
-            iop.push_front([](Bus& bus, CPU& cpu){
-                unsigned char res = cpu.y & (((cpu.arg.addr >> 8) & 0xff) + 1);
-                if (res > 0){
-                     cpu.as.write_value = res & 0xff;
-                     cpu.as.next_write = true;
-                     cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                         ++cpu.di.cycles;
-                         cpu.write(bus, cpu.arg, cpu.as.write_value);
-                         cpu.pc += cpu.di.bytes;
-                     });
-                } else {
-                    cpu.pc += cpu.di.bytes;
-                }
-            });
-            break;
-        }
-        case SXA:{
-            iop.push_front([](Bus& bus, CPU& cpu){
-                unsigned char res = cpu.x & (((cpu.arg.addr >> 8) & 0xff) + 1);
-                if (res > 0){
-                    cpu.as.write_value = res & 0xff;
-                    cpu.as.next_write = true;
-                    cpu.iop.push_front([](Bus& bus, CPU& cpu){
-                        cpu.write(bus, cpu.arg, cpu.as.write_value);
-                        ++cpu.di.cycles;
-                        cpu.pc += cpu.di.bytes;
-                    });
-                } else {
-                    cpu.pc += cpu.di.bytes;
-                }
-            });
-            break;
-        }
         case BCC: { push_branch_ops<StatusReg::C, false>(); break;}
         case BCS: { push_branch_ops<StatusReg::C, true>();  break;}
         case BNE: { push_branch_ops<StatusReg::Z, false>(); break;}
@@ -818,7 +783,7 @@ void CPU::fill_exec_ops() {
             break;}
         case CLC:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::C, 0); cpu.pc+=1; }); break;}
         case CLD:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::D, 0); cpu.pc+=1; }); break;}
-        case CLI:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::I, 0); cpu.pc+=1; }); break;}
+        case CLI:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.cli_next_count = 2; cpu.sr.set(StatusReg::I, 0); cpu.pc+=1; }); break;}
         case CLV:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::V, 0); cpu.pc+=1; }); break;}
         case CMP:{
             iop.push_front([](Bus& bus, CPU& cpu){
@@ -1136,7 +1101,30 @@ void CPU::fill_exec_ops() {
             });
             break;
         }
-
+        case SYA:{
+            iop.push_front([](Bus& bus, CPU& cpu){});
+            iop.push_front([](Bus& bus, CPU& cpu){cpu.as.next_write = true;});
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.as.write_value = cpu.y &
+                                      (cpu.dmc_dma_stop ? 0xff : (std::min(((cpu.arg.addr >> 8) + 1) & 0xff, 0x1f))); // TODO: check (RDY line goes low 2 cycles before the write cycle)
+                cpu.arg.addr = ((cpu.y & ((cpu.arg.addr >> 8) & 0xff)) << 8) | (cpu.arg.addr & 0xff);
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
+        case SXA:{
+            iop.push_front([](Bus& bus, CPU& cpu){});
+            iop.push_front([](Bus& bus, CPU& cpu){cpu.as.next_write = true;});
+            iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.as.write_value = cpu.x &
+                                     (cpu.dmc_dma_stop ? 0xff : (std::min(((cpu.arg.addr >> 8) + 1) & 0xff, 0x1f))); // TODO: check (RDY line goes low 2 cycles before the write cycle)
+                cpu.arg.addr = ((cpu.x & ((cpu.arg.addr >> 8) & 0xff)) << 8) | (cpu.arg.addr & 0xff);
+                cpu.write(bus, cpu.arg, cpu.as.write_value);
+                cpu.pc += cpu.di.bytes;
+            });
+            break;
+        }
         case LAE: {
             iop.push_front([](Bus& bus, CPU& cpu){
                 auto val = cpu.read(bus, cpu.arg);
@@ -1360,7 +1348,10 @@ void CPU::fill_exec_ops() {
         }
         case SEC:{iop.push_front([](Bus& bus, CPU& cpu){cpu.sr.set(StatusReg::C, true); cpu.pc+=cpu.di.bytes; }); break;}
         case SED:{iop.push_front([](Bus& bus, CPU& cpu){cpu.sr.set(StatusReg::D, true); cpu.pc+=cpu.di.bytes; }); break;}
-        case SEI:{iop.push_front([](Bus& bus, CPU& cpu){cpu.sr.set(StatusReg::I, true); cpu.pc+=cpu.di.bytes; }); break;}
+        case SEI:{iop.push_front([](Bus& bus, CPU& cpu){
+            cpu.i_set_before_sei = !cpu.sr.get(StatusReg::I);
+            cpu.sr.set(StatusReg::I, true);
+            cpu.pc+=cpu.di.bytes; }); break;}
         case STA:{
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.write(bus, cpu.arg, cpu.a);
@@ -1532,19 +1523,19 @@ void CPU::interrupt_handle(Bus& bus) {
         if (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) {
             interrupt_requests[NMI] = true;
             bus.nmi_interrupt_flip_flop = false;
-        } else if ((bus.apu_irq_interrupt_flip_flop && bus.is_apu_irq_enable()) || (bus.ppu_irq_interrupt_flip_flop && bus.mapper.is_irq_enabled())) { // todo: check !sr.get(StatusReg::I)
-            if (!sr.get(StatusReg::I) && !interrupt_requests[IRQ])
-                interrupt_requests[IRQ] = true;
+        } else if ((bus.apu_irq_interrupt_flip_flop) || (bus.ppu_irq_interrupt_flip_flop)) { // todo: check !sr.get(StatusReg::I)
+            if (cli_next_count) --cli_next_count;
+            if (!cli_next_count){
+                if (((!sr.get(StatusReg::I)) || i_set_before_sei) && !interrupt_requests[IRQ]) {
+                    interrupt_requests[IRQ] = true;
+                }
+            }
         }
         for (int i = 0; i < InterruptsCount; ++i) {
             if (interrupt_requests[i]) {
                 as.interrupt = static_cast<Interrupt>(i);
                 push_interrupts_ops(bus);
                 interrupt_in_progress = true;
-                if (interrupt_requests[IRQ]){ // TODO: check
-                    bus.apu_irq_interrupt_flip_flop = false;
-                    bus.ppu_irq_interrupt_flip_flop = false;
-                }
                 break;
             }
         }
@@ -1566,6 +1557,7 @@ void CPU::tick_step(Bus& bus){
 #if DEBUG_MODE
     if (!debug_run) return;
 #endif
+    i_set_before_sei = false;
     switch (istep) {
         case Fetch: {
             if (bus.dmc_dma_in_progress){

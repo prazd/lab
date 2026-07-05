@@ -154,7 +154,6 @@ struct DMCChan : Channel {
             if (!dmc_dma_counter){
                 sample_ready = true;
                 sample_buffer = bus.dmc_dma_read_prg(dma_address);
-                bus.cpu_open_bus_value = sample_buffer;
                 dma_address = dma_address == 0xffff ? 0x8000 : dma_address + 1;
                 if (bytes_remaining)
                     --bytes_remaining;
@@ -177,7 +176,8 @@ struct DMCChan : Channel {
             }
         }
 
-        if (rate_counter) --rate_counter;
+        if (rate_counter)
+            --rate_counter;
         if (!rate_counter){
             output_level += (shift_reg & 1) ? 2 : -2;
             if (shift_count){
@@ -194,16 +194,13 @@ struct DMCChan : Channel {
                     shift_count = 8;
                 }
                 // todo: check put/get cycle
-//                if (!bus.dmc_dma_in_progress){
-                    sample_ready = false;
-
-                    dmc_dma_counter = 4;
-                    if (bus.next_write) {
-                        dmc_delay = 1; // TODO: check
-                    } else {
-                        bus.dmc_dma_in_progress = true;
-                    }
-//                }
+                sample_ready = false;
+                dmc_dma_counter = 4;
+                if (bus.next_write) {
+                    dmc_delay = 1;  // TODO: check
+                } else {
+                    bus.dmc_dma_in_progress = true;
+                }
             }
         }
     }

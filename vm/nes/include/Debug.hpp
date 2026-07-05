@@ -1127,6 +1127,7 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
         CartridgeM,
         PPUM,
         MMIORegsM,
+        Interrupts,
 #if GAME_GENIE_MODE
         GameGenieM,
 #endif
@@ -1203,6 +1204,13 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
                        << "  PPUDATA(0x2007):" <<        (int)(ppudata_v) << '\n';
                 }
 
+                break;
+            }
+            case Interrupts: {
+                ss << "Interrupts req:\n"
+                   << "  APU_IRQ:"     <<  (int)bus.apu_irq_interrupt_flip_flop  << '\n'
+                   << "  PPU_IRQ:"     <<  (int)bus.ppu_irq_interrupt_flip_flop  << '\n'
+                   << "  NMI:"     <<  (int)bus.nmi_interrupt_flip_flop  << '\n';
                 break;
             }
 #if GAME_GENIE_MODE

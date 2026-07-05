@@ -45,6 +45,7 @@ struct CPU {
     unsigned char x{};
     unsigned char y{};
 
+    size_t cli_next_count = 0;
     bool dmc_dma_stop = false;
 
     enum Interrupt: unsigned char {
@@ -158,9 +159,9 @@ struct CPU {
     size_t current_iop_index{};
 
     unsigned short last_read_addr = 0;
-
     void set_next_write_by_push_addr();
 
+    bool i_set_before_sei = false;
     struct InstructionState {
         unsigned short tmp_l{};
         unsigned short tmp_h{};

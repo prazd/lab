@@ -25,7 +25,7 @@ constexpr static std::string_view cpu_tests[] = {
         "/Users/prazd/Desktop/dev/nes-test-roms/blargg_nes_cpu_test5/cpu.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/oam_read/oam_read.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes",
-        "/Users/prazd/Desktop/dev/nes-test-roms/cpu_timing_test6/cpu_timing_test.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/cpu_timing_test6/cpu_timing_test.nes", // TODO: check
         "/Users/prazd/Desktop/dev/nes-test-roms/instr_test-v5/all_instrs.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/branch_timing_tests/1.Branch_Basics.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/branch_timing_tests/2.Backward_Branch.nes",
@@ -52,6 +52,7 @@ constexpr static std::string_view ppu_tests[] = {
         "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/06.right_edge.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/sprite_hit_tests_2005.10.05/11.edge_timing.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes",
+        // TODO: debug
         "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/2.Details.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/3.A12_clocking.nes",
