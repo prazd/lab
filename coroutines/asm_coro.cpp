@@ -5,10 +5,24 @@
 #include <vector>
 #include <utility>
 
-// TODO: handle in scheduler
+// TODO: debug
+#define SAVE_BEFORE_CALL\
+    asm("movq %%rbx, %0" : "=r"(Coro::tmp.regs[Coro::State::RBX]));\
+    asm("movq %%rbp, %0" : "=r"(Coro::tmp.regs[Coro::State::RBP]));\
+    asm("movq %%r12, %0" : "=r"(Coro::tmp.regs[Coro::State::R12]));\
+    asm("movq %%r13, %0" : "=r"(Coro::tmp.regs[Coro::State::R13]));\
+    asm("movq %%r14, %0" : "=r"(Coro::tmp.regs[Coro::State::R14]));\
+    asm("movq %%r15, %0" : "=r"(Coro::tmp.regs[Coro::State::R15]));\
+
+#define RESTORE_AFTER_CALL\
+    asm("movq %0,%%rbx" :: "m"(Coro::tmp.regs[Coro::State::RBX]) :  "rbx");\
+    asm("movq %0,%%r12" :: "m"(Coro::tmp.regs[Coro::State::R12]) :  "r12");\
+    asm("movq %0,%%r13" :: "m"(Coro::tmp.regs[Coro::State::R13]) :  "r13");\
+    asm("movq %0,%%r14" :: "m"(Coro::tmp.regs[Coro::State::R14]) :  "r14");\
+    asm("movq %0,%%r15" :: "m"(Coro::tmp.regs[Coro::State::R15]) :  "r15");\
+
 #define PROLOGUE\
-    static bool init = false;\
-    if (!init) init = true; else {RESTORE}\
+    if (Coro::f_s->need_restore) {RESTORE}\
 
 #define EPILOGUE\
     Coro::f_s->done = true;\
@@ -70,6 +84,7 @@ struct Coro {
         uintptr_t begin = 0;
         uintptr_t end = 0;
         size_t top = 0;
+        bool need_restore = false;
         bool done = false;
         State(){}
         void print(){
@@ -83,6 +98,20 @@ struct Coro {
     };
     static void restore_rip(){
         asm("movq %0,8(%%rsp)" :: "r"(Coro::f_s->regs[Coro::State::RIP]) : "memory");
+        // asm("movq %0,%%rbx" :: "m"(Coro::f_s->regs[Coro::State::RBX]) : "rbx");
+        // asm("movq %0,%%rcx" :: "m"(Coro::f_s->regs[Coro::State::RCX]) : "rcx");
+        // asm("movq %0,%%rdx" :: "m"(Coro::f_s->regs[Coro::State::RDX]) : "rdx");
+        // asm("movq %0,%%rdi" :: "m"(Coro::f_s->regs[Coro::State::RDI]) : "rdi");
+        // asm("movq %0,%%rsi" :: "m"(Coro::f_s->regs[Coro::State::RSI]) : "rsi");
+        // asm("movq %0,%%r8"  :: "m"(Coro::f_s->regs[Coro::State::R8])  : "r8");
+        // asm("movq %0,%%r9"  :: "m"(Coro::f_s->regs[Coro::State::R9])  : "r9");
+        // asm("movq %0,%%r10" :: "m"(Coro::f_s->regs[Coro::State::R10]) : "r10");
+        // asm("movq %0,%%r11" :: "m"(Coro::f_s->regs[Coro::State::R11]) : "r11");
+        // asm("movq %0,%%r12" :: "m"(Coro::f_s->regs[Coro::State::R12]) : "r12");
+        // asm("movq %0,%%r13" :: "m"(Coro::f_s->regs[Coro::State::R13]) : "r13");
+        // asm("movq %0,%%r14" :: "m"(Coro::f_s->regs[Coro::State::R14]) : "r14");
+        // asm("movq %0,%%r15" :: "m"(Coro::f_s->regs[Coro::State::R15]) : "r15");
+        // asm("movq %0,%%rax" :: "m"(Coro::f_s->regs[Coro::State::RAX]) : "rax");
     }
         
     // TODO: debug
@@ -95,6 +124,7 @@ struct Coro {
     // TODO: handle args
     static inline std::vector<std::pair<void(*)(), State>> states;
     static inline State* f_s = nullptr;
+    static inline State tmp = State{};
     static inline void add(void(*addr)()){
         states.push_back({addr, {}});
     }
@@ -105,7 +135,12 @@ struct Coro {
             bool done = false;
             for (size_t i = 0, e = states.size(); i < e; ++i){
                 f_s = &states[i].second;
-                if (!f_s->done) states[i].first();
+                if (!f_s->done) {
+                    // SAVE_BEFORE_CALL
+                    states[i].first();
+                    // RESTORE_AFTER_CALL
+                    if (!f_s->need_restore) f_s->need_restore = true;
+                }
                 if (f_s->done) done = true;
             }
             if (done) states.erase(std::remove_if(std::begin(states), std::end(states), [](auto& el){return el.second.done;}), std::end(states));
@@ -113,8 +148,6 @@ struct Coro {
     }
 };
 
-
-// TODO: debug gcc
 __attribute__((optimize("-fno-omit-frame-pointer")))
 void foo(){
     PROLOGUE
@@ -144,6 +177,7 @@ void bar(){
 }
 
 int main(){
+    Coro::add(foo);
     Coro::add(foo);
     Coro::add(bar);
     Coro::run();
