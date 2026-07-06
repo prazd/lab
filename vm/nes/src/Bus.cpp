@@ -389,7 +389,7 @@ void Bus::controller_read_tick() {
 
 void Bus::tick() {
     ++master_clock;
-    ppu_irq_interrupt_flip_flop = mapper.is_irq_requested(); // todo: check
+    ppu_irq_interrupt_flip_flop = mapper.is_irq_requested();
     open_bus_decay();
 }
 

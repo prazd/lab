@@ -116,7 +116,7 @@ struct DMCChan : Channel {
         rate_counter = ntsc_rates[rate_index];
         dma_address = 0xc000;
         auto s_addr = bus.unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
-        dmc_delay = 4;
+        dmc_delay = 1;
         dma_address |= s_addr << 6;
         dmc_dma_counter = 4;
         sample_ready = false;
@@ -162,7 +162,6 @@ struct DMCChan : Channel {
                     if (need_sample_update){
                         shift_reg = sample_buffer;
                         shift_count = 8;
-                        // todo: check put/get cycle
                         bus.dmc_dma_in_progress = true;
                         sample_ready = false;
                         dmc_dma_counter = 4;
@@ -232,7 +231,7 @@ struct APU {
 
     enum FrameCounterMode {
         Step4, Step5
-    } frame_counter_mode = Step4;
+    } frame_counter_mode = Step5; // TODO: check
 
     void tick(Bus& bus);
     void handle_frame_counter_update(Bus& bus);

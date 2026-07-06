@@ -783,7 +783,7 @@ void CPU::fill_exec_ops() {
             break;}
         case CLC:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::C, 0); cpu.pc+=1; }); break;}
         case CLD:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::D, 0); cpu.pc+=1; }); break;}
-        case CLI:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.cli_next_count = 2; cpu.sr.set(StatusReg::I, 0); cpu.pc+=1; }); break;}
+        case CLI:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.interrupt_delay = 2; cpu.sr.set(StatusReg::I, 0); cpu.pc+=1; }); break;}
         case CLV:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::V, 0); cpu.pc+=1; }); break;}
         case CMP:{
             iop.push_front([](Bus& bus, CPU& cpu){
@@ -1220,6 +1220,7 @@ void CPU::fill_exec_ops() {
                 cpu.sr.set_status(bus.read_prg(0x100 + cpu.sp));
             });
             iop.push_front([](Bus& bus, CPU& cpu){
+                cpu.interrupt_delay = 2;
                 cpu.pc += cpu.di.bytes;
             });
             break;
@@ -1519,13 +1520,13 @@ void CPU::iop_exec_step(Bus& bus) {
 
 void CPU::interrupt_handle(Bus& bus) {
     bool interrupt_in_progress = false;
+    if (interrupt_delay) --interrupt_delay;
     if (interrupt_requested){
         if (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) {
             interrupt_requests[NMI] = true;
             bus.nmi_interrupt_flip_flop = false;
-        } else if ((bus.apu_irq_interrupt_flip_flop) || (bus.ppu_irq_interrupt_flip_flop)) { // todo: check !sr.get(StatusReg::I)
-            if (cli_next_count) --cli_next_count;
-            if (!cli_next_count){
+        } else if ((bus.apu_irq_interrupt_flip_flop) || (bus.ppu_irq_interrupt_flip_flop)) {
+            if (!interrupt_delay){
                 if (((!sr.get(StatusReg::I)) || i_set_before_sei) && !interrupt_requests[IRQ]) {
                     interrupt_requests[IRQ] = true;
                 }

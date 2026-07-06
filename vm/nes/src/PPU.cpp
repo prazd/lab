@@ -120,7 +120,6 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
 
 void PPU::bg_tick(Bus &bus) {
     auto& v = bus.ppu_v;
-    bus.ppu_irq_interrupt_flip_flop = bus.mapper.is_irq_requested();
     // TODO: continue debug
 //    update_state(bus);
 #if DEBUG_MODE

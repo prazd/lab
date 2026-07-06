@@ -437,6 +437,8 @@ int main(){
     // /Users/prazd/Desktop/dev/GameGenie.nes
 
 // TODO: debug
+    // /Users/prazd/Desktop/dev/nes-test-roms/sprdma_and_dmc_dma/sprdma_and_dmc_dma.nes
+    // /Users/prazd/Desktop/dev/nes-test-roms/sprdma_and_dmc_dma/sprdma_and_dmc_dma_512.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/cpu_exec_space/test_cpu_exec_space_ppuio.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/dma_2007_write.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/dma_4016_read.nes
@@ -446,9 +448,9 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, PPUm>{}.run();
+    MultiTest<NESVM, APUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // e08a
+    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d133 (DMC)
 
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif

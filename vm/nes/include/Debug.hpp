@@ -74,6 +74,19 @@ struct DebugWindow {
     static inline unsigned short hex_to_ushort(const std::string& str, int base){
        return str.empty() ? 0 : std::stoul(str, nullptr, base);
     }
+
+    static inline auto split_by_c(std::string& s, char c){
+        std::vector<std::string_view> res;
+        size_t it = 0;
+        for (size_t i = 0, e = s.size(); i != e; ++i){
+            if (s[i] == c){
+                res.push_back(std::string_view{s.begin() + it, s.begin() + i});
+                it = i+1;
+            }
+        }
+        res.push_back(std::string_view{s.begin() + it, s.end()});
+        return res;
+    }
 };
 
 template<size_t x, size_t y, size_t w, size_t h, size_t t_w, size_t t_h>
@@ -1616,10 +1629,13 @@ struct InstructionFinder: DebugWindowText<x, y, w, h> {
 
         if (mode == Instruction) {
             if (CheckCollisionPointRec(GetMousePosition(), add_instr_button) && IsMouseButtonPressed(0)){
-                for (size_t i = 0, e = std::size(CPU::instruction_str); i < e; ++i){
-                    if (u_input.s == CPU::instruction_str[i]){
-                        instr_search_list.push_back(static_cast<CPU::Instruction>(i));
-                        break;
+                auto instructions_sv = DW::split_by_c(u_input.s, ' ');
+                for (auto& isv: instructions_sv){
+                    for (size_t i = 0, e = std::size(CPU::instruction_str); i < e; ++i){
+                        if (isv == CPU::instruction_str[i]){
+                            instr_search_list.push_back(static_cast<CPU::Instruction>(i));
+                            break;
+                        }
                     }
                 }
             } else if (CheckCollisionPointRec(GetMousePosition(), clear_instr_button) && IsMouseButtonPressed(0)) {

@@ -45,7 +45,7 @@ struct CPU {
     unsigned char x{};
     unsigned char y{};
 
-    size_t cli_next_count = 0;
+    size_t interrupt_delay = 0;
     bool dmc_dma_stop = false;
 
     enum Interrupt: unsigned char {
