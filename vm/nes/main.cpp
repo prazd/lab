@@ -292,6 +292,17 @@ struct NESVM {
 #endif
             }
         };
+        auto is_collision_down_left = [&] {
+            switch (current_down_left_view) {
+                case NameTableV: return CheckCollisionPointRec(GetMousePosition(), ntv.rec);
+                case ColorsV: return CheckCollisionPointRec(GetMousePosition(), cv.rec);
+                case SpriteTilesV: return CheckCollisionPointRec(GetMousePosition(), stv.rec);
+                case MemoryReaderV: return CheckCollisionPointRec(GetMousePosition(), mem_reader.rec);
+                case InstructionFinder: return CheckCollisionPointRec(GetMousePosition(), instr_finder.rec);
+                case DiffSnapshotV: return CheckCollisionPointRec(GetMousePosition(), ds.rec);
+            }
+        };
+
 
         enum UpRightView {
             PatternTableV,
@@ -305,6 +316,13 @@ struct NESVM {
                 case PatternTableV: {ptv.handle(ppu,bus); break;}
                 case PaletteViewer: {pv.handle(bus, ppu); break;}
                 default: {ntnv.handle(bus); break;}
+            }
+        };
+        auto is_collision_up_right = [&]{
+            switch (current_up_right_view) {
+                case PatternTableV: return CheckCollisionPointRec(GetMousePosition(), ptv.rec);
+                case PaletteViewer: return CheckCollisionPointRec(GetMousePosition(), pv.rec);
+                case NameTableNumV: return CheckCollisionPointRec(GetMousePosition(), ntnv.rec);
             }
         };
 
@@ -372,9 +390,10 @@ struct NESVM {
             cc.handle(bus.c);
             sprite_info.handle(bus, ppu);
 
-            if (CheckCollisionPointRec(GetMousePosition(), ptv.rec) && IsKeyPressed(KEY_M))
+            if (is_collision_up_right() && IsKeyPressed(KEY_M))
                 current_up_right_view = static_cast<UpRightView>((current_up_right_view + 1) % UpRightViewCount);
-            if (CheckCollisionPointRec(GetMousePosition(), ntv.rec) && IsKeyPressed(KEY_M))
+
+            if (is_collision_down_left() && IsKeyPressed(KEY_M))
                 current_down_left_view = static_cast<DownRightView>((current_down_left_view + 1) % DownRightViewCount);
 
             if (CheckCollisionPointRec(GetMousePosition(),display_rec)){
@@ -448,7 +467,7 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, APUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #else
     NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d133 (DMC)
 

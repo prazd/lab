@@ -260,6 +260,9 @@ unsigned char Bus::read_prg_internal(unsigned short addr) {
                 apu_clear_frame_irq_req = true;
             return (apu_control & 0xdf) | (cpu_internal_bus_value & 0x20);
         }
+
+        // TODO: check
+        case constants::DMC_CHAN_SAMPLE_LENGTH:
         case constants::PULSE1_DUTY_ENVELOPE:{
             return cpu_open_bus_value;
         }

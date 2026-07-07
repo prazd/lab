@@ -1549,7 +1549,7 @@ void CPU::interrupt_handle(Bus& bus) {
 void CPU::update_interrupt_request(Bus& bus){
     if (di.cycles == 1 && !interrupt_requested){
         interrupt_requested = ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.master_clock - bus.current_nmi_cycle > 2) ||
-                ((bus.apu_irq_interrupt_flip_flop || bus.ppu_irq_interrupt_flip_flop) && bus.master_clock - bus.apu_fc_irq_set_cycle > 2));
+            (((bus.apu_irq_interrupt_flip_flop && bus.master_clock - bus.apu_fc_irq_set_cycle > 2) || bus.ppu_irq_interrupt_flip_flop)));
     }
 }
 
@@ -1558,26 +1558,27 @@ void CPU::tick_step(Bus& bus){
 #if DEBUG_MODE
     if (!debug_run) return;
 #endif
+    if (bus.dmc_dma_in_progress){
+        if (!dmc_dma_stop) dmc_dma_stop = true;
+        return;
+    }
+    if (bus.dma_active) {
+        if (bus.dma_start){
+            bus.dma_start = false;
+            bus.alignment = !(cycles_count & 1);
+            return;
+        }
+        bus.tick_dma();
+#if DEBUG_MODE
+        if (!bus.dma_active) assert(cycles_count & 1);
+#endif
+        return;
+    }
     i_set_before_sei = false;
     switch (istep) {
         case Fetch: {
-            if (bus.dmc_dma_in_progress){
-                if (!dmc_dma_stop) dmc_dma_stop = true;
-                return;
-            }
-            if (bus.dma_active) {
-                if (bus.dma_start){
-                    bus.dma_start = false;
-                    bus.alignment = !(cycles_count & 1);
-                    return;
-                }
-                bus.tick_dma();
-#if DEBUG_MODE
-                if (!bus.dma_active) assert(cycles_count & 1);
-#endif
-                return;
-            }
             di = decode(bus.read_prg( pc));
+            is_branch = std::any_of(std::begin(branch_instructions), std::end(branch_instructions), [i = di.i](auto el){return el == i;});
             current_iop_index = 0;
             fill_address_ops();
             fill_exec_ops();
@@ -1589,26 +1590,14 @@ void CPU::tick_step(Bus& bus){
             ++bus.instructions_count;
 // todo: finish
             --di.cycles;
+            ++ins_cycle;
+            if (is_branch) update_interrupt_request(bus);
             break;
         }
         case Execute: {
-            update_interrupt_request(bus);
-            if (bus.dma_active) {
-                if (bus.dma_start){
-                    bus.dma_start = false;
-                    bus.alignment = !(cycles_count & 1);
-                    return;
-                }
-                bus.tick_dma();
-#if DEBUG_MODE
-                if (!bus.dma_active) assert(cycles_count & 1);
-#endif
-                return;
-            }
-            if (bus.dmc_dma_in_progress){
-                if (!dmc_dma_stop) dmc_dma_stop = true;
-                return;
-            }
+            if (!is_branch || (is_branch && ins_cycle == 3))
+                update_interrupt_request(bus);
+            ++ins_cycle;
             if (!iop.empty()){
                 iop_exec_step(bus);
                 ++current_iop_index;
@@ -1621,6 +1610,7 @@ void CPU::tick_step(Bus& bus){
 #endif
             if (istep == Fetch) {bus.last_arg_addr = as.result = pc;}
             dmc_dma_stop = false;
+            ins_cycle = 0;
             break;
         }
     }

@@ -115,6 +115,10 @@ struct CPU {
         TOP, SYA, SXA, ANE, SHA, SHS, LAE
     };
 
+    static constexpr Instruction branch_instructions[] = {
+            BCC,BCS,BNE,BEQ,BPL,BMI,BVC,BVS,BIT,
+    };
+
     AddressingResult dummy_read(Bus& bus, AddressingResult);
 
     static constexpr inline std::string_view instruction_str[77] = {
@@ -158,6 +162,8 @@ struct CPU {
     void iop_exec_step(Bus& bus);
     size_t current_iop_index{};
 
+    size_t ins_cycle = 0;
+    bool is_branch = false;
     unsigned short last_read_addr = 0;
     void set_next_write_by_push_addr();
 
@@ -189,7 +195,6 @@ struct CPU {
     void tick(Bus&);
     void tick_step(Bus&);
     void interrupt_handle(Bus&);
-    void interrupt_handle_with_delay(Bus&);
     bool stop_requested = false;
     void push_interrupts_ops(Bus&);
     DecodedInstruction di{};
@@ -199,6 +204,7 @@ struct CPU {
         iop.push_front([](Bus& bus, CPU& cpu){
             cpu.pc += cpu.di.bytes;
             if (cpu.sr.get(f) == expect){
+                ++cpu.di.cycles;
                 cpu.iop.push_front([](Bus& bus, CPU& cpu){
                     char add_val = (char)(cpu.read(bus, cpu.arg));
                     cpu.as.tmp_l = cpu.pc;
