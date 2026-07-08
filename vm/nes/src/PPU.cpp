@@ -463,7 +463,7 @@ void PPU::tick(Bus& bus) {
 
     if (current_y == 261){
         sprite_evaluate_tick(bus);
-        if (current_scanline_cycle == 1) { // todo: debug (2)
+        if (current_scanline_cycle == 2) { // todo: debug (2)
             if ((bus.ppumask >> 3) & 1) update_current_display(); // todo: check
             bus.nmi_interrupt_flip_flop = false; // todo: check
             bus.ppustatus &= 0x3f;

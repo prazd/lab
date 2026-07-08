@@ -61,10 +61,15 @@ struct CPU {
     bool debug_run = true;
 #endif
 
-    bool interrupt_requested = true;
-
     // request RESET interrupt on start (https://www.nesdev.org/NESDoc.pdf - page 13)
-    bool interrupt_requests[3]{true,false,false};
+    unsigned char interrupt_requests = 1; // RESET
+    inline void set_interrupt_req(Interrupt i, bool flag){
+        interrupt_requests &= (~(1 << i) & 0xff);
+        interrupt_requests |= (flag << i);
+    }
+    inline bool is_interrupt_requested(Interrupt i) const{
+        return (interrupt_requests >> i) & 1;
+    }
     unsigned short interrupt_addresses[3] = {
             constants::RESET_INTERRUPT_HANDLER_L,
             constants::NMI_INTERRUPT_HANDLER_L,

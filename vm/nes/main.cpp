@@ -142,8 +142,9 @@ struct NESVM {
                 ppu_tick();
                 bus.tick();
 
-                ppu_tick(); apu_tick(); cpu_tick();
+                apu_tick(); cpu_tick();
                 controller_tick();
+                ppu_tick();
                 bus.tick();
                 ++current_tick;
             }
@@ -169,6 +170,15 @@ struct NESVM {
                 dis.selected_scanline_active || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLES) {
             if (!cpu.debug_run) snap_storage.update_state(bus, cpu, ppu); // todo: check
             cpu.debug_run = true;
+            if (cpu_tick_count++ % 3 == 2) {
+                apu_tick();
+                cpu_tick();
+                controller_tick();
+                if (dis.is_line_jump_active && ppu.line_start) {
+                    dis.is_line_jump_active = false;
+                }
+                if (!cpu.debug_run) snap_storage.push_state(bus);
+            }
             ppu_tick();
             if (dis.is_frame_jump_active && ppu.frame_start){
                 dis.is_frame_jump_active = false;
@@ -181,15 +191,6 @@ struct NESVM {
                 dis.trigger_search = !(bus.ppu_addr_triggered_on_read || bus.ppu_addr_triggered_on_write);
             } else if (dis.selected_scanline_active) {
                 dis.selected_scanline_active = (ppu.current_y != dis.selected_scanline);
-            }
-            if (cpu_tick_count++ % 3 == 2) {
-                apu_tick();
-                cpu_tick();
-                controller_tick();
-                if (dis.is_line_jump_active && ppu.line_start) {
-                    dis.is_line_jump_active = false;
-                }
-                if (!cpu.debug_run) snap_storage.push_state(bus);
             }
             bus.tick();
         }
@@ -226,9 +227,9 @@ struct NESVM {
              ppu_tick();
              bus.tick();
 
-             ppu_tick(); apu_tick(); cpu_tick();
+             apu_tick(); cpu_tick();
              controller_tick();
-
+             ppu_tick();
              bus.tick();
         }
 #endif
@@ -467,7 +468,7 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, PPUm>{}.run();
+    MultiTest<NESVM, APUm>{}.run();
 #else
     NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d133 (DMC)
 

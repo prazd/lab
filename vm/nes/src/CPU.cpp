@@ -31,8 +31,7 @@ void CPU::reset() {
     a = 0;
     x = 0;
     y = 0;
-    interrupt_requests[CPU::RESET] = true;
-    interrupt_requested = true;
+    set_interrupt_req(RESET, true);
     sr.set(StatusReg::I, false);
     stop_requested = false;
     pc = 0;
@@ -777,8 +776,15 @@ void CPU::fill_exec_ops() {
                 --cpu.sp;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                cpu.pc = (bus.read_prg(constants::IRQ_INTERRUPT_HANDLER_L + 1) << 8) |
-                          bus.read_prg(constants::IRQ_INTERRUPT_HANDLER_L);
+                // TODO: check
+                if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop)){
+                    cpu.pc = (bus.read_prg(constants::NMI_INTERRUPT_HANDLER_L + 1) << 8) |
+                             bus.read_prg(constants::NMI_INTERRUPT_HANDLER_L);
+                    bus.nmi_interrupt_flip_flop = false;
+                } else {
+                    cpu.pc = (bus.read_prg(constants::IRQ_INTERRUPT_HANDLER_L + 1) << 8) |
+                             bus.read_prg(constants::IRQ_INTERRUPT_HANDLER_L);
+                }
             });
             break;}
         case CLC:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::C, 0); cpu.pc+=1; }); break;}
@@ -1486,8 +1492,14 @@ void CPU::push_interrupts_ops(Bus& bus) {
         --cpu.sp;
     });
     iop.push_front([](Bus& bus, CPU& cpu){
-        cpu.pc = (bus.read_prg(cpu.interrupt_addresses[cpu.as.interrupt]) | (bus.read_prg(cpu.interrupt_addresses[cpu.as.interrupt] + 1) << 8));
-        cpu.interrupt_requests[cpu.as.interrupt] = false;
+        // TODO: check
+       for (size_t i = 0; i < InterruptsCount; ++i){
+           if (cpu.is_interrupt_requested(static_cast<Interrupt>(i))){
+               cpu.pc = (bus.read_prg(cpu.interrupt_addresses[i]) | (bus.read_prg(cpu.interrupt_addresses[i] + 1) << 8));
+               cpu.set_interrupt_req(static_cast<Interrupt>(i), false);
+               break;
+           }
+       }
     });
 }
 
@@ -1519,37 +1531,22 @@ void CPU::iop_exec_step(Bus& bus) {
 }
 
 void CPU::interrupt_handle(Bus& bus) {
-    bool interrupt_in_progress = false;
-    if (interrupt_delay) --interrupt_delay;
-    if (interrupt_requested){
-        if (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) {
-            interrupt_requests[NMI] = true;
-            bus.nmi_interrupt_flip_flop = false;
-        } else if ((bus.apu_irq_interrupt_flip_flop) || (bus.ppu_irq_interrupt_flip_flop)) {
-            if (!interrupt_delay){
-                if (((!sr.get(StatusReg::I)) || i_set_before_sei) && !interrupt_requests[IRQ]) {
-                    interrupt_requests[IRQ] = true;
-                }
-            }
-        }
-        for (int i = 0; i < InterruptsCount; ++i) {
-            if (interrupt_requests[i]) {
-                as.interrupt = static_cast<Interrupt>(i);
-                push_interrupts_ops(bus);
-                interrupt_in_progress = true;
-                break;
-            }
-        }
-        interrupt_requested = false;
-    }
-    istep = interrupt_in_progress ? Execute : Fetch;
+    if (interrupt_requests) push_interrupts_ops(bus);
+    istep = interrupt_requests ? Execute : Fetch;
 }
 
-
 void CPU::update_interrupt_request(Bus& bus){
-    if (di.cycles == 1 && !interrupt_requested){
-        interrupt_requested = ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.master_clock - bus.current_nmi_cycle > 2) ||
-            (((bus.apu_irq_interrupt_flip_flop && bus.master_clock - bus.apu_fc_irq_set_cycle > 2) || bus.ppu_irq_interrupt_flip_flop)));
+    if (di.cycles == 1){
+        if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.master_clock - bus.current_nmi_cycle > 3)){
+            set_interrupt_req(NMI, true);
+            bus.nmi_interrupt_flip_flop = false;
+        }
+        if (interrupt_delay) --interrupt_delay;
+        if (!interrupt_delay && ((bus.apu_irq_interrupt_flip_flop && bus.master_clock - bus.apu_fc_irq_set_cycle > 2) || bus.ppu_irq_interrupt_flip_flop) &&
+                ((!sr.get(StatusReg::I)) || i_set_before_sei) && !is_interrupt_requested(IRQ)
+        ){
+                set_interrupt_req(IRQ, true);
+        }
     }
 }
 
