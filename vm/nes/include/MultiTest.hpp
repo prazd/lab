@@ -76,7 +76,7 @@ struct MultiTest{
     static constexpr float DISPLAY_PIXELS_WIDTH = 256;
     static constexpr float DISPLAY_PIXELS_HEIGHT = 240;
     static constexpr size_t FRAME_SZ = 256;
-    static constexpr size_t CYCLES_COUNT = constants::CPU_FRAME_CYCLES/2;
+    static constexpr size_t CYCLES_COUNT = constants::CPU_SPEED/120;
 
     struct FrameData {
         Texture2D texture{};

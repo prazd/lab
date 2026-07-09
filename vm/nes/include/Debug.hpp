@@ -448,6 +448,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     bool is_tile_line_jump_active = false;
     bool is_line_jump_active = false;
     bool is_one_tick_ppu_active = false;
+    unsigned char stress_speed = 0;
 
     Rectangle line_button;
     UserInput<x, y - 30, w, 30> u_input;
@@ -472,6 +473,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle state_import_button;
     Rectangle load_save_button;
     Rectangle save_button;
+    Rectangle stress_button;
+
 
     Rectangle sync_button;
     Rectangle change_mode_button;
@@ -497,7 +500,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       state_dump_button{DW::rec.x + w, DW::rec.y + 40 * 2, 40, 40},
                                       state_import_button{DW::rec.x + w, DW::rec.y + 40 * 3, 40, 40},
                                       load_save_button{DW::rec.x + w, DW::rec.y + 40 * 4, 40, 40},
-                                      save_button{DW::rec.x + w, DW::rec.y + 40 * 5, 40, 40}
+                                      save_button{DW::rec.x + w, DW::rec.y + 40 * 5, 40, 40},
+                                      stress_button{DW::rec.x + w, DW::rec.y + 40 * 6, 40, 40}
                                       {}
 
 
@@ -721,6 +725,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             cartridge.update_game_state<false>((char*)(bus.cpu_map + constants::CARTRIDGE_RAM_BEGIN));
         }  else if (CheckCollisionPointRec(GetMousePosition(), save_button) && IsMouseButtonPressed(0)){
             cartridge.update_game_state<true>((char*)(bus.cpu_map + constants::CARTRIDGE_RAM_BEGIN));
+        } else if (CheckCollisionPointRec(GetMousePosition(), stress_button) && IsMouseButtonPressed(0)){
+            stress_speed ^= 1;
         }
 
         if (dump_state_request && cpu.istep == CPU::Fetch && cpu.iop.empty())
@@ -797,6 +803,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         DW::draw_text_button(state_import_button, " i_state", GREEN, 15.f);
         DW::draw_text_button(load_save_button, " load_save", GREEN, 15.f);
         DW::draw_text_button(save_button, " save", GREEN, 15.f);
+        DW::draw_text_button(stress_button, " stress", stress_speed ? GREEN : RED, 15.f);
         DW::draw_text_button(sync_button, " state", GREEN, 15.f);
         DW::draw_text_button(change_mode_button, " mode", GREEN, 15.f);
         u_input.handle();

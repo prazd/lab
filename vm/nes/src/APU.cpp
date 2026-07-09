@@ -60,7 +60,7 @@ float APU::gen_sample(Bus &bus) {
 void APU::update_control(Bus& bus){
     bus.apu_control &= 0xee;
     bus.apu_control |= (!!pulse_ch1.length_counter);
-    bus.apu_control |= (!!dmc_ch.bytes_remaining) << 4;
+    bus.apu_control |= (!!bus.dmc_bytes_remaining) << 4;
 }
 
 void APU::tick(Bus& bus) {
@@ -90,7 +90,7 @@ void APU::tick(Bus& bus) {
         if (bus.apu_is_enable(Bus::DMC))
             dmc_ch.restart(bus);
         else
-            dmc_ch.bytes_remaining = 0;
+            bus.dmc_bytes_remaining = 0;
         bus.apu_control &= 0x7f;
         bus.apu_enable_req = false;
     }
@@ -102,7 +102,7 @@ void APU::tick(Bus& bus) {
 
     if (bus.apu_pulse1_timer_update){
         if (bus.apu_is_enable(Bus::Pulse1)) {
-            pulse_ch1.length_counter = length_table[((bus.unsafe_read_prg(constants::PULSE1_TIMER_HIGH) >> 3) & 0x1f)];
+            pulse_ch1.length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::PULSE1_TIMER_HIGH) >> 3) & 0x1f)];
             pulse_ch1.current_duty_step = 0;
             pulse_ch1.envelope = 15; // set start flag
         }

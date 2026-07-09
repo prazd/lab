@@ -58,6 +58,10 @@ struct Bus {
     unsigned short last_arg_addr{};
     bool next_write{};
     unsigned short dma_address{};
+    unsigned short dmc_dma_address{};
+    bool apu_enable_req{};
+    char dmc_output_level{};
+    size_t dmc_bytes_remaining = 0;
     bool dma_start = false;
     bool dma_active = false;
     unsigned dma_index = 0;
@@ -99,12 +103,18 @@ struct Bus {
     bool ppu_w{};
     unsigned char ppu_x{};
 
+    void apu_enable_handle();
+    size_t dmc_rate_counter = 0;
+    size_t dmc_rate_index = 0;
+    size_t dmc_delay = 0;
+    size_t dmc_dma_counter = 0;
+    bool dmc_sample_ready = false;
+
     bool is_apu_irq_enable();
     size_t apu_fc_irq_set_cycle = 0;
     bool dmc_dma_in_progress = false;
     unsigned char apufc{};
     bool apufc_requested = false;
-    bool apu_enable_req = false;
     unsigned char apu_enable = 0;
     enum APUChan {Pulse1 = 0x1, Pulse2 = 0x2, Triangle = 0x4, Noise = 0x8, DMC = 0x10 };
     inline bool apu_is_enable(APUChan c){
@@ -141,5 +151,44 @@ struct Bus {
 
     void open_bus_decay();
     void reset();
+
+    static constexpr unsigned short ntsc_rates[] = {
+            428,380,340,320,286,254,226,214,190,160,142,128,106,84,72,54
+    };
+
+    static constexpr unsigned char length_table[32]{
+            10,
+            254,
+            20,
+            2,
+            40,
+            4,
+            80,
+            6,
+            160,
+            8,
+            60,
+            10,
+            14,
+            12,
+            26,
+            14,
+            12,
+            16,
+            24,
+            18,
+            48,
+            20,
+            96,
+            22,
+            192,
+            24,
+            72,
+            26,
+            16,
+            28,
+            32,
+            30
+    };
 };
 #endif //NES_BUS_HPP

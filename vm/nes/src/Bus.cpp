@@ -82,6 +82,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
         case constants::CONTROLLER1: { latch_req = true; latch_val = value; return; }
         case constants::CONTROLLER2_AND_APU_FC: {apufc_requested = true; apufc = value; return; }
         case constants::APU_CONTROL: {
+//            apu_enable_handle();
             apu_enable_req = true;
             apu_enable = value; return;}
     }
@@ -92,6 +93,24 @@ void Bus::write(unsigned short addr, unsigned char value) {
         apu_pulse1_timer_update = true;
     }
     cpu_map[addr] = value;
+}
+
+// TODO: debug
+void Bus::apu_enable_handle() {
+    apu_control &= 0x7f;
+    if (!apu_is_enable(DMC))  {dmc_bytes_remaining = 0; return;}
+    if (dmc_bytes_remaining) return;
+    auto s_len = unsafe_read_prg(constants::DMC_CHAN_SAMPLE_LENGTH);
+    dmc_bytes_remaining = (s_len << 4) | 1;
+    auto chan_direct_load_val = unsafe_read_prg(constants::DMC_CHAN_DIRECT_LOAD);
+    dmc_output_level = (char)(chan_direct_load_val & 0x7f);
+    dmc_rate_counter = ntsc_rates[dmc_rate_index];
+    dma_address = 0xc000;
+    auto s_addr = unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
+    dmc_delay = 1;
+    dma_address |= s_addr << 6;
+    dmc_dma_counter = 2;
+    dmc_sample_ready = false;
 }
 
 void Bus::unsafe_write(unsigned short addr, unsigned char value) {

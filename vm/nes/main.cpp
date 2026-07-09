@@ -131,6 +131,7 @@ struct NESVM {
             cpu.debug_run = true;
             dis.next = false;
         }
+        auto frame_cycles = (size_t)((dis.stress_speed ? (constants::CPU_SPEED_f) * 2 : (constants::CPU_SPEED_f)) * GetFrameTime());
         do {
             bool snap_update = cpu.debug_run;
             if (snap_update)
@@ -157,7 +158,7 @@ struct NESVM {
             } else if (reg_info.is_cpu_watching()){
                 cpu.debug_run = true;
             }
-        } while((dis.selected_move_active || dis.trigger_search || reg_info.is_cpu_watching()) && current_tick < constants::CPU_FRAME_CYCLES);
+        } while((dis.selected_move_active || dis.trigger_search || reg_info.is_cpu_watching()) &&  current_tick < frame_cycles);
         if (!dis.selected_move_active || !dis.trigger_search || !reg_info.is_cpu_watching())
             dis.handle(cpu);
     }
@@ -165,9 +166,10 @@ struct NESVM {
     void ppu_debug_exec(){
         size_t current_tick = 0;
         static size_t cpu_tick_count = 0;
+        auto frame_cycles = (size_t)( (dis.stress_speed ? (constants::PPU_SPEED_f) * 2 : (constants::PPU_SPEED_f)) * GetFrameTime());
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active ||
                 dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run ||
-                dis.selected_scanline_active || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLES) {
+                dis.selected_scanline_active || reg_info.is_ppu_watching()) && current_tick++ < frame_cycles) {
             if (!cpu.debug_run) snap_storage.update_state(bus, cpu, ppu); // todo: check
             cpu.debug_run = true;
             if (cpu_tick_count++ % 3 == 2) {
@@ -220,7 +222,8 @@ struct NESVM {
             }
 #else
         if (cpu.stop_requested) return;
-        for (int i = 0; i < constants::CPU_FRAME_CYCLES; ++i){
+        auto frame_cycles = (size_t)(constants::CPU_SPEED_f * GetFrameTime());
+        for (int i = 0; i < frame_cycles; ++i){
              ppu_tick();
              bus.tick();
 
@@ -329,7 +332,6 @@ struct NESVM {
 
 #endif
 
-        SetTargetFPS(60);
         auto img = GenImageColor(constants::DISPLAY_PIXELS_WIDTH, constants::DISPLAY_PIXELS_HEIGHT, WHITE);
         auto display_texture = LoadTextureFromImage(img);
         Rectangle display_rec = {320, 0,(float)display_texture.width * 2.8f, (float)display_texture.height * 2.8f};
@@ -384,42 +386,43 @@ struct NESVM {
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, display_rec, {0, 0},0, WHITE);
             DrawRectangleLinesEx(display_rec, 1.f, BLACK);
 
-            reg_info.handle(cpu, ppu, bus);
-            handle_up_right_view();
-            handle_down_left_view();
-            general_info.handle(bus, cartridge, ppu);
-            cc.handle(bus.c);
-            sprite_info.handle(bus, ppu);
+            if (!dis.stress_speed){
+                reg_info.handle(cpu, ppu, bus);
+                handle_up_right_view();
+                handle_down_left_view();
+                general_info.handle(bus, cartridge, ppu);
+                cc.handle(bus.c);
+                sprite_info.handle(bus, ppu);
+                if (is_collision_up_right() && IsKeyPressed(KEY_M))
+                    current_up_right_view = static_cast<UpRightView>((current_up_right_view + 1) % UpRightViewCount);
 
-            if (is_collision_up_right() && IsKeyPressed(KEY_M))
-                current_up_right_view = static_cast<UpRightView>((current_up_right_view + 1) % UpRightViewCount);
+                if (is_collision_down_left() && IsKeyPressed(KEY_M))
+                    current_down_left_view = static_cast<DownRightView>((current_down_left_view + 1) % DownRightViewCount);
 
-            if (is_collision_down_left() && IsKeyPressed(KEY_M))
-                current_down_left_view = static_cast<DownRightView>((current_down_left_view + 1) % DownRightViewCount);
+                if (CheckCollisionPointRec(GetMousePosition(),display_rec)){
+                    if (IsKeyPressed(KEY_S))
+                        cpu.stop_requested = !cpu.stop_requested;
+                    if (IsKeyPressed(KEY_X))
+                        grid_view_enable = !grid_view_enable;
 
-            if (CheckCollisionPointRec(GetMousePosition(),display_rec)){
-                if (IsKeyPressed(KEY_S))
-                    cpu.stop_requested = !cpu.stop_requested;
-                if (IsKeyPressed(KEY_X))
-                    grid_view_enable = !grid_view_enable;
-
-                if (IsKeyPressed(KEY_ONE) ||
-                    IsKeyPressed(KEY_TWO) ||
-                    IsKeyPressed(KEY_THREE) ||
-                    IsKeyPressed(KEY_FOUR) ||
-                    IsKeyPressed(KEY_FIVE) ||
-                    IsKeyPressed(KEY_SIX)
-                ){
-                    ppu.pixel_mixing_debug_view.m_switch(static_cast<PPU::PixelMixingDebugView::Mode>(GetKeyPressed() - KEY_ONE));
+                    if (IsKeyPressed(KEY_ONE) ||
+                        IsKeyPressed(KEY_TWO) ||
+                        IsKeyPressed(KEY_THREE) ||
+                        IsKeyPressed(KEY_FOUR) ||
+                        IsKeyPressed(KEY_FIVE) ||
+                        IsKeyPressed(KEY_SIX)
+                            ){
+                        ppu.pixel_mixing_debug_view.m_switch(static_cast<PPU::PixelMixingDebugView::Mode>(GetKeyPressed() - KEY_ONE));
+                    }
+                    if (IsKeyPressed(KEY_C)){
+                        ppu.displays[0].fill(WHITE);
+                        ppu.displays[1].fill(WHITE);
+                    }
+                    if (IsKeyPressed(KEY_R)) reset(rom_path);
                 }
-                if (IsKeyPressed(KEY_C)){
-                    ppu.displays[0].fill(WHITE);
-                    ppu.displays[1].fill(WHITE);
-                }
-                if (IsKeyPressed(KEY_R)) reset(rom_path);
+
+                if (grid_view_enable) dtg.draw(22.4f,22.4f);
             }
-
-            if (grid_view_enable) dtg.draw(22.4f,22.4f);
 #else
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,(float)GetScreenWidth(), (float)GetScreenHeight()}, {0, 0},0, WHITE);
 #endif
@@ -468,7 +471,7 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, APUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #else
     NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d133 (DMC)
 
