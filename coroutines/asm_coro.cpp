@@ -4,24 +4,24 @@
 #include <iomanip>
 #include <vector>
 #include <utility>
+#include <cassert>
 
-// TODO: debug
 #define SAVE_BEFORE_CALL\
+    asm("movq %%rsp, %0" : "=r"(Coro::tmp.rsp1));\
+
+#define SAVE_AFTER_CALL\
+    asm("movq %%rsp, %0" : "=r"(Coro::tmp.rsp2));\
+
+#define RESTORE_AFTER_CALL\
+    asm("movq %0,%%rbp" :: "m"(Coro::tmp.regs[Coro::State::RBP]) :  "rbp");\
+    asm("movq %0,%%rsp" :: "m"(Coro::tmp.regs[Coro::State::RSP]) :  "rsp");\
+
+#define PROLOGUE\
     asm("movq %%rbx, %0" : "=r"(Coro::tmp.regs[Coro::State::RBX]));\
-    asm("movq %%rbp, %0" : "=r"(Coro::tmp.regs[Coro::State::RBP]));\
     asm("movq %%r12, %0" : "=r"(Coro::tmp.regs[Coro::State::R12]));\
     asm("movq %%r13, %0" : "=r"(Coro::tmp.regs[Coro::State::R13]));\
     asm("movq %%r14, %0" : "=r"(Coro::tmp.regs[Coro::State::R14]));\
     asm("movq %%r15, %0" : "=r"(Coro::tmp.regs[Coro::State::R15]));\
-
-#define RESTORE_AFTER_CALL\
-    asm("movq %0,%%rbx" :: "m"(Coro::tmp.regs[Coro::State::RBX]) :  "rbx");\
-    asm("movq %0,%%r12" :: "m"(Coro::tmp.regs[Coro::State::R12]) :  "r12");\
-    asm("movq %0,%%r13" :: "m"(Coro::tmp.regs[Coro::State::R13]) :  "r13");\
-    asm("movq %0,%%r14" :: "m"(Coro::tmp.regs[Coro::State::R14]) :  "r14");\
-    asm("movq %0,%%r15" :: "m"(Coro::tmp.regs[Coro::State::R15]) :  "r15");\
-
-#define PROLOGUE\
     if (Coro::f_s->need_restore) {RESTORE}\
 
 #define EPILOGUE\
@@ -38,8 +38,6 @@
     asm("movq %%rdx, %0" : "=r"(Coro::f_s->regs[Coro::State::RDX]));\
     asm("movq %%rdi, %0" : "=r"(Coro::f_s->regs[Coro::State::RDI]));\
     asm("movq %%rsi, %0" : "=r"(Coro::f_s->regs[Coro::State::RSI]));\
-    asm("movq %%rbp, %0" : "=r"(Coro::f_s->regs[Coro::State::RBP]));\
-    asm("movq %%rsp, %0" : "=r"(Coro::f_s->regs[Coro::State::RSP]));\
     asm("movq %%r8,  %0" : "=r"(Coro::f_s->regs[Coro::State::R8]));\
     asm("movq %%r9,  %0" : "=r"(Coro::f_s->regs[Coro::State::R9]));\
     asm("movq %%r10, %0" : "=r"(Coro::f_s->regs[Coro::State::R10]));\
@@ -48,6 +46,11 @@
     asm("movq %%r13, %0" : "=r"(Coro::f_s->regs[Coro::State::R13]));\
     asm("movq %%r14, %0" : "=r"(Coro::f_s->regs[Coro::State::R14]));\
     asm("movq %%r15, %0" : "=r"(Coro::f_s->regs[Coro::State::R15]));\
+    asm("movq %0,%%rbx"  :: "m"(Coro::tmp.regs[Coro::State::RBX])  : "rbx");\
+    asm("movq %0,%%r12"  :: "m"(Coro::tmp.regs[Coro::State::R12])  : "r12");\
+    asm("movq %0,%%r13"  :: "m"(Coro::tmp.regs[Coro::State::R13])  : "r13");\
+    asm("movq %0,%%r14"  :: "m"(Coro::tmp.regs[Coro::State::R14])  : "r14");\
+    asm("movq %0,%%r15"  :: "m"(Coro::tmp.regs[Coro::State::R15])  : "r15");\
     asm("call *%0" :: "r"((uintptr_t)Coro::save_rip) : "memory");\
     asm("leave");\
     asm("ret");\
@@ -81,11 +84,14 @@ struct Coro {
         };             
         unsigned long regs[RegsCount]{};
         unsigned char stack[0x2000]{};
+        unsigned long rsp1{};
+        unsigned long rsp2{};
         uintptr_t begin = 0;
         uintptr_t end = 0;
         size_t top = 0;
         bool need_restore = false;
         bool done = false;
+        bool equal = false;
         State(){}
         void print(){
             for (ssize_t i = top-1; i>=0; --i)
@@ -98,52 +104,41 @@ struct Coro {
     };
     static void restore_rip(){
         asm("movq %0,8(%%rsp)" :: "r"(Coro::f_s->regs[Coro::State::RIP]) : "memory");
-        // asm("movq %0,%%rbx" :: "m"(Coro::f_s->regs[Coro::State::RBX]) : "rbx");
-        // asm("movq %0,%%rcx" :: "m"(Coro::f_s->regs[Coro::State::RCX]) : "rcx");
-        // asm("movq %0,%%rdx" :: "m"(Coro::f_s->regs[Coro::State::RDX]) : "rdx");
-        // asm("movq %0,%%rdi" :: "m"(Coro::f_s->regs[Coro::State::RDI]) : "rdi");
-        // asm("movq %0,%%rsi" :: "m"(Coro::f_s->regs[Coro::State::RSI]) : "rsi");
-        // asm("movq %0,%%r8"  :: "m"(Coro::f_s->regs[Coro::State::R8])  : "r8");
-        // asm("movq %0,%%r9"  :: "m"(Coro::f_s->regs[Coro::State::R9])  : "r9");
-        // asm("movq %0,%%r10" :: "m"(Coro::f_s->regs[Coro::State::R10]) : "r10");
-        // asm("movq %0,%%r11" :: "m"(Coro::f_s->regs[Coro::State::R11]) : "r11");
-        // asm("movq %0,%%r12" :: "m"(Coro::f_s->regs[Coro::State::R12]) : "r12");
-        // asm("movq %0,%%r13" :: "m"(Coro::f_s->regs[Coro::State::R13]) : "r13");
-        // asm("movq %0,%%r14" :: "m"(Coro::f_s->regs[Coro::State::R14]) : "r14");
-        // asm("movq %0,%%r15" :: "m"(Coro::f_s->regs[Coro::State::R15]) : "r15");
-        // asm("movq %0,%%rax" :: "m"(Coro::f_s->regs[Coro::State::RAX]) : "rax");
     }
         
     // TODO: debug
     static void save_rip(){
-        asm("movq 8(%%rsp), %0" :  "=r"(Coro::f_s->regs[Coro::State::RIP]));
+        asm("movq 8(%%rsp), %0" : "=r"(Coro::f_s->regs[Coro::State::RIP]));
         Coro::f_s->regs[Coro::State::RIP] += 2;
     }
 
 
     // TODO: handle args
-    static inline std::vector<std::pair<void(*)(), State>> states;
+    static inline std::vector<State> states;
+    static inline std::vector<void(*)()> functions;
     static inline State* f_s = nullptr;
     static inline State tmp = State{};
     static inline void add(void(*addr)()){
-        states.push_back({addr, {}});
+        states.push_back(State{});
+        functions.push_back(addr);
     }
     static inline void run(){
         if (states.empty()) return;
-        
         while(!states.empty()){
             bool done = false;
             for (size_t i = 0, e = states.size(); i < e; ++i){
-                f_s = &states[i].second;
+                f_s = &states[i];
                 if (!f_s->done) {
-                    // SAVE_BEFORE_CALL
-                    states[i].first();
-                    // RESTORE_AFTER_CALL
-                    if (!f_s->need_restore) f_s->need_restore = true;
+                    SAVE_BEFORE_CALL
+                    functions[i]();
+                    SAVE_AFTER_CALL
+                    assert(Coro::tmp.rsp1 == Coro::tmp.rsp2);
+                    if ((f_s && !f_s->need_restore)) f_s->need_restore = true;
+            
                 }
-                if (f_s->done) done = true;
+                if ((f_s && f_s->done)) done = true;
             }
-            if (done) states.erase(std::remove_if(std::begin(states), std::end(states), [](auto& el){return el.second.done;}), std::end(states));
+            if (done) states.erase(std::remove_if(std::begin(states), std::end(states), [](auto& el){return el.done;}), std::end(states));
         }
     }
 };
