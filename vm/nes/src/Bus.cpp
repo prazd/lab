@@ -80,11 +80,25 @@ void Bus::write(unsigned short addr, unsigned char value) {
             return;
         }
         case constants::CONTROLLER1: { latch_req = true; latch_val = value; return; }
-        case constants::CONTROLLER2_AND_APU_FC: {apufc_requested = true; apufc = value; return; }
+        case constants::CONTROLLER2_AND_APU_FC: {
+            apufc = value;
+            frame_counter_mode = static_cast<FrameCounterMode>((apufc >> 7) & 1);
+            apu_irq_inhibit = (apufc & 0x40);
+            if (apu_irq_inhibit && frame_counter_mode == Step4) {
+                apu_control &= 0xbf;
+                apu_irq_interrupt_flip_flop = false;
+            }
+            frame_counter_reset = true;
+            if (!(apu_current_tick & 1)){
+                frame_counter_reset_ticks = 2;
+            } else
+                frame_counter_reset_ticks = 3;
+            return; }
         case constants::APU_CONTROL: {
-//            apu_enable_handle();
             apu_enable_req = true;
-            apu_enable = value; return;}
+            apu_enable = value;
+            apu_enable_handle();
+            return;}
     }
     if (addr == constants::PULSE1_DUTY_ENVELOPE){
         apu_pulse1_envelope_update = true;
@@ -107,9 +121,9 @@ void Bus::apu_enable_handle() {
     dmc_rate_counter = ntsc_rates[dmc_rate_index];
     dma_address = 0xc000;
     auto s_addr = unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
-    dmc_delay = 1;
     dma_address |= s_addr << 6;
-    dmc_dma_counter = 2;
+    dmc_delay = 1;
+    dmc_dma_counter = 4;
     dmc_sample_ready = false;
 }
 
@@ -134,7 +148,7 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
             dma_index = 0;
             return;
         }
-        case constants::CONTROLLER1: { if (value) c.latch1 = true; else c.update_status1();
+        case constants::CONTROLLER1: { if (value) c.latch1 = true; else {c.update_status1(); c.update_status2();}
             return; }
         case constants::CONTROLLER2_AND_APU_FC: { apufc = value;
             return; }
@@ -262,18 +276,29 @@ unsigned char Bus::read_prg_internal(unsigned short addr) {
         case constants::CONTROLLER1:{
             unsigned char res = false;
             if (instructions_count - last_instruction_num_read){
-                c.shift_req = true;
+                c.shift_req1 = true;
                 res = c.read_status1();
             } else {
-                res = c.prev_res;
+                res = c.prev_res1;
             }
             res &= 0x1f;
             res |= cpu_open_bus_value & 0xe0;
             last_instruction_num_read = instructions_count;
             return res;
         }
-        case constants::CONTROLLER2_AND_APU_FC:
-            return cpu_open_bus_value & 0xfe;
+        case constants::CONTROLLER2_AND_APU_FC:{
+            unsigned char res = false;
+            if (instructions_count - last_instruction_num_read){
+                c.shift_req2 = true;
+                res = c.read_status2();
+            } else {
+                res = c.prev_res2;
+            }
+            res &= 0x1f;
+            res |= cpu_open_bus_value & 0xe0;
+            last_instruction_num_read = instructions_count;
+            return res;
+        }
         case constants::APU_CONTROL: {
             if (master_clock - apu_fc_irq_set_cycle > 3) // TODO: check
                 apu_clear_frame_irq_req = true;
@@ -396,16 +421,21 @@ void Bus::unsafe_write_chr(unsigned short addr, unsigned char value){
 
 void Bus::controller_write_tick() {
     if (latch_req){
-        if (latch_val & 1) {c.latch1 = true;} else {c.update_status1(); c.latch1 = false;}
+        if (latch_val & 1) {c.latch1 = true;} else {c.update_status1(); c.update_status2(); c.latch1 = false;}
         latch_req = false;
     }
 
 }
 void Bus::controller_read_tick() {
-    if (c.shift_req){
+    if (c.shift_req1){
         ++c.current1;
         c.status1 >>= 1;
-        c.shift_req = false;
+        c.shift_req1 = false;
+    }
+    if (c.shift_req2){
+        ++c.current2;
+        c.status2 >>= 1;
+        c.shift_req2 = false;
     }
 }
 

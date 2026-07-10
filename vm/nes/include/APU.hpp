@@ -92,20 +92,6 @@ struct DMCChan : Channel {
     unsigned char shift_count{};
 
     // TODO: debug move to bus
-    inline void restart(Bus& bus){
-        if (bus.dmc_bytes_remaining) return;
-        auto s_len = bus.unsafe_read_prg(constants::DMC_CHAN_SAMPLE_LENGTH);
-        bus.dmc_bytes_remaining = (s_len << 4) | 1;
-        auto chan_direct_load_val = bus.unsafe_read_prg(constants::DMC_CHAN_DIRECT_LOAD);
-        bus.dmc_output_level = (char)(chan_direct_load_val & 0x7f);
-        bus.dmc_rate_counter = Bus::ntsc_rates[bus.dmc_rate_index];
-        bus.dmc_dma_address = 0xc000;
-        auto s_addr = bus.unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
-        bus.dmc_delay = 1;
-        bus.dma_address |= s_addr << 6;
-        bus.dmc_dma_counter = 4;
-        bus.dmc_sample_ready = false;
-    }
 
     inline void tick(Bus& bus){
         auto chan_freq_val = bus.unsafe_read_prg(constants::DMC_CHAN_FREQ);
@@ -133,9 +119,18 @@ struct DMCChan : Channel {
         if (bus.dmc_delay){
             --bus.dmc_delay;
             if (!bus.dmc_delay) bus.dmc_dma_in_progress = true;
-        } else if (bus.dmc_dma_counter) {
+        }
+
+        if (bus.dmc_dma_counter && bus.dmc_dma_in_progress) {
             --bus.dmc_dma_counter;
-            bus.dmc_dma_read_prg(bus.last_arg_addr); // dummy read
+            if (bus.last_arg_addr == 0x4016){
+                // TODO: debug
+                if (bus.dmc_dma_counter == 3 && !(bus.apu_current_tick & 1)){
+                    bus.dmc_dma_read_prg(bus.last_arg_addr); // dummy read
+                }
+            } else {
+                bus.dmc_dma_read_prg(bus.last_arg_addr); // dummy read
+            }
             if (!bus.dmc_dma_counter){
                 bus.dmc_sample_ready = true;
                 sample_buffer = bus.dmc_dma_read_prg(bus.dmc_dma_address);
@@ -157,11 +152,11 @@ struct DMCChan : Channel {
                     bus.apu_control |= 0x80;
                     bus.apu_irq_interrupt_flip_flop = true;
                 }
+            } else {
+                return;
             }
         }
 
-        if (bus.dmc_rate_counter)
-            --bus.dmc_rate_counter;
         if (!bus.dmc_rate_counter){
             bus.dmc_output_level += (shift_reg & 1) ? 2 : -2;
             if (shift_count){
@@ -193,7 +188,6 @@ struct DMCChan : Channel {
 struct APU {
     short buffer[1024]{};
     size_t buffer_i = 0;
-    size_t current_tick = 0;
     size_t sample_acc = 0;
 
     PulseChan<constants::PULSE1_TIMER_LOW,
@@ -209,14 +203,7 @@ struct APU {
     DMCChan dmc_ch{};
 
     size_t cycle_counter{};
-    bool irq_inhibit = false;
     size_t irq_set_counter = 0;
-    bool frame_counter_reset = false;
-    unsigned char frame_counter_reset_ticks = 0;
-
-    enum FrameCounterMode {
-        Step4, Step5
-    } frame_counter_mode = Step5; // TODO: check
 
     void tick(Bus& bus);
     void handle_frame_counter_update(Bus& bus);

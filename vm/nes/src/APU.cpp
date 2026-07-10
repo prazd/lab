@@ -9,7 +9,7 @@ void APU::frame_counter_step4(Bus& bus) {
     } else if (cycle_counter == 29829) {
         frame_counter_quarter_update(bus);
         frame_counter_half_update(bus);
-        if (!irq_inhibit) {
+        if (!bus.apu_irq_inhibit) {
             bus.apu_irq_interrupt_flip_flop = true;
             bus.apu_fc_irq_set_cycle = bus.master_clock;
         }else {
@@ -44,7 +44,7 @@ void APU::frame_counter_half_update(Bus& bus) {
 }
 
 void APU::handle_frame_counter_update(Bus& bus) {
-    if (frame_counter_mode == Step4)
+    if (bus.frame_counter_mode == Bus::Step4)
         frame_counter_step4(bus);
     else
         frame_counter_step5(bus);
@@ -64,33 +64,15 @@ void APU::update_control(Bus& bus){
 }
 
 void APU::tick(Bus& bus) {
-    if (irq_inhibit && bus.apu_control & 0x40){
+    if (bus.apu_irq_inhibit && bus.apu_control & 0x40){
         if (irq_set_counter) --irq_set_counter;
         if (!irq_set_counter) bus.apu_control &= 0xbf;
     }
     update_control(bus);
-    if (bus.apufc_requested) {
-        frame_counter_mode = static_cast<FrameCounterMode>((bus.apufc >> 7) & 1);
-        irq_inhibit = (bus.apufc & 0x40);
-        if (irq_inhibit && frame_counter_mode == Step4) {
-            bus.apu_control &= 0xbf;
-            bus.apu_irq_interrupt_flip_flop = false;
-        }
-        frame_counter_reset = true;
-        if (!(current_tick & 1)){
-            frame_counter_reset_ticks = 2;
-        } else
-            frame_counter_reset_ticks = 3;
-        bus.apufc_requested = false;
-    }
     if (bus.apu_enable_req){
 // TODO:
 //        if (dmc_ch.dmc_dma_counter <= 2)
         pulse_ch1.length_counter = bus.apu_is_enable(Bus::Pulse1) ? 0 : pulse_ch1.length_counter;
-        if (bus.apu_is_enable(Bus::DMC))
-            dmc_ch.restart(bus);
-        else
-            bus.dmc_bytes_remaining = 0;
         bus.apu_control &= 0x7f;
         bus.apu_enable_req = false;
     }
@@ -109,7 +91,7 @@ void APU::tick(Bus& bus) {
         bus.apu_pulse1_timer_update = false;
     }
 
-    if (!(current_tick & 1)){
+    if (!(bus.apu_current_tick & 1)){
         pulse_ch1.tick_timer(bus);
         if (bus.apu_clear_frame_irq_req){
             bus.apu_control &= 0xbf;
@@ -118,13 +100,15 @@ void APU::tick(Bus& bus) {
         }
     }
     if (bus.apu_is_enable(Bus::DMC)) dmc_ch.tick(bus);
+    if (bus.dmc_rate_counter)
+        --bus.dmc_rate_counter;
 
-    if (frame_counter_reset) {
-        if (frame_counter_reset_ticks) { --frame_counter_reset_ticks; }
-        if (!frame_counter_reset_ticks) {
+    if (bus.frame_counter_reset) {
+        if (bus.frame_counter_reset_ticks) { --bus.frame_counter_reset_ticks; }
+        if (!bus.frame_counter_reset_ticks) {
             cycle_counter = 0;
-            frame_counter_reset = false;
-            if (frame_counter_mode == Step5) {
+            bus.frame_counter_reset = false;
+            if (bus.frame_counter_mode == Bus::Step5) {
                 frame_counter_quarter_update(bus);
                 frame_counter_half_update(bus);
             }
@@ -141,5 +125,5 @@ void APU::tick(Bus& bus) {
         buffer_i = buffer_i + 2 == 1024 ? 0 : buffer_i + 2;
     }
 #endif
-    ++current_tick;
+    ++bus.apu_current_tick;
 }

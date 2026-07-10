@@ -19,7 +19,9 @@ struct Bus {
             return;
         }
         if (dma_state == Read){
-            dma_value = read_prg(dma_address + dma_index);
+            auto addr = dma_address + dma_index;
+            if (!((addr >= 0x4000 && addr <= 0x4019) && (last_arg_addr < 0x4000 || last_arg_addr > 0x4019)))
+                dma_value = read_prg(dma_address + dma_index);
         } else {
             oam[dma_index++] = dma_value;
             dma_active = (dma_index != 256);
@@ -54,6 +56,15 @@ struct Bus {
     VEC_MODE unsigned char oam[0x100]{};
     VEC_MODE unsigned char cpu_map[0x10000]{};
     VEC_MODE unsigned char ppu_map[0x4000]{};
+
+    enum FrameCounterMode {
+        Step4, Step5
+    } frame_counter_mode = Step5; // TODO: check
+
+    bool apu_irq_inhibit = false;
+    bool frame_counter_reset = false;
+    size_t apu_current_tick = 0;
+    size_t frame_counter_reset_ticks = 0;
 
     unsigned short last_arg_addr{};
     bool next_write{};
@@ -114,7 +125,6 @@ struct Bus {
     size_t apu_fc_irq_set_cycle = 0;
     bool dmc_dma_in_progress = false;
     unsigned char apufc{};
-    bool apufc_requested = false;
     unsigned char apu_enable = 0;
     enum APUChan {Pulse1 = 0x1, Pulse2 = 0x2, Triangle = 0x4, Noise = 0x8, DMC = 0x10 };
     inline bool apu_is_enable(APUChan c){

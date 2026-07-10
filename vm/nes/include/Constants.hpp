@@ -37,9 +37,9 @@ namespace constants {
     constexpr unsigned short CONTROLLER2_AND_APU_FC = 0x4017;
 
     constexpr size_t CPU_SPEED = 1790000;
+    constexpr size_t CPU_FRAME_CYCLE = CPU_SPEED/60;
+    constexpr size_t PPU_FRAME_CYCLE = CPU_FRAME_CYCLE * 3;
     constexpr float CPU_SPEED_f = 1790000.f;
-    constexpr size_t PPU_SPEED = CPU_SPEED * 3;
-    constexpr float PPU_SPEED_f = CPU_SPEED_f * 3;
 
     // CPU map
     constexpr unsigned short RAM_BEGIN = 0x0000;

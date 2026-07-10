@@ -131,7 +131,6 @@ struct NESVM {
             cpu.debug_run = true;
             dis.next = false;
         }
-        auto frame_cycles = (size_t)((dis.stress_speed ? (constants::CPU_SPEED_f) * 2 : (constants::CPU_SPEED_f)) * GetFrameTime());
         do {
             bool snap_update = cpu.debug_run;
             if (snap_update)
@@ -158,7 +157,7 @@ struct NESVM {
             } else if (reg_info.is_cpu_watching()){
                 cpu.debug_run = true;
             }
-        } while((dis.selected_move_active || dis.trigger_search || reg_info.is_cpu_watching()) &&  current_tick < frame_cycles);
+        } while((dis.selected_move_active || dis.trigger_search || reg_info.is_cpu_watching()) && current_tick < constants::CPU_FRAME_CYCLE);
         if (!dis.selected_move_active || !dis.trigger_search || !reg_info.is_cpu_watching())
             dis.handle(cpu);
     }
@@ -166,10 +165,9 @@ struct NESVM {
     void ppu_debug_exec(){
         size_t current_tick = 0;
         static size_t cpu_tick_count = 0;
-        auto frame_cycles = (size_t)( (dis.stress_speed ? (constants::PPU_SPEED_f) * 2 : (constants::PPU_SPEED_f)) * GetFrameTime());
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active ||
                 dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run ||
-                dis.selected_scanline_active || reg_info.is_ppu_watching()) && current_tick++ < frame_cycles) {
+                dis.selected_scanline_active || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLE) {
             if (!cpu.debug_run) snap_storage.update_state(bus, cpu, ppu); // todo: check
             cpu.debug_run = true;
             if (cpu_tick_count++ % 3 == 2) {
@@ -222,8 +220,9 @@ struct NESVM {
             }
 #else
         if (cpu.stop_requested) return;
-        auto frame_cycles = (size_t)(constants::CPU_SPEED_f * GetFrameTime());
-        for (int i = 0; i < frame_cycles; ++i){
+        static double current_tick = 0.0;
+        current_tick += (double)(constants::CPU_SPEED_f * GetFrameTime());
+        while(current_tick>=1.0){
              ppu_tick();
              bus.tick();
 
@@ -234,6 +233,7 @@ struct NESVM {
              controller_tick();
              ppu_tick();
              bus.tick();
+             current_tick-=1.0;
         }
 #endif
     }
@@ -355,6 +355,9 @@ struct NESVM {
         ppu.displays[1].fill(BLACK);
         ppu_init();
         cpu_init();
+#if DEBUG_MODE
+        SetTargetFPS(60);
+#endif
 #if !DEBUG_MODE && !MULTI_TEST_MODE
         cartridge.update_game_state<false>((char*)(bus.cpu_map + constants::CARTRIDGE_RAM_BEGIN));
 #endif
@@ -471,7 +474,7 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, PPUm>{}.run();
+    MultiTest<NESVM, APUm>{}.run();
 #else
     NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d133 (DMC)
 

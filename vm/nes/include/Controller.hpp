@@ -11,10 +11,14 @@ struct Controller {
     };
 
     unsigned char status1{};
+    unsigned char status2{};
     unsigned char current1 = 0;
-    bool prev_res = false;
+    unsigned char current2 = 0;
+    bool prev_res1 = false;
+    bool prev_res2 = false;
     bool latch1 = false;
-    bool shift_req = false;
+    bool shift_req1 = false;
+    bool shift_req2 = false;
 
     KeyboardKey keys1[8] = {
         KEY_Q,KEY_E,
@@ -60,13 +64,25 @@ struct Controller {
         }
     }
 
+    // TODO: finish
+    inline void update_status2() {
+        status2 = 0;
+    }
+
     inline bool read_status1(){
         if (latch1) return IsKeyDown(keys1[0]) || IsKeyDown(keys2[0]);
         if (current1 < 8){
-            prev_res = status1 & 1;
-            return prev_res;
+            prev_res1 = status1 & 1;
+            return prev_res1;
         }
         return true;
+    }
+
+    // TODO: finish
+    inline bool read_status2(){
+        current2 = 0;
+        prev_res2 = false;
+        return false;
     }
 };
 #endif //NES_CONTROLLER_H
