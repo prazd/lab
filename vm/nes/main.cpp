@@ -221,7 +221,7 @@ struct NESVM {
 #else
         if (cpu.stop_requested) return;
         static double current_tick = 0.0;
-        current_tick += (double)(constants::CPU_SPEED_f * GetFrameTime());
+        current_tick += (double)(constants::CPU_SPEED_f * std::min(GetFrameTime(), 0.016f));
         while(current_tick>=1.0){
              ppu_tick();
              bus.tick();
@@ -358,12 +358,26 @@ struct NESVM {
 #if DEBUG_MODE
         SetTargetFPS(60);
 #endif
-#if !DEBUG_MODE && !MULTI_TEST_MODE
+#if !DEBUG_MODE
         cartridge.update_game_state<false>((char*)(bus.cpu_map + constants::CARTRIDGE_RAM_BEGIN));
 #endif
+
+#if !DEBUG_MODE
+        Shader s = LoadShader(0, "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/shaders/crt.fs");
+        int resolutionLoc = GetShaderLocation(s, "iResolution");
+        int timeLoc = GetShaderLocation(s, "iTime");
+        Vector2 resolution = {(float)constants::DISPLAY_PIXELS_WIDTH, (float)constants::DISPLAY_PIXELS_HEIGHT};
+        bool shaders_mode = false;
+#endif
+
         while(!WindowShouldClose()){
             frame_execute();
             UpdateTexture(display_texture, ppu.get_active_display().data());
+#if !DEBUG_MODE
+            SetShaderValue(s, resolutionLoc, &resolution, SHADER_UNIFORM_VEC2);
+            auto time = (float)GetTime();
+            SetShaderValue(s, timeLoc, &time, SHADER_UNIFORM_FLOAT);
+#endif
 
 #if GAME_GENIE_MODE
             if (bus.gg.game_mode && !bus.gg.started){
@@ -427,7 +441,16 @@ struct NESVM {
                 if (grid_view_enable) dtg.draw(22.4f,22.4f);
             }
 #else
+#if !DEBUG_MODE
+            if (IsKeyPressed(KEY_Z)) shaders_mode = !shaders_mode;
+            if (shaders_mode) {
+                BeginShaderMode(s);
+                DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,(float)GetScreenWidth(), (float)GetScreenHeight()}, {0, 0},0, WHITE);
+                EndShaderMode();
+            } else
+#endif
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,(float)GetScreenWidth(), (float)GetScreenHeight()}, {0, 0},0, WHITE);
+
 #endif
             DrawFPS(0,0);
             EndDrawing();
@@ -440,7 +463,7 @@ struct NESVM {
     }
 
     ~NESVM(){
-#if !DEBUG_MODE && !MULTI_TEST_MODE
+#if !DEBUG_MODE
         if (bus.mapper.has_battery()) cartridge.update_game_state<true>((char*)(bus.cpu_map + constants::CARTRIDGE_RAM_BEGIN));
 #endif
     }

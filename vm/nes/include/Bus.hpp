@@ -80,6 +80,8 @@ struct Bus {
     size_t ppu_current_y = 0;
     size_t status_read_cycle = 0;
     size_t current_nmi_cycle = 0;
+    size_t clear_nmi_cycle = 0;
+    bool nmi_detect = false;
     size_t current_ppu_cycle = 0;
     bool ppu_irq_interrupt_flip_flop = false;
     bool apu_irq_interrupt_flip_flop = false;

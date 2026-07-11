@@ -442,6 +442,9 @@ void Bus::controller_read_tick() {
 void Bus::tick() {
     ++master_clock;
     ppu_irq_interrupt_flip_flop = mapper.is_irq_requested();
+// TODO: debug
+//    if (!nmi_detect)
+//        nmi_detect = ppustatus & 0x80 && ppuctrl & 0x80 && nmi_interrupt_flip_flop && master_clock - current_nmi_cycle >= 0;
     open_bus_decay();
 }
 

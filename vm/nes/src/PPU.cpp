@@ -457,6 +457,7 @@ void PPU::tick(Bus& bus) {
 
     if (((current_y == 241 && current_scanline_cycle > 1) || current_y >= 242) && current_y < 261
      && bus.ppuctrl & 0x80 && !(prev_ppuctrl_val & 0x80) && bus.ppustatus & 0x80) {
+//        bus.ppustatus |= 1 << 7; TODO: check
         bus.current_nmi_cycle = bus.master_clock;
         bus.nmi_interrupt_flip_flop = true;
     }
@@ -466,6 +467,7 @@ void PPU::tick(Bus& bus) {
         if (current_scanline_cycle == 2) { // todo: debug (2)
             if ((bus.ppumask >> 3) & 1) update_current_display(); // todo: check
             bus.nmi_interrupt_flip_flop = false; // todo: check
+            bus.clear_nmi_cycle = bus.master_clock;
             bus.ppustatus &= 0x3f;
         } else if (current_scanline_cycle == 257) {
             secondary_oam_fill(bus);

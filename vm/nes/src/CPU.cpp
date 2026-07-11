@@ -1537,9 +1537,10 @@ void CPU::interrupt_handle(Bus& bus) {
 
 void CPU::update_interrupt_request(Bus& bus){
     if (di.cycles == 1){
-        if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.master_clock - bus.current_nmi_cycle > 3)){
+        if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop  && bus.master_clock - bus.current_nmi_cycle > 3) || bus.nmi_detect){
             set_interrupt_req(NMI, true);
             bus.nmi_interrupt_flip_flop = false;
+            bus.nmi_detect = false;
         }
         if (interrupt_delay) --interrupt_delay;
         if (!interrupt_delay && ((bus.apu_irq_interrupt_flip_flop && bus.master_clock - bus.apu_fc_irq_set_cycle > 2) || bus.ppu_irq_interrupt_flip_flop) &&
