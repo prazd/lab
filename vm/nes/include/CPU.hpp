@@ -172,6 +172,8 @@ struct CPU {
     unsigned short last_read_addr = 0;
     void set_next_write_by_push_addr();
 
+    bool interrupt_push_in_action = false;
+
     bool i_set_before_sei = false;
     struct InstructionState {
         unsigned short tmp_l{};
@@ -186,6 +188,7 @@ struct CPU {
         unsigned short result{};
         bool next_write = false;
         bool next_read = false;
+        bool tmp_b = false;
         Interrupt interrupt = RESET;
         StatusReg::Flag flag = StatusReg::Flag::Unused;
     } as;

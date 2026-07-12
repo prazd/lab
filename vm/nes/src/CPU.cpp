@@ -756,19 +756,18 @@ void CPU::fill_exec_ops() {
         }
         case BRK:{
             iop.push_front([](Bus& bus, CPU& cpu){
-                bus.write(0x100 + cpu.sp, ((cpu.pc + 2) >> 8) & 0xff);
-            });
-            iop.push_front([](Bus& bus, CPU& cpu){
-                --cpu.sp;
                 cpu.as.next_write = true;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                bus.write(0x100 + cpu.sp, (cpu.pc + 2) & 0xff);
-            });
-            iop.push_front([](Bus& bus, CPU& cpu){
-                --cpu.sp;
+                bus.write(0x100 + cpu.sp, ((cpu.pc + 2) >> 8) & 0xff); --cpu.sp;
                 cpu.as.next_write = true;
             });
+            iop.push_front([](Bus& bus, CPU& cpu){
+                bus.write(0x100 + cpu.sp, (cpu.pc + 2) & 0xff); --cpu.sp;
+                // https://www.nesdev.org/wiki/CPU_interrupts
+                cpu.as.tmp_b = (bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop); // NMI overlap
+            });
+            iop.push_front([](Bus& bus, CPU& cpu){});
             iop.push_front([](Bus& bus, CPU& cpu){
                 cpu.sr.set(StatusReg::B, true);
                 bus.write(0x100 + cpu.sp, cpu.sr.get_status());
@@ -777,7 +776,7 @@ void CPU::fill_exec_ops() {
             });
             iop.push_front([](Bus& bus, CPU& cpu){
                 // TODO: check
-                if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop)){
+                if (cpu.as.tmp_b){
                     cpu.pc = (bus.read_prg(constants::NMI_INTERRUPT_HANDLER_L + 1) << 8) |
                              bus.read_prg(constants::NMI_INTERRUPT_HANDLER_L);
                     bus.nmi_interrupt_flip_flop = false;
@@ -785,6 +784,7 @@ void CPU::fill_exec_ops() {
                     cpu.pc = (bus.read_prg(constants::IRQ_INTERRUPT_HANDLER_L + 1) << 8) |
                              bus.read_prg(constants::IRQ_INTERRUPT_HANDLER_L);
                 }
+                cpu.interrupt_push_in_action = false;
             });
             break;}
         case CLC:{iop.push_front([](Bus& bus, CPU& cpu){ cpu.sr.set(StatusReg::C, 0); cpu.pc+=1; }); break;}
@@ -1222,10 +1222,11 @@ void CPU::fill_exec_ops() {
                 ++cpu.sp;
             });
             iop.push_front([](Bus& bus, CPU& cpu){
-                // TODO: Interrupt disable flag The effect of changing this flag is delayed 1 instruction.
-                cpu.sr.set_status(bus.read_prg(0x100 + cpu.sp));
+                // TODO(check): Interrupt disable flag The effect of changing this flag is delayed 1 instruction.
             });
             iop.push_front([](Bus& bus, CPU& cpu){
+                auto val = bus.read_prg(0x100 + cpu.sp);
+                cpu.sr.set_status(val);
                 cpu.interrupt_delay = 2;
                 cpu.pc += cpu.di.bytes;
             });
@@ -1485,8 +1486,14 @@ void CPU::push_interrupts_ops(Bus& bus) {
     iop.push_front([](Bus& bus, CPU& cpu){
         cpu.sr.set(StatusReg::B, false);
         cpu.sr.set(StatusReg::Unused, true);
-        bus.write(0x100 + cpu.sp, cpu.sr.reg); // TODO: debug
+        bus.write(0x100 + cpu.sp, cpu.sr.reg);
         cpu.sr.set(StatusReg::I, true);
+        if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.master_clock - bus.current_nmi_cycle > 3) || bus.nmi_detect) {
+            cpu.set_interrupt_req(NMI, true);
+            if (cpu.is_interrupt_requested(IRQ)) cpu.set_interrupt_req(IRQ, false); // NMI overlap
+            bus.nmi_interrupt_flip_flop = false;
+            bus.nmi_detect = false;
+        }
     });
     iop.push_front([](Bus& bus, CPU& cpu){
         --cpu.sp;
@@ -1500,6 +1507,7 @@ void CPU::push_interrupts_ops(Bus& bus) {
                break;
            }
        }
+       cpu.interrupt_push_in_action = false;
     });
 }
 
@@ -1531,22 +1539,21 @@ void CPU::iop_exec_step(Bus& bus) {
 }
 
 void CPU::interrupt_handle(Bus& bus) {
-    if (interrupt_requests) push_interrupts_ops(bus);
+    if (interrupt_requests) {push_interrupts_ops(bus); interrupt_push_in_action = true;}
     istep = interrupt_requests ? Execute : Fetch;
 }
 
 void CPU::update_interrupt_request(Bus& bus){
-    if (di.cycles == 1){
+    // TODO: check
+    if (iop.size() == 1){
         if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop  && bus.master_clock - bus.current_nmi_cycle > 3) || bus.nmi_detect){
             set_interrupt_req(NMI, true);
             bus.nmi_interrupt_flip_flop = false;
             bus.nmi_detect = false;
-        }
-        if (interrupt_delay) --interrupt_delay;
-        if (!interrupt_delay && ((bus.apu_irq_interrupt_flip_flop && bus.master_clock - bus.apu_fc_irq_set_cycle > 2) || bus.ppu_irq_interrupt_flip_flop) &&
-                ((!sr.get(StatusReg::I)) || i_set_before_sei) && !is_interrupt_requested(IRQ)
-        ){
-                set_interrupt_req(IRQ, true);
+        } else if (((bus.apu_irq_interrupt_flip_flop && bus.master_clock - bus.apu_fc_irq_set_cycle > 2) || bus.ppu_irq_interrupt_flip_flop) &&
+                   ((!sr.get(StatusReg::I)) || i_set_before_sei) && !is_interrupt_requested(IRQ)
+                ){
+            set_interrupt_req(IRQ, true);
         }
     }
 }
@@ -1581,6 +1588,7 @@ void CPU::tick_step(Bus& bus){
             fill_address_ops();
             fill_exec_ops();
             if (di.i == JMP) iop_exec_step(bus); // todo: check
+            if (di.i == BRK) interrupt_push_in_action = true;
 #if DEBUG_MODE
             pc_watch_count += (pc == pc_watch_address);
 #endif
@@ -1593,7 +1601,7 @@ void CPU::tick_step(Bus& bus){
             break;
         }
         case Execute: {
-            if (!is_branch || (is_branch && ins_cycle == 3))
+            if (!interrupt_push_in_action && (!is_branch || (is_branch && ins_cycle == 3))) // TODO: check
                 update_interrupt_request(bus);
             ++ins_cycle;
             if (!iop.empty()){

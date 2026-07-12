@@ -33,15 +33,20 @@ constexpr static std::string_view cpu_tests[] = {
         "/Users/prazd/Desktop/dev/nes-test-roms/dmc_dma_during_read4/read_write_2007.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_ppumem.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_oam.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/cpu_interrupts_v2/rom_singles/1-cli_latency.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/cpu_interrupts_v2/rom_singles/2-nmi_and_brk.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/cpu_interrupts_v2/rom_singles/3-nmi_and_irq.nes",
+        "/Users/prazd/Desktop/dev/nes-test-roms/cpu_interrupts_v2/rom_singles/4-irq_and_dma.nes"
 };
 
 constexpr static std::string_view ppu_tests[] = {
         "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/1.frame_basics.nes",
+        // TODO: debug
         "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes",
+
         "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes",
-        // TODO: debug
         "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/ppu_open_bus/ppu_open_bus.nes",
@@ -89,13 +94,16 @@ struct MultiTest{
 
     static void step(VM& vm, FrameData& fm) {
         for (int i = 0; i < CYCLES_COUNT; ++i){
-            for (int j = 0; j < 3; ++j) {
-                vm.ppu_tick();
-            }
+            vm.ppu_tick();
+            vm.bus.tick();
+
+            vm.ppu_tick();
+            vm.bus.tick();
 #if APU_TICK_ON
             vm.apu_tick();
 #endif
             vm.cpu_tick();
+            vm.ppu_tick();
             vm.bus.tick();
         }
         fm.in_progress.store(false);

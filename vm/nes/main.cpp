@@ -243,6 +243,7 @@ struct NESVM {
         InitWindow(constants::DEBUG_WIDTH, constants::DEBUG_HEIGHT, "NES");
 #else
         SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+        SetConfigFlags(FLAG_VSYNC_HINT);
         InitWindow(constants::WIDTH, constants::HEIGHT, "NES");
 #endif
 
@@ -463,7 +464,7 @@ struct NESVM {
     }
 
     ~NESVM(){
-#if !DEBUG_MODE
+#if !DEBUG_MODE && !MULTI_TEST_MODE
         if (bus.mapper.has_battery()) cartridge.update_game_state<true>((char*)(bus.cpu_map + constants::CARTRIDGE_RAM_BEGIN));
 #endif
     }
@@ -497,7 +498,7 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, APUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #else
     NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d133 (DMC)
 
