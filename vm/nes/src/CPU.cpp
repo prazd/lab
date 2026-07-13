@@ -1597,11 +1597,10 @@ void CPU::tick_step(Bus& bus){
 // todo: finish
             --di.cycles;
             ++ins_cycle;
-            if (is_branch) update_interrupt_request(bus);
             break;
         }
         case Execute: {
-            if (!interrupt_push_in_action && (!is_branch || (is_branch && ins_cycle == 3))) // TODO: check
+            if (!interrupt_push_in_action && (!is_branch || (is_branch && (ins_cycle == 1 || ins_cycle == 3))))
                 update_interrupt_request(bus);
             ++ins_cycle;
             if (!iop.empty()){

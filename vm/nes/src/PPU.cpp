@@ -176,7 +176,6 @@ void PPU::bg_tick(Bus &bus) {
             attributes_high <<= 1;
             fetch_tile_data_step(bus);
         } else if (current_scanline_cycle == 340){ // todo: check ppumask.enable_background_rendering
-            ++frames_count;
 #if DEBUG_MODE
             frame_start = true;
 #endif
@@ -432,7 +431,6 @@ void PPU::secondary_oam_fill(Bus& bus){
 }
 
 void PPU::tick(Bus& bus) {
-    current_scanline_cycle += (current_scanline_cycle == 0 && current_y == 0 && bus.ppumask & 0x8 && !(frames_count & 1)); // todo: debug
     if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256) {
         draw_pixel(bus);
         sprite_evaluate_tick(bus);
@@ -451,14 +449,14 @@ void PPU::tick(Bus& bus) {
     if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1)) {
         bus.ppustatus &= 0x5f; // todo: check zero hit value set to zero
         bus.ppustatus |= 1 << 7;
-        bus.current_nmi_cycle = bus.master_clock;
+        bus.current_nmi_cycle = current_cycle;
         if (bus.ppuctrl & 0x80) bus.nmi_interrupt_flip_flop = true;
     }
 
     if (((current_y == 241 && current_scanline_cycle > 1) || current_y >= 242) && current_y < 261
      && bus.ppuctrl & 0x80 && !(prev_ppuctrl_val & 0x80) && bus.ppustatus & 0x80) {
 //        bus.ppustatus |= 1 << 7; TODO: check
-        bus.current_nmi_cycle = bus.master_clock;
+        bus.current_nmi_cycle = current_cycle;
         bus.nmi_interrupt_flip_flop = true;
     }
 
@@ -467,15 +465,20 @@ void PPU::tick(Bus& bus) {
         if (current_scanline_cycle == 2) { // todo: debug (2)
             if ((bus.ppumask >> 3) & 1) update_current_display(); // todo: check
             bus.nmi_interrupt_flip_flop = false; // todo: check
-            bus.clear_nmi_cycle = bus.master_clock;
+            bus.clear_nmi_cycle = current_cycle; // todo: check
             bus.ppustatus &= 0x3f;
         } else if (current_scanline_cycle == 257) {
             secondary_oam_fill(bus);
+            // TODO: debug
+        } else if (current_scanline_cycle == 340 && bus.ppumask & 0x8 && (frames_count & 1)) {
+            ++current_scanline_cycle;
         }
     }
-
     bus.current_ppu_cycle = current_cycle;
     if (current_scanline_cycle == 341){
+#if DEBUG_MODE
+       if (current_y == 261) frame_start = true;
+#endif
         current_sprite_evaluation_step = SpriteCopy;
         current_scanline_cycle = 0;
         current_oam_index = sprite_evaluation_index = 0;

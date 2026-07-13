@@ -10,7 +10,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
     cpu_addr_triggered_on_write = cpu_trigger_write_addresses[addr];
 #endif
 #if GAME_GENIE_MODE
-    if (addr >= 0x8000 && addr <= 0x800b){
+    if (addr >= 0x8000 && addr <= 0x800b && !gg.started){
         gg.handle(addr, value);
         return;
     }

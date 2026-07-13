@@ -978,7 +978,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
             ppu.is_sprite_off = !ppu.is_sprite_off;
 
         ss  << std::dec << " CPU Cycles count:" << cpu.cycles_count << '\n'
-        << " CPU:\n"
+        << " CPU:" << cpu.ins_cycle << '\n'
         << std::hex << " A:" << (unsigned)cpu.a << '\n'
         << " X:" << (unsigned)cpu.x << '\n'
         << " Y:" << (unsigned)cpu.y << '\n'

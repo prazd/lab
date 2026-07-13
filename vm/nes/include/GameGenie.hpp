@@ -2,7 +2,7 @@
 #define NES_GAMEGENIE_HPP
 #include "Constants.hpp"
 #if GAME_GENIE_MODE
-#include "Simple.h"
+#include "Simple.hpp"
 
 //https://www.nesdev.org/wiki/Game_Genie
 struct GameGenie {

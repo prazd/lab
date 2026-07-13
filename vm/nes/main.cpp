@@ -305,6 +305,9 @@ struct NESVM {
                 case MemoryReaderV: return CheckCollisionPointRec(GetMousePosition(), mem_reader.rec);
                 case InstructionFinder: return CheckCollisionPointRec(GetMousePosition(), instr_finder.rec);
                 case DiffSnapshotV: return CheckCollisionPointRec(GetMousePosition(), ds.rec);
+#if GAME_GENIE_MODE
+                case CustomGameGenieV: return CheckCollisionPointRec(GetMousePosition(), cgg.rec);
+#endif
             }
         };
 
@@ -481,7 +484,7 @@ int main(){
     // /Users/prazd/Desktop/dev/DonkeyKong.nes
     // /Users/prazd/Desktop/dev/DonkeyKongJU.nes (NROM)
     // /Users/prazd/Desktop/dev/KirbysAdventure.nes
-    // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: 0x8082/0x80e4/0x80c3/0x8eb6
+    // /Users/prazd/Desktop/dev/SuperMarioBros.nes // debug: GameGenie
     // palette_ram.nes
     // /Users/prazd/Desktop/dev/nes-test-roms/mmc3_irq_tests/1.Clocking.nes
     // /Users/prazd/Desktop/dev/GameGenie.nes
@@ -500,7 +503,8 @@ int main(){
 #if MULTI_TEST_MODE
     MultiTest<NESVM, PPUm>{}.run();
 #else
-    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d133 (DMC)
+//    /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes
+    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // d133 (DMC)
 
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
