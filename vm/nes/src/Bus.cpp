@@ -226,15 +226,16 @@ unsigned char Bus::read_prg_internal(unsigned short addr) {
         case constants::PPUSTATUS: {
             ppu_w = false;
             status_read_cycle = current_ppu_cycle;
-            if (ppustatus & 0x80 && current_ppu_cycle - current_nmi_cycle == 0) { // todo: debug
-                status_read_cycle = current_ppu_cycle;
-                nmi_interrupt_flip_flop = false;
-                auto tmp = ppustatus & 0x7f;
-                ppustatus = 0;
-                ppu_open_bus_value &= 0x1f;
-                ppu_open_bus_value |= (tmp & 0xe0);
-                return tmp;
-            }
+// TODO: debug
+//            if (ppustatus & 0x80 && ppu_current_y == 241 && ppu_current_scanline == 0) {
+//                nmi_reject = true;
+//                nmi_interrupt_flip_flop = false;
+//                auto tmp = ppustatus & 0x7f;
+//                ppustatus = 0;
+//                ppu_open_bus_value &= 0x1f;
+//                ppu_open_bus_value |= (tmp & 0xe0);
+//                return tmp;
+//            }
             unsigned char current = (ppustatus & 0xe0) | (ppu_open_bus_value & 0x1f);
             ppustatus &= 0x60;
             ppu_open_bus_value &= 0x1f;

@@ -446,7 +446,7 @@ void PPU::tick(Bus& bus) {
 
     ++current_scanline_cycle;
 
-    if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1)) {
+    if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1) && !bus.nmi_reject) { // TODO: check
         bus.ppustatus &= 0x5f; // todo: check zero hit value set to zero
         bus.ppustatus |= 1 << 7;
         bus.current_nmi_cycle = current_cycle;
@@ -462,11 +462,12 @@ void PPU::tick(Bus& bus) {
 
     if (current_y == 261){
         sprite_evaluate_tick(bus);
-        if (current_scanline_cycle == 2) { // todo: debug (2)
+        if (current_scanline_cycle == 1) { // todo: debug (2)
             if ((bus.ppumask >> 3) & 1) update_current_display(); // todo: check
             bus.nmi_interrupt_flip_flop = false; // todo: check
             bus.clear_nmi_cycle = current_cycle; // todo: check
             bus.ppustatus &= 0x3f;
+            bus.nmi_reject = false; // TODO: check
         } else if (current_scanline_cycle == 257) {
             secondary_oam_fill(bus);
             // TODO: debug
@@ -482,11 +483,12 @@ void PPU::tick(Bus& bus) {
         current_sprite_evaluation_step = SpriteCopy;
         current_scanline_cycle = 0;
         current_oam_index = sprite_evaluation_index = 0;
-        current_y = current_y == 261 ? (current_x = 0) : current_y + 1;
+        current_y = current_y == 261 ? (++frames_count, current_x = 0) : current_y + 1;
 #if DEBUG_MODE
         assert(current_step == NT);
 #endif
     }
     bus.ppu_current_y = current_y;
+    bus.ppu_current_scanline = current_scanline_cycle;
     prev_ppuctrl_val = bus.ppuctrl;
 }

@@ -35,17 +35,16 @@ constexpr static std::string_view cpu_tests[] = {
         "/Users/prazd/Desktop/dev/nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_oam.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/cpu_interrupts_v2/rom_singles/1-cli_latency.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/cpu_interrupts_v2/rom_singles/2-nmi_and_brk.nes",
+        // TODO: debug
         "/Users/prazd/Desktop/dev/nes-test-roms/cpu_interrupts_v2/rom_singles/3-nmi_and_irq.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/cpu_interrupts_v2/rom_singles/4-irq_and_dma.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/cpu_interrupts_v2/rom_singles/5-branch_delays_irq.nes"
 };
 
 constexpr static std::string_view ppu_tests[] = {
-        // TODO: debug
         "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/1.frame_basics.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes",
-
         "/Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes",
         "/Users/prazd/Desktop/dev/nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes",

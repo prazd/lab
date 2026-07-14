@@ -10,7 +10,7 @@ uniform sampler2D texture0;
 
 out vec4 finalColor;
 
-// Original - https://www.shadertoy.com/view/XtlSD7
+
 #define RGB( r, g, b ) vec3( float( r ) / 255.0, float( g ) / 255.0, float( b ) / 255.0 )
 vec2 CRTCurveUV( vec2 uv )
 {
@@ -35,6 +35,7 @@ void DrawScanline( inout vec3 color, vec2 uv )
     color *= scanline * grille * 1.2;
 }
 
+// Original - https://www.shadertoy.com/view/XtlSD7
 void main(){
     vec2 fragCoord = fragTexCoord * iResolution;
 

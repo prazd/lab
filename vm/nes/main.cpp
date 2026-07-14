@@ -6,8 +6,10 @@
 #include "PPU.hpp"
 #include "CPU.hpp"
 #include "Cartridge.hpp"
+#include "Shaders.hpp"
 #include "Debug.hpp"
 #include "MultiTest.hpp"
+#include <initializer_list>
 
 struct NESVM {
     APU apu{};
@@ -367,9 +369,10 @@ struct NESVM {
 #endif
 
 #if !DEBUG_MODE
-        Shader s = LoadShader(0, "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/shaders/crt.fs");
-        int resolutionLoc = GetShaderLocation(s, "iResolution");
-        int timeLoc = GetShaderLocation(s, "iTime");
+        Shaders shaders = Shaders(std::initializer_list<const char*>{
+            "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/shaders/crt.fs",
+            "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/shaders/lcd.fs"
+        });
         Vector2 resolution = {(float)constants::DISPLAY_PIXELS_WIDTH, (float)constants::DISPLAY_PIXELS_HEIGHT};
         bool shaders_mode = false;
 #endif
@@ -378,9 +381,10 @@ struct NESVM {
             frame_execute();
             UpdateTexture(display_texture, ppu.get_active_display().data());
 #if !DEBUG_MODE
-            SetShaderValue(s, resolutionLoc, &resolution, SHADER_UNIFORM_VEC2);
+            auto shader_data = shaders.get();
+            SetShaderValue(shader_data.s, shader_data.resolutionLoc, &resolution, SHADER_UNIFORM_VEC2);
             auto time = (float)GetTime();
-            SetShaderValue(s, timeLoc, &time, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(shader_data.s, shader_data.timeLoc, &time, SHADER_UNIFORM_FLOAT);
 #endif
 
 #if GAME_GENIE_MODE
@@ -447,8 +451,9 @@ struct NESVM {
 #else
 #if !DEBUG_MODE
             if (IsKeyPressed(KEY_Z)) shaders_mode = !shaders_mode;
+            shaders.handle();
             if (shaders_mode) {
-                BeginShaderMode(s);
+                BeginShaderMode(shader_data.s);
                 DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,(float)GetScreenWidth(), (float)GetScreenHeight()}, {0, 0},0, WHITE);
                 EndShaderMode();
             } else
@@ -501,10 +506,10 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, PPUm>{}.run();
+    MultiTest<NESVM, CPUm>{}.run();
 #else
 //    /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes
-    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // d133 (DMC)
+    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d133 (DMC)
 
 //    std::cout << std::is_trivially_copyable_v<CPU>;
 #endif
