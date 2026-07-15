@@ -45,6 +45,7 @@ struct Bus {
 
     static inline std::bitset<0x10000> cpu_write_set_addresses;
     static inline std::bitset<0x10000> cpu_read_set_addresses;
+    static inline std::bitset<0x10000> cpu_pc_read_set_addresses;
     static inline std::bitset<0x10000> cpu_trigger_write_addresses;
     static inline std::bitset<0x10000> cpu_trigger_read_addresses;
 

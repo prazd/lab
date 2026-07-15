@@ -29,19 +29,30 @@ struct DebugWindow {
     }
 
     template <typename PredF, typename HandlerF, typename ... Args>
+    static void cpu_search_step(Bus& bus, CPU& cpu, PredF pred_f, HandlerF handler_f, unsigned& l_pc, Args&&... args) {
+        auto val = bus.unsafe_read_prg(l_pc);
+        if (val == 0xff){++l_pc; return;}  // also skip ISC (0xff)
+        auto decoded = cpu.decode(val);
+        if (!decoded.bytes) {++l_pc; return;}
+        auto asm_info = cpu.disassemble(bus, l_pc);
+        if (pred_f(l_pc, decoded, asm_info))
+            handler_f(l_pc, decoded, asm_info, std::forward<Args>(args)...);
+        l_pc += decoded.bytes;
+    }
+
+    template <typename PredF, typename HandlerF, typename ... Args>
     static void cpu_search(Bus& bus, CPU& cpu, PredF pred_f, HandlerF handler_f, Args&&... args) {
         unsigned l_pc = 0x8000;
+        while(l_pc < 0xffff)
+            cpu_search_step(bus, cpu,  pred_f, handler_f, l_pc, std::forward<Args>(args)...);
+    }
+
+    template <typename PredF, typename HandlerF, typename ... Args>
+    static void cpu_search_pc(Bus& bus, CPU& cpu, PredF pred_f, HandlerF handler_f, Args&&... args) {
+        unsigned l_pc = 0x8000;
         while(l_pc < 0xffff) {
-            if (bus.unsafe_read_prg(l_pc) == 0xff){ // also skip ISC (0xff)
-                while(bus.unsafe_read_prg(++l_pc) == 0xff);
-                continue;
-            }
-            auto decoded = cpu.decode(bus.unsafe_read_prg(l_pc));
-            if (!decoded.bytes) {++l_pc; continue;}
-            auto asm_info = cpu.disassemble(bus, l_pc);
-            if (pred_f(l_pc, decoded, asm_info))
-                handler_f(l_pc, decoded, asm_info, std::forward<Args>(args)...);
-            l_pc += decoded.bytes;
+            if (!Bus::cpu_pc_read_set_addresses.test(l_pc)) {++l_pc; continue;}
+            cpu_search_step(bus, cpu, pred_f, handler_f, l_pc, std::forward<Args>(args)...);
         }
     }
 
@@ -697,7 +708,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             );
 
             std::stringstream lss;
-            DW::cpu_search(bus, cpu,
+            DW::cpu_search_pc(bus, cpu,
                            [](auto&&...){return true;},
                            [](auto l_pc, auto& decoded, auto& asm_info, auto& lss, const auto& subroutines_addresses){
                                if (std::any_of(subroutines_addresses.begin(), subroutines_addresses.end(), [l_pc](auto el){return el == l_pc;}))
@@ -1310,7 +1321,7 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 DrawText(tmp_str.c_str(), t_x, t_y, 10.f, BLACK);
                 ss.str("");
                 ss << std::hex;
-                ss << "  " << current_address << " | ";
+                ss << "  " <<  HEX_COUT(current_address, 4) << " | ";
                 t_y += 15.f;
                 t_x = DW::rec.x;
             }
@@ -1324,11 +1335,11 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 DrawText(tmp_str.c_str(), t_x, t_y, 10.f, BLACK);
                 ss.str("");
                 t_x += (sz * 5.f);
-                ss << std::hex;
+
                 if (mode == PPUm) {
-                    ss  << (unsigned)bus.unsafe_read_chr(current_address) << ' ';
+                    ss  <<  HEX_COUT_W2((unsigned)bus.unsafe_read_chr(current_address)) << ' ';
                 } else {
-                    ss  << (unsigned)bus.unsafe_read_prg( current_address) << ' ';
+                    ss  << HEX_COUT_W2((unsigned)bus.unsafe_read_prg( current_address)) << ' ';
                 }
                 tmp_str = ss.str();
                 bool is_write = mode == PPUm ? (bus.ppu_write_set_addresses[adjusted_address]) : (bus.cpu_write_set_addresses[adjusted_address]);
@@ -1339,9 +1350,9 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 ss << std::hex;
             } else {
                 if (mode == PPUm) {
-                    ss  << (unsigned)bus.unsafe_read_chr(current_address) << ' ';
+                    ss  << HEX_COUT_W2((unsigned)bus.unsafe_read_chr(current_address)) << ' ';
                 } else {
-                    ss  << (unsigned)bus.unsafe_read_prg( current_address) << ' ';
+                    ss  << HEX_COUT_W2((unsigned)bus.unsafe_read_prg( current_address)) << ' ';
                 }
             }
 
@@ -1663,7 +1674,7 @@ struct InstructionFinder: DebugWindowText<x, y, w, h> {
                 },
                 instructions);
             } else if (mode == Instruction){
-                DW::cpu_search(bus, cpu, [instr_search_list=instr_search_list](auto lpc, auto& decoded, auto& asm_info){
+                DW::cpu_search_pc(bus, cpu, [instr_search_list=instr_search_list](auto lpc, auto& decoded, auto& asm_info){
                        static int current_ins = 0;
                        if (decoded.i == instr_search_list[current_ins]){
                             if (current_ins == 0) instr_search_address = lpc;

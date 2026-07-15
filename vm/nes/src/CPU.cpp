@@ -1488,7 +1488,7 @@ void CPU::push_interrupts_ops(Bus& bus) {
         cpu.sr.set(StatusReg::Unused, true);
         bus.write(0x100 + cpu.sp, cpu.sr.reg);
         cpu.sr.set(StatusReg::I, true);
-        if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.master_clock - bus.current_nmi_cycle > 3) || bus.nmi_detect) {
+        if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop && bus.current_ppu_cycle - bus.current_nmi_cycle >= 2) || bus.nmi_detect) {
             cpu.set_interrupt_req(NMI, true);
             if (cpu.is_interrupt_requested(IRQ)) cpu.set_interrupt_req(IRQ, false); // NMI overlap
             bus.nmi_interrupt_flip_flop = false;
@@ -1546,7 +1546,7 @@ void CPU::interrupt_handle(Bus& bus) {
 void CPU::update_interrupt_request(Bus& bus){
     // TODO: check
     if (iop.size() == 1){
-        if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop  && bus.master_clock - bus.current_nmi_cycle > 3) || bus.nmi_detect){
+        if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop  && bus.current_ppu_cycle - bus.current_nmi_cycle >= 2) || bus.nmi_detect){
             set_interrupt_req(NMI, true);
             bus.nmi_interrupt_flip_flop = false;
             bus.nmi_detect = false;
@@ -1583,6 +1583,9 @@ void CPU::tick_step(Bus& bus){
     switch (istep) {
         case Fetch: {
             di = decode(bus.read_prg( pc));
+#if DEBUG_MODE
+            Bus::cpu_pc_read_set_addresses[pc] = true;
+#endif
             is_branch = std::any_of(std::begin(branch_instructions), std::end(branch_instructions), [i = di.i](auto el){return el == i;});
             current_iop_index = 0;
             fill_address_ops();
