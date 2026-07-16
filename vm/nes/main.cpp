@@ -509,8 +509,6 @@ int main(){
     MultiTest<NESVM, CPUm>{}.run();
 #else
 //    /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes
-    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d133 (DMC)
-
-//    std::cout << std::is_trivially_copyable_v<CPU>;
+    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // d133 (DMC)
 #endif
 }

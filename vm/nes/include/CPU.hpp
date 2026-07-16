@@ -187,7 +187,6 @@ struct CPU {
         unsigned char arg2{};
         unsigned short result{};
         bool next_write = false;
-        bool next_read = false;
         bool tmp_b = false;
         Interrupt interrupt = RESET;
         StatusReg::Flag flag = StatusReg::Flag::Unused;

@@ -66,6 +66,7 @@ struct Bus {
     bool frame_counter_reset = false;
     size_t apu_current_tick = 0;
     size_t frame_counter_reset_ticks = 0;
+    unsigned char ins_cycle = 0;
 
     unsigned short last_arg_addr{};
     bool next_write{};
@@ -124,9 +125,10 @@ struct Bus {
     size_t dmc_rate_index = 0;
     size_t dmc_delay = 0;
     size_t dmc_dma_counter = 0;
-    bool dmc_sample_ready = false;
+    SimpleDequeTC<unsigned char, 1> dmc_sample_buffer{};
+    unsigned char dmc_shift_reg{};
+    unsigned char dmc_shift_count{};
 
-    bool is_apu_irq_enable();
     size_t apu_fc_irq_set_cycle = 0;
     bool dmc_dma_in_progress = false;
     unsigned char apufc{};
@@ -137,7 +139,6 @@ struct Bus {
     }
     unsigned char apu_control = 0;
     bool apu_clear_frame_irq_req = false;
-    unsigned short apu_dmc_bytes_remaining = 0;
 
     bool apu_pulse1_timer_update = false;
     bool apu_pulse1_envelope_update = false;

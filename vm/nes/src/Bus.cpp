@@ -10,7 +10,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
     cpu_addr_triggered_on_write = cpu_trigger_write_addresses[addr];
 #endif
 #if GAME_GENIE_MODE
-    if (addr >= 0x8000 && addr <= 0x800b && !gg.started){
+    if (!gg.started && addr >= 0x8000 && addr <= 0x800b){
         gg.handle(addr, value);
         return;
     }
@@ -122,9 +122,12 @@ void Bus::apu_enable_handle() {
     dma_address = 0xc000;
     auto s_addr = unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
     dma_address |= s_addr << 6;
-    dmc_delay = 1;
-    dmc_dma_counter = 4;
-    dmc_sample_ready = false;
+    if (dmc_sample_buffer.empty()){
+        dmc_delay = 3;
+    } else {
+        dmc_shift_reg = dmc_sample_buffer.back(); dmc_sample_buffer.pop_back();
+        dmc_shift_count = 8;
+    }
 }
 
 void Bus::unsafe_write(unsigned short addr, unsigned char value) {
@@ -154,10 +157,6 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
             return; }
     }
     cpu_map[addr] = value;
-}
-
-bool Bus::is_apu_irq_enable() {
-    return !(apufc & 0x40);
 }
 
 unsigned char Bus::read_prg(unsigned short addr) {
@@ -463,6 +462,7 @@ void Bus::adjust_cpu_mirroring(unsigned short& addr) {
         addr-=constants::RAM_MIRROR2_BEGIN;
     else if (addr >= constants::RAM_MIRROR3_BEGIN && addr <= constants::RAM_MIRROR3_END)
         addr-=constants::RAM_MIRROR3_BEGIN;
+    // TODO: debug GameGenie(ZZZLTT)
     else if (addr >= constants::PPU_REGS_MIRROR_BEGIN && addr <= constants::PPU_REGS_MIRROR_END){
         addr = constants::PPU_REGS_BEGIN + (addr % 8);
     }

@@ -21,17 +21,6 @@ inline Color color_by_id(unsigned char id) {
     }
 }
 
-inline unsigned char id_by_color(Color c) {
-    if (c == BLACK){
-        return 0b01;
-    } else if (c == GRAY) {
-        return 0b10;
-    } else if (c == DARKGRAY){
-        return 0b11;
-    }
-    return 0b00;
-}
-
 struct PPU {
 // https://www.nesdev.org/wiki/PPU_memory_map
 //  $0000-$0FFF	$1000	Pattern table 0	Cartridge

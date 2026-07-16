@@ -1,6 +1,7 @@
 #ifndef NES_APU_HPP
 #define NES_APU_HPP
 #include "Bus.hpp"
+#include "Simple.hpp"
 
 struct Envelope {
     unsigned char prev_divider{};
@@ -87,9 +88,6 @@ struct DMCChan : Channel {
     bool is_loop{};
     bool irq_enable{};
     bool need_sample_update = false;
-    unsigned char sample_buffer{};
-    unsigned char shift_reg{};
-    unsigned char shift_count{};
 
     // TODO: debug move to bus
 
@@ -106,10 +104,9 @@ struct DMCChan : Channel {
             bus.dmc_dma_address = 0xc000;
             auto s_addr = bus.unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
             bus.dmc_dma_address |= s_addr << 6;
-            if (!bus.dmc_sample_ready){
+            if (bus.dmc_sample_buffer.empty()){
                 bus.apu_irq_interrupt_flip_flop = true;
-                bus.dmc_sample_ready = false;
-                bus.dmc_dma_counter = 4;
+                bus.dmc_dma_counter = 3 + bus.next_write;
                 need_sample_update = true;
             }
         } else if (!bus.dmc_bytes_remaining){
@@ -117,8 +114,8 @@ struct DMCChan : Channel {
         }
 
         if (bus.dmc_delay){
-            --bus.dmc_delay;
-            if (!bus.dmc_delay) bus.dmc_dma_in_progress = true;
+            if (!(bus.dmc_delay == 1 && bus.next_write)) --bus.dmc_delay;
+            if (!bus.dmc_delay) {bus.dmc_dma_counter = 3 + bus.next_write; bus.dmc_dma_in_progress = true;}
         }
 
         if (bus.dmc_dma_counter && bus.dmc_dma_in_progress) {
@@ -132,20 +129,15 @@ struct DMCChan : Channel {
                 bus.dmc_dma_read_prg(bus.last_arg_addr); // dummy read
             }
             if (!bus.dmc_dma_counter){
-                bus.dmc_sample_ready = true;
-                sample_buffer = bus.dmc_dma_read_prg(bus.dmc_dma_address);
+                bus.dmc_sample_buffer.push_back(bus.dmc_dma_read_prg(bus.dmc_dma_address));
                 bus.dmc_dma_address = bus.dmc_dma_address == 0xffff ? 0x8000 : bus.dmc_dma_address + 1;
                 if (bus.dmc_bytes_remaining)
                     --bus.dmc_bytes_remaining;
                 bus.dmc_dma_in_progress = false;
                 if (bus.dmc_bytes_remaining){
                     if (need_sample_update){
-                        shift_reg = sample_buffer;
-                        shift_count = 8;
-                        bus.dmc_dma_in_progress = true;
-                        bus.dmc_sample_ready = false;
-                        bus.dmc_dma_counter = 4;
-                        need_sample_update = false;
+                        bus.dmc_shift_reg = bus.dmc_sample_buffer.back(); bus.dmc_sample_buffer.pop_back();
+                        bus.dmc_shift_count = 8;
                     }
                 } else if (!bus.dmc_bytes_remaining && !is_loop && irq_enable){
                     bus.apu_control &= 0x7f;
@@ -158,28 +150,23 @@ struct DMCChan : Channel {
         }
 
         if (!bus.dmc_rate_counter){
-            bus.dmc_output_level += (shift_reg & 1) ? 2 : -2;
-            if (shift_count){
-                shift_reg >>= 1;
-                --shift_count;
+            bus.dmc_output_level += (bus.dmc_shift_reg & 1) ? 2 : -2;
+            if (bus.dmc_shift_count){
+                bus.dmc_shift_reg >>= 1;
+                --bus.dmc_shift_count;
                 bus.dmc_output_level = std::clamp(bus.dmc_output_level, (char)127, (char)0);
                 bus.dmc_rate_counter = Bus::ntsc_rates[bus.dmc_rate_index];
             }
-            if (!shift_count){
-                if (!bus.dmc_sample_ready)
+            if (!bus.dmc_shift_count){
+                if (bus.dmc_sample_buffer.empty()){
                     need_sample_update = true;
-                else {
-                    shift_reg = sample_buffer;
-                    shift_count = 8;
+                    bus.dmc_dma_counter = 3 + bus.next_write;
+                    bus.dmc_dma_in_progress = true;
+                } else {
+                    bus.dmc_shift_reg = bus.dmc_sample_buffer.back(); bus.dmc_sample_buffer.pop_back();
+                    bus.dmc_shift_count = 8;
                 }
                 // todo: check put/get cycle
-                bus.dmc_sample_ready = false;
-                bus.dmc_dma_counter = 4;
-                if (bus.next_write) {
-                    bus.dmc_delay = 1;  // TODO: check
-                } else {
-                    bus.dmc_dma_in_progress = true;
-                }
             }
         }
     }

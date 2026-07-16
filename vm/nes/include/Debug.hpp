@@ -989,7 +989,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
             ppu.is_sprite_off = !ppu.is_sprite_off;
 
         ss  << std::dec << " CPU Cycles count:" << cpu.cycles_count << '\n'
-        << " CPU:" << cpu.ins_cycle << '\n'
+        << " CPU:" << (int)bus.ins_cycle << '\n'
         << std::hex << " A:" << (unsigned)cpu.a << '\n'
         << " X:" << (unsigned)cpu.x << '\n'
         << " Y:" << (unsigned)cpu.y << '\n'
@@ -1241,7 +1241,10 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
                 ss << "Interrupts req:\n"
                    << "  APU_IRQ:"     <<  (int)bus.apu_irq_interrupt_flip_flop  << '\n'
                    << "  PPU_IRQ:"     <<  (int)bus.ppu_irq_interrupt_flip_flop  << '\n'
-                   << "  NMI:"     <<  (int)bus.nmi_interrupt_flip_flop  << '\n';
+                   << "  NMI:"     <<  (int)bus.nmi_interrupt_flip_flop  << '\n'
+                   << "DMA req:\n"
+                   << "  DMC:"     <<  (int)bus.dmc_dma_in_progress  << '(' << bus.dmc_dma_counter << ")\n"
+                   << "  OAM:"     <<  (int)bus.dma_active  << '\n';
                 break;
             }
 #if GAME_GENIE_MODE
