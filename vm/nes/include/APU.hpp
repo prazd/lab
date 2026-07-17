@@ -87,10 +87,8 @@ struct TriangleChan : Channel{
 struct DMCChan : Channel {
     bool is_loop{};
     bool irq_enable{};
-    bool need_sample_update = false;
 
     // TODO: debug move to bus
-
     inline void tick(Bus& bus){
         auto chan_freq_val = bus.unsafe_read_prg(constants::DMC_CHAN_FREQ);
         is_loop = chan_freq_val & 0x40;
@@ -107,7 +105,7 @@ struct DMCChan : Channel {
             if (bus.dmc_sample_buffer.empty()){
                 bus.apu_irq_interrupt_flip_flop = true;
                 bus.dmc_dma_counter = 3 + bus.next_write;
-                need_sample_update = true;
+                bus.dmc_need_sample_update = true;
             }
         } else if (!bus.dmc_bytes_remaining){
             return;
@@ -117,7 +115,6 @@ struct DMCChan : Channel {
             if (!(bus.dmc_delay == 1 && bus.next_write)) --bus.dmc_delay;
             if (!bus.dmc_delay) {bus.dmc_dma_counter = 3 + bus.next_write; bus.dmc_dma_in_progress = true;}
         }
-
         if (bus.dmc_dma_counter && bus.dmc_dma_in_progress) {
             --bus.dmc_dma_counter;
             if (bus.last_arg_addr == 0x4016){
@@ -131,21 +128,23 @@ struct DMCChan : Channel {
             if (!bus.dmc_dma_counter){
                 bus.dmc_sample_buffer.push_back(bus.dmc_dma_read_prg(bus.dmc_dma_address));
                 bus.dmc_dma_address = bus.dmc_dma_address == 0xffff ? 0x8000 : bus.dmc_dma_address + 1;
-                if (bus.dmc_bytes_remaining)
-                    --bus.dmc_bytes_remaining;
+                if (bus.dmc_bytes_remaining) --bus.dmc_bytes_remaining;
                 bus.dmc_dma_in_progress = false;
                 if (bus.dmc_bytes_remaining){
-                    if (need_sample_update){
+                    if (bus.dmc_need_sample_update){
                         bus.dmc_shift_reg = bus.dmc_sample_buffer.back(); bus.dmc_sample_buffer.pop_back();
                         bus.dmc_shift_count = 8;
+                        bus.dmc_need_sample_update = false;
                     }
                 } else if (!bus.dmc_bytes_remaining && !is_loop && irq_enable){
                     bus.apu_control &= 0x7f;
                     bus.apu_control |= 0x80;
                     bus.apu_irq_interrupt_flip_flop = true;
+                    if (!bus.dmc_shift_count) {
+                        bus.dmc_shift_reg = bus.dmc_sample_buffer.back(); bus.dmc_sample_buffer.pop_back();
+                        bus.dmc_shift_count = 8;
+                    }
                 }
-            } else {
-                return;
             }
         }
 
@@ -157,16 +156,17 @@ struct DMCChan : Channel {
                 bus.dmc_output_level = std::clamp(bus.dmc_output_level, (char)127, (char)0);
                 bus.dmc_rate_counter = Bus::ntsc_rates[bus.dmc_rate_index];
             }
+
+            // TODO: debug
             if (!bus.dmc_shift_count){
-                if (bus.dmc_sample_buffer.empty()){
-                    need_sample_update = true;
-                    bus.dmc_dma_counter = 3 + bus.next_write;
-                    bus.dmc_dma_in_progress = true;
-                } else {
+                if (!(bus.dmc_sample_buffer.empty() && bus.dmc_bytes_remaining)){
                     bus.dmc_shift_reg = bus.dmc_sample_buffer.back(); bus.dmc_sample_buffer.pop_back();
                     bus.dmc_shift_count = 8;
+                } else {
+                    bus.dmc_need_sample_update = true;
                 }
-                // todo: check put/get cycle
+                bus.dmc_dma_counter = 4; // TODO: check
+                bus.dmc_dma_in_progress = true;
             }
         }
     }

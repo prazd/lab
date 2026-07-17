@@ -124,7 +124,8 @@ void Bus::apu_enable_handle() {
     dma_address |= s_addr << 6;
     if (dmc_sample_buffer.empty()){
         dmc_delay = 3;
-    } else {
+        dmc_need_sample_update = true;
+    } else if (!dmc_shift_count){
         dmc_shift_reg = dmc_sample_buffer.back(); dmc_sample_buffer.pop_back();
         dmc_shift_count = 8;
     }
@@ -220,7 +221,7 @@ unsigned char Bus::read_prg_internal(unsigned short addr) {
         case constants::PPUCTRL:
         case constants::PPUMASK:
         case constants::PPUSCROLL:
-        case constants::PPUADDR:  return ppu_open_bus_value;
+        case constants::PPUADDR:  return ppu_open_bus_value; // TODO: debug GameGenie(ZZZLTT)
 
         case constants::PPUSTATUS: {
             ppu_w = false;
@@ -462,7 +463,6 @@ void Bus::adjust_cpu_mirroring(unsigned short& addr) {
         addr-=constants::RAM_MIRROR2_BEGIN;
     else if (addr >= constants::RAM_MIRROR3_BEGIN && addr <= constants::RAM_MIRROR3_END)
         addr-=constants::RAM_MIRROR3_BEGIN;
-    // TODO: debug GameGenie(ZZZLTT)
     else if (addr >= constants::PPU_REGS_MIRROR_BEGIN && addr <= constants::PPU_REGS_MIRROR_END){
         addr = constants::PPU_REGS_BEGIN + (addr % 8);
     }

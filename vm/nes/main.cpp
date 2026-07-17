@@ -506,9 +506,9 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, CPUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #else
 //    /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes
-    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // d133 (DMC)
+    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d133 (DMC)
 #endif
 }

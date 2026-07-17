@@ -126,6 +126,7 @@ struct Bus {
     size_t dmc_delay = 0;
     size_t dmc_dma_counter = 0;
     SimpleDequeTC<unsigned char, 1> dmc_sample_buffer{};
+    bool dmc_need_sample_update = false;
     unsigned char dmc_shift_reg{};
     unsigned char dmc_shift_count{};
 

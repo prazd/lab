@@ -1668,7 +1668,8 @@ struct InstructionFinder: DebugWindowText<x, y, w, h> {
             if (mode == Value){
                 instructions.clear();
                 target_addr = std::stoul(u_input.s, 0, 16);
-                DW::cpu_search(bus, cpu, [target_addr=target_addr](auto lpc, auto& decoded, auto& asm_info){
+                // TODO: check
+                DW::cpu_search_pc(bus, cpu, [target_addr=target_addr](auto lpc, auto& decoded, auto& asm_info){
                     return asm_info.arg_addr == target_addr;
                 },
         [](auto lpc, auto& decoded, auto& asm_info, auto& instructions){
