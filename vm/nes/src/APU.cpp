@@ -50,10 +50,10 @@ void APU::handle_frame_counter_update(Bus& bus) {
         frame_counter_step5(bus);
 }
 
-float APU::gen_sample(Bus &bus) {
+float APU::gen_sample(Bus& bus) {
     float res = 0.f;
     auto ch1 = pulse_ch1.get_dac(bus);
-    res += ch1;
+    res += ch1/15.f;
     return res;
 }
 
@@ -103,6 +103,8 @@ void APU::tick(Bus& bus) {
     if (bus.dmc_rate_counter)
         --bus.dmc_rate_counter;
 
+    pulse_ch1.current_duty_step = !pulse_ch1.current_duty_step ? 7 : pulse_ch1.current_duty_step-1;
+
     if (bus.frame_counter_reset) {
         if (bus.frame_counter_reset_ticks) { --bus.frame_counter_reset_ticks; }
         if (!bus.frame_counter_reset_ticks) {
@@ -120,9 +122,9 @@ void APU::tick(Bus& bus) {
     if (sample_acc >= constants::CPU_SPEED){
         sample_acc-=constants::CPU_SPEED;
         auto s = gen_sample(bus);
-        buffer[buffer_i] = s * 32768.f;
-        buffer[buffer_i+1] = s * 32768.f;
-        buffer_i = buffer_i + 2 == 1024 ? 0 : buffer_i + 2;
+        buffer[write_i] = (short)(s * 32768.f);
+        write_i = write_i + 1 == 1024 ? 0 : write_i + 1;
+        ++sample_count;
     }
 #endif
     ++bus.apu_current_tick;

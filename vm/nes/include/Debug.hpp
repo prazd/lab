@@ -866,7 +866,10 @@ struct SnapStorage {
     };
     State next;
     CircleStack<State,10> prev_states;
-    void step_back(Bus& bus, CPU& cpu, PPU& ppu){
+    inline void reset(){
+        prev_states.clear();
+    }
+    inline void step_back(Bus& bus, CPU& cpu, PPU& ppu){
         if (!prev_states.empty()){
             auto& [c,p,b] = prev_states.top();
             bus = b;
@@ -876,13 +879,13 @@ struct SnapStorage {
         }
     }
 
-    void update_state(Bus& bus, CPU& cpu, PPU& ppu){
+    inline void update_state(Bus& bus, CPU& cpu, PPU& ppu){
         next.cpus.from_cpu(cpu, bus);
         next.ppus.from_ppu(ppu, bus);
         next.bus = bus;
     }
 
-    void push_state(Bus& bus){
+    inline void push_state(Bus& bus){
         next.cpus.write_addresses = bus.cpu_write_addresses;
         next.ppus.write_addresses = bus.ppu_write_addresses;
         bus.cpu_write_addresses.reset();
@@ -1159,6 +1162,7 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
         PPUM,
         MMIORegsM,
         Interrupts,
+        APUM,
 #if GAME_GENIE_MODE
         GameGenieM,
 #endif
@@ -1166,7 +1170,7 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
     } mode = CartridgeM;
 
     std::stringstream ss;
-    void handle(Bus& bus, Cartridge& c, PPU& ppu){
+    void handle(Bus& bus, Cartridge& c, PPU& ppu, APU& apu){
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
             mode = static_cast<Mode>((mode + 1) % ModeCount);
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
@@ -1245,6 +1249,12 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
                    << "DMA req:\n"
                    << "  DMC:"     <<  (int)bus.dmc_dma_in_progress  << '(' << bus.dmc_dma_counter << ")\n"
                    << "  OAM:"     <<  (int)bus.dma_active  << '\n';
+                break;
+            }
+            case APUM: {
+                ss << "APU:\n"
+                   << "  CH1 duty:"     <<  (int)apu.pulse_ch1.current_duty_step  << '\n'
+                   << "  FC mode:"     <<  (int)bus.frame_counter_mode  << '\n';
                 break;
             }
 #if GAME_GENIE_MODE

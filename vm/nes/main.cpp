@@ -42,8 +42,10 @@ struct NESVM {
         apu.tick(bus);
 #endif
 #if APU_ON
-        if (apu.buffer_i % 512 == 0){
-            SDL_QueueAudio(audio_dev, apu.buffer, 256);
+        // TODO: debug
+        if (apu.sample_count == 128){
+            SDL_QueueAudio(audio_dev, apu.buffer + std::exchange(apu.read_i, (apu.read_i + 128) % std::size(apu.buffer)) , 256);
+            apu.sample_count = 0;
         }
 #endif
     }
@@ -108,19 +110,16 @@ struct NESVM {
     }
 
     void reset(std::string_view path){
-        auto tmp = NESVM(path);
-        bus = tmp.bus;
+        bus = Bus{};
         bus.reset();
-        cpu = tmp.cpu;
+        cpu = CPU{};
         ppu.reset();
-        cartridge = std::move(tmp.cartridge);
-        rom_path = tmp.rom_path;
+        cartridge.read(path);
+        read_cartridge_data();
+        rom_path = path;
         apu = APU{};
-
 #if DEBUG_MODE
-        reg_info = std::move(tmp.reg_info);
-        dis = std::move(tmp.dis);
-        snap_storage = tmp.snap_storage;
+        snap_storage.reset();
 #endif
         cpu_init();
         ppu_init();
@@ -347,8 +346,8 @@ struct NESVM {
         SDL_AudioSpec want{};
         want.freq = 44100;
         want.format = AUDIO_S16LSB;
-        want.channels = 2;
-        want.samples = 256;
+        want.channels = 1;
+        want.samples = 128;
 
         audio_dev = SDL_OpenAudioDevice(nullptr, 0, &want, nullptr, 0);
         if (!audio_dev){
@@ -415,7 +414,7 @@ struct NESVM {
                 reg_info.handle(cpu, ppu, bus);
                 handle_up_right_view();
                 handle_down_left_view();
-                general_info.handle(bus, cartridge, ppu);
+                general_info.handle(bus, cartridge, ppu, apu);
                 cc.handle(bus.c);
                 sprite_info.handle(bus, ppu);
                 if (is_collision_up_right() && IsKeyPressed(KEY_M))
@@ -506,9 +505,11 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, PPUm>{}.run();
+    MultiTest<NESVM, APUm>{}.run();
 #else
 //    /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes
-    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // d133 (DMC)
+//    /Users/prazd/Desktop/dev/nes-test-roms/test_apu_2/test_5.nes
+//    /Users/prazd/Desktop/dev/nes-test-roms/test_apu_2/test_6.nes
+    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // d133 (DMC)
 #endif
 }

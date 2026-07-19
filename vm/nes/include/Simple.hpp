@@ -235,12 +235,14 @@ struct CircleStack {
     bool empty() const {
         return !current;
     }
-
+    void clear(){
+        while(!empty()) pop();
+    }
     T& top() {
         return *std::launder(reinterpret_cast<T*>(ptr + ((ptr != arr) ? ptrdiff_t(-1 * sizeof(T)) : ptrdiff_t(sizeof(T) * (sz-1)))));
     }
     ~CircleStack(){
-        while(!empty()) pop();
+        clear();
     }
 };
 

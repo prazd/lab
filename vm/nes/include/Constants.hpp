@@ -2,11 +2,11 @@
 #define NES_CONSTANTS_HPP
 #include <iostream>
 #define APU_TICK_ON 1
-#define APU_ON 0
+#define APU_ON 1
 #define HIDE_OVERSCAN 1
 #define DEBUG_MODE 1
 #define GAME_GENIE_MODE 0
-#define MULTI_TEST_MODE 1
+#define MULTI_TEST_MODE 0
 
 #if !MULTI_TEST_MODE
 #define VEC_MODE static inline

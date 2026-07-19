@@ -42,7 +42,7 @@ struct Channel {
     unsigned short timer{};
     unsigned char length_counter{};
     unsigned char sweep_shift{};
-    inline void update_timer(unsigned char l, unsigned short h){
+    inline void update_timer(unsigned char l, unsigned char h){
         timer = (((h & 0x7) << 8) | l);
     }
 };
@@ -55,7 +55,6 @@ struct PulseChan : Channel, Envelope {
     inline void tick_timer(Bus& bus){
         --timer;
         if (!timer){
-            current_duty_step = (current_duty_step + 1) % 8;
             update_timer(bus.unsafe_read_prg(timer_l), bus.unsafe_read_prg(timer_h));
         }
     }
@@ -174,7 +173,9 @@ struct DMCChan : Channel {
 
 struct APU {
     short buffer[1024]{};
-    size_t buffer_i = 0;
+    size_t write_i = 0;
+    size_t read_i = 0;
+    size_t sample_count = 0;
     size_t sample_acc = 0;
 
     PulseChan<constants::PULSE1_TIMER_LOW,
