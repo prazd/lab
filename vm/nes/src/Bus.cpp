@@ -105,6 +105,15 @@ void Bus::write(unsigned short addr, unsigned char value) {
     } else if (addr == constants::PULSE1_TIMER_HIGH){
         apu_pulse1_start_flag = true;
         apu_pulse1_timer_update = true;
+    } else if (addr == constants::PULSE1_SWEEP){
+        apu_pulse1_sweep_update = true;
+    } else if (addr == constants::PULSE2_DUTY_ENVELOPE){
+        apu_pulse2_envelope_update = true;
+    } else if (addr == constants::PULSE2_TIMER_HIGH){
+        apu_pulse2_start_flag = true;
+        apu_pulse2_timer_update = true;
+    } else if (addr == constants::PULSE2_SWEEP){
+        apu_pulse2_sweep_update = true;
     }
     cpu_map[addr] = value;
 }

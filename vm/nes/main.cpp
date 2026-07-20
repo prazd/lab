@@ -43,8 +43,8 @@ struct NESVM {
 #endif
 #if APU_ON
         // TODO: debug
-        if (apu.sample_count == 128){
-            SDL_QueueAudio(audio_dev, apu.buffer + std::exchange(apu.read_i, (apu.read_i + 128) % std::size(apu.buffer)) , 256);
+        if (apu.sample_count == 256){
+            SDL_QueueAudio(audio_dev, apu.buffer + std::exchange(apu.read_i, (apu.read_i + 256) % std::size(apu.buffer)) , 512);
             apu.sample_count = 0;
         }
 #endif
@@ -505,7 +505,7 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, APUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #else
 //    /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes
 //    /Users/prazd/Desktop/dev/nes-test-roms/test_apu_2/test_5.nes

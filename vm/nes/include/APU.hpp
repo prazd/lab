@@ -17,24 +17,8 @@ struct Envelope {
         is_infinite_play = val & 0x20;
         prev_divider = val & 0xf;
     }
-    inline unsigned char get_volume(Bus& bus){
+    inline unsigned char get_volume(Bus& bus) const{
         return is_volume_const ? volume_const_val : decay_lvl;
-    }
-    inline void envelope_tick(Bus& bus){
-        if (bus.apu_pulse1_start_flag){
-            divider = prev_divider;
-            decay_lvl = 15;
-            bus.apu_pulse1_start_flag = false;
-            return;
-        }
-        if (divider) --divider;
-        if (!divider){
-            divider = prev_divider;
-            if (decay_lvl) --decay_lvl;
-            if (!decay_lvl) {
-                if (is_infinite_play) decay_lvl = 15;
-            }
-        }
     }
 };
 
@@ -51,26 +35,68 @@ template <unsigned short timer_l,
           unsigned short timer_h,
           unsigned short duty_envelope>
 struct PulseChan : Channel, Envelope {
+    bool sweep_enable = false;
+    bool sweep_is_neg = false;
+    bool sweep_reset = false;
+    unsigned char sweep_period = 0;
+    unsigned char sweep_shift = 0;
+    unsigned char sweep_counter = 0;
+    unsigned short sweep_delta = 0;
+
+    inline void update_sweep(unsigned char val){
+        sweep_enable = val & 0x80;
+        sweep_period = (val >> 4) & 0x7;
+        sweep_is_neg = val & 0x8;
+        sweep_shift = val & 0x7;
+        sweep_reset = true;
+    }
+
+    inline void sweep_update_timer(){
+        sweep_counter = sweep_period;
+        sweep_delta = timer >> sweep_shift;
+        auto target_period = sweep_is_neg ? timer - sweep_delta : timer + sweep_delta;
+        if (timer >= 8 && target_period <= 0x7ff)
+            timer = target_period;
+    }
+
     unsigned char current_duty_step{};
     inline void tick_timer(Bus& bus){
         --timer;
         if (!timer){
+            current_duty_step = current_duty_step == 0 ? 7 : current_duty_step - 1;
             update_timer(bus.unsafe_read_prg(timer_l), bus.unsafe_read_prg(timer_h));
+        }
+    }
+    inline void envelope_tick(Bus& bus){
+        // TODO: check
+        if (bus.apu_pulse1_start_flag){
+            divider = prev_divider;
+            decay_lvl = 15;
+            bus.apu_pulse1_start_flag = false;
+            return;
+        }
+        if (divider) --divider;
+        if (!divider){
+            divider = prev_divider;
+            if (decay_lvl) --decay_lvl;
+            if (!decay_lvl) {
+                if (is_infinite_play) decay_lvl = 15;
+            }
         }
     }
     inline unsigned char get_duty_cycle(Bus& bus) const {
         switch((bus.unsafe_read_prg(duty_envelope) >> 6) & 0x3){
-            case 0:  return  0b0100'0000; // 12.5%
-            case 1:  return  0b0110'0000; // 25%
-            case 2:  return  0b0111'1000; // 50%
-            default: return  0b1001'1111; // 25% (negated)
+            case 0:  return  0b0000'0001; // 12.5%
+            case 1:  return  0b0000'0011; // 25%
+            case 2:  return  0b0000'1111; // 50%
+            default: return  0b1111'1100; // 25% (negated)
         }
     }
     inline unsigned char get_duty_value(Bus& bus) const {
         return (get_duty_cycle(bus) >> current_duty_step) & 1;
     }
     inline unsigned char get_dac(Bus& bus) const {
-        return get_duty_value(bus) ? envelope & 0xf : 0;
+        return get_duty_value(bus) ? get_volume(bus) & 0xf : 0;
     }
 };
 

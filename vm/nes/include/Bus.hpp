@@ -85,7 +85,6 @@ struct Bus {
     size_t status_read_cycle = 0;
     size_t current_nmi_cycle = 0;
     size_t clear_nmi_cycle = 0;
-    bool nmi_detect = false;
     size_t current_ppu_cycle = 0;
     bool ppu_irq_interrupt_flip_flop = false;
     bool apu_irq_interrupt_flip_flop = false;
@@ -142,8 +141,16 @@ struct Bus {
     bool apu_clear_frame_irq_req = false;
 
     bool apu_pulse1_timer_update = false;
+    bool apu_pulse1_sweep_update = false;
     bool apu_pulse1_envelope_update = false;
     bool apu_pulse1_start_flag = false;
+
+    bool apu_pulse2_timer_update = false;
+    bool apu_pulse2_sweep_update = false;
+    bool apu_pulse2_envelope_update = false;
+    bool apu_pulse2_start_flag = false;
+
+
     Controller c;
     bool latch_req = false;
     unsigned char latch_val = 0;
