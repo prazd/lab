@@ -259,6 +259,7 @@ struct NESVM {
         MemoryViewer<1110,462,450,432> mem_reader{};
         InstructionFinder<1110,462,450,432> instr_finder{};
         Snapshot<1110,462,450,432> ds{};
+        APUView<1110,432,480,432> apuv{};
 #if GAME_GENIE_MODE
         CustomGameGenie<1110,462,450,432> cgg{};
 #endif
@@ -279,6 +280,7 @@ struct NESVM {
             MemoryReaderV,
             InstructionFinder,
             DiffSnapshotV,
+            APUView,
 #if GAME_GENIE_MODE
             CustomGameGenieV,
 #endif
@@ -293,6 +295,7 @@ struct NESVM {
                 case MemoryReaderV:     {mem_reader.handle(bus, cpu, ppu);  break;}
                 case InstructionFinder: {instr_finder.handle(bus, cpu);        break;}
                 case DiffSnapshotV:     {ds.handle(bus, cpu, ppu);          break;}
+                case APUView:           {apuv.handle(bus, apu);                break;}
 #if GAME_GENIE_MODE
                 case CustomGameGenieV:   {cgg.handle(bus); break;}
 #endif
@@ -306,6 +309,7 @@ struct NESVM {
                 case MemoryReaderV: return CheckCollisionPointRec(GetMousePosition(), mem_reader.rec);
                 case InstructionFinder: return CheckCollisionPointRec(GetMousePosition(), instr_finder.rec);
                 case DiffSnapshotV: return CheckCollisionPointRec(GetMousePosition(), ds.rec);
+                case APUView: return CheckCollisionPointRec(GetMousePosition(), apuv.rec);
 #if GAME_GENIE_MODE
                 case CustomGameGenieV: return CheckCollisionPointRec(GetMousePosition(), cgg.rec);
 #endif

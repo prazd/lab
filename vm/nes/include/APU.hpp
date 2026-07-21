@@ -6,7 +6,7 @@
 struct Envelope {
     unsigned char prev_divider{};
     unsigned char divider{};
-    unsigned char decay_lvl = 15;
+    unsigned char decay_lvl = 0;
     unsigned char envelope{};
     bool is_volume_const = false;
     unsigned char volume_const_val = 0;
@@ -31,6 +31,8 @@ struct Channel {
     }
 };
 
+
+//  https://www.nesdev.org/wiki/APU_Pulse
 template <unsigned short timer_l,
           unsigned short timer_h,
           unsigned short duty_envelope>
@@ -42,6 +44,7 @@ struct PulseChan : Channel, Envelope {
     unsigned char sweep_shift = 0;
     unsigned char sweep_counter = 0;
     unsigned short sweep_delta = 0;
+    unsigned short sweep_target_period = 0;
 
     inline void update_sweep(unsigned char val){
         sweep_enable = val & 0x80;
@@ -54,9 +57,9 @@ struct PulseChan : Channel, Envelope {
     inline void sweep_update_timer(){
         sweep_counter = sweep_period;
         sweep_delta = timer >> sweep_shift;
-        auto target_period = sweep_is_neg ? timer - sweep_delta : timer + sweep_delta;
-        if (timer >= 8 && target_period <= 0x7ff)
-            timer = target_period;
+        sweep_target_period = sweep_is_neg ? timer - sweep_delta : timer + sweep_delta;
+        if (timer >= 8 && sweep_target_period <= 0x7ff && sweep_enable)
+          timer = sweep_target_period;
     }
 
     unsigned char current_duty_step{};
@@ -68,19 +71,12 @@ struct PulseChan : Channel, Envelope {
         }
     }
     inline void envelope_tick(Bus& bus){
-        // TODO: check
-        if (bus.apu_pulse1_start_flag){
-            divider = prev_divider;
-            decay_lvl = 15;
-            bus.apu_pulse1_start_flag = false;
-            return;
-        }
         if (divider) --divider;
         if (!divider){
             divider = prev_divider;
             if (decay_lvl) --decay_lvl;
-            if (!decay_lvl) {
-                if (is_infinite_play) decay_lvl = 15;
+            if (!decay_lvl && is_infinite_play) {
+                decay_lvl = 15;
             }
         }
     }
@@ -96,7 +92,10 @@ struct PulseChan : Channel, Envelope {
         return (get_duty_cycle(bus) >> current_duty_step) & 1;
     }
     inline unsigned char get_dac(Bus& bus) const {
-        return get_duty_value(bus) ? get_volume(bus) & 0xf : 0;
+        // TODO: check
+        if (length_counter && timer >= 8 && sweep_target_period <= 0x7ff && get_duty_value(bus))
+            return  get_volume(bus) & 0xf;
+        return 0;
     }
 };
 
@@ -203,6 +202,10 @@ struct APU {
     size_t read_i = 0;
     size_t sample_count = 0;
     size_t sample_acc = 0;
+
+#if DEBUG_MODE
+    unsigned char internal_enable = 0x1f;
+#endif
 
     PulseChan<constants::PULSE1_TIMER_LOW,
             constants::PULSE1_TIMER_HIGH,

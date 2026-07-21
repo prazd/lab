@@ -1162,7 +1162,6 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
         PPUM,
         MMIORegsM,
         Interrupts,
-        APUM,
 #if GAME_GENIE_MODE
         GameGenieM,
 #endif
@@ -1249,12 +1248,6 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
                    << "DMA req:\n"
                    << "  DMC:"     <<  (int)bus.dmc_dma_in_progress  << '(' << bus.dmc_dma_counter << ")\n"
                    << "  OAM:"     <<  (int)bus.dma_active  << '\n';
-                break;
-            }
-            case APUM: {
-                ss << "APU:\n"
-                   << "  CH1 duty:"     <<  (int)apu.pulse_ch1.current_duty_step  << '\n'
-                   << "  FC mode:"     <<  (int)bus.frame_counter_mode  << '\n';
                 break;
             }
 #if GAME_GENIE_MODE
@@ -1734,6 +1727,47 @@ struct InstructionFinder: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(add_instr_button, " addi", BLACK);
             DW::draw_text_button(clear_instr_button, " cleari", BLACK);
         }
+        ss.str("");
+        DW::draw_win();
+    }
+};
+
+template <size_t x, size_t y, size_t w, size_t h>
+struct APUView: DebugWindowText<x, y, w, h> {
+    using DW = DebugWindowText<x, y, w, h>;
+    Rectangle buttons[5]{
+            {DW::rec.x, DW::rec.y + DW::rec.height, 30, 30},
+            {DW::rec.x + 30, DW::rec.y + DW::rec.height, 30, 30},
+            {DW::rec.x + 60, DW::rec.y + DW::rec.height, 30, 30},
+            {DW::rec.x + 90, DW::rec.y + DW::rec.height, 30, 30},
+            {DW::rec.x + 120, DW::rec.y + DW::rec.height, 30, 30}
+    };
+    Bus::APUChan chans[5]{Bus::APUChan::Pulse1,
+                              Bus::APUChan::Pulse2,
+                              Bus::APUChan::Triangle,
+                              Bus::APUChan::Noise,
+                              Bus::APUChan::DMC};
+    std::stringstream  ss;
+
+    void handle(Bus& bus, APU& apu){
+        for (size_t i = 0, e = std::size(buttons); i != e; ++i){
+            if (CheckCollisionPointRec(GetMousePosition(), buttons[i]) && IsMouseButtonPressed(0))
+                apu.internal_enable ^= chans[i];
+        }
+        ss << "APU:\n"
+           << "  Enable :"      <<  std::bitset<8>(bus.apu_enable).to_string() << '\n'
+           << "  CH1 duty:"     <<  (int)apu.pulse_ch1.current_duty_step  << '\n'
+           << "  CH1 length counter:"     <<  (int)apu.pulse_ch1.length_counter  << '\n'
+           << "  CH2 length counter:"     <<  (int)apu.pulse_ch2.length_counter  << '\n'
+           << "  FC mode:"      <<  (int)bus.frame_counter_mode  << '\n';
+
+        auto s = ss.str();
+        DrawText(s.c_str(), DW::rec.x, DW::rec.y, 13.f, BLACK);
+        DW::draw_text_button(buttons[0], " P1", apu.internal_enable & chans[0] ? GREEN : RED);
+        DW::draw_text_button(buttons[1], " P2", apu.internal_enable & chans[1] ? GREEN : RED);
+        DW::draw_text_button(buttons[2], " T", apu.internal_enable & chans[2] ? GREEN : RED);
+        DW::draw_text_button(buttons[3], " N", apu.internal_enable & chans[3] ? GREEN : RED);
+        DW::draw_text_button(buttons[4], " D", apu.internal_enable & chans[4] ? GREEN : RED);
         ss.str("");
         DW::draw_win();
     }

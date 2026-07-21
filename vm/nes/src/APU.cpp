@@ -34,10 +34,20 @@ void APU::frame_counter_step5(Bus& bus) {
 }
 
 void APU::frame_counter_quarter_update(Bus& bus) {
-    if (bus.apu_is_enable(Bus::APUChan::Pulse1))
+    if (bus.apu_pulse1_start_flag){
+        pulse_ch1.divider = pulse_ch1.prev_divider;
+        pulse_ch1.decay_lvl = 15;
+        bus.apu_pulse1_start_flag = false;
+    } else {
         pulse_ch1.envelope_tick(bus);
-    if (bus.apu_is_enable(Bus::APUChan::Pulse2))
+    }
+    if (bus.apu_pulse2_start_flag){
+        pulse_ch2.divider = pulse_ch2.prev_divider;
+        pulse_ch2.decay_lvl = 15;
+        bus.apu_pulse2_start_flag = false;
+    } else {
         pulse_ch2.envelope_tick(bus);
+    }
 }
 
 void APU::frame_counter_half_update(Bus& bus) {
@@ -81,10 +91,18 @@ static inline float high_pass_filter(float x){
 float APU::gen_sample(Bus& bus) {
     auto ch1 = pulse_ch1.get_dac(bus);
     auto ch2 = pulse_ch2.get_dac(bus);
-    auto pulse_res = 95.88f/((8128.f/(ch1+ch2)) + 100.f);
     auto triangle = 0.f; // TODO
     auto noise = 0.f; // TODO
-    auto tnd_res = 159.79f/(1/((triangle/8227.f) + (noise/12241.f) + bus.dmc_output_level/22638.f) + 100.f); // TODO: debug
+    auto dmc = bus.dmc_output_level;
+#if DEBUG_MODE
+    if (!(internal_enable & Bus::APUChan::Pulse1)) ch1 = 0;
+    if (!(internal_enable & Bus::APUChan::Pulse2)) ch2 = 0;
+    if (!(internal_enable & Bus::APUChan::Triangle)) triangle = 0;
+    if (!(internal_enable & Bus::APUChan::Noise)) noise = 0;
+    if (!(internal_enable & Bus::APUChan::DMC)) dmc = 0;
+#endif
+    auto pulse_res = 95.88f/((8128.f/(ch1+ch2)) + 100.f);
+    auto tnd_res = 159.79f/(1/((triangle/8227.f) + (noise/12241.f) + dmc/22638.f) + 100.f); // TODO: debug
     return low_pass_filter(high_pass_filter(pulse_res));
 }
 
@@ -115,8 +133,8 @@ void APU::tick(Bus& bus) {
     if (bus.apu_enable_req){
 // TODO:
 //        if (dmc_ch.dmc_dma_counter <= 2)
-        pulse_ch1.length_counter = bus.apu_is_enable(Bus::Pulse1) ? 0 : pulse_ch1.length_counter;
-        pulse_ch2.length_counter = bus.apu_is_enable(Bus::Pulse2) ? 0 : pulse_ch2.length_counter;
+        pulse_ch1.length_counter = bus.apu_is_enable(Bus::Pulse1) ? pulse_ch1.length_counter : 0;
+        pulse_ch2.length_counter = bus.apu_is_enable(Bus::Pulse2) ? pulse_ch2.length_counter : 0;
 
         bus.apu_control &= 0x7f;
         bus.apu_enable_req = false;
