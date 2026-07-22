@@ -114,6 +114,10 @@ void Bus::write(unsigned short addr, unsigned char value) {
         apu_pulse2_timer_update = true;
     } else if (addr == constants::PULSE2_SWEEP){
         apu_pulse2_sweep_update = true;
+    } else if (addr == constants::TRIANGLE_CHAN_TIMER_HIGH){
+        apu_triangle_timer_update = true;
+    } else if (addr == constants::TRIANGLE_CHAN_LINEAR_COUNTER){
+        apu_triangle_linear_counter_update = true;
     }
     cpu_map[addr] = value;
 }

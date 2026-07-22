@@ -55,10 +55,12 @@ struct PulseChan : Channel, Envelope {
     }
 
     inline void sweep_update_timer(){
+        sweep_reset = false;
         sweep_counter = sweep_period;
         sweep_delta = timer >> sweep_shift;
-        sweep_target_period = sweep_is_neg ? timer - sweep_delta : timer + sweep_delta;
-        if (timer >= 8 && sweep_target_period <= 0x7ff && sweep_enable)
+        // TODO: pulse1/pulse2 update
+        sweep_target_period = sweep_is_neg ?  timer - sweep_delta : timer + sweep_delta;
+        if (timer >= 8 && sweep_target_period <= 0x7ff && sweep_enable && sweep_shift) // TODO: check
           timer = sweep_target_period;
     }
 
@@ -70,12 +72,15 @@ struct PulseChan : Channel, Envelope {
             update_timer(bus.unsafe_read_prg(timer_l), bus.unsafe_read_prg(timer_h));
         }
     }
+
+//    https://www.nesdev.org/wiki/APU_Envelope
     inline void envelope_tick(Bus& bus){
+        // TODO: check
         if (divider) --divider;
-        if (!divider){
+        else if (!divider){
             divider = prev_divider;
             if (decay_lvl) --decay_lvl;
-            if (!decay_lvl && is_infinite_play) {
+            else if (!decay_lvl && is_infinite_play) {
                 decay_lvl = 15;
             }
         }
@@ -104,7 +109,27 @@ struct NoiseChan : Channel {
 };
 
 struct TriangleChan : Channel{
-    // todo
+    unsigned char next_linear_counter{};
+    unsigned char linear_counter{};
+    bool linear_counter_reload = false;
+    static constexpr unsigned char seq[32]{
+        15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,
+        0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+    };
+    size_t current_seq_i{};
+    inline void tick_timer(Bus& bus){
+        --timer;
+        if (!timer){
+            if (linear_counter) current_seq_i = (current_seq_i + 1) & 0x1f;
+            update_timer(bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_LOW), bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH));
+        }
+    }
+    unsigned char get_dac(){
+        // TODO: check
+        if (length_counter)
+            return seq[current_seq_i];
+        return 0;
+    }
 };
 
 // TODO: finish

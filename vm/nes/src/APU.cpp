@@ -48,6 +48,12 @@ void APU::frame_counter_quarter_update(Bus& bus) {
     } else {
         pulse_ch2.envelope_tick(bus);
     }
+
+    if (triangle_ch.linear_counter_reload){
+        triangle_ch.linear_counter = triangle_ch.next_linear_counter & 0x7f;
+        if (!(triangle_ch.linear_counter & 0x80)) triangle_ch.linear_counter_reload = false;
+    }
+    if (triangle_ch.linear_counter) --triangle_ch.linear_counter;
 }
 
 void APU::frame_counter_half_update(Bus& bus) {
@@ -62,6 +68,9 @@ void APU::frame_counter_half_update(Bus& bus) {
     if (pulse_ch2.sweep_counter) --pulse_ch2.sweep_counter;
     if (!pulse_ch2.sweep_counter || pulse_ch2.sweep_reset)
         pulse_ch2.sweep_update_timer();
+
+    if (triangle_ch.length_counter && !(triangle_ch.linear_counter & 0x80))
+        --triangle_ch.length_counter;
 }
 
 void APU::handle_frame_counter_update(Bus& bus) {
@@ -91,7 +100,7 @@ static inline float high_pass_filter(float x){
 float APU::gen_sample(Bus& bus) {
     auto ch1 = pulse_ch1.get_dac(bus);
     auto ch2 = pulse_ch2.get_dac(bus);
-    auto triangle = 0.f; // TODO
+    auto triangle = triangle_ch.get_dac();
     auto noise = 0.f; // TODO
     auto dmc = bus.dmc_output_level;
 #if DEBUG_MODE
@@ -103,13 +112,14 @@ float APU::gen_sample(Bus& bus) {
 #endif
     auto pulse_res = 95.88f/((8128.f/(ch1+ch2)) + 100.f);
     auto tnd_res = 159.79f/(1/((triangle/8227.f) + (noise/12241.f) + dmc/22638.f) + 100.f); // TODO: debug
-    return low_pass_filter(high_pass_filter(pulse_res));
+    return low_pass_filter(high_pass_filter(pulse_res + tnd_res));
 }
 
 void APU::update_control(Bus& bus){
     bus.apu_control &= 0xee;
     bus.apu_control |= (!!pulse_ch1.length_counter);
     bus.apu_control |= (!!pulse_ch2.length_counter) << 1;
+    bus.apu_control |= (!!triangle_ch.length_counter) << 2;
     bus.apu_control |= (!!bus.dmc_bytes_remaining) << 4;
 }
 
@@ -135,6 +145,7 @@ void APU::tick(Bus& bus) {
 //        if (dmc_ch.dmc_dma_counter <= 2)
         pulse_ch1.length_counter = bus.apu_is_enable(Bus::Pulse1) ? pulse_ch1.length_counter : 0;
         pulse_ch2.length_counter = bus.apu_is_enable(Bus::Pulse2) ? pulse_ch2.length_counter : 0;
+        triangle_ch.length_counter = bus.apu_is_enable(Bus::Triangle) ? triangle_ch.length_counter : 0;
 
         bus.apu_control &= 0x7f;
         bus.apu_enable_req = false;
@@ -150,25 +161,34 @@ void APU::tick(Bus& bus) {
         bus.apu_pulse2_envelope_update = false;
     }
 
-
     if (bus.apu_pulse1_timer_update){
-        if (bus.apu_is_enable(Bus::Pulse1)) {
+        if (bus.apu_is_enable(Bus::Pulse1))
             pulse_ch1.length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::PULSE1_TIMER_HIGH) >> 3) & 0x1f)];
-        }
         bus.apu_pulse1_timer_update = false;
     }
 
     if (bus.apu_pulse2_timer_update){
-        if (bus.apu_is_enable(Bus::Pulse2)) {
+        if (bus.apu_is_enable(Bus::Pulse2))
             pulse_ch2.length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::PULSE2_TIMER_HIGH) >> 3) & 0x1f)];
-        }
         bus.apu_pulse2_timer_update = false;
     }
 
+    if (bus.apu_triangle_timer_update){
+        if (bus.apu_is_enable(Bus::Triangle))
+            triangle_ch.length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH) >> 3) & 0x1f)];
+        triangle_ch.linear_counter_reload = true;
+        bus.apu_triangle_timer_update = false;
+    }
+
+    if (bus.apu_triangle_linear_counter_update){
+        triangle_ch.next_linear_counter = bus.unsafe_read_prg(constants::TRIANGLE_CHAN_LINEAR_COUNTER);
+        bus.apu_triangle_linear_counter_update = false;
+    }
 
     if (!(bus.apu_current_tick & 1)){
         pulse_ch1.tick_timer(bus);
         pulse_ch2.tick_timer(bus);
+        triangle_ch.tick_timer(bus);
         if (bus.apu_clear_frame_irq_req){
             bus.apu_control &= 0xbf;
             bus.apu_irq_interrupt_flip_flop = false;

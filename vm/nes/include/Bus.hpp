@@ -150,6 +150,9 @@ struct Bus {
     bool apu_pulse2_envelope_update = false;
     bool apu_pulse2_start_flag = false;
 
+    bool apu_triangle_timer_update = false;
+    bool apu_triangle_linear_counter_update = false;
+
 
     Controller c;
     bool latch_req = false;
