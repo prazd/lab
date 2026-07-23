@@ -7,7 +7,6 @@ struct Envelope {
     unsigned char prev_divider{};
     unsigned char divider{};
     unsigned char decay_lvl = 0;
-    unsigned char envelope{};
     bool is_volume_const = false;
     unsigned char volume_const_val = 0;
     bool is_infinite_play = false;
@@ -20,12 +19,23 @@ struct Envelope {
     inline unsigned char get_volume(Bus& bus) const{
         return is_volume_const ? volume_const_val : decay_lvl;
     }
+//    https://www.nesdev.org/wiki/APU_Envelope
+    inline void envelope_tick(Bus& bus){
+        // TODO: check
+        if (divider) --divider;
+        else if (!divider){
+            divider = prev_divider;
+            if (decay_lvl) --decay_lvl;
+            else if (!decay_lvl && is_infinite_play) {
+                decay_lvl = 15;
+            }
+        }
+    }
 };
 
 struct Channel {
     unsigned short timer{};
     unsigned char length_counter{};
-    unsigned char sweep_shift{};
     inline void update_timer(unsigned char l, unsigned char h){
         timer = (((h & 0x7) << 8) | l);
     }
@@ -58,10 +68,11 @@ struct PulseChan : Channel, Envelope {
         sweep_reset = false;
         sweep_counter = sweep_period;
         sweep_delta = timer >> sweep_shift;
-        // TODO: pulse1/pulse2 update
-        sweep_target_period = sweep_is_neg ?  timer - sweep_delta : timer + sweep_delta;
-        if (timer >= 8 && sweep_target_period <= 0x7ff && sweep_enable && sweep_shift) // TODO: check
-          timer = sweep_target_period;
+        // TODO: check + pulse1/pulse2 update
+        int res = sweep_is_neg ? std::max(timer - sweep_delta, 0) : timer + sweep_delta;
+        sweep_target_period = (unsigned short)res;
+        if (timer >= 8 && sweep_target_period <= 0x7ff && sweep_enable && sweep_shift)
+            timer = sweep_target_period;
     }
 
     unsigned char current_duty_step{};
@@ -73,18 +84,6 @@ struct PulseChan : Channel, Envelope {
         }
     }
 
-//    https://www.nesdev.org/wiki/APU_Envelope
-    inline void envelope_tick(Bus& bus){
-        // TODO: check
-        if (divider) --divider;
-        else if (!divider){
-            divider = prev_divider;
-            if (decay_lvl) --decay_lvl;
-            else if (!decay_lvl && is_infinite_play) {
-                decay_lvl = 15;
-            }
-        }
-    }
     inline unsigned char get_duty_cycle(Bus& bus) const {
         switch((bus.unsafe_read_prg(duty_envelope) >> 6) & 0x3){
             case 0:  return  0b0000'0001; // 12.5%
@@ -104,8 +103,30 @@ struct PulseChan : Channel, Envelope {
     }
 };
 
-struct NoiseChan : Channel {
-    // todo
+//https://www.nesdev.org/wiki/APU_Noise
+struct NoiseChan : Channel, Envelope {
+    unsigned char loop{};
+    bool mode = false;
+    static constexpr unsigned short period[16]{
+        4,8,16,32,64,96,128,160,202,254,380,508,762,
+        1016,2034,4068
+    };
+    unsigned short shift_reg = 1;
+    inline void tick_timer(Bus& bus){
+        --timer;
+        if (!timer){
+            bool feedback = (shift_reg & 1) ^ (mode ? (!!(shift_reg & 0x40)) : (!!(shift_reg & 0x2)));
+            shift_reg >>= 1;
+            shift_reg |= (feedback << 14);
+            timer = period[(loop & 0xf)];
+        }
+    }
+    inline unsigned char get_dac(Bus& bus) const {
+        // TODO: check
+        if (length_counter && !(shift_reg & 1))
+            return get_volume(bus) & 0xf;
+        return 0;
+    }
 };
 
 struct TriangleChan : Channel{

@@ -118,6 +118,13 @@ void Bus::write(unsigned short addr, unsigned char value) {
         apu_triangle_timer_update = true;
     } else if (addr == constants::TRIANGLE_CHAN_LINEAR_COUNTER){
         apu_triangle_linear_counter_update = true;
+    } else if (addr == constants::NOISE_CHAN_LOOP){
+        apu_triangle_linear_counter_update = true;
+    } else if (addr == constants::NOISE_CHAN_ENVELOPE){
+        apu_noise_envelope_update = true;
+    } else if (addr == constants::NOISE_CHAN_LENGTH_COUNTER){
+        apu_noise_start_flag = true;
+        apu_noise_timer_update = true;
     }
     cpu_map[addr] = value;
 }
@@ -363,12 +370,12 @@ unsigned char Bus::unsafe_read_prg(unsigned short addr) {
         case constants::CONTROLLER2_AND_APU_FC:
             return cpu_open_bus_value & 0xfe;
         case constants::APU_CONTROL: {
-            apu_clear_frame_irq_req = true;
             return (apu_control & 0xdf) | (cpu_open_bus_value & 0x20);
         }
-        case constants::PULSE1_DUTY_ENVELOPE:{
-            return cpu_open_bus_value;
-        }
+// TODO: check
+//        case constants::PULSE1_DUTY_ENVELOPE:{
+//            return cpu_open_bus_value;
+//        }
     }
 
     // TODO: check

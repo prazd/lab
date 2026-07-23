@@ -41,12 +41,21 @@ void APU::frame_counter_quarter_update(Bus& bus) {
     } else {
         pulse_ch1.envelope_tick(bus);
     }
+
     if (bus.apu_pulse2_start_flag){
         pulse_ch2.divider = pulse_ch2.prev_divider;
         pulse_ch2.decay_lvl = 15;
         bus.apu_pulse2_start_flag = false;
     } else {
         pulse_ch2.envelope_tick(bus);
+    }
+
+    if (bus.apu_noise_start_flag){
+        noise_ch.divider = noise_ch.prev_divider;
+        noise_ch.decay_lvl = 15;
+        bus.apu_noise_start_flag = false;
+    } else {
+        noise_ch.envelope_tick(bus);
     }
 
     if (triangle_ch.linear_counter_reload){
@@ -68,6 +77,9 @@ void APU::frame_counter_half_update(Bus& bus) {
     if (pulse_ch2.sweep_counter) --pulse_ch2.sweep_counter;
     if (!pulse_ch2.sweep_counter || pulse_ch2.sweep_reset)
         pulse_ch2.sweep_update_timer();
+
+    if (noise_ch.length_counter && !noise_ch.is_infinite_play)
+        --noise_ch.length_counter;
 
     if (triangle_ch.length_counter && !(triangle_ch.linear_counter & 0x80))
         --triangle_ch.length_counter;
@@ -101,7 +113,7 @@ float APU::gen_sample(Bus& bus) {
     auto ch1 = pulse_ch1.get_dac(bus);
     auto ch2 = pulse_ch2.get_dac(bus);
     auto triangle = triangle_ch.get_dac();
-    auto noise = 0.f; // TODO
+    auto noise = noise_ch.get_dac(bus);
     auto dmc = bus.dmc_output_level;
 #if DEBUG_MODE
     if (!(internal_enable & Bus::APUChan::Pulse1)) ch1 = 0;
@@ -111,7 +123,7 @@ float APU::gen_sample(Bus& bus) {
     if (!(internal_enable & Bus::APUChan::DMC)) dmc = 0;
 #endif
     auto pulse_res = 95.88f/((8128.f/(ch1+ch2)) + 100.f);
-    auto tnd_res = 159.79f/(1/((triangle/8227.f) + (noise/12241.f) + dmc/22638.f) + 100.f); // TODO: debug
+    auto tnd_res = 159.79f/((1.f/((triangle/8227.f) + (noise/12241.f) + dmc/22638.f)) + 100.f); // TODO: debug
     return low_pass_filter(high_pass_filter(pulse_res + tnd_res));
 }
 
@@ -120,6 +132,7 @@ void APU::update_control(Bus& bus){
     bus.apu_control |= (!!pulse_ch1.length_counter);
     bus.apu_control |= (!!pulse_ch2.length_counter) << 1;
     bus.apu_control |= (!!triangle_ch.length_counter) << 2;
+    bus.apu_control |= (!!noise_ch.length_counter) << 3;
     bus.apu_control |= (!!bus.dmc_bytes_remaining) << 4;
 }
 
@@ -146,7 +159,7 @@ void APU::tick(Bus& bus) {
         pulse_ch1.length_counter = bus.apu_is_enable(Bus::Pulse1) ? pulse_ch1.length_counter : 0;
         pulse_ch2.length_counter = bus.apu_is_enable(Bus::Pulse2) ? pulse_ch2.length_counter : 0;
         triangle_ch.length_counter = bus.apu_is_enable(Bus::Triangle) ? triangle_ch.length_counter : 0;
-
+        noise_ch.length_counter = bus.apu_is_enable(Bus::Noise) ? noise_ch.length_counter : 0;
         bus.apu_control &= 0x7f;
         bus.apu_enable_req = false;
     }
@@ -159,6 +172,11 @@ void APU::tick(Bus& bus) {
     if (bus.apu_pulse2_envelope_update){
         pulse_ch2.update_envelope(bus, bus.unsafe_read_prg(constants::PULSE2_DUTY_ENVELOPE));
         bus.apu_pulse2_envelope_update = false;
+    }
+
+    if (bus.apu_noise_envelope_update){
+        noise_ch.update_envelope(bus, bus.unsafe_read_prg(constants::NOISE_CHAN_ENVELOPE));
+        bus.apu_noise_envelope_update = false;
     }
 
     if (bus.apu_pulse1_timer_update){
@@ -180,15 +198,30 @@ void APU::tick(Bus& bus) {
         bus.apu_triangle_timer_update = false;
     }
 
+    if (bus.apu_noise_timer_update){
+        if (bus.apu_is_enable(Bus::Noise))
+            noise_ch.length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::NOISE_CHAN_LENGTH_COUNTER) >> 3) & 0x1f)];
+        bus.apu_noise_timer_update = false;
+    }
+
     if (bus.apu_triangle_linear_counter_update){
         triangle_ch.next_linear_counter = bus.unsafe_read_prg(constants::TRIANGLE_CHAN_LINEAR_COUNTER);
         bus.apu_triangle_linear_counter_update = false;
+    }
+
+
+    if (bus.apu_noise_chan_loop_update){
+        noise_ch.loop = bus.unsafe_read_prg(constants::NOISE_CHAN_LOOP);
+        noise_ch.mode = noise_ch.loop & 0x80;
+        noise_ch.timer = noise_ch.period[(noise_ch.loop & 0xf)];
+        bus.apu_noise_chan_loop_update = false;
     }
 
     if (!(bus.apu_current_tick & 1)){
         pulse_ch1.tick_timer(bus);
         pulse_ch2.tick_timer(bus);
         triangle_ch.tick_timer(bus);
+        noise_ch.tick_timer(bus);
         if (bus.apu_clear_frame_irq_req){
             bus.apu_control &= 0xbf;
             bus.apu_irq_interrupt_flip_flop = false;
