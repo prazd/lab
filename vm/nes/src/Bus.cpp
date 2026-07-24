@@ -73,7 +73,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
             inc_by_ppudata();
             return;}
         case constants::OAMDMA : {
-            dma_address = value << 8;
+            oam_dma_address = value << 8;
             dma_active = true;
             dma_start = true;
             dma_index = 0;
@@ -119,12 +119,14 @@ void Bus::write(unsigned short addr, unsigned char value) {
     } else if (addr == constants::TRIANGLE_CHAN_LINEAR_COUNTER){
         apu_triangle_linear_counter_update = true;
     } else if (addr == constants::NOISE_CHAN_LOOP){
-        apu_triangle_linear_counter_update = true;
+        apu_noise_chan_loop_update = true;
     } else if (addr == constants::NOISE_CHAN_ENVELOPE){
         apu_noise_envelope_update = true;
     } else if (addr == constants::NOISE_CHAN_LENGTH_COUNTER){
         apu_noise_start_flag = true;
         apu_noise_timer_update = true;
+    } else if (addr == constants::DMC_CHAN_SAMPLE_ADDRESS) {
+        apu_dmc_dma_address_update = true;
     }
     cpu_map[addr] = value;
 }
@@ -139,9 +141,8 @@ void Bus::apu_enable_handle() {
     auto chan_direct_load_val = unsafe_read_prg(constants::DMC_CHAN_DIRECT_LOAD);
     dmc_output_level = (char)(chan_direct_load_val & 0x7f);
     dmc_rate_counter = ntsc_rates[dmc_rate_index];
-    dma_address = 0xc000;
     auto s_addr = unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
-    dma_address |= s_addr << 6;
+    dmc_dma_address = 0xc000 | s_addr << 6;
     if (dmc_sample_buffer.empty()){
         dmc_delay = 3;
         dmc_need_sample_update = true;
@@ -166,7 +167,7 @@ void Bus::unsafe_write(unsigned short addr, unsigned char value) {
         case constants::PPUADDR:   {ppuaddr   =   value; return;}
         case constants::PPUDATA:   {ppudata   =   value; return;}
         case constants::OAMDMA : {
-            dma_address = value << 8;
+            oam_dma_address = value << 8;
             dma_active = true;
             dma_start = true;
             dma_index = 0;
@@ -370,6 +371,8 @@ unsigned char Bus::unsafe_read_prg(unsigned short addr) {
         case constants::CONTROLLER2_AND_APU_FC:
             return cpu_open_bus_value & 0xfe;
         case constants::APU_CONTROL: {
+            // TODO: check
+            apu_clear_frame_irq_req = true;
             return (apu_control & 0xdf) | (cpu_open_bus_value & 0x20);
         }
 // TODO: check
@@ -540,7 +543,7 @@ void Bus::reset(){
     cpu_open_bus_value = 0;
     dma_active = false;
     dma_index = 0;
-    dma_address = 0;
+    oam_dma_address = 0;
     nmi_interrupt_flip_flop = false;
     apu_irq_interrupt_flip_flop = false;
     ppu_irq_interrupt_flip_flop = false;

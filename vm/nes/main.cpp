@@ -509,11 +509,12 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, PPUm>{}.run();
+    MultiTest<NESVM, APUm>{}.run();
 #else
 //    /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes
 //    /Users/prazd/Desktop/dev/nes-test-roms/test_apu_2/test_5.nes
 //    /Users/prazd/Desktop/dev/nes-test-roms/test_apu_2/test_6.nes
-    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // d133 (DMC)
+// TODO: AccuracyCoin (APU reg activation debug)
+    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); //
 #endif
 }

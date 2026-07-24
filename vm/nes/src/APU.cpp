@@ -92,21 +92,24 @@ void APU::handle_frame_counter_update(Bus& bus) {
         frame_counter_step5(bus);
 }
 
+template <int hz>
 static inline float low_pass_filter(float x){
     static float prev_y = 0.f;
-    static float a = 0.864f;
+    // TODO: check
+    static constexpr float a = (2.0f * 3.14f * (float)hz / 44100.f) / ((1 + 2.0f * 3.14f * (float)hz / 44100.f));
     return prev_y = prev_y + a * (x - prev_y);
 }
 
+template <int hz>
 static inline float high_pass_filter(float x){
     static float prev_y = 0.f;
     static float prev_x = 0.f;
-    static float a = 0.987f;
+    // TODO: check
+    static constexpr float a = (1.0f/(1.0f + 2.0f * 3.14f * (float)hz / 44100.f));
     auto res = a * (prev_y + x - prev_x);
     prev_x = x;
     return prev_y = res ;
 }
-
 
 // https://www.nesdev.org/wiki/APU_Mixer
 float APU::gen_sample(Bus& bus) {
@@ -124,7 +127,7 @@ float APU::gen_sample(Bus& bus) {
 #endif
     auto pulse_res = 95.88f/((8128.f/(ch1+ch2)) + 100.f);
     auto tnd_res = 159.79f/((1.f/((triangle/8227.f) + (noise/12241.f) + dmc/22638.f)) + 100.f); // TODO: debug
-    return low_pass_filter(high_pass_filter(pulse_res + tnd_res));
+    return low_pass_filter<14'000>(high_pass_filter<440>(high_pass_filter<90>(pulse_res + tnd_res)));
 }
 
 void APU::update_control(Bus& bus){
@@ -217,6 +220,12 @@ void APU::tick(Bus& bus) {
         bus.apu_noise_chan_loop_update = false;
     }
 
+    if (bus.apu_dmc_dma_address_update) {
+        auto s_addr = bus.unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
+        dmc_ch.dma_base_address = 0xc000 | (s_addr << 6);
+        bus.apu_dmc_dma_address_update = false;
+    }
+
     if (!(bus.apu_current_tick & 1)){
         pulse_ch1.tick_timer(bus);
         pulse_ch2.tick_timer(bus);
@@ -231,8 +240,7 @@ void APU::tick(Bus& bus) {
 
 // TODO: debug
     if (bus.apu_is_enable(Bus::DMC)) dmc_ch.tick(bus);
-    if (bus.dmc_rate_counter)
-        --bus.dmc_rate_counter;
+    if (bus.dmc_rate_counter) --bus.dmc_rate_counter;
 
 
     if (bus.frame_counter_reset) {
@@ -258,4 +266,84 @@ void APU::tick(Bus& bus) {
     }
 #endif
     ++bus.apu_current_tick;
+}
+
+void DMCChan::tick(Bus &bus) {
+    auto chan_freq_val = bus.unsafe_read_prg(constants::DMC_CHAN_FREQ);
+    is_loop = chan_freq_val & 0x40;
+    irq_enable = chan_freq_val & 0x80;
+    if (!irq_enable) bus.apu_control &= 0x7f;
+    bus.dmc_rate_index = chan_freq_val & 0xf;
+
+    if (!bus.dmc_bytes_remaining && is_loop){
+        auto s_len = bus.unsafe_read_prg(constants::DMC_CHAN_SAMPLE_LENGTH);
+        bus.dmc_bytes_remaining = (s_len << 4) | 1;
+        bus.dmc_dma_address = dma_base_address;
+        if (bus.dmc_sample_buffer.empty()){
+            bus.apu_irq_interrupt_flip_flop = true;
+            bus.dmc_dma_counter = 3 + bus.next_write;
+            bus.dmc_need_sample_update = true;
+        }
+    } else if (!bus.dmc_bytes_remaining){
+        return;
+    }
+
+    if (bus.dmc_delay){
+        if (!(bus.dmc_delay == 1 && bus.next_write)) --bus.dmc_delay;
+        if (!bus.dmc_delay) {bus.dmc_dma_counter = 3 + bus.next_write; bus.dmc_dma_in_progress = true;}
+    }
+    if (bus.dmc_dma_counter && bus.dmc_dma_in_progress) {
+        --bus.dmc_dma_counter;
+        if (bus.last_arg_addr == 0x4016){
+            // TODO: debug
+            if (bus.dmc_dma_counter == 3 && !(bus.apu_current_tick & 1)){
+                bus.dmc_dma_read_prg(bus.last_arg_addr); // dummy read
+            }
+        } else {
+            bus.dmc_dma_read_prg(bus.last_arg_addr); // dummy read
+        }
+        if (!bus.dmc_dma_counter){
+            bus.dmc_sample_buffer.push_back(bus.dmc_dma_read_prg(bus.dmc_dma_address));
+            bus.dmc_dma_address = bus.dmc_dma_address == 0xffff ? 0x8000 : bus.dmc_dma_address + 1;
+            if (bus.dmc_bytes_remaining) --bus.dmc_bytes_remaining;
+            bus.dmc_dma_in_progress = false;
+            if (bus.dmc_bytes_remaining){
+                if (bus.dmc_need_sample_update){
+                    bus.dmc_shift_reg = bus.dmc_sample_buffer.back(); bus.dmc_sample_buffer.pop_back();
+                    bus.dmc_shift_count = 8;
+                    bus.dmc_need_sample_update = false;
+                }
+            } else if (!bus.dmc_bytes_remaining && !is_loop && irq_enable){
+                bus.apu_control &= 0x7f;
+                bus.apu_control |= 0x80;
+                bus.apu_irq_interrupt_flip_flop = true;
+                if (!bus.dmc_shift_count) {
+                    bus.dmc_shift_reg = bus.dmc_sample_buffer.back(); bus.dmc_sample_buffer.pop_back();
+                    bus.dmc_shift_count = 8;
+                }
+            }
+        }
+    }
+
+    if (!bus.dmc_rate_counter){
+        bus.dmc_output_level += (bus.dmc_shift_reg & 1) ? 2 : -2;
+        if (bus.dmc_shift_count){
+            bus.dmc_shift_reg >>= 1;
+            --bus.dmc_shift_count;
+            bus.dmc_output_level = std::clamp(bus.dmc_output_level, (char)0, (char)127);
+            bus.dmc_rate_counter = Bus::ntsc_rates[bus.dmc_rate_index];
+        }
+
+        // TODO: debug
+        if (!bus.dmc_shift_count){
+            if (!(bus.dmc_sample_buffer.empty() && bus.dmc_bytes_remaining)){
+                bus.dmc_shift_reg = bus.dmc_sample_buffer.back(); bus.dmc_sample_buffer.pop_back();
+                bus.dmc_shift_count = 8;
+            } else {
+                bus.dmc_need_sample_update = true;
+            }
+            bus.dmc_dma_counter = 4; // TODO: check
+            bus.dmc_dma_in_progress = true;
+        }
+    }
 }

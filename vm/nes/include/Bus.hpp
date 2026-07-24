@@ -19,9 +19,9 @@ struct Bus {
             return;
         }
         if (dma_state == Read){
-            auto addr = dma_address + dma_index;
+            auto addr = oam_dma_address + dma_index;
             if (!((addr >= 0x4000 && addr <= 0x4019) && (last_arg_addr < 0x4000 || last_arg_addr > 0x4019)))
-                dma_value = read_prg(dma_address + dma_index);
+                dma_value = read_prg(oam_dma_address + dma_index);
         } else {
             oam[dma_index++] = dma_value;
             dma_active = (dma_index != 256);
@@ -70,8 +70,8 @@ struct Bus {
 
     unsigned short last_arg_addr{};
     bool next_write{};
-    unsigned short dma_address{};
-    unsigned short dmc_dma_address{};
+    unsigned short oam_dma_address{};
+    unsigned short dmc_dma_address = 0xc000;
     bool apu_enable_req{};
     char dmc_output_level{};
     size_t dmc_bytes_remaining = 0;
@@ -158,6 +158,8 @@ struct Bus {
     bool apu_triangle_linear_counter_update = false;
 
     bool apu_noise_chan_loop_update = false;
+
+    bool apu_dmc_dma_address_update{};
 
 
     Controller c;
