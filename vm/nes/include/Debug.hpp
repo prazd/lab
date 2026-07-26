@@ -1769,18 +1769,27 @@ struct APUView: DebugWindowText<x, y, w, h> {
                 info_mode = (InfoMode)i;
         }
 
+        // TODO: add more info
         ss << "APU:\n"
            << "  Enable :"      <<  std::bitset<8>(bus.apu_enable).to_string() << '\n'
            << "  FC mode:"      <<  (int)bus.frame_counter_mode  << '\n';
         switch (info_mode) {
             case P1: {
-                ss << "  duty:"     <<  (int)apu.pulse_ch1.current_duty_step  << '\n'
-                    << " length counter:"     <<  (int)apu.pulse_ch1.length_counter  << '\n';
+                ss  << "  duty:"     <<  (int)apu.pulse_ch1.current_duty_step  << '\n'
+                    << " length counter:"     <<  (int)apu.pulse_ch1.length_counter  << '\n'
+                    << "  sweep:"     <<  (int)apu.pulse_ch1.sweep_shift  << '\n'
+                    << "  sweep neg:"     <<  (int)apu.pulse_ch1.sweep_is_neg  << '\n'
+                    << "  sweep period:"     <<  (int)apu.pulse_ch1.sweep_period  << '\n'
+                    << "  timer:"     <<  (int)apu.pulse_ch1.timer  << '\n';
                 break;
             }
             case P2: {
-                ss << "  duty:"     <<  (int)apu.pulse_ch2.current_duty_step  << '\n'
-                << "  length counter:"     <<  (int)apu.pulse_ch2.length_counter  << '\n';
+                ss  << "  duty:"     <<  (int)apu.pulse_ch2.current_duty_step  << '\n'
+                    << "  length counter:"     <<  (int)apu.pulse_ch2.length_counter  << '\n'
+                    << "  sweep:"     <<  (int)apu.pulse_ch2.sweep_shift  << '\n'
+                    << "  sweep neg:"     <<  (int)apu.pulse_ch2.sweep_is_neg  << '\n'
+                    << "  sweep period:"     <<  (int)apu.pulse_ch2.sweep_period  << '\n'
+                    << "  timer:"     <<  (int)apu.pulse_ch2.timer  << '\n';
                 break;
             }
             case T: {break;}

@@ -351,7 +351,7 @@ struct NESVM {
         want.freq = 44100;
         want.format = AUDIO_S16LSB;
         want.channels = 1;
-        want.samples = 128;
+        want.samples = 256;
 
         audio_dev = SDL_OpenAudioDevice(nullptr, 0, &want, nullptr, 0);
         if (!audio_dev){
@@ -421,11 +421,16 @@ struct NESVM {
                 general_info.handle(bus, cartridge, ppu, apu);
                 cc.handle(bus.c);
                 sprite_info.handle(bus, ppu);
-                if (is_collision_up_right() && IsKeyPressed(KEY_M))
-                    current_up_right_view = static_cast<UpRightView>((current_up_right_view + 1) % UpRightViewCount);
 
-                if (is_collision_down_left() && IsKeyPressed(KEY_M))
-                    current_down_left_view = static_cast<DownRightView>((current_down_left_view + 1) % DownRightViewCount);
+                if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_LEFT)){
+                    current_up_right_view = static_cast<UpRightView>((is_collision_up_right() ?
+                            wrap((int)current_up_right_view, -IsKeyPressed(KEY_LEFT) + IsKeyPressed(KEY_RIGHT),  0, UpRightViewCount-1)
+                             : current_up_right_view));
+
+                    current_down_left_view = static_cast<DownRightView>((is_collision_down_left() ?
+                            wrap((int)current_down_left_view, -IsKeyPressed(KEY_LEFT) + IsKeyPressed(KEY_RIGHT),  0, DownRightViewCount-1):
+                            current_down_left_view));
+                }
 
                 if (CheckCollisionPointRec(GetMousePosition(),display_rec)){
                     if (IsKeyPressed(KEY_S))
@@ -515,6 +520,6 @@ int main(){
 //    /Users/prazd/Desktop/dev/nes-test-roms/test_apu_2/test_5.nes
 //    /Users/prazd/Desktop/dev/nes-test-roms/test_apu_2/test_6.nes
 // TODO: AccuracyCoin (APU reg activation debug)
-    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); //
+    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); //
 #endif
 }

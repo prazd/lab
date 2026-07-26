@@ -21,12 +21,6 @@ struct Controller {
     bool shift_req2 = false;
 
     KeyboardKey keys1[8] = {
-        KEY_Q,KEY_E,
-        KEY_SPACE,KEY_ENTER,
-        KEY_UP,KEY_DOWN,
-        KEY_LEFT, KEY_RIGHT
-    };
-    KeyboardKey keys2[8] = {
             KEY_LEFT_BRACKET,KEY_RIGHT_BRACKET,
             KEY_SPACE,KEY_ENTER,
             KEY_W,KEY_S,
@@ -55,10 +49,10 @@ struct Controller {
             for (int i = 0; i < 8; ++i)
                 status1 |=
 #if DEBUG_MODE
-                        ((custom_status & (1 << i)) | (IsKeyDown(keys1[i]) || IsKeyDown(keys2[i])) << i);
+                        ((custom_status & (1 << i)) | (IsKeyDown(keys1[i])) << i);
 #else
 
-                        ((IsKeyDown(keys1[i]) || IsKeyDown(keys2[i])) << i);
+                        (IsKeyDown(keys1[i]) << i);
 #endif
             current1 = 0;
         }
@@ -70,7 +64,7 @@ struct Controller {
     }
 
     inline bool read_status1(){
-        if (latch1) return IsKeyDown(keys1[0]) || IsKeyDown(keys2[0]);
+        if (latch1) return IsKeyDown(keys1[0]);
         if (current1 < 8){
             prev_res1 = status1 & 1;
             return prev_res1;

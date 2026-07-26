@@ -184,26 +184,26 @@ void APU::tick(Bus& bus) {
 
     if (bus.apu_pulse1_timer_update){
         if (bus.apu_is_enable(Bus::Pulse1))
-            pulse_ch1.length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::PULSE1_TIMER_HIGH) >> 3) & 0x1f)];
+            pulse_ch1.update_lc_and_timer(bus);
         bus.apu_pulse1_timer_update = false;
     }
 
     if (bus.apu_pulse2_timer_update){
         if (bus.apu_is_enable(Bus::Pulse2))
-            pulse_ch2.length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::PULSE2_TIMER_HIGH) >> 3) & 0x1f)];
+            pulse_ch2.update_lc_and_timer(bus);
         bus.apu_pulse2_timer_update = false;
     }
 
     if (bus.apu_triangle_timer_update){
         if (bus.apu_is_enable(Bus::Triangle))
-            triangle_ch.length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH) >> 3) & 0x1f)];
+            triangle_ch.update_lc_and_timer(bus);
         triangle_ch.linear_counter_reload = true;
         bus.apu_triangle_timer_update = false;
     }
 
     if (bus.apu_noise_timer_update){
         if (bus.apu_is_enable(Bus::Noise))
-            noise_ch.length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::NOISE_CHAN_LENGTH_COUNTER) >> 3) & 0x1f)];
+            noise_ch.update_lc_and_timer(bus);
         bus.apu_noise_timer_update = false;
     }
 
@@ -293,15 +293,13 @@ void DMCChan::tick(Bus &bus) {
         if (!bus.dmc_delay) {bus.dmc_dma_counter = 3 + bus.next_write; bus.dmc_dma_in_progress = true;}
     }
     if (bus.dmc_dma_counter && bus.dmc_dma_in_progress) {
-        --bus.dmc_dma_counter;
-        if (bus.last_arg_addr == 0x4016){
-            // TODO: debug
-            if (bus.dmc_dma_counter == 3 && !(bus.apu_current_tick & 1)){
-                bus.dmc_dma_read_prg(bus.last_arg_addr); // dummy read
-            }
-        } else {
-            bus.dmc_dma_read_prg(bus.last_arg_addr); // dummy read
+        if (bus.dmc_dma_counter == 3){
+// TODO: check
+//            if (bus.last_arg_addr == 0x4016){
+//                if (!(bus.apu_current_tick & 1)) bus.unsafe_read_prg(bus.last_arg_addr);
+                bus.dmc_dma_read_prg(bus.last_arg_addr); // TODO: debug
         }
+        --bus.dmc_dma_counter;
         if (!bus.dmc_dma_counter){
             bus.dmc_sample_buffer.push_back(bus.dmc_dma_read_prg(bus.dmc_dma_address));
             bus.dmc_dma_address = bus.dmc_dma_address == 0xffff ? 0x8000 : bus.dmc_dma_address + 1;

@@ -79,9 +79,14 @@ struct PulseChan : Channel, Envelope {
     inline void tick_timer(Bus& bus){
         --timer;
         if (!timer){
-            current_duty_step = current_duty_step == 0 ? 7 : current_duty_step - 1;
+            current_duty_step = !current_duty_step ? 7 : current_duty_step - 1;
             update_timer(bus.unsafe_read_prg(timer_l), bus.unsafe_read_prg(timer_h));
         }
+    }
+
+    inline void update_lc_and_timer(Bus& bus){
+        length_counter = Bus::length_table[((bus.unsafe_read_prg(timer_h) >> 3) & 0x1f)];
+        update_timer(bus.unsafe_read_prg(timer_l), bus.unsafe_read_prg(timer_h));
     }
 
     inline unsigned char get_duty_cycle(Bus& bus) const {
@@ -121,6 +126,10 @@ struct NoiseChan : Channel, Envelope {
             timer = period[(loop & 0xf)];
         }
     }
+    inline void update_lc_and_timer(Bus& bus){
+        length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::NOISE_CHAN_LENGTH_COUNTER) >> 3) & 0x1f)];
+        timer = period[(loop & 0xf)]; // TODO: check
+    }
     inline unsigned char get_dac(Bus& bus) const {
         // TODO: check
         if (length_counter && !(shift_reg & 1))
@@ -144,6 +153,10 @@ struct TriangleChan : Channel{
             if (linear_counter) current_seq_i = (current_seq_i + 1) & 0x1f;
             update_timer(bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_LOW), bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH));
         }
+    }
+    inline void update_lc_and_timer(Bus& bus){
+        length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH) >> 3) & 0x1f)];
+        update_timer(bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_LOW), bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH));
     }
     unsigned char get_dac(){
         // TODO: check

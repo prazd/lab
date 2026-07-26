@@ -327,4 +327,11 @@ public:
         for (auto&& t: pool) if (t.joinable()) t.join();
     }
 };
+
+template <std::integral T>
+T wrap(T current, int add, T min, T max){
+    int r = current + add;
+    return (r >= min && r <= max) ? r :
+           (r > max ? min : max);
+}
 #endif
