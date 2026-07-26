@@ -4,6 +4,7 @@
 #include <chrono>
 #include <thread>
 #include <utility>
+#include <optional>
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
 #include <sys/ptrace.h>
@@ -99,6 +100,8 @@ struct DySymtabCommand {
     unsigned nmodtab{};
     unsigned extrefsymoff{};
     unsigned nextrefsyms{};
+    unsigned indirectsymoff{};
+    unsigned nindirectsyms{};
     unsigned extreloff{};
     unsigned nextrel{};
     unsigned locreloff{};
@@ -111,68 +114,71 @@ inline MachOHeader parse_macho_header(const std::vector<char>& f) {
     return header;
 }
 
-inline Section64 macho_find_section(const std::vector<char>& f, const char* segment, const char* section){
-    auto ptr = f.data();
-    auto e = ptr + f.size();
-    ptr += sizeof(MachOHeader);
+inline std::optional<Section64> macho_find_section(char* ptr, const char* segment, const char* section){
+    MachOHeader header;
+    memcpy(&header, ptr, sizeof(MachOHeader));
     LoadCommands lc;
     SegmentCommand64 sc;
     Section64 s64;
     unsigned s = 0;
-    while(ptr != e){
+    size_t current_nsec = 0;
+    ptr += sizeof(MachOHeader);
+    for (int i = 0; i < header.number_of_load_commands; ++i){
         if (s == 0){
             memcpy(&lc, ptr, sizeof(LoadCommands));
             s += (lc.ncmds == LC_SEGMENT_64);
             ptr += s == 0 ? lc.szcmds : 0;
+            ++i;
         } else if (s == 1){
             memcpy(&sc, ptr, sizeof(SegmentCommand64));
-            std::cout << "Addr:" << (void*)ptr << " Segname:" << sc.segname << '\n';
             if (!strcmp(sc.segname, segment)){
-                s += 1;
+                ++s;
                 ptr += sizeof(SegmentCommand64);
+                current_nsec = sc.nsects;
             }
             ptr += s == 1 ? sc.cmdsz: 0;
+            ++i; // TODO: check
         } else if (s == 2) {
             memcpy(&s64, ptr, sizeof(Section64));
-            std::cout << "Segname:" << s64.segname << " Sectionname:" << s64.sectionname << '\n';
             if (!strcmp(s64.sectionname, section)) return s64;
             ptr += sizeof(Section64);
+            if (current_nsec) --current_nsec;
+            if (!current_nsec) break;
         }
     }
-    std::abort();
+    return std::nullopt;
 }
 
-inline SegmentCommand64 macho_find_segment_header(const std::vector<char>& f, const char* segment){
-    auto ptr = f.data();
-    auto e = ptr + f.size();
+inline std::optional<SegmentCommand64> macho_find_segment_header(char* ptr, const char* segment){
+    MachOHeader header;
+    memcpy(&header, ptr, sizeof(MachOHeader));
     ptr += sizeof(MachOHeader);
     LoadCommands lc;
     SegmentCommand64 sc;
     unsigned s = 0;
-    while(ptr != e){
+    for (int i = 0; i < header.number_of_load_commands; ++i){
         if (s == 0){
             memcpy(&lc, ptr, sizeof(LoadCommands));
             s += (lc.ncmds == LC_SEGMENT_64);
             ptr += s == 0 ? lc.szcmds : 0;
         } else if (s == 1){
             memcpy(&sc, ptr, sizeof(SegmentCommand64));
-            std::cout << "Addr:" << (void*)ptr << " Segname:" << sc.segname << '\n';
             if (!strcmp(sc.segname, segment)){
                 return sc;
             }
             ptr += s == 1 ? sc.cmdsz: 0;
         }
     }
-    std::abort();
+    return std::nullopt;
 }
 
 template <typename T>
-inline T macho_find_cmd(const std::vector<char>& f, unsigned cmd){
-    auto ptr = f.data();
-    auto e = ptr + f.size();
-    ptr += sizeof(MachOHeader);
+inline std::optional<T> macho_find_cmd(char* ptr, unsigned cmd){
+    MachOHeader header;
+    memcpy(&header, ptr, sizeof(MachOHeader));
     LoadCommands lc;
-    while(ptr < e){
+    ptr += sizeof(MachOHeader);
+    for (int i = 0; i < header.number_of_load_commands; ++i){
         memcpy(&lc, ptr, sizeof(LoadCommands));
         if (lc.szcmds == 0){
             std::cout << "Not found\n";
@@ -185,7 +191,7 @@ inline T macho_find_cmd(const std::vector<char>& f, unsigned cmd){
         };
         ptr += lc.szcmds;
     }
-    std::abort();
+    return std::nullopt;
 }
 #endif
 #endif
