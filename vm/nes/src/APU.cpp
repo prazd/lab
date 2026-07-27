@@ -239,9 +239,10 @@ void APU::tick(Bus& bus) {
     }
 
 // TODO: debug
+#if 0
     if (bus.apu_is_enable(Bus::DMC)) dmc_ch.tick(bus);
     if (bus.dmc_rate_counter) --bus.dmc_rate_counter;
-
+#endif
 
     if (bus.frame_counter_reset) {
         if (bus.frame_counter_reset_ticks) { --bus.frame_counter_reset_ticks; }

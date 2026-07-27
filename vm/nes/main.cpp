@@ -9,6 +9,7 @@
 #include "Shaders.hpp"
 #include "Debug.hpp"
 #include "MultiTest.hpp"
+#include <sstream>
 #include <initializer_list>
 
 struct NESVM {
@@ -239,6 +240,51 @@ struct NESVM {
 #endif
     }
 
+    void rom_select_init(){
+        cartridge.update_select_files();
+        run();
+    }
+
+    void rom_select_handle(int x, int y, int width, int height){
+        static constexpr size_t view_count = 10;
+        static int begin = 0;
+        static int end = view_count-1;
+        std::stringstream ss;
+        std::string tmp;
+        for (size_t i = 0; i != view_count; ++i){
+            ss << cartridge.select_files[(begin + i) % cartridge.select_files.size()] << '\n';
+            tmp = ss.str();
+            if (cartridge.selected_index != (begin + i) % cartridge.select_files.size())
+                DrawText(tmp.c_str(), x, y + (i * 15), 15, BLACK);
+            else {
+                DrawRectangle(x, y + (i * 15), width, 15, BLACK);
+                DrawText(tmp.c_str(), x, y + (i * 15), 15, WHITE);
+            }
+            ss.str("");
+        }
+
+        if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_DOWN))
+            if (cartridge.selected_index == begin){
+                begin = wrap(begin, -IsKeyPressed(KEY_UP),
+                     0, (int)(cartridge.select_files.size()-1));
+                end = wrap(end, -IsKeyPressed(KEY_UP),
+                     0, (int)(cartridge.select_files.size()-1));
+            } else if (cartridge.selected_index == end){
+                begin = wrap(begin, IsKeyPressed(KEY_DOWN),
+                             0, (int)(cartridge.select_files.size()-1));
+                end = wrap(end, IsKeyPressed(KEY_DOWN),
+                           0, (int)(cartridge.select_files.size()-1));
+            }
+        cartridge.selected_index =
+                wrap(cartridge.selected_index, -IsKeyPressed(KEY_UP) + IsKeyPressed(KEY_DOWN),
+                     0, (int)(cartridge.select_files.size()-1));
+        if (IsKeyPressed(KEY_ENTER)){
+            cartridge.read(cartridge.selected_files_path + cartridge.select_files[cartridge.selected_index]);
+            read_cartridge_data();
+            cartridge.selected = true;
+        }
+    }
+
     void run(){
 #if DEBUG_MODE
         InitWindow(constants::DEBUG_WIDTH, constants::DEBUG_HEIGHT, "NES");
@@ -369,9 +415,6 @@ struct NESVM {
 #endif
 #if !DEBUG_MODE
         cartridge.update_game_state<false>((char*)(bus.cpu_map + constants::CARTRIDGE_RAM_BEGIN));
-#endif
-
-#if !DEBUG_MODE
         Shaders shaders = Shaders(std::initializer_list<const char*>{
             "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/shaders/crt.fs",
             "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/shaders/lcd.fs"
@@ -381,8 +424,15 @@ struct NESVM {
 #endif
 
         while(!WindowShouldClose()){
+#if ROM_SELECT_ON
+            if (cartridge.selected){
+#endif
             frame_execute();
             UpdateTexture(display_texture, ppu.get_active_display().data());
+#if ROM_SELECT_ON
+            }
+#endif
+            
 #if !DEBUG_MODE
             auto shader_data = shaders.get();
             SetShaderValue(shader_data.s, shader_data.resolutionLoc, &resolution, SHADER_UNIFORM_VEC2);
@@ -408,11 +458,17 @@ struct NESVM {
 #if DEBUG_MODE
             dis.draw(cpu, ppu, bus, apu, cartridge);
             dis.snap_handle(cpu, ppu, bus, snap_storage);
+#if ROM_SELECT_ON
+            if (cartridge.selected){
 #endif
-
-#if DEBUG_MODE
-            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height}, display_rec, {0, 0},0, WHITE);
+            DrawTexturePro(display_texture, {0, 0, (float) display_texture.width, (float) display_texture.height},
+                           display_rec, {0, 0}, 0, WHITE);
             DrawRectangleLinesEx(display_rec, 1.f, BLACK);
+#if ROM_SELECT_ON
+            } else {
+                rom_select_handle(display_rec.x, display_rec.y, display_rec.width, display_rec.height);
+            }
+#endif
 
             if (!dis.stress_speed){
                 reg_info.handle(cpu, ppu, bus);
@@ -457,7 +513,6 @@ struct NESVM {
                 if (grid_view_enable) dtg.draw(22.4f,22.4f);
             }
 #else
-#if !DEBUG_MODE
             if (IsKeyPressed(KEY_Z)) shaders_mode = !shaders_mode;
             shaders.handle();
             if (shaders_mode) {
@@ -465,11 +520,19 @@ struct NESVM {
                 DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,(float)GetScreenWidth(), (float)GetScreenHeight()}, {0, 0},0, WHITE);
                 EndShaderMode();
             } else
-#endif
+#if ROM_SELECT_ON
+        if (cartridge.selected){
+#endif                
             DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,(float)GetScreenWidth(), (float)GetScreenHeight()}, {0, 0},0, WHITE);
-
+#if ROM_SELECT_ON
+        } else {
+            rom_select_handle(0,0,GetScreenWidth(),GetScreenHeight());
+        }
+#endif                
 #endif
+#if 0
             DrawFPS(0,0);
+#endif
             EndDrawing();
         }
 #if APU_ON
@@ -515,11 +578,15 @@ int main(){
 
 #if MULTI_TEST_MODE
     MultiTest<NESVM, APUm>{}.run();
+#elif ROM_SELECT_ON
+    NESVM{}.rom_select_init();
 #else
 //    /Users/prazd/Desktop/dev/nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes
 //    /Users/prazd/Desktop/dev/nes-test-roms/test_apu_2/test_5.nes
 //    /Users/prazd/Desktop/dev/nes-test-roms/test_apu_2/test_6.nes
+// /Users/prazd/Desktop/dev/FinalFantasy.nes - debug
+
 // TODO: AccuracyCoin (APU reg activation debug)
-    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); //
+    NESVM{"/Users/prazd/Desktop/dev/Metroid.nes"}.run(); //
 #endif
 }

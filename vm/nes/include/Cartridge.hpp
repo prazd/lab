@@ -57,6 +57,10 @@ struct Cartridge {
     unsigned chr_nvram_sz = 0;
     std::string rom_path{};
     std::string save_path = "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/sav/";
+    std::string selected_files_path = "/Users/prazd/Desktop/dev/";
+    std::vector<std::string> select_files{};
+    bool selected = false;
+    int selected_index = 0;
 
     inline void parse_header() {
         unsigned char nes_id = (buffer[Flag7] >> 2) & 0x3;
@@ -130,6 +134,13 @@ struct Cartridge {
             if (!f.is_open()) {return;}
             f.read(buf, 8192);
             f.close();
+        }
+    }
+
+    void update_select_files(){
+        for (auto& entry: std::filesystem::directory_iterator(std::filesystem::path(selected_files_path))){
+            auto str = entry.path().filename().string();
+            if (str.contains(".nes")) select_files.push_back(str);
         }
     }
 };

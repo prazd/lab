@@ -1,10 +1,11 @@
 #ifndef NES_CONSTANTS_HPP
 #define NES_CONSTANTS_HPP
 #include <iostream>
+#define ROM_SELECT_ON 1
 #define APU_TICK_ON 1
 #define APU_ON 1
 #define HIDE_OVERSCAN 1
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 #define GAME_GENIE_MODE 0
 #define MULTI_TEST_MODE 0
 
