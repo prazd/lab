@@ -112,6 +112,9 @@ struct Bus {
         m8x16
     } sprite_mode = m8x8;
     unsigned short ppu_v{};
+#if DEBUG_MODE
+    unsigned short start_v_value{};
+#endif
     void inc_ppu_v_x();
     void inc_ppu_v_y();
     void inc_by_ppudata();

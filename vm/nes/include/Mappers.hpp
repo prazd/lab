@@ -174,37 +174,43 @@ namespace mappers {
         inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
             return rom[addr-0x8000];
         }
-        inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
-            return rom[addr];
-        }
     };
 
     struct UXROM {
-        unsigned char current_bank = 0;
+        unsigned char bank = 0;
 
         inline void handle(unsigned short addr, unsigned char value){
-            current_bank = value & 0xf;
+            bank = value & 0xf;
         }
         inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
             if (addr >= 0xC000 && addr <= 0xFFFF)
                 return  rom[(rom.size()-0x4000) + addr-0xC000];
-            return rom[addr-0x8000 + (current_bank * 0x4000)];
-        }
-        inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
-            return rom[addr];
+            return rom[addr-0x8000 + (bank * 0x4000)];
         }
     };
 
     struct CNROM {
-        unsigned short current_offset{};
+        unsigned short offset{};
         inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
             return rom[addr-0x8000];
         }
         inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
-            return rom[(0x2000 * current_offset) + addr];
+            return rom[(0x2000 * offset) + addr];
         }
         inline void handle(unsigned short addr, unsigned char value){
-            current_offset = value;
+            offset = value;
+        }
+    };
+
+    struct AxROM {
+        unsigned char bank = 0;
+        bool single_screen_nt = 0;
+        inline void handle(unsigned short addr, unsigned char val){
+            bank = val & 0x7;
+            single_screen_nt = val & 0x10;
+        }
+        inline unsigned char read_prg_rom(const std::vector<unsigned char>& rom, unsigned short addr) {
+            return rom[addr-0x8000 + (bank * 0x8000)];
         }
     };
 
@@ -274,8 +280,7 @@ namespace mappers {
             }
         }
         inline unsigned char read_chr_rom(const std::vector<unsigned char>& rom, unsigned short addr){
-            // TODO: check
-            if (!(control_register & 0x10)) return rom[addr];
+            if (!(control_register & 0x10)) return rom[((chr_bank0 & 0xfe) * 0x1000) + addr];
             bool b0 = (addr >= 0 && addr <= 0x0fff);
             return rom[((b0 ? chr_bank0 : chr_bank1) * 0x1000) + (addr - (b0 ? 0 : 0x1000))];
         }
@@ -288,7 +293,8 @@ struct Mapper {
         MMC1 = 0x1,
         UxROM = 0x2,
         CNROM = 0x3,
-        MMC3 = 0x4
+        MMC3 = 0x4,
+        AXROM = 0x7,
     } mtype = MMC1;
 
     enum ScreenMirroring {
@@ -309,6 +315,7 @@ struct Mapper {
     mappers::CNROM cnrom;
     mappers::UXROM uxrom;
     mappers::MMC3 mmc3;
+    mappers::AxROM axrom;
 
     inline bool has_battery(){
         switch (mtype) {
@@ -330,16 +337,20 @@ struct Mapper {
         switch (mtype) {
             case MMC1: {
                 switch (mmc1.get_screen_mirroring_value()) {
-                    case 0b00: current_screen_mirroring = SingleScreenLower; break;
-                    case 0b01: current_screen_mirroring = SingleScreenUpper; break;
-                    case 0b10: current_screen_mirroring = Vertical;          break;
-                    case 0b11: current_screen_mirroring = Horizontal;        break;
+                    case 0b00: {current_screen_mirroring = SingleScreenLower; break;}
+                    case 0b01: {current_screen_mirroring = SingleScreenUpper; break;}
+                    case 0b10: {current_screen_mirroring = Vertical;          break;}
+                    case 0b11: {current_screen_mirroring = Horizontal;        break;}
                 }
                 break;
             }
             case MMC3: {
                 mmc3.is_vertical = !is_horizontal_arrangement;
                 current_screen_mirroring = mmc3.is_vertical ? Vertical: Horizontal;
+                break;
+            }
+            case AXROM: {
+                current_screen_mirroring = axrom.single_screen_nt ? SingleScreenUpper : SingleScreenLower;
                 break;
             }
             default: {
@@ -353,15 +364,19 @@ struct Mapper {
         switch (mtype) {
             case MMC1: {
                 switch (mmc1.get_screen_mirroring_value()) {
-                    case 0b00: current_screen_mirroring = SingleScreenLower; break;
-                    case 0b01: current_screen_mirroring = SingleScreenUpper; break;
-                    case 0b10: current_screen_mirroring = Vertical;          break;
-                    case 0b11: current_screen_mirroring = Horizontal;        break;
+                    case 0b00: {current_screen_mirroring = SingleScreenLower; break;}
+                    case 0b01: {current_screen_mirroring = SingleScreenUpper; break;}
+                    case 0b10: {current_screen_mirroring = Vertical;          break;}
+                    case 0b11: {current_screen_mirroring = Horizontal;        break;}
                 }
                 break;
             }
             case MMC3: {
                 current_screen_mirroring = mmc3.is_vertical ? Vertical: Horizontal;
+                break;
+            }
+            case AXROM: {
+                current_screen_mirroring = axrom.single_screen_nt ? SingleScreenUpper : SingleScreenLower;
                 break;
             }
             default: {
@@ -373,11 +388,12 @@ struct Mapper {
 
     inline unsigned char read_prg_rom(unsigned short addr){
         switch (mtype) {
-            case NROM: return nrom.read_prg_rom(prg, addr);
-            case MMC1: return mmc1.read_prg_rom(prg, addr);
+            case NROM: return  nrom.read_prg_rom(prg, addr);
+            case MMC1: return  mmc1.read_prg_rom(prg, addr);
             case UxROM: return uxrom.read_prg_rom(prg, addr);
             case CNROM: return cnrom.read_prg_rom(prg, addr);
-            case MMC3: return mmc3.read_prg_rom(prg, addr);
+            case MMC3:   return  mmc3.read_prg_rom(prg, addr);
+            case AXROM: return axrom.read_prg_rom(prg, addr);
             default: return 0xff;
         }
     }
@@ -392,23 +408,19 @@ struct Mapper {
 
     inline unsigned char read_chr_rom(unsigned short addr){
         switch (mtype) {
-            case NROM:  { return nrom.read_chr_rom(chr, addr);  }
             case MMC1:  { return mmc1.read_chr_rom(chr, addr);  }
-            case UxROM: { return uxrom.read_chr_rom(chr, addr); }
             case CNROM: { return cnrom.read_chr_rom(chr, addr); }
             case MMC3:  { mmc3.tick_irq(addr); return mmc3.read_chr_rom(chr,addr);}
-            default: return 0xff;
+            default: return chr[addr];
         }
     }
 
     inline unsigned char unsafe_read_chr_rom(unsigned short addr){
         switch (mtype) {
-            case NROM:  { return nrom.read_chr_rom(chr, addr);  }
-            case MMC1:  { return mmc1.read_chr_rom(chr, addr);  }
-            case UxROM: { return uxrom.read_chr_rom(chr, addr); }
-            case CNROM: { return cnrom.read_chr_rom(chr, addr); }
+            case MMC1:  { return mmc1.read_chr_rom(chr, addr);}
+            case CNROM: { return cnrom.read_chr_rom(chr, addr);}
             case MMC3:  { return mmc3.read_chr_rom(chr,addr);}
-            default: return 0xff;
+            default: return chr[addr];
         }
     }
 
@@ -432,6 +444,7 @@ struct Mapper {
                 uxrom.handle(addr, value); break;
             case CNROM: {cnrom.handle(addr, value);  break;}
             case MMC3:  {mmc3.tick_irq(addr); mmc3.handle(addr, value); update_screen_mirroring(false); break;}
+            case AXROM: {axrom.handle(addr, value); break;}
             default: return;
         }
     }

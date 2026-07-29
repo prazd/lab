@@ -63,6 +63,9 @@ void Bus::write(unsigned short addr, unsigned char value) {
                 ppu_t &= 0x3fff;
                 mapper.update_state(ppu_t, ppu_v);
                 ppu_v = ppu_t;
+#if DEBUG_MODE
+                start_v_value = ppu_v;
+#endif
                 last_ppu_address = ppu_v;
             }
             ppu_w = !ppu_w;
@@ -529,6 +532,9 @@ void Bus::reset(){
     memset(cpu_map, 0, sizeof(cpu_map));
     ppu_t = 0;
     ppu_v = 0;
+#if DEBUG_MODE
+    start_v_value = 0;
+#endif
     ppu_w = false;
     ppu_x = 0;
     ppuctrl = 0;

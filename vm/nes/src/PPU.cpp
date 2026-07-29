@@ -149,6 +149,11 @@ void PPU::bg_tick(Bus &bus) {
             // set coarse x + update ntx bit
             v &= 0xfbe0;
             v |= (bus.ppu_t & 0x41f);
+#if DEBUG_MODE
+            // TODO: debug
+            if (current_y == 0)
+                bus.start_v_value = v;
+#endif
             bus.mapper.irq_handle();
         } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336) {
             shift_register_high <<= 1;
@@ -168,6 +173,9 @@ void PPU::bg_tick(Bus &bus) {
         } else if (current_scanline_cycle == 280 && bus.ppumask & 0x18) {
             v &= 0x841f;
             v |= (bus.ppu_t & 0x7be0);
+#if DEBUG_MODE
+            bus.start_v_value = v;
+#endif
             bus.mapper.irq_handle();
         } else if (current_scanline_cycle >= 321 && current_scanline_cycle <= 336){
             shift_register_high <<= 1;

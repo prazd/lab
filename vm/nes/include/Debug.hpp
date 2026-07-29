@@ -208,6 +208,8 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
         ViewModeCount,
     } view_mode = TBPPMode;
 
+    bool show_screen = true;
+
     TileRow get_tile_row(unsigned char a, unsigned char b) {
         std::array<Color, 8> res{};
         for (int i = 0; i < 8; ++i){
@@ -267,6 +269,32 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     void draw_tbpp(Bus& bus, PPU& ppu){
         size_t current = 0;
         size_t current_nt = 0;
+
+        static size_t screen_x[4]{};
+        static size_t screen_y[4]{};
+
+        size_t start_nt = ((bus.start_v_value >> 10) & 0x3);
+        screen_x[0] = (((bus.start_v_value & 0x1f) + (start_nt == 1 || start_nt == 3) * 32)) % 64;
+        screen_y[0] = (((bus.start_v_value >> 5) & 0x1f) + (start_nt == 2 || start_nt == 3) * 30) % 60;
+
+        screen_x[1] = (screen_x[0] + 32) % 64;
+        screen_y[1] = screen_y[0];
+
+        screen_x[2] = screen_x[0];
+        screen_y[2] = (screen_y[0] + 30) % 60;
+
+        screen_x[3] = (screen_x[0] + 32) % 64;
+        screen_y[3]= (screen_y[0] + 30) % 60;
+
+        auto is_in_screen = [](size_t s_x, size_t s_y){
+            for (int sc = 0; sc < 4; ++sc){
+                if (s_x == screen_x[sc] && s_y == screen_y[sc]){
+                    return true;
+                }
+            }
+            return false;
+        };
+
         for (int s = 0; s < 61; ++s){
             if (s == 30){
                 for (int i = 0; i < 64; ++i) {
@@ -289,8 +317,15 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                         auto l_tile = bus.unsafe_read_chr(pt_addr + z);
                         auto h_tile = bus.unsafe_read_chr(pt_addr + z + 8);
                         auto tile_row = get_tile_row(h_tile, l_tile);
-                        for (int k = 0; k < 8; ++k){
-                            DW::buffer[current++] = tile_row[k];
+                        if (show_screen && is_in_screen(i, current_nt_y))
+                         {
+                            for (int k = 0; k < 8; ++k){
+                                DW::buffer[current++] = GREEN;
+                            }
+                        } else {
+                            for (int k = 0; k < 8; ++k){
+                                DW::buffer[current++] = tile_row[k];
+                            }
                         }
                     }
                     --current_nt;
@@ -300,6 +335,8 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     }
 
     void handle(PPU& ppu, Bus& bus){
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
+            show_screen = !show_screen;
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
             view_mode = static_cast<ViewMode>((view_mode + 1) % ViewModeCount);
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_TWO))
@@ -1184,13 +1221,23 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
                    << "  Battery:" << c.is_battery << '\n'
                    << " Is alternative nt:" << c.is_alternative_nametable << '\n'
                    << " Is horizontal arrangement:" << c.is_horizontal_arrangement << '\n';
-                if (bus.mapper.mtype == Mapper::MMC3) {
-                    ss << "MMC3:\n" <<
-                       "IRQ enable:" << (int) bus.mapper.mmc3.irq_enable << '\n' <<
-                       "IRQ counter:" << (int) bus.mapper.mmc3.irq_counter << '\n' <<
-                       "IRQ latch:" << (int) bus.mapper.mmc3.irq_latch << '\n' <<
-                       "IRQ requested:" << (int) bus.mapper.mmc3.irq_requested << '\n' <<
-                       "Reload flag:" << (int) bus.mapper.mmc3.reload_flag;
+
+                switch (bus.mapper.mtype) {
+                    case Mapper::MMC3:{
+                        ss << "MMC3:\n" <<
+                           "IRQ enable:" << (int) bus.mapper.mmc3.irq_enable << '\n' <<
+                           "IRQ counter:" << (int) bus.mapper.mmc3.irq_counter << '\n' <<
+                           "IRQ latch:" << (int) bus.mapper.mmc3.irq_latch << '\n' <<
+                           "IRQ requested:" << (int) bus.mapper.mmc3.irq_requested << '\n' <<
+                           "Reload flag:" << (int) bus.mapper.mmc3.reload_flag;
+                        break;
+                    }
+                    case Mapper::AXROM: {
+                        ss << "AXROM:\n" <<
+                        "Bank:" << (int)bus.mapper.axrom.bank << '\n' <<
+                        "MirrorMode:" << (int)bus.mapper.axrom.single_screen_nt << '\n';
+                        break;
+                    }
                 }
                 break;
             }
