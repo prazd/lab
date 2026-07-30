@@ -111,12 +111,22 @@ struct NESVM {
     }
 
     void reset(std::string_view path){
+#if ROM_SELECT_ON
+        if (!cartridge.selected) return;
+#endif
         bus = Bus{};
         bus.reset();
         cpu = CPU{};
         ppu.reset();
+#if ROM_SELECT_ON
+        cartridge.selected = false;
+        cartridge.selected_index = 0;
+        cartridge.select_begin = 0;
+        cartridge.select_end = cartridge.select_view_count-1;
+#else
         cartridge.read(path);
         read_cartridge_data();
+#endif
         rom_path = path;
         apu = APU{};
 #if DEBUG_MODE
@@ -246,15 +256,12 @@ struct NESVM {
     }
 
     void rom_select_handle(int x, int y, int width, int height){
-        static constexpr size_t view_count = 10;
-        static int begin = 0;
-        static int end = view_count-1;
         std::stringstream ss;
         std::string tmp;
-        for (size_t i = 0; i != view_count; ++i){
-            ss << cartridge.select_files[(begin + i) % cartridge.select_files.size()] << '\n';
+        for (size_t i = 0; i != cartridge.select_view_count; ++i){
+            ss << cartridge.select_files[(cartridge.select_begin + i) % cartridge.select_files.size()] << '\n';
             tmp = ss.str();
-            if (cartridge.selected_index != (begin + i) % cartridge.select_files.size())
+            if (cartridge.selected_index != (cartridge.select_begin + i) % cartridge.select_files.size())
                 DrawText(tmp.c_str(), x, y + (i * 15), 15, BLACK);
             else {
                 DrawRectangle(x, y + (i * 15), width, 15, BLACK);
@@ -263,20 +270,20 @@ struct NESVM {
             ss.str("");
         }
 
-        if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_DOWN))
-            if (cartridge.selected_index == begin){
-                begin = wrap(begin, -IsKeyPressed(KEY_UP),
+        if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_S))
+            if (cartridge.selected_index == cartridge.select_begin){
+                cartridge.select_begin = wrap(cartridge.select_begin, -IsKeyPressed(KEY_W),
                      0, (int)(cartridge.select_files.size()-1));
-                end = wrap(end, -IsKeyPressed(KEY_UP),
+                cartridge.select_end = wrap(cartridge.select_end , -IsKeyPressed(KEY_W),
                      0, (int)(cartridge.select_files.size()-1));
-            } else if (cartridge.selected_index == end){
-                begin = wrap(begin, IsKeyPressed(KEY_DOWN),
+            } else if (cartridge.selected_index == cartridge.select_end ){
+                cartridge.select_begin = wrap(cartridge.select_begin, IsKeyPressed(KEY_S),
                              0, (int)(cartridge.select_files.size()-1));
-                end = wrap(end, IsKeyPressed(KEY_DOWN),
+                cartridge.select_end  = wrap(cartridge.select_end , IsKeyPressed(KEY_S),
                            0, (int)(cartridge.select_files.size()-1));
             }
         cartridge.selected_index =
-                wrap(cartridge.selected_index, -IsKeyPressed(KEY_UP) + IsKeyPressed(KEY_DOWN),
+                wrap(cartridge.selected_index, -IsKeyPressed(KEY_W) + IsKeyPressed(KEY_S),
                      0, (int)(cartridge.select_files.size()-1));
         if (IsKeyPressed(KEY_ENTER)){
             cartridge.read(cartridge.selected_files_path + cartridge.select_files[cartridge.selected_index]);

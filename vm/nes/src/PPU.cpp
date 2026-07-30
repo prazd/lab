@@ -335,7 +335,8 @@ void PPU::draw_pixel(Bus &bus) {
     } else if (bg_data != 0 && sprite_data == 0)
         res = bg_data;
     else if (bg_data != 0 && sprite_data != 0) { // zero hit
-        if (oam_index == 0 && bus.ppumask & 0x10 && bus.ppumask & 0x8 && ((current_x & 0xff) != 0xff) && !(bus.ppustatus & (0x80)) && !(bus.ppustatus & 0x40)){
+        // TODO: debug
+        if ((oam_index == 0 || oam_index == 1) && bus.ppumask & 0x10 && bus.ppumask & 0x8 && ((current_x & 0xff) != 0xff) && !(bus.ppustatus & (0x80)) && !(bus.ppustatus & 0x40)){
             bus.ppustatus |= (1 << 6);
         }
         res = (!is_bg_prio && (bus.ppumask & 0x10)) ? (is_sprite = true, sprite_data) : bg_data;

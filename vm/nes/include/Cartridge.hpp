@@ -59,6 +59,10 @@ struct Cartridge {
     std::string save_path = "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/sav/";
     std::string selected_files_path = "/Users/prazd/Desktop/dev/";
     std::vector<std::string> select_files{};
+    static constexpr size_t select_view_count = 10;
+    int select_begin = 0;
+    int select_end = select_view_count-1;
+
     bool selected = false;
     int selected_index = 0;
 

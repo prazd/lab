@@ -193,6 +193,15 @@ struct PatternTableView: DebugWindowWithTexture<x, y, w, h, t_w + (t_w / 8), t_h
 template <size_t x, size_t y, size_t w, size_t h, size_t t_w = (256 * 2) + 1, size_t t_h = (240 * 2) + 1>
 struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     using DW = DebugWindowWithTexture<x, y, w, h, t_w, t_h>;
+
+    static inline size_t lines_h[32]{};
+    static inline size_t lines_y1{};
+    static inline size_t lines_y2{};
+
+    static inline size_t lines_v[30]{};
+    static inline size_t lines_x1{};
+    static inline size_t lines_x2{};
+
     using TileRow = std::array<Color, 8>;
     enum PatternTable{
         PT0,
@@ -247,17 +256,24 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                         auto shift_y = (y_tile_n/2) % 2;
                         auto shift_x = (x_tile_n/2) % 2;
                         auto attrib_value = (val >> (2 * ((shift_y * 2) + shift_x))) & 0x3;
-                        for (int k = 0; k < 8; ++k){
-                            auto res = ((((h_tile >> 7) & 1) << 1) | (l_tile >> 7) & 1);
-                            h_tile <<= 1;
-                            l_tile <<= 1;
-                            auto attrib_high_bit = (attrib_value >> 1) & 1;
-                            auto attrib_low_bit = attrib_value & 1;
-                            unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
-                            unsigned short r_index =  constants::IMAGE_PALETTE_BEGIN;
-                            r_index += ((res != 0) * index);
-                            auto pixel_index = bus.ppu_map[r_index];
-                            DW::buffer[current++] = ppu.palette[pixel_index];
+                        if (show_screen && is_in_screen(i, current_nt_y))
+                        {
+                            for (int k = 0; k < 8; ++k){
+                                DW::buffer[current++] = GREEN;
+                            }
+                        } else {
+                            for (int k = 0; k < 8; ++k) {
+                                auto res = ((((h_tile >> 7) & 1) << 1) | (l_tile >> 7) & 1);
+                                h_tile <<= 1;
+                                l_tile <<= 1;
+                                auto attrib_high_bit = (attrib_value >> 1) & 1;
+                                auto attrib_low_bit = attrib_value & 1;
+                                unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
+                                unsigned short r_index = constants::IMAGE_PALETTE_BEGIN;
+                                r_index += ((res != 0) * index);
+                                auto pixel_index = bus.ppu_map[r_index];
+                                DW::buffer[current++] = ppu.palette[pixel_index];
+                            }
                         }
                     }
                     --current_nt;
@@ -266,35 +282,33 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
         }
     }
 
+    static void sync_screen_pos(Bus& bus){
+        size_t start_nt = ((bus.start_v_value >> 10) & 0x3);
+        lines_x1 = (((bus.start_v_value & 0x1f) + (start_nt == 1 || start_nt == 3) * 31)) % 64;
+        lines_y1 = (((bus.start_v_value >> 5) & 0x1f) + (start_nt == 2 || start_nt == 3) * 29) % 60;
+        lines_x2 = (lines_x1 + 31) % 64;
+        lines_y2 = (lines_y1 + 29) % 60;
+
+        for (size_t i = 0; i < 32; ++i)
+            lines_h[i] = (i + lines_x1) % 64;
+
+        for (size_t i = 0; i < 30; ++i)
+            lines_v[i] = (i + lines_y1) % 60;
+    }
+
+    static bool is_in_screen(size_t s_x, size_t s_y){
+        return
+        std::any_of(std::begin(lines_h), std::end(lines_h), [s_x, s_y](auto el){
+            return el == s_x && (s_y == lines_y1 || s_y == lines_y2);
+        }) ||
+        std::any_of(std::begin(lines_v), std::end(lines_v), [s_x, s_y](auto el){
+            return el == s_y && (s_x == lines_x1 || s_x == lines_x2);
+        });
+    }
+
     void draw_tbpp(Bus& bus, PPU& ppu){
         size_t current = 0;
         size_t current_nt = 0;
-
-        static size_t screen_x[4]{};
-        static size_t screen_y[4]{};
-
-        size_t start_nt = ((bus.start_v_value >> 10) & 0x3);
-        screen_x[0] = (((bus.start_v_value & 0x1f) + (start_nt == 1 || start_nt == 3) * 32)) % 64;
-        screen_y[0] = (((bus.start_v_value >> 5) & 0x1f) + (start_nt == 2 || start_nt == 3) * 30) % 60;
-
-        screen_x[1] = (screen_x[0] + 32) % 64;
-        screen_y[1] = screen_y[0];
-
-        screen_x[2] = screen_x[0];
-        screen_y[2] = (screen_y[0] + 30) % 60;
-
-        screen_x[3] = (screen_x[0] + 32) % 64;
-        screen_y[3]= (screen_y[0] + 30) % 60;
-
-        auto is_in_screen = [](size_t s_x, size_t s_y){
-            for (int sc = 0; sc < 4; ++sc){
-                if (s_x == screen_x[sc] && s_y == screen_y[sc]){
-                    return true;
-                }
-            }
-            return false;
-        };
-
         for (int s = 0; s < 61; ++s){
             if (s == 30){
                 for (int i = 0; i < 64; ++i) {
@@ -335,6 +349,7 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
     }
 
     void handle(PPU& ppu, Bus& bus){
+        sync_screen_pos(bus);
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_M))
             show_screen = !show_screen;
         if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyPressed(KEY_ONE))
