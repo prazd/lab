@@ -1233,6 +1233,7 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
                    << "  MapperNum:" << std::dec << c.mapper_num << '\n'
                    << "  CHR_ROM_SZ:" << std::dec << c.chr_rom_sz << '\n'
                    << "  PRG_ROM_SZ:" << std::dec << c.prg_rom_sz << '\n'
+                   << "  CHR RAM:"  << bus.mapper.is_chr_ram << '\n'
                    << "  Battery:" << c.is_battery << '\n'
                    << " Is alternative nt:" << c.is_alternative_nametable << '\n'
                    << " Is horizontal arrangement:" << c.is_horizontal_arrangement << '\n';

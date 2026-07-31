@@ -214,7 +214,7 @@ void Bus::inc_ppu_v_y() {
     if (y_fine_add_prev == 7){
         auto y_coarse_val = ((ppu_v >> 5) & 0x1f); // todo: check
         if (y_coarse_val == 29) {
-            ppu_v = 0;
+            ppu_v &= 0x0800;
             ppu_v ^= 0x800;
         } else if (y_coarse_val == 31) {
             ppu_v = 0;

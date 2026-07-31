@@ -222,7 +222,7 @@ namespace mappers {
         //  PPU $1000-$1FFF: 4 KB switchable CHR bank
         unsigned char mmc1_sr = 0x10;       // 5 bit
         unsigned char load_register = 0;    // $8000-$FFFF
-        unsigned char control_register = 0; // $8000-$9FFF
+        unsigned char control_register = 0xc; // $8000-$9FFF
         unsigned char chr_bank0 = 0;        // $A000-$BFFF
         unsigned char chr_bank1 = 0;        // $C000-$DFFF
         unsigned char prg_bank = 0;         // $E000-$FFFF
@@ -283,6 +283,11 @@ namespace mappers {
             if (!(control_register & 0x10)) return rom[((chr_bank0 & 0xfe) * 0x1000) + addr];
             bool b0 = (addr >= 0 && addr <= 0x0fff);
             return rom[((b0 ? chr_bank0 : chr_bank1) * 0x1000) + (addr - (b0 ? 0 : 0x1000))];
+        }
+        inline void reset(){
+            // TODO: check
+            mmc1_sr = 0x10;
+            control_register = 0xc;
         }
     };
 }
@@ -456,6 +461,8 @@ struct Mapper {
     inline void reset(){
         if (mtype == MMC3){
             mmc3.reset();
+        } else if (mtype == MMC1){
+            mmc1.reset();
         }
     }
     inline void tick(){
