@@ -271,7 +271,7 @@ inline void patch_sym_runtime(char* base, const char* s, size_t slide, void* new
 
     for (int i = 0; i < entries; ++i){
         auto s_index = *(dysym_begin + got->reserved1 + i);
-        if (s_index == INDIRECT_SYMBOL_LOCAL || s_index == INDIRECT_SYMBOL_ABS) continue;
+        if (s_index & INDIRECT_SYMBOL_LOCAL || s_index & INDIRECT_SYMBOL_ABS) continue;
         auto cur_n64 = ((nlist64*)(get_addr_linkedit(lc_symtab_seg->symoff))) + s_index;
         auto cur_str = (get_addr_linkedit(lc_symtab_seg->stroff)) + cur_n64->n_strx;
         if (!strcmp(cur_str, s)){

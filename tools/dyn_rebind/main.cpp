@@ -8,7 +8,7 @@
 #include <filesystem>
 #define LOG 1
 #include "Rebind.hpp"
-#define REBIND_CALL 1
+#define REBIND_CALL 0
 
 #if 0
 void* operator new(size_t n){
