@@ -10,13 +10,13 @@ struct Envelope {
     bool is_volume_const = false;
     unsigned char volume_const_val = 0;
     bool is_infinite_play = false;
-    inline void update_envelope(Bus& bus, unsigned char val){
+    inline void update_envelope(unsigned char val){
         is_volume_const = val & 0x10;
         volume_const_val = val & 0xf;
         is_infinite_play = val & 0x20;
         prev_divider = val & 0xf;
     }
-    inline unsigned char get_volume(Bus& bus) const{
+    inline unsigned char get_volume() const{
         return is_volume_const ? volume_const_val : decay_lvl;
     }
 //    https://www.nesdev.org/wiki/APU_Envelope
@@ -86,7 +86,9 @@ struct PulseChan : Channel, Envelope {
 
     inline void update_lc_and_timer(Bus& bus){
         length_counter = Bus::length_table[((bus.unsafe_read_prg(timer_h) >> 3) & 0x1f)];
+        // TODO: check
         update_timer(bus.unsafe_read_prg(timer_l), bus.unsafe_read_prg(timer_h));
+        current_duty_step = 0;
     }
 
     inline unsigned char get_duty_cycle(Bus& bus) const {
@@ -103,7 +105,7 @@ struct PulseChan : Channel, Envelope {
     inline unsigned char get_dac(Bus& bus) const {
         // TODO: check
         if (length_counter && timer >= 8 && sweep_target_period <= 0x7ff && get_duty_value(bus))
-            return  get_volume(bus) & 0xf;
+            return  get_volume();
         return 0;
     }
 };
@@ -133,7 +135,7 @@ struct NoiseChan : Channel, Envelope {
     inline unsigned char get_dac(Bus& bus) const {
         // TODO: check
         if (length_counter && !(shift_reg & 1))
-            return get_volume(bus) & 0xf;
+            return get_volume();
         return 0;
     }
 };
@@ -141,6 +143,7 @@ struct NoiseChan : Channel, Envelope {
 struct TriangleChan : Channel{
     unsigned char next_linear_counter{};
     unsigned char linear_counter{};
+    bool control_flag = false;
     bool linear_counter_reload = false;
     static constexpr unsigned char seq[32]{
         15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,
@@ -159,8 +162,7 @@ struct TriangleChan : Channel{
         update_timer(bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_LOW), bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH));
     }
     unsigned char get_dac(){
-        // TODO: check
-        if (length_counter)
+        if (length_counter && linear_counter)
             return seq[current_seq_i];
         return 0;
     }

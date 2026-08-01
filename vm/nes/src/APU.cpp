@@ -60,9 +60,9 @@ void APU::frame_counter_quarter_update(Bus& bus) {
 
     if (triangle_ch.linear_counter_reload){
         triangle_ch.linear_counter = triangle_ch.next_linear_counter & 0x7f;
-        if (!(triangle_ch.linear_counter & 0x80)) triangle_ch.linear_counter_reload = false;
-    }
-    if (triangle_ch.linear_counter) --triangle_ch.linear_counter;
+        triangle_ch.control_flag = triangle_ch.next_linear_counter & 0x80;
+        triangle_ch.linear_counter_reload = triangle_ch.control_flag;
+    } else if (triangle_ch.linear_counter) --triangle_ch.linear_counter;
 }
 
 void APU::frame_counter_half_update(Bus& bus) {
@@ -81,7 +81,7 @@ void APU::frame_counter_half_update(Bus& bus) {
     if (noise_ch.length_counter && !noise_ch.is_infinite_play)
         --noise_ch.length_counter;
 
-    if (triangle_ch.length_counter && !(triangle_ch.linear_counter & 0x80))
+    if (triangle_ch.length_counter && !triangle_ch.control_flag)
         --triangle_ch.length_counter;
 }
 
@@ -127,7 +127,11 @@ float APU::gen_sample(Bus& bus) {
 #endif
     auto pulse_res = 95.88f/((8128.f/(ch1+ch2)) + 100.f);
     auto tnd_res = 159.79f/((1.f/((triangle/8227.f) + (noise/12241.f) + dmc/22638.f)) + 100.f); // TODO: debug
+#if 0
     return low_pass_filter<14'000>(high_pass_filter<440>(high_pass_filter<90>(pulse_res + tnd_res)));
+#else
+    return pulse_res + tnd_res;
+#endif
 }
 
 void APU::update_control(Bus& bus){
@@ -168,29 +172,33 @@ void APU::tick(Bus& bus) {
     }
 
     if (bus.apu_pulse1_envelope_update){
-        pulse_ch1.update_envelope(bus, bus.unsafe_read_prg(constants::PULSE1_DUTY_ENVELOPE));
+        pulse_ch1.update_envelope(bus.unsafe_read_prg(constants::PULSE1_DUTY_ENVELOPE));
         bus.apu_pulse1_envelope_update = false;
     }
 
     if (bus.apu_pulse2_envelope_update){
-        pulse_ch2.update_envelope(bus, bus.unsafe_read_prg(constants::PULSE2_DUTY_ENVELOPE));
+        pulse_ch2.update_envelope(bus.unsafe_read_prg(constants::PULSE2_DUTY_ENVELOPE));
         bus.apu_pulse2_envelope_update = false;
     }
 
     if (bus.apu_noise_envelope_update){
-        noise_ch.update_envelope(bus, bus.unsafe_read_prg(constants::NOISE_CHAN_ENVELOPE));
+        noise_ch.update_envelope(bus.unsafe_read_prg(constants::NOISE_CHAN_ENVELOPE));
         bus.apu_noise_envelope_update = false;
     }
 
     if (bus.apu_pulse1_timer_update){
-        if (bus.apu_is_enable(Bus::Pulse1))
+        if (bus.apu_is_enable(Bus::Pulse1)){
             pulse_ch1.update_lc_and_timer(bus);
+            bus.apu_pulse1_start_flag = true; // TODO: check
+        }
         bus.apu_pulse1_timer_update = false;
     }
 
     if (bus.apu_pulse2_timer_update){
-        if (bus.apu_is_enable(Bus::Pulse2))
+        if (bus.apu_is_enable(Bus::Pulse2)){
             pulse_ch2.update_lc_and_timer(bus);
+            bus.apu_pulse2_start_flag = true; // TODO: check
+        }
         bus.apu_pulse2_timer_update = false;
     }
 
