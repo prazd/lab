@@ -23,6 +23,12 @@ sys_getpid(void)
 }
 
 uint64
+sys_getmem(void)
+{
+  return pgcount() * PGSIZE;
+}
+
+uint64
 sys_fork(void)
 {
   return kfork();
