@@ -35,9 +35,10 @@ struct Envelope {
 
 struct Channel {
     unsigned short timer{};
+    unsigned short timer_period{};
     unsigned char length_counter{};
-    inline void update_timer(unsigned char l, unsigned char h){
-        timer = (((h & 0x7) << 8) | l);
+    inline void set_timer_period(unsigned char l, unsigned char h){
+        timer_period = (((h & 0x7) << 8) | l);
     }
 };
 
@@ -64,15 +65,27 @@ struct PulseChan : Channel, Envelope {
         sweep_reset = true;
     }
 
+    inline void update_sweep_target_period(){
+        sweep_delta = timer_period >> sweep_shift;
+        int res = 0;
+        if constexpr (timer_l == constants::PULSE1_TIMER_LOW) {
+            res = sweep_is_neg ? std::max(timer_period - sweep_delta - 1, 0) : timer_period + sweep_delta;
+        } else {
+            res = sweep_is_neg ? std::max(timer_period - sweep_delta, 0) : timer_period + sweep_delta;
+        }
+        sweep_target_period = (unsigned short)res;
+    }
+
+    inline void update_timer_period(Bus& bus){
+        set_timer_period(bus.unsafe_read_prg(timer_l), bus.unsafe_read_prg(timer_h));
+    }
+
     inline void sweep_update_timer(){
         sweep_reset = false;
         sweep_counter = sweep_period;
-        sweep_delta = timer >> sweep_shift;
-        // TODO: check + pulse1/pulse2 update
-        int res = sweep_is_neg ? std::max(timer - sweep_delta, 0) : timer + sweep_delta;
-        sweep_target_period = (unsigned short)res;
-        if (timer >= 8 && sweep_target_period <= 0x7ff && sweep_enable && sweep_shift)
-            timer = sweep_target_period;
+        update_sweep_target_period();
+        if (sweep_target_period <= 0x7ff && sweep_enable && sweep_shift)
+            timer_period = sweep_target_period;
     }
 
     unsigned char current_duty_step{};
@@ -80,15 +93,16 @@ struct PulseChan : Channel, Envelope {
         --timer;
         if (!timer){
             current_duty_step = !current_duty_step ? 7 : current_duty_step - 1;
-            update_timer(bus.unsafe_read_prg(timer_l), bus.unsafe_read_prg(timer_h));
+            timer = timer_period;
         }
     }
 
     inline void update_lc_and_timer(Bus& bus){
         length_counter = Bus::length_table[((bus.unsafe_read_prg(timer_h) >> 3) & 0x1f)];
-        // TODO: check
-        update_timer(bus.unsafe_read_prg(timer_l), bus.unsafe_read_prg(timer_h));
+        update_timer_period(bus);
         current_duty_step = 0;
+        // TODO: check
+        update_sweep_target_period();
     }
 
     inline unsigned char get_duty_cycle(Bus& bus) const {
@@ -104,7 +118,7 @@ struct PulseChan : Channel, Envelope {
     }
     inline unsigned char get_dac(Bus& bus) const {
         // TODO: check
-        if (length_counter && timer >= 8 && sweep_target_period <= 0x7ff && get_duty_value(bus))
+        if (length_counter && timer_period >= 8 && sweep_target_period <= 0x7ff && get_duty_value(bus))
             return  get_volume();
         return 0;
     }
@@ -125,12 +139,11 @@ struct NoiseChan : Channel, Envelope {
             bool feedback = (shift_reg & 1) ^ (mode ? (!!(shift_reg & 0x40)) : (!!(shift_reg & 0x2)));
             shift_reg >>= 1;
             shift_reg |= (feedback << 14);
-            timer = period[(loop & 0xf)];
+            timer = timer_period;
         }
     }
-    inline void update_lc_and_timer(Bus& bus){
+    inline void update_lc(Bus& bus){
         length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::NOISE_CHAN_LENGTH_COUNTER) >> 3) & 0x1f)];
-        timer = period[(loop & 0xf)]; // TODO: check
     }
     inline unsigned char get_dac(Bus& bus) const {
         // TODO: check
@@ -154,12 +167,11 @@ struct TriangleChan : Channel{
         --timer;
         if (!timer){
             if (linear_counter) current_seq_i = (current_seq_i + 1) & 0x1f;
-            update_timer(bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_LOW), bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH));
+            timer = timer_period;
         }
     }
-    inline void update_lc_and_timer(Bus& bus){
+    inline void update_lc(Bus& bus){
         length_counter = Bus::length_table[((bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH) >> 3) & 0x1f)];
-        update_timer(bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_LOW), bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH));
     }
     unsigned char get_dac(){
         if (length_counter && linear_counter)

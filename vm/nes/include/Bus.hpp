@@ -143,11 +143,13 @@ struct Bus {
     unsigned char apu_control = 0;
     bool apu_clear_frame_irq_req = false;
 
+    bool apu_pulse1_timer_and_lc_update = false;
     bool apu_pulse1_timer_update = false;
     bool apu_pulse1_sweep_update = false;
     bool apu_pulse1_envelope_update = false;
     bool apu_pulse1_start_flag = false;
 
+    bool apu_pulse2_timer_and_lc_update = false;
     bool apu_pulse2_timer_update = false;
     bool apu_pulse2_sweep_update = false;
     bool apu_pulse2_envelope_update = false;
@@ -155,9 +157,10 @@ struct Bus {
 
     bool apu_noise_start_flag = false;
     bool apu_noise_envelope_update = false;
-    bool apu_noise_timer_update = false;
+    bool apu_noise_length_counter = false;
 
-    bool apu_triangle_timer_update = false;
+    bool apu_triangle_length_counter = false;
+    bool apu_triangle_timer_period = false;
     bool apu_triangle_linear_counter_update = false;
 
     bool apu_noise_chan_loop_update = false;

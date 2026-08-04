@@ -1798,13 +1798,16 @@ struct InstructionFinder: DebugWindowText<x, y, w, h> {
 template <size_t x, size_t y, size_t w, size_t h>
 struct APUView: DebugWindowText<x, y, w, h> {
     using DW = DebugWindowText<x, y, w, h>;
-    Rectangle active_buttons[5]{
+    Rectangle active_chan_buttons[5]{
             {DW::rec.x, DW::rec.y + DW::rec.height, 30, 30},
             {DW::rec.x + 30, DW::rec.y + DW::rec.height, 30, 30},
             {DW::rec.x + 60, DW::rec.y + DW::rec.height, 30, 30},
             {DW::rec.x + 90, DW::rec.y + DW::rec.height, 30, 30},
             {DW::rec.x + 120, DW::rec.y + DW::rec.height, 30, 30}
     };
+    Rectangle active_sound_button = {DW::rec.x + 150, DW::rec.y + DW::rec.height, 30, 30};
+    bool active_sound = true;
+
     Rectangle info_buttons[5]{
             {DW::rec.x - 30, DW::rec.y, 30, 30},
             {DW::rec.x - 30, DW::rec.y + 30, 30, 30},
@@ -1825,8 +1828,12 @@ struct APUView: DebugWindowText<x, y, w, h> {
     std::stringstream  ss;
 
     void handle(Bus& bus, APU& apu){
-        for (size_t i = 0, e = std::size(active_buttons); i != e; ++i){
-            if (CheckCollisionPointRec(GetMousePosition(), active_buttons[i]) && IsMouseButtonPressed(0))
+        if (CheckCollisionPointRec(GetMousePosition(), active_sound_button) && IsMouseButtonPressed(0)){
+            active_sound = !active_sound;
+            apu.internal_enable = active_sound ? 0x1f : 0;
+        }
+        for (size_t i = 0, e = std::size(active_chan_buttons); i != e; ++i){
+            if (CheckCollisionPointRec(GetMousePosition(), active_chan_buttons[i]) && IsMouseButtonPressed(0))
                 apu.internal_enable ^= chans[i];
             if (CheckCollisionPointRec(GetMousePosition(), info_buttons[i]) && IsMouseButtonPressed(0))
                 info_mode = (InfoMode)i;
@@ -1870,11 +1877,12 @@ struct APUView: DebugWindowText<x, y, w, h> {
 
         auto s = ss.str();
         DrawText(s.c_str(), DW::rec.x, DW::rec.y, 13.f, BLACK);
-        DW::draw_text_button(active_buttons[0], " P1", apu.internal_enable & chans[0] ? GREEN : RED);
-        DW::draw_text_button(active_buttons[1], " P2", apu.internal_enable & chans[1] ? GREEN : RED);
-        DW::draw_text_button(active_buttons[2], " T", apu.internal_enable & chans[2] ? GREEN : RED);
-        DW::draw_text_button(active_buttons[3], " N", apu.internal_enable & chans[3] ? GREEN : RED);
-        DW::draw_text_button(active_buttons[4], " D", apu.internal_enable & chans[4] ? GREEN : RED);
+        DW::draw_text_button(active_chan_buttons[0], " P1", apu.internal_enable & chans[0] ? GREEN : RED);
+        DW::draw_text_button(active_chan_buttons[1], " P2", apu.internal_enable & chans[1] ? GREEN : RED);
+        DW::draw_text_button(active_chan_buttons[2], " T", apu.internal_enable & chans[2] ? GREEN : RED);
+        DW::draw_text_button(active_chan_buttons[3], " N", apu.internal_enable & chans[3] ? GREEN : RED);
+        DW::draw_text_button(active_chan_buttons[4], " D", apu.internal_enable & chans[4] ? GREEN : RED);
+        DW::draw_text_button(active_sound_button, " ON", active_sound ? GREEN : RED);
 
         DW::draw_text_button(info_buttons[0], " P1", info_mode == P1 ? GREEN : BLACK);
         DW::draw_text_button(info_buttons[1], " P2", info_mode == P2 ? GREEN : BLACK);

@@ -103,22 +103,29 @@ void Bus::write(unsigned short addr, unsigned char value) {
             apu_enable_handle();
             return;}
     }
-    if (addr == constants::PULSE1_DUTY_ENVELOPE){
+    if (addr == constants::PULSE1_DUTY_ENVELOPE) {
         apu_pulse1_envelope_update = true;
+    } else if (addr == constants::PULSE1_TIMER_LOW){
+        apu_pulse1_timer_update = true;
     } else if (addr == constants::PULSE1_TIMER_HIGH){
         apu_pulse1_start_flag = true;
-        apu_pulse1_timer_update = true;
+        apu_pulse1_timer_and_lc_update = true;
     } else if (addr == constants::PULSE1_SWEEP){
         apu_pulse1_sweep_update = true;
-    } else if (addr == constants::PULSE2_DUTY_ENVELOPE){
+    } else if (addr == constants::PULSE2_DUTY_ENVELOPE) {
         apu_pulse2_envelope_update = true;
+    } else if (addr == constants::PULSE2_TIMER_LOW) {
+        apu_pulse2_timer_update = true;
     } else if (addr == constants::PULSE2_TIMER_HIGH){
         apu_pulse2_start_flag = true;
-        apu_pulse2_timer_update = true;
+        apu_pulse2_timer_and_lc_update = true;
     } else if (addr == constants::PULSE2_SWEEP){
         apu_pulse2_sweep_update = true;
-    } else if (addr == constants::TRIANGLE_CHAN_TIMER_HIGH){
-        apu_triangle_timer_update = true;
+    } else if (addr == constants::TRIANGLE_CHAN_TIMER_HIGH) {
+        apu_triangle_length_counter = true;
+        apu_triangle_timer_period = true;
+    } else if (addr == constants::TRIANGLE_CHAN_TIMER_LOW) {
+        apu_triangle_timer_period = true;
     } else if (addr == constants::TRIANGLE_CHAN_LINEAR_COUNTER){
         apu_triangle_linear_counter_update = true;
     } else if (addr == constants::NOISE_CHAN_LOOP){
@@ -127,7 +134,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
         apu_noise_envelope_update = true;
     } else if (addr == constants::NOISE_CHAN_LENGTH_COUNTER){
         apu_noise_start_flag = true;
-        apu_noise_timer_update = true;
+        apu_noise_length_counter = true;
     } else if (addr == constants::DMC_CHAN_SAMPLE_ADDRESS) {
         apu_dmc_dma_address_update = true;
     }

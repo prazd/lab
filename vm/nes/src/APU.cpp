@@ -127,7 +127,7 @@ float APU::gen_sample(Bus& bus) {
 #endif
     auto pulse_res = 95.88f/((8128.f/(ch1+ch2)) + 100.f);
     auto tnd_res = 159.79f/((1.f/((triangle/8227.f) + (noise/12241.f) + dmc/22638.f)) + 100.f); // TODO: debug
-#if 0
+#if 1
     return low_pass_filter<14'000>(high_pass_filter<440>(high_pass_filter<90>(pulse_res + tnd_res)));
 #else
     return pulse_res + tnd_res;
@@ -186,33 +186,49 @@ void APU::tick(Bus& bus) {
         bus.apu_noise_envelope_update = false;
     }
 
-    if (bus.apu_pulse1_timer_update){
+    if (bus.apu_pulse1_timer_and_lc_update){
         if (bus.apu_is_enable(Bus::Pulse1)){
             pulse_ch1.update_lc_and_timer(bus);
             bus.apu_pulse1_start_flag = true; // TODO: check
         }
+        bus.apu_pulse1_timer_and_lc_update = false;
+    }
+
+    if (bus.apu_pulse1_timer_update) {
+        pulse_ch1.update_timer_period(bus);
         bus.apu_pulse1_timer_update = false;
     }
 
-    if (bus.apu_pulse2_timer_update){
+    if (bus.apu_pulse2_timer_and_lc_update){
         if (bus.apu_is_enable(Bus::Pulse2)){
             pulse_ch2.update_lc_and_timer(bus);
             bus.apu_pulse2_start_flag = true; // TODO: check
         }
+        bus.apu_pulse2_timer_and_lc_update = false;
+    }
+
+    if (bus.apu_pulse2_timer_update) {
+        pulse_ch2.update_timer_period(bus);
         bus.apu_pulse2_timer_update = false;
     }
 
-    if (bus.apu_triangle_timer_update){
-        if (bus.apu_is_enable(Bus::Triangle))
-            triangle_ch.update_lc_and_timer(bus);
+    if (bus.apu_triangle_length_counter){
+        if (bus.apu_is_enable(Bus::Triangle)){
+            triangle_ch.update_lc(bus);
+        }
         triangle_ch.linear_counter_reload = true;
-        bus.apu_triangle_timer_update = false;
+        bus.apu_triangle_length_counter = false;
     }
 
-    if (bus.apu_noise_timer_update){
+    if (bus.apu_triangle_timer_period) {
+        triangle_ch.set_timer_period(bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_LOW), bus.unsafe_read_prg(constants::TRIANGLE_CHAN_TIMER_HIGH));
+        bus.apu_triangle_timer_period = false;
+    }
+
+    if (bus.apu_noise_length_counter){
         if (bus.apu_is_enable(Bus::Noise))
-            noise_ch.update_lc_and_timer(bus);
-        bus.apu_noise_timer_update = false;
+            noise_ch.update_lc(bus);
+        bus.apu_noise_length_counter = false;
     }
 
     if (bus.apu_triangle_linear_counter_update){
@@ -220,11 +236,10 @@ void APU::tick(Bus& bus) {
         bus.apu_triangle_linear_counter_update = false;
     }
 
-
     if (bus.apu_noise_chan_loop_update){
         noise_ch.loop = bus.unsafe_read_prg(constants::NOISE_CHAN_LOOP);
         noise_ch.mode = noise_ch.loop & 0x80;
-        noise_ch.timer = noise_ch.period[(noise_ch.loop & 0xf)];
+        noise_ch.timer_period = noise_ch.period[(noise_ch.loop & 0xf)];
         bus.apu_noise_chan_loop_update = false;
     }
 
