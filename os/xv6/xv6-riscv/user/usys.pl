@@ -40,6 +40,7 @@ entry("chdir");
 entry("dup");
 entry("getpid");
 entry("getmem");
+entry("dtbs");
 entry("sbrk");
 entry("pause");
 entry("uptime");

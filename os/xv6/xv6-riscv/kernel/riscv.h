@@ -24,6 +24,14 @@ r_mstatus()
   return x;
 }
 
+static inline uint64
+r_dtbaddr()
+{
+  uint64 x;
+  asm volatile("mv %0, a1" : "=r"(x));
+  return x;
+}
+
 static inline void
 w_mstatus(uint64 x)
 {

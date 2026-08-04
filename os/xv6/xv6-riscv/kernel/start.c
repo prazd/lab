@@ -2,7 +2,7 @@
 #include "param.h"
 #include "memlayout.h"
 #include "riscv.h"
-#include "defs.h"
+#include "DTB.h"
 
 void main();
 void timerinit();
@@ -14,6 +14,8 @@ __attribute__((aligned(16))) char stack0[4096 * NCPU];
 void
 start()
 {
+  DTB_ADDRESS = r_dtbaddr();
+  set_dtb_header();
   // set M Previous Privilege mode to Supervisor, for mret.
   unsigned long x = r_mstatus();
   x &= ~MSTATUS_MPP_MASK;

@@ -1,3 +1,4 @@
+#include "kernel/DTB.h"
 #define SBRK_ERROR ((char *)-1)
 
 struct stat;
@@ -26,6 +27,7 @@ int pause(int);
 int uptime(void);
 int sync(void);
 uint64 getmem(void);
+uint64 dtbs(void);
 
 // ulib.c
 int stat(const char *, struct stat *);

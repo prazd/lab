@@ -61,6 +61,7 @@ void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
 uint64          pgcount(void);
+void*           pabegin(void);
 
 // log.c
 void            initlog(int, struct superblock*);
@@ -181,6 +182,8 @@ void            plic_complete(int);
 void            virtio_disk_init(void);
 void            virtio_disk_rw(struct buf *, int);
 void            virtio_disk_intr(void);
+
+uint64          get_dtb_start(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x) / sizeof((x)[0]))

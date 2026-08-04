@@ -4,6 +4,7 @@
 #include "param.h"
 #include "memlayout.h"
 #include "spinlock.h"
+#include "DTB.h"
 #include "proc.h"
 #include "vm.h"
 
@@ -26,6 +27,12 @@ uint64
 sys_getmem(void)
 {
   return pgcount() * PGSIZE;
+}
+
+uint64
+sys_dtbs(void)
+{
+  return get_dtb_start();
 }
 
 uint64
