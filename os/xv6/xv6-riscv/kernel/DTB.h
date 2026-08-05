@@ -21,9 +21,10 @@ enum DTBToken {
 };
 extern uint64 DTB_ADDRESS;
 extern struct DTBHeader dtb_header;
-extern uint64 TMP;
+extern uint64 ADDRBEGIN;
+extern uint64 ADDREND;
 
-inline unsigned to_little_endian(unsigned val) {
+inline unsigned to_little_endian32(unsigned val) {
   unsigned res = 0;
   unsigned char* r_ptr = (unsigned char*)&res;
   unsigned char* val_ptr = (unsigned char*)&val;
@@ -31,6 +32,21 @@ inline unsigned to_little_endian(unsigned val) {
   r_ptr[1] = val_ptr[2];
   r_ptr[2] = val_ptr[1];
   r_ptr[3] = val_ptr[0];
+  return res;
+}
+
+inline unsigned to_little_endian64(unsigned long val) {
+  unsigned long res = 0;
+  unsigned char* r_ptr = (unsigned char*)&res;
+  unsigned char* val_ptr = (unsigned char*)&val;
+  r_ptr[0] = val_ptr[7];
+  r_ptr[1] = val_ptr[6];
+  r_ptr[2] = val_ptr[5];
+  r_ptr[3] = val_ptr[4];
+  r_ptr[4] = val_ptr[3];
+  r_ptr[5] = val_ptr[2];
+  r_ptr[6] = val_ptr[1];
+  r_ptr[7] = val_ptr[0];
   return res;
 }
 
@@ -42,47 +58,53 @@ inline unsigned char cmp_str(const char* str1, const char* str2, int sz){
 }
 
 
-inline void parse_dtb(){
-  unsigned char* dt_struct_ptr = ((unsigned char*)DTB_ADDRESS) + to_little_endian(dtb_header.off_dt_struct);
-  unsigned* check = (unsigned*)dt_struct_ptr;
-  unsigned cur = to_little_endian(*check);
+static inline void parse_dtb(){
+  unsigned char* dt_struct_ptr = ((unsigned char*)DTB_ADDRESS) + to_little_endian32(dtb_header.off_dt_struct);
+  unsigned* dt_struct_u32_ptr = (unsigned*)dt_struct_ptr;
+  unsigned cur = to_little_endian32(*dt_struct_u32_ptr);
   unsigned char found = 0;
   while (cur != FDT_END){
-     if (cmp_str((char*)(check+1), "memory", 6)) {
+     if (cmp_str((char*)(dt_struct_u32_ptr+1), "memory", 6)) {
         found = 1;
         break;
      } else {
-        ++check;
-        while(to_little_endian(*check) != FDT_BEGIN_NODE) {
-          ++check;
-          if (to_little_endian(*check) == FDT_END) break;
+        ++dt_struct_u32_ptr;
+        while(to_little_endian32(*dt_struct_u32_ptr) != FDT_BEGIN_NODE) {
+          ++dt_struct_u32_ptr;
+          if (to_little_endian32(*dt_struct_u32_ptr) == FDT_END) break;
         }
-        cur = to_little_endian(*check);
+        cur = to_little_endian32(*dt_struct_u32_ptr);
      }
   }
 
+
+
   if (found){
-    char* dt_strings_ptr = ((char*)DTB_ADDRESS) + to_little_endian(dtb_header.off_dt_strings);
-//    unsigned char found_reg = 0;
-    check+=5; // memo'ry@8'0000'000(\0)'
+    const char* dt_strings_ptr = ((const char*)DTB_ADDRESS) + to_little_endian32(dtb_header.off_dt_strings);
+    dt_struct_u32_ptr+=5; // memo'ry@8'0000'000(\0)'
+    int reg_found = 0;
 //     FDT_PROP
 //     len
-    check+=2;
-// TODO: finish
-//    while(!found_reg){
-//      if (cmp_str(dt_strings_ptr + to_little_endian(*check), "reg", 3)){
-//        found_reg = 1;
-//        break;
-//      } else {
-//        while(to_little_endian(*check) != FDT_PROP){++check;}
-//        check+=2;
-//      }
-//    }
-    TMP = *((uint64*)(dt_strings_ptr + to_little_endian(*check)));
+    dt_struct_u32_ptr+=2;
+    while(to_little_endian32(*dt_struct_u32_ptr) != FDT_END) {
+      if (cmp_str(dt_strings_ptr + to_little_endian32(*dt_struct_u32_ptr), "reg", 3)) {
+        reg_found = 1;
+        break;
+      } else {
+        while(to_little_endian32(*dt_struct_u32_ptr) != FDT_PROP){++dt_struct_u32_ptr;}
+        dt_struct_u32_ptr+=2;
+      }
+    }
+    if (reg_found){
+      // 0x80000000
+      // 0x8000000
+      ADDRBEGIN = to_little_endian64(*(((uint64*)(dt_struct_u32_ptr+1))));
+      ADDREND = to_little_endian64(*(((uint64*)(dt_struct_u32_ptr+1)) + 1)) + ADDRBEGIN;
+    }
   }
 }
 
-inline void set_dtb_header(){
+static inline void set_dtb_header(){
   unsigned char* addr = (unsigned char*)DTB_ADDRESS;
   unsigned char* ptr = (unsigned char*)&dtb_header;
   for (int i = 0, e = sizeof(dtb_header); i != e; ++i)
@@ -91,7 +113,5 @@ inline void set_dtb_header(){
 }
 
 inline uint64 get_dtb_start() {
-//  unsigned char* dt_struct_ptr = ((unsigned char*)DTB_ADDRESS) + dtb_header.off_dt_struct;
-//  unsigned* check = (unsigned*)dt_struct_ptr;
-  return TMP;
+  return ADDRBEGIN;
 }
