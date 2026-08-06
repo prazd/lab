@@ -16,6 +16,8 @@ start()
 {
   DTB_ADDRESS = r_dtbaddr();
   set_dtb_header();
+  parse_dtb();
+  update_addr_range(ADDRBEGIN, ADDREND);
   // set M Previous Privilege mode to Supervisor, for mret.
   unsigned long x = r_mstatus();
   x &= ~MSTATUS_MPP_MASK;

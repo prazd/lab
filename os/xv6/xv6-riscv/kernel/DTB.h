@@ -96,10 +96,10 @@ static inline void parse_dtb(){
       }
     }
     if (reg_found){
-      // 0x80000000
-      // 0x8000000
+      // 0x80000000 - base
+      // 0x8000000 - sz
       ADDRBEGIN = to_little_endian64(*(((uint64*)(dt_struct_u32_ptr+1))));
-      ADDREND = to_little_endian64(*(((uint64*)(dt_struct_u32_ptr+1)) + 1)) + ADDRBEGIN;
+      ADDREND = ADDRBEGIN + to_little_endian64(*(((uint64*)(dt_struct_u32_ptr+1)) + 1));
     }
   }
 }
@@ -109,7 +109,6 @@ static inline void set_dtb_header(){
   unsigned char* ptr = (unsigned char*)&dtb_header;
   for (int i = 0, e = sizeof(dtb_header); i != e; ++i)
     *ptr++ = *addr++;
-  parse_dtb();
 }
 
 inline uint64 get_dtb_start() {

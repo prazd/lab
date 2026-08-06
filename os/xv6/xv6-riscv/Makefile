@@ -151,6 +151,7 @@ UPROGS=\
 	$U/_sync\
 	$U/_mem\
 	$U/_dtb_parse\
+	$U/_sbrk_test
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

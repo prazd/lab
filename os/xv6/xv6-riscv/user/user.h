@@ -28,6 +28,8 @@ int uptime(void);
 int sync(void);
 uint64 getmem(void);
 uint64 dtbs(void);
+uint64 getpsz(void);
+uint64 printptes(void);
 
 // ulib.c
 int stat(const char *, struct stat *);

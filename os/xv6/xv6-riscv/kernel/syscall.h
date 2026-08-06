@@ -22,4 +22,7 @@
 #define SYS_close  21
 #define SYS_sync   22
 #define SYS_getmem 23
-#define SYS_dtbs   24 // for debug
+// for debug
+#define SYS_dtbs   24
+#define SYS_getpsz 25
+#define SYS_printptes 26

@@ -36,6 +36,18 @@ sys_dtbs(void)
 }
 
 uint64
+sys_getpsz(void)
+{
+  return myproc()->sz;
+}
+
+uint64
+sys_printptes(void)
+{
+  return print_walk(myproc()->pagetable);
+}
+
+uint64
 sys_fork(void)
 {
   return kfork();

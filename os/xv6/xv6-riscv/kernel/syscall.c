@@ -105,6 +105,8 @@ extern uint64 sys_close(void);
 extern uint64 sys_sync(void);
 extern uint64 sys_getmem(void);
 extern uint64 sys_dtbs(void);
+extern uint64 sys_getpsz(void);
+extern uint64 sys_printptes(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -134,6 +136,8 @@ static uint64 (*syscalls[])(void) = {
   [SYS_sync]    sys_sync,
   [SYS_getmem]  sys_getmem,
   [SYS_dtbs]    sys_dtbs,
+  [SYS_getpsz]  sys_getpsz,
+  [SYS_printptes]  sys_printptes,
   // clang-format on
 };
 

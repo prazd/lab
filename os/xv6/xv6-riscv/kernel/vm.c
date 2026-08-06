@@ -115,6 +115,33 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
   return &pagetable[PX(0, va)];
 }
 
+// TODO: check
+uint64
+print_walk(pagetable_t pt2_base)
+{
+  for (int i = 0; i < 512; ++i) {
+    pte_t* pte2 = pt2_base + i;
+    if (*pte2) {
+      printk("PTE2[%d]: %p\n", i, (void*)(*pte2));
+      pagetable_t pt1_base = (pagetable_t)PTE2PA(*pte2);
+      for (int j = 0; j < 512; ++j) {
+        pte_t* pte1 = pt1_base + j;
+        if (*pte1) {
+          printk("PTE1[%d]: %p\n", j, (void*)(*pte1));
+          pagetable_t pt0_base = (pagetable_t)PTE2PA(*pte1);
+          for (int k = 0; k < 512; ++k) {
+            pte_t* pte0 = pt0_base + k;
+            if (*pte0) {
+              printk("PTE0[%d]: %p\n", k, (void*)(*pte0));
+            }
+          }
+        }
+      }
+    }
+  }
+  return 0;
+}
+
 // Look up a virtual address, return the physical address,
 // or 0 if not mapped.
 // Can only be used to look up user pages.
