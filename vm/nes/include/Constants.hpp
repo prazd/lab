@@ -20,7 +20,7 @@
 #endif
 
 #define HEX_COUT(val, n) std::hex << std::setw(n) << std::setfill('0') << val
-#define HEX_COUT_W2(val) HEX_COUT(val, 2)
+#define HEX_COUT_W2(val) HEX_COUT((int)val, 2)
 
 namespace constants {
     constexpr float WIDTH = 600.f;

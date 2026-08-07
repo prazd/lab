@@ -594,6 +594,6 @@ int main(){
 // /Users/prazd/Desktop/dev/FinalFantasy.nes - debug
 
 // TODO: AccuracyCoin (APU reg activation debug)
-    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); //
+    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // 929a
 #endif
 }

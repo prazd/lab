@@ -692,11 +692,11 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         // trigger search
         } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             unsigned short addr = DW::hex_to_ushort(u_input.s, 16);
-            bus.adjust_cpu_mirroring(addr);
+            bus.adjust_cpu_mirroring_unsafe(addr);
             bus.cpu_trigger_write_addresses[addr] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             unsigned short addr = DW::hex_to_ushort(u_input.s, 16);
-            bus.adjust_cpu_mirroring(addr);
+            bus.adjust_cpu_mirroring_unsafe(addr);
             bus.cpu_trigger_read_addresses[addr] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button7) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             bus.cpu_trigger_read_addresses = 0;
@@ -728,11 +728,11 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         // trigger search
         else if (CheckCollisionPointRec(GetMousePosition(), button9) && run_mode == PPU_M  && IsMouseButtonPressed(0)) {
             unsigned short addr = DW::hex_to_ushort(u_input.s, 16);
-            bus.adjust_ppu_mirroring(addr);
+            bus.adjust_ppu_mirroring_unsafe(addr);
             bus.ppu_trigger_write_addresses[addr] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button10) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
             unsigned short addr = DW::hex_to_ushort(u_input.s, 16);
-            bus.adjust_ppu_mirroring(addr);
+            bus.adjust_ppu_mirroring_unsafe(addr);
             bus.ppu_trigger_read_addresses[std::stoul(u_input.s, nullptr, 16)] = true;
         }   else if (CheckCollisionPointRec(GetMousePosition(), button11) && run_mode == PPU_M && IsMouseButtonPressed(0)) {
             bus.ppu_trigger_read_addresses = 0;
@@ -1349,30 +1349,54 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
     Rectangle mode_button{};
     Rectangle pc_watch_address_button{};
     Rectangle dump_button{};
+    Rectangle clear_sets_button{};
+
     UserInput<x, y - 30, w, 30> u_input;
     enum Mode {
-        CPUm, PPUm, OAMm, ModeCount
+        CPUm, PPUm, CIRAM, OAMm, ModeCount
     } mode = CPUm;
-    std::string_view mode_str[2] = {
+    std::string_view mode_str[3] = {
             "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/CPU.dump",
             "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/PPU.dump",
+               "/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/CIRAM.dump",
     };
     MemoryViewer():
             update_target_button{DW::rec.x, DW::rec.y+DW::rec.height, 30,30},
             mode_button{DW::rec.x+30, DW::rec.y+DW::rec.height, 30,30},
             write_button{DW::rec.x+30*2, DW::rec.y+DW::rec.height, 30,30},
             pc_watch_address_button{DW::rec.x+30*3, DW::rec.y+DW::rec.height, 30,30},
-            dump_button{DW::rec.x+30*4, DW::rec.y+DW::rec.height, 30,30}
+            dump_button{DW::rec.x+30*4, DW::rec.y+DW::rec.height, 30,30},
+            clear_sets_button{DW::rec.x+30*5, DW::rec.y+DW::rec.height, 30,30}
             {}
 
     void dump(Bus& bus, auto& r, std::string_view path, size_t sz){
         std::ofstream file(path, std::ios::binary);
         if (!file.is_open()) return;
-        for (int i = 0; i != sz; ++i)
-            file.put(mode == PPUm ? bus.unsafe_read_chr(i) : bus.unsafe_read_prg(i));
+        for (int i = 0; i != sz; ++i){
+            switch(mode) {
+                case PPUm: {file.put(bus.unsafe_read_chr(i)); break;}
+                case CPUm: {file.put(bus.unsafe_read_prg(i)); break;}
+                case CIRAM: {file.put(bus.ppu_map[0x2000 + i]); break;}
+            }
+        }
     }
 
-    void mem_print(Bus& bus, auto& r, size_t sz){
+    void mem_print(Bus& bus, unsigned char* ptr, size_t sz){
+        unsigned short address = start_address & (sz-1);
+        unsigned short cur_addr{};
+       for (size_t i = 0; i < 16 * lines_count; ++i){
+           cur_addr = (address + i) & (sz-1);
+           if (!(i & 0xf)) {
+               ss << ' ' << HEX_COUT(cur_addr, 4) << "| ";
+           }
+           if (cur_addr == target_address) ss << " [ ";
+           ss << HEX_COUT_W2(ptr[cur_addr]) << ' ';
+           if (cur_addr == target_address) ss << " ] ";
+           if ((i & 0xf) == 0xf) ss << '\n';
+       }
+    }
+
+    void mem_print_color(Bus& bus, auto& r, size_t sz){
         t_x = DW::rec.x;
         t_y = DW::rec.y;
         ss << std::hex;
@@ -1381,9 +1405,9 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         for (int i = 0; i < 16 * lines_count; ++i){
             adjusted_address = current_address = (start_address + i) & (sz-1);
             if (mode == PPUm)
-                bus.adjust_ppu_mirroring(adjusted_address);
+                bus.adjust_ppu_mirroring_unsafe(adjusted_address);
             else
-                bus.adjust_cpu_mirroring(adjusted_address);
+                bus.adjust_cpu_mirroring_unsafe(adjusted_address);
             if (!(i & 0xf)){
                 ss << "\n";
                 tmp_str = ss.str();
@@ -1394,6 +1418,7 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 t_y += 15.f;
                 t_x = DW::rec.x;
             }
+            ss << ' ';
             if (current_address == target_address) ss << " [ ";
             // TODO
             bool is_updated = mode == PPUm ? (bus.ppu_read_set_addresses[adjusted_address] || bus.ppu_write_set_addresses[adjusted_address]) :
@@ -1406,9 +1431,9 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 t_x += (sz * 5.f);
 
                 if (mode == PPUm) {
-                    ss  <<  HEX_COUT_W2((unsigned)bus.unsafe_read_chr(current_address)) << ' ';
+                    ss << HEX_COUT_W2(bus.unsafe_read_chr(current_address)) << ' ';
                 } else {
-                    ss  << HEX_COUT_W2((unsigned)bus.unsafe_read_prg( current_address)) << ' ';
+                    ss << HEX_COUT_W2(bus.unsafe_read_prg( current_address)) << ' ';
                 }
                 tmp_str = ss.str();
                 bool is_write = mode == PPUm ? (bus.ppu_write_set_addresses[adjusted_address]) : (bus.cpu_write_set_addresses[adjusted_address]);
@@ -1419,9 +1444,9 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 ss << std::hex;
             } else {
                 if (mode == PPUm) {
-                    ss  << HEX_COUT_W2((unsigned)bus.unsafe_read_chr(current_address)) << ' ';
+                    ss  << HEX_COUT_W2(bus.unsafe_read_chr(current_address)) << ' ';
                 } else {
-                    ss  << HEX_COUT_W2((unsigned)bus.unsafe_read_prg( current_address)) << ' ';
+                    ss  << HEX_COUT_W2(bus.unsafe_read_prg( current_address)) << ' ';
                 }
             }
 
@@ -1455,6 +1480,7 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
             switch (mode) {
                 case PPUm: dump(bus, ppu, mode_str[mode], sizeof(bus.ppu_map)); break;
                 case CPUm: dump(bus, cpu, mode_str[mode], sizeof(bus.cpu_map)); break;
+                case CIRAM: dump(bus, cpu, mode_str[mode], 0x800); break;
                 default: break;
             }
         } else if (CheckCollisionPointRec(GetMousePosition(), pc_watch_address_button) && IsMouseButtonPressed(0)){
@@ -1464,11 +1490,16 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
             start_address = (start_address - 16) & 0xffff;
         } else if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsKeyDown(KEY_DOWN)){
             start_address = (start_address + 16) & 0xffff;
+        } else if (CheckCollisionPointRec(GetMousePosition(), clear_sets_button) && IsMouseButtonPressed(0)){
+            bus.cpu_write_set_addresses.reset();
+            bus.cpu_read_set_addresses.reset();
+            bus.ppu_write_set_addresses.reset();
+            bus.ppu_read_set_addresses.reset();
         }
 
         switch (mode){
-            case CPUm: mem_print(bus,  cpu, sizeof(bus.cpu_map)); ss << "\nCPU"; break;
-            case PPUm: mem_print(bus, ppu, sizeof(bus.ppu_map)); ss << "\nPPU"; break;
+            case CPUm: mem_print_color(bus,  cpu, sizeof(bus.cpu_map)); ss << "\nCPU"; break;
+            case PPUm: mem_print_color(bus, ppu, sizeof(bus.ppu_map)); ss << "\nPPU"; break;
             case OAMm: {
                 auto i = target_address * 4;
                 auto e = i + (16 * 4);
@@ -1477,6 +1508,15 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
                 for (; i != e; i+=4)
                     ss << (int)bus.oam[i] << ' ' << (int)bus.oam[i+1] << ' ' << (int)bus.oam[i+2] << ' ' << (int)bus.oam[i+3] << '\n';
                 ss << "OAM";
+                tmp_str = ss.str();
+                DrawText(tmp_str.c_str(), DW::rec.x,  DW::rec.y, 11.2, BLACK);
+                ss.str("");
+                ss << std::hex;
+                break;
+            }
+            case CIRAM: {
+                mem_print(bus, bus.ppu_map + 0x2000, 0x800);
+                ss << "CIRAM\n";
                 tmp_str = ss.str();
                 DrawText(tmp_str.c_str(), DW::rec.x,  DW::rec.y, 11.2, BLACK);
                 ss.str("");
@@ -1493,6 +1533,7 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         DW::draw_text_button(write_button, "write", BLACK);
         DW::draw_text_button(pc_watch_address_button, "pc_watch", BLACK);
         DW::draw_text_button(dump_button, "dump", BLACK);
+        DW::draw_text_button(clear_sets_button, "clear", BLACK);
         u_input.handle();
         DW::draw_win();
         ss.str("");

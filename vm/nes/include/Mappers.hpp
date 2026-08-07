@@ -355,7 +355,7 @@ struct Mapper {
                 break;
             }
             case AXROM: {
-                current_screen_mirroring = axrom.single_screen_nt ? SingleScreenUpper : SingleScreenLower;
+                current_screen_mirroring = axrom.single_screen_nt ? SingleScreenUpper : SingleScreenLower; // TODO: check
                 break;
             }
             default: {

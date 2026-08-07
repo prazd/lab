@@ -163,7 +163,7 @@ void Bus::apu_enable_handle() {
 }
 
 void Bus::unsafe_write(unsigned short addr, unsigned char value) {
-    adjust_cpu_mirroring(addr);
+    adjust_cpu_mirroring_unsafe(addr);
     if (addr >= 0x8000 && addr <= 0xffff){
         mapper.handle(addr, value);
         return;
@@ -364,7 +364,7 @@ void Bus::inc_by_ppudata() {
 }
 
 unsigned char Bus::unsafe_read_prg(unsigned short addr) {
-    adjust_cpu_mirroring(addr);
+    adjust_cpu_mirroring_unsafe(addr);
     if (addr >= 0x8000 && addr <= 0xffff){
         return mapper.read_prg_rom(addr);
     }
@@ -415,16 +415,22 @@ unsigned char Bus::read_chr(unsigned short addr) {
     } else if (addr >= 0x2000 && addr <= 0x3fff) {
         return ppu_map[addr];
     }
+#if DEBUG_MODE
+    std::abort();
+#endif
     return 0xff; // dummy
 }
 
 unsigned char Bus::unsafe_read_chr(unsigned short addr) {
-    adjust_ppu_mirroring(addr);
+    adjust_ppu_mirroring_unsafe(addr);
     if (addr >= 0x0000 && addr <= 0x1FFF){
         return mapper.unsafe_read_chr_rom(addr);
     } else if (addr >= 0x2000 && addr <= 0x3fff) {
         return ppu_map[addr];
     }
+#if DEBUG_MODE
+    std::abort();
+#endif
     return 0xff;
 }
 
@@ -445,7 +451,7 @@ void Bus::write_chr(unsigned short addr, unsigned char value){
 }
 
 void Bus::unsafe_write_chr(unsigned short addr, unsigned char value){
-    adjust_ppu_mirroring(addr);
+    adjust_ppu_mirroring_unsafe(addr);
     if (addr >= 0x0000 && addr <= 0x1FFF && ((ppustatus >> 7) & 1 || !(ppumask & 0x8) || !(ppumask & 0x10))) {
         mapper.write_chr_ram(addr, value);
     } else if (addr >= 0x2000 && addr <= 0x3fff){
@@ -501,7 +507,29 @@ void Bus::adjust_cpu_mirroring(unsigned short& addr) {
     }
 }
 
+void Bus::adjust_cpu_mirroring_unsafe(unsigned short& addr) {
+    if (addr >= constants::RAM_MIRROR1_BEGIN && addr <= constants::RAM_MIRROR1_END)
+        addr -= constants::RAM_MIRROR1_BEGIN;
+    else if (addr >= constants::RAM_MIRROR2_BEGIN && addr <= constants::RAM_MIRROR2_END)
+        addr -= constants::RAM_MIRROR2_BEGIN;
+    else if (addr >= constants::RAM_MIRROR3_BEGIN && addr <= constants::RAM_MIRROR3_END)
+        addr -= constants::RAM_MIRROR3_BEGIN;
+    else if (addr >= constants::PPU_REGS_MIRROR_BEGIN && addr <= constants::PPU_REGS_MIRROR_END) {
+        addr = constants::PPU_REGS_BEGIN + (addr % 8);
+    }
+}
+
 void Bus::adjust_ppu_mirroring(unsigned short& addr) {
+    if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
+        addr = constants::IMAGE_PALETTE_BEGIN + (addr % 32);
+    if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
+        addr -= 0x10;
+    if (addr >= constants::TABLES_MIRROR_BEGIN && addr <= constants::TABLES_MIRROR_END)
+        addr = constants::NAME_TABLE0_BEGIN + (addr - constants::TABLES_MIRROR_BEGIN);
+    adjust_ppu_nt_mirroring(addr); // TODO: check
+}
+
+void Bus::adjust_ppu_mirroring_unsafe(unsigned short& addr) {
     if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
         addr = constants::IMAGE_PALETTE_BEGIN + (addr % 32);
     if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
