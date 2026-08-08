@@ -449,7 +449,7 @@ struct Mapper {
                 uxrom.handle(addr, value); break;
             case CNROM: {cnrom.handle(addr, value);  break;}
             case MMC3:  {mmc3.tick_irq(addr); mmc3.handle(addr, value); update_screen_mirroring(false); break;}
-            case AXROM: {axrom.handle(addr, value); break;}
+            case AXROM: {axrom.handle(addr, value); update_screen_mirroring(false); break;}
             default: return;
         }
     }

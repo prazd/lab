@@ -512,6 +512,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     bool is_line_jump_active = false;
     bool is_one_tick_ppu_active = false;
     unsigned char stress_speed = 0;
+    bool cpu_to_fetch_req = false;
 
     Rectangle line_button;
     UserInput<x, y - 30, w, 30> u_input;
@@ -724,6 +725,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == PPU_M && IsMouseButtonPressed(0)){
             ppu.run = !ppu.run;
             ppu.fill_white_background = !ppu.run;
+            cpu_to_fetch_req = true;
         }
         // trigger search
         else if (CheckCollisionPointRec(GetMousePosition(), button9) && run_mode == PPU_M  && IsMouseButtonPressed(0)) {
@@ -1262,6 +1264,7 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
                    << "  FramesCount:" << std::dec << ppu.frames_count << '\n'
                    << "  LastLineX:" << std::dec << ppu.last_line_x << '\n'
                    << "  CurrentLineX:" << std::dec << ppu.current_line_x << '\n' << std::hex
+                   << "  PPU_X:" << std::dec << (int)bus.ppu_x << '\n' << std::hex
                    << "  ShiftRegL:" << std::bitset<16>(ppu.shift_register_low).to_string() << '\n' << std::hex
                    << "  ShiftRegH:" << std::bitset<16>(ppu.shift_register_high).to_string() << '\n' << std::hex
                    << "  AttributesRegL:" << std::bitset<16>(ppu.attributes_low).to_string() << '\n' << std::hex
@@ -1328,7 +1331,9 @@ struct GeneralInfo: DebugWindowText<x, y, w, h> {
             }
 #endif
         }
-                auto s = ss.str();
+        auto s = ss.str();
+        if (CheckCollisionPointRec(GetMousePosition(), DW::rec) && IsMouseButtonPressed(0))
+            SetClipboardText(s.c_str());
         DW::draw(s.c_str(), 13.f);
         ss.str("");
     }

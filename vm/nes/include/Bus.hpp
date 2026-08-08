@@ -179,7 +179,6 @@ struct Bus {
     void adjust_cpu_mirroring_unsafe(unsigned short&);
 
     void adjust_ppu_nt_mirroring(unsigned short& address);
-
     unsigned short get_nt_by_mirror_mode(Mapper::ScreenMirroring sm, unsigned char n);
     void tick();
     void controller_read_tick();

@@ -333,13 +333,13 @@ void PPU::draw_pixel(Bus &bus) {
         is_sprite = true;
         res = sprite_data;
     } else if (bg_data != 0 && sprite_data == 0){
-        res = (universal_background = !(bus.ppumask & 0x8), bg_data);
+        res = (universal_background = !(bus.ppumask & 0x8), bg_data); // TODO: check
     } else if (bg_data != 0 && sprite_data != 0) { // zero hit
         // TODO: debug
         if ((oam_index == 0 || oam_index == 1) && bus.ppumask & 0x10 && bus.ppumask & 0x8 && ((current_x & 0xff) != 0xff) && !(bus.ppustatus & (0x80)) && !(bus.ppustatus & 0x40)){
             bus.ppustatus |= (1 << 6);
         }
-        res = (!is_bg_prio && (bus.ppumask & 0x10)) ? (is_sprite = true, sprite_data) : (universal_background = !(bus.ppumask & 0x8), bg_data);
+        res = (!is_bg_prio && (bus.ppumask & 0x10)) ? (is_sprite = true, sprite_data) : (universal_background = !(bus.ppumask & 0x8), bg_data); // TODO: check
     } else {
         universal_background = true;
     }
@@ -359,10 +359,16 @@ void PPU::draw_pixel(Bus &bus) {
 
     unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
 
-    
-    unsigned char pixel_index = bus.read_chr( universal_background ? constants::IMAGE_PALETTE_BEGIN : (
-                                         (is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN) + index));
 
+    unsigned char pixel_index = 0;
+    if (bus.ppumask & 0x18) {
+        pixel_index = bus.read_chr( universal_background ? constants::IMAGE_PALETTE_BEGIN : (
+                (is_sprite ? constants::SPRITE_PALETTE_BEGIN : constants::IMAGE_PALETTE_BEGIN) + index));
+    } else if (bus.ppu_v >= constants::IMAGE_PALETTE_BEGIN){
+        pixel_index = bus.read_chr(bus.ppu_v) & 0x3f;
+    } else {
+        pixel_index = bus.read_chr(constants::IMAGE_PALETTE_BEGIN); // TODO: check
+    }
     if (bus.ppumask & 1) pixel_index &= 0x30;
 #if !HIDE_OVERSCAN
     if (current_y <= 7 || current_y >= 232 || current_x % 256 <= 15 || current_x % 256 >= 240)

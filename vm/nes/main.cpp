@@ -178,7 +178,7 @@ struct NESVM {
         size_t current_tick = 0;
         static size_t cpu_tick_count = 0;
         while ((dis.is_frame_jump_active || dis.is_tile_line_jump_active || dis.is_line_jump_active ||
-                dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run ||
+                dis.is_one_tick_ppu_active || dis.trigger_search || ppu.run || dis.cpu_to_fetch_req ||
                 dis.selected_scanline_active || reg_info.is_ppu_watching()) && current_tick++ < constants::PPU_FRAME_CYCLE) {
             if (!cpu.debug_run) snap_storage.update_state(bus, cpu, ppu); // todo: check
             cpu.debug_run = true;
@@ -203,6 +203,8 @@ struct NESVM {
                 dis.trigger_search = !(bus.ppu_addr_triggered_on_read || bus.ppu_addr_triggered_on_write);
             } else if (dis.selected_scanline_active) {
                 dis.selected_scanline_active = (ppu.current_y != dis.selected_scanline);
+            } else if (dis.cpu_to_fetch_req){
+                dis.cpu_to_fetch_req = cpu.istep != CPU::Fetch;
             }
             bus.tick();
         }
@@ -214,7 +216,8 @@ struct NESVM {
             !dis.trigger_search &&
             !dis.selected_scanline_active &&
             !reg_info.is_ppu_watching() &&
-            !ppu.run) dis.handle(cpu);
+            !ppu.run &&
+            !dis.cpu_to_fetch_req) dis.handle(cpu);
     }
 #endif
 
@@ -415,8 +418,10 @@ struct NESVM {
 #endif
         ppu.displays[0].fill(BLACK);
         ppu.displays[1].fill(BLACK);
+#if !ROM_SELECT_ON
         ppu_init();
         cpu_init();
+#endif
 #if DEBUG_MODE
         SetTargetFPS(60);
 #endif
@@ -594,6 +599,6 @@ int main(){
 // /Users/prazd/Desktop/dev/FinalFantasy.nes - debug
 
 // TODO: AccuracyCoin (APU reg activation debug)
-    NESVM{"/Users/prazd/Desktop/dev/SuperMarioBros.nes"}.run(); // 929a
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/full_palette/full_palette.nes"}.run(); // 929a
 #endif
 }
