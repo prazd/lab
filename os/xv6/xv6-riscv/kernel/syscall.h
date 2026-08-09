@@ -26,3 +26,4 @@
 #define SYS_dtbs   24
 #define SYS_getpsz 25
 #define SYS_printptes 26
+#define SYS_printkernptes 27

@@ -8,3 +8,6 @@ typedef unsigned int uint32;
 typedef unsigned long uint64;
 
 typedef uint64 pde_t;
+
+unsigned to_little_endian32(unsigned val);
+unsigned to_little_endian64(unsigned long val);

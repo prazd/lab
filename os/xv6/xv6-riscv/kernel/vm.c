@@ -17,6 +17,10 @@ extern char etext[]; // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+const uint64 HUGE_ADDRESSES[] = {
+    PLIC
+};
+
 // Make a direct-map page table for the kernel.
 pagetable_t
 kvmmake(void)
@@ -33,7 +37,7 @@ kvmmake(void)
   kvmmap(kpgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
 
   // PLIC
-  kvmmap(kpgtbl, PLIC, PLIC, 0x4000000, PTE_R | PTE_W);
+  kvmmaphuge(kpgtbl, PLIC, PLIC, 0x4000000, PTE_R | PTE_W);
 
   // map kernel text executable and read-only.
   kvmmap(kpgtbl, KERNBASE, KERNBASE, (uint64)etext - KERNBASE, PTE_R | PTE_X);
@@ -59,6 +63,13 @@ void
 kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 {
   if (mappages(kpgtbl, va, sz, pa, perm) != 0)
+    panic("kvmmap");
+}
+
+void
+kvmmaphuge(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
+{
+  if (maphugepages(kpgtbl, va, sz, pa, perm) != 0)
     panic("kvmmap");
 }
 
@@ -115,7 +126,30 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
   return &pagetable[PX(0, va)];
 }
 
-// TODO: check
+pte_t *
+huge_walk(pagetable_t pagetable, uint64 va, int alloc)
+{
+  if (va >= MAXVA)
+    panic("walk");
+
+  for (int level = 2; level > 1; level--) {
+    pte_t *pte = &pagetable[PX(level, va)];
+    if (*pte & PTE_V) {
+      pagetable = (pagetable_t)PTE2PA(*pte);
+    } else {
+      if (!alloc || (pagetable = (pde_t *)kalloc()) == 0)
+        return 0;
+      memset(pagetable, 0, PGSIZE);
+      *pte = PA2PTE(pagetable) | PTE_V;
+    }
+  }
+  return &pagetable[PX(1, va)];
+}
+
+pagetable_t getkernpt() {
+  return kernel_pagetable;
+}
+
 uint64
 print_walk(pagetable_t pt2_base)
 {
@@ -128,13 +162,48 @@ print_walk(pagetable_t pt2_base)
         pte_t* pte1 = pt1_base + j;
         if (*pte1) {
           printk("PTE1[%d]: %p\n", j, (void*)(*pte1));
+          int found = 0;
+          uint64 pte_le64 = (uint64)(PTE2PA(*pte1));
+          for (int a = 0, e = 1; a != e; ++a){
+              if (pte_le64 == HUGE_ADDRESSES[a]) {
+                found = 1;
+                break;
+              }
+          }
+          if (found) break;
           pagetable_t pt0_base = (pagetable_t)PTE2PA(*pte1);
           for (int k = 0; k < 512; ++k) {
             pte_t* pte0 = pt0_base + k;
-            if (*pte0) {
-              printk("PTE0[%d]: %p\n", k, (void*)(*pte0));
+            if (*pte0){
+              printk("PTE0[%d]: %p\n", k, (void*)(pte0));
             }
           }
+        }
+      }
+    }
+  }
+  return 0;
+}
+
+uint64
+print_walk_huge(pagetable_t pt2_base)
+{
+  for (int i = 0; i < 512; ++i) {
+    pte_t* pte2 = pt2_base + i;
+    if (*pte2) {
+      pagetable_t pt1_base = (pagetable_t)PTE2PA(*pte2);
+      for (int j = 0; j < 512; ++j) {
+        pte_t* pte1 = pt1_base + j;
+        if (*pte1) {
+          int found = 0;
+          uint64 pte_le64 = (uint64)(PTE2PA(*pte1));
+          for (int a = 0, e = 1; a != e; ++a){
+            if (pte_le64 == HUGE_ADDRESSES[a]) {
+              found = 1;
+              break;
+            }
+          }
+          if (found) printk("PTE1[%d]: %p PA: %p\n", j, (void*)(*pte1), (void*)PTE2PA(*pte1));
         }
       }
     }
@@ -197,6 +266,37 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
       break;
     a += PGSIZE;
     pa += PGSIZE;
+  }
+  return 0;
+}
+
+int
+maphugepages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
+{
+  uint64 a, last;
+  pte_t *pte;
+
+  if ((va % HUGE_PGSIZE) != 0)
+    panic("mappages: va not aligned");
+
+  if ((size % HUGE_PGSIZE) != 0)
+    panic("mappages: size not aligned");
+
+  if (size == 0)
+    panic("mappages: size");
+
+  a = va;
+  last = va + size - HUGE_PGSIZE;
+  for (;;) {
+    if ((pte = huge_walk(pagetable, a, 1)) == 0)
+      return -1;
+    if (*pte & PTE_V)
+      panic("mappages: remap");
+    *pte = PA2PTE(pa) | perm | PTE_V;
+    if (a == last)
+      break;
+    a += HUGE_PGSIZE;
+    pa += HUGE_PGSIZE;
   }
   return 0;
 }

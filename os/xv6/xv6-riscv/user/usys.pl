@@ -43,6 +43,7 @@ entry("getmem");
 entry("dtbs");
 entry("getpsz");
 entry("printptes");
+entry("printkernptes");
 entry("sbrk");
 entry("pause");
 entry("uptime");

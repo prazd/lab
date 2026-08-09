@@ -48,6 +48,12 @@ sys_printptes(void)
 }
 
 uint64
+sys_printkernptes(void)
+{
+  return print_walk_huge(getkernpt());
+}
+
+uint64
 sys_fork(void)
 {
   return kfork();
