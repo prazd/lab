@@ -204,7 +204,7 @@ namespace mappers {
 
     struct AxROM {
         unsigned char bank = 0;
-        bool single_screen_nt = 0;
+        bool single_screen_nt = false;
         inline void handle(unsigned short addr, unsigned char val){
             bank = val & 0x7;
             single_screen_nt = val & 0x10;

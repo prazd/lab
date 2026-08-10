@@ -410,14 +410,12 @@ struct NESVM {
         want.samples = 256;
 
         audio_dev = SDL_OpenAudioDevice(nullptr, 0, &want, nullptr, 0);
-        if (!audio_dev){
-            std::cout << "SDL_OpenAudioDevice error\n";
-            std::abort();
-        }
+        if (!audio_dev) fatal("SDL_OpenAudioDevice error");
         SDL_PauseAudioDevice(audio_dev, 0);
 #endif
         ppu.displays[0].fill(BLACK);
         ppu.displays[1].fill(BLACK);
+// TODO: check
 #if !ROM_SELECT_ON
         ppu_init();
         cpu_init();
@@ -589,7 +587,7 @@ int main(){
     // /Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes
 
 #if MULTI_TEST_MODE
-    MultiTest<NESVM, APUm>{}.run();
+    MultiTest<NESVM, PPUm>{}.run();
 #elif ROM_SELECT_ON
     NESVM{}.rom_select_init();
 #else
@@ -599,6 +597,6 @@ int main(){
 // /Users/prazd/Desktop/dev/FinalFantasy.nes - debug
 
 // TODO: AccuracyCoin (APU reg activation debug)
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/full_palette/full_palette.nes"}.run(); // 929a
+    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // 929a
 #endif
 }

@@ -416,7 +416,7 @@ unsigned char Bus::read_chr(unsigned short addr) {
         return ppu_map[addr];
     }
 #if DEBUG_MODE
-    std::abort();
+    fatal("Read chr:", addr);
 #endif
     return 0xff; // dummy
 }
@@ -429,7 +429,7 @@ unsigned char Bus::unsafe_read_chr(unsigned short addr) {
         return ppu_map[addr];
     }
 #if DEBUG_MODE
-    std::abort();
+    fatal("unsafe_read_chr:", addr);
 #endif
     return 0xff;
 }
@@ -448,6 +448,11 @@ void Bus::write_chr(unsigned short addr, unsigned char value){
     } else if (addr >= 0x2000 && addr <= 0x3fff){
         ppu_map[addr] = value;
     }
+#if DEBUG_MODE
+    else {
+        fatal("Write chr:", addr);
+    }
+#endif
 }
 
 void Bus::unsafe_write_chr(unsigned short addr, unsigned char value){
@@ -457,6 +462,11 @@ void Bus::unsafe_write_chr(unsigned short addr, unsigned char value){
     } else if (addr >= 0x2000 && addr <= 0x3fff){
         ppu_map[addr] = value;
     }
+#if DEBUG_MODE
+    else {
+        fatal("Write chr:", addr);
+    }
+#endif
 }
 
 void Bus::controller_write_tick() {

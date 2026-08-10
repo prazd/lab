@@ -67,7 +67,7 @@ struct DebugWindow {
 
     static void save_data_to_file(const std::string& filename, const char* ptr, long sz){
         std::ofstream f(std::string("/Users/prazd/Desktop/books/cpp/cpp/vm/nes/build/") + filename);
-        if (!f.is_open()) {std::abort();};
+        if (!f.is_open()) fatal("save_data_to_file error");
         f.write(ptr, sz);
         f.close();
     }
@@ -78,7 +78,7 @@ struct DebugWindow {
         auto sz = std::filesystem::file_size(full_path);
         res.resize(sz);
         auto fs = std::ifstream(full_path, std::ios::binary);
-        if (!fs.is_open()) std::abort();
+        if (!fs.is_open()) fatal("read_data_from_file error");
         fs.read(reinterpret_cast<char*>(res.data()),sz);
         return res;
     }
@@ -569,7 +569,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       {}
 
 
-    void dump_state(Bus& bus, CPU& cpu, PPU& ppu, APU& apu) {
+    void dump_state(Bus& bus, CPU& cpu, PPU& ppu, APU& apu, std::string& filename) {
         std::vector<unsigned char> res;
         res.resize(sizeof(ppu) + sizeof(cpu) + sizeof(apu) + sizeof(bus) +
                        sizeof(Bus::cpu_map) + sizeof(Bus::ppu_map) + sizeof(Bus::oam) +
@@ -593,12 +593,12 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         memcpy(res_ptr, Mapper::prg.data(), Mapper::prg.size());
         res_ptr += Mapper::prg.size();
         memcpy(res_ptr, Mapper::chr.data(), Mapper::chr.size());
-        DW::save_data_to_file("state_dump", (const char*)res.data(), res.size());
+        DW::save_data_to_file(filename.size() ? filename.c_str() : "state_dump", (const char*)res.data(), res.size());
         dump_state_request = false;
     }
 
-    void import_state(Bus& bus, CPU& cpu, PPU& ppu, APU& apu) {
-        auto res = DW::read_data_from_file("state_dump");
+    void import_state(Bus& bus, CPU& cpu, PPU& ppu, APU& apu, std::string& filename) {
+        auto res = DW::read_data_from_file(filename.size() ? filename.c_str() : "state_dump");
         unsigned char* res_ptr = res.data();
 
         memcpy(&ppu, res_ptr,  sizeof(ppu));
@@ -785,7 +785,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         }  else if (CheckCollisionPointRec(GetMousePosition(), state_dump_button) && IsMouseButtonPressed(0)){
             dump_state_request = true;
         } else if  (CheckCollisionPointRec(GetMousePosition(), state_import_button) && IsMouseButtonPressed(0)){
-            import_state(bus, cpu, ppu, apu);
+            import_state(bus, cpu, ppu, apu, u_input.s);
         } else if (CheckCollisionPointRec(GetMousePosition(), load_save_button) && IsMouseButtonPressed(0)){
             cartridge.update_game_state<false>((char*)(bus.cpu_map + constants::CARTRIDGE_RAM_BEGIN));
         }  else if (CheckCollisionPointRec(GetMousePosition(), save_button) && IsMouseButtonPressed(0)){
@@ -795,7 +795,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         }
 
         if (dump_state_request && cpu.istep == CPU::Fetch && cpu.iop.empty())
-            dump_state(bus, cpu, ppu, apu);
+            dump_state(bus, cpu, ppu, apu, u_input.s);
 
         for (int i = 0; i < 10; ++i){
             auto r = Rectangle{line_button.x, line_button.y + i * (line_button.height + 25.f), line_button.width, line_button.height};

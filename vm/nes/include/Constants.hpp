@@ -14,8 +14,10 @@
 #else
 #define VEC_MODE
 #undef DEBUG_MODE
+#undef ROM_SELECT_ON
 #undef GAME_GENIE_MODE
 #define DEBUG_MODE 0
+#define ROM_SELECT_ON 0
 #define GAME_GENIE_MODE 0
 #endif
 

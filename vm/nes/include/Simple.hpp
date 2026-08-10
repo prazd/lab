@@ -5,6 +5,7 @@
 #include <thread>
 #include <queue>
 #include <algorithm>
+#include <execinfo.h>
 
 template <typename T, size_t sz>
 struct SimpleDeque {
@@ -333,5 +334,17 @@ T wrap(T current, int add, T min, T max){
     int r = current + add;
     return (r >= min && r <= max) ? r :
            (r > max ? min : max);
+}
+
+template <typename ... T>
+inline void fatal(T&& ... args){
+    void* buffer[64]{};
+    int n = backtrace(buffer, 64);
+    auto syms = backtrace_symbols(buffer, n);
+    for (int i = 0; i < n; ++i)
+        std::cerr << syms[i] << '\n';
+    (std::cerr << ... << args);
+    free(syms);
+    std::abort();
 }
 #endif

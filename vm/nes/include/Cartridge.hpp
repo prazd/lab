@@ -110,7 +110,7 @@ struct Cartridge {
         auto sz = std::filesystem::file_size(rom_path);
         buffer.resize(sz);
         auto fs = std::ifstream(rom_path, std::ios::binary);
-        if (!fs.is_open()) std::abort();
+        if (!fs.is_open()) fatal("ROM read error");
         fs.read(reinterpret_cast<char*>(buffer.data()),sz);
         parse_header();
     }
