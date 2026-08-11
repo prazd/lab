@@ -143,11 +143,55 @@ getcmd(char *buf, int nbuf)
 }
 
 int
-main(void)
+read_file_cmd(const char* path, char *buf, int nbuf)
+{
+  memset(buf, 0, nbuf);
+  int fd;
+  if ((fd = open(path, O_RDONLY)) < 0) {
+    fprintf(2, "cat: cannot open %s\n", path);
+    return -1;
+  }
+  int n;
+  if ((n = read(fd, buf, nbuf)) > 0)
+    return 0;
+  return -1;
+}
+
+void execute(char* buf){
+  char *cmd = buf;
+  while (*cmd == ' ' || *cmd == '\t')
+    cmd++;
+  if (*cmd == '\n') // is a blank command
+    return;
+  if (cmd[0] == 'c' && cmd[1] == 'd' && cmd[2] == ' ') {
+    // Chdir must be called by the parent, not the child.
+    // TODO: maybe support - cd tmp;...;cd ..;
+    cmd[strlen(cmd) - 1] = 0; // chop \n
+    if (chdir(cmd + 3) < 0)
+      fprintf(2, "cannot cd %s\n", cmd + 3);
+  } else {
+    if (fork1() == 0)
+      runcmd(parsecmd(cmd));
+    wait(0);
+  }
+}
+
+int
+main(int argc, char* argv[])
 {
   static char buf[100];
-  int fd;
 
+  // run script file
+  if (argc > 1){
+    read_file_cmd(argv[1], buf, sizeof(buf));
+    char *cmd = buf;
+    while(*cmd != '\n') ++cmd;
+    ++cmd;
+    execute(cmd);
+    return 0;
+  }
+
+  int fd;
   // Ensure that three file descriptors are open.
   while ((fd = open("console", O_RDWR)) >= 0) {
     if (fd >= 3) {
@@ -157,23 +201,8 @@ main(void)
   }
 
   // Read and run input commands.
-  while (getcmd(buf, sizeof(buf)) >= 0) {
-    char *cmd = buf;
-    while (*cmd == ' ' || *cmd == '\t')
-      cmd++;
-    if (*cmd == '\n') // is a blank command
-      continue;
-    if (cmd[0] == 'c' && cmd[1] == 'd' && cmd[2] == ' ') {
-      // Chdir must be called by the parent, not the child.
-      cmd[strlen(cmd) - 1] = 0; // chop \n
-      if (chdir(cmd + 3) < 0)
-        fprintf(2, "cannot cd %s\n", cmd + 3);
-    } else {
-      if (fork1() == 0)
-        runcmd(parsecmd(cmd));
-      wait(0);
-    }
-  }
+  while (getcmd(buf, sizeof(buf)) >= 0)
+    execute(buf);
   exit(0);
 }
 

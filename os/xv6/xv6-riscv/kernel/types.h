@@ -11,3 +11,4 @@ typedef uint64 pde_t;
 
 unsigned to_little_endian32(unsigned val);
 unsigned to_little_endian64(unsigned long val);
+unsigned char cmp_str(const char* str1, const char* str2, int sz);

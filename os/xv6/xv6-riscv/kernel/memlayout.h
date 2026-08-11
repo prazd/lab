@@ -37,12 +37,6 @@
 #define PLIC_SPRIORITY(hart) (PLIC + 0x201000 + (hart) * 0x2000)
 #define PLIC_SCLAIM(hart)    (PLIC + 0x201004 + (hart) * 0x2000)
 
-// the kernel expects there to be RAM
-// for use by the kernel and user pages
-// from physical address 0x80000000 to PHYSTOP.
-extern unsigned long KERNBASE;
-extern unsigned long PHYSTOP;
-void update_addr_range(unsigned long, unsigned long);
 
 // map the trampoline page to the highest address,
 // in both user and kernel space.

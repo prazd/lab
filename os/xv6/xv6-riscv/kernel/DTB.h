@@ -24,13 +24,6 @@ extern struct DTBHeader dtb_header;
 extern uint64 ADDRBEGIN;
 extern uint64 ADDREND;
 
-inline unsigned char cmp_str(const char* str1, const char* str2, int sz){
-  for (int i = 0; i < sz; ++i){
-    if (str1[i] != str2[i]) return 0;
-  }
-  return 1;
-}
-
 static inline void parse_dtb(){
   unsigned char* dt_struct_ptr = ((unsigned char*)DTB_ADDRESS) + to_little_endian32(dtb_header.off_dt_struct);
   unsigned* dt_struct_u32_ptr = (unsigned*)dt_struct_ptr;

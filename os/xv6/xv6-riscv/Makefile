@@ -2,8 +2,8 @@ K=kernel
 U=user
 
 OBJS = \
+  $K/memrange.o \
   $K/DTB.o \
-  $K/memlayout.o \
   $K/entry.o \
   $K/start.o \
   $K/console.o \
@@ -153,7 +153,8 @@ UPROGS=\
 	$U/_mem\
 	$U/_dtb_parse\
 	$U/_sbrk_test\
-	$U/_sandbox
+	$U/_sandbox\
+	$U/scr.sh
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

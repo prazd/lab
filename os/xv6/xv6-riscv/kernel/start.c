@@ -1,6 +1,7 @@
 #include "types.h"
 #include "param.h"
 #include "memlayout.h"
+#include "memrange.h"
 #include "riscv.h"
 #include "DTB.h"
 

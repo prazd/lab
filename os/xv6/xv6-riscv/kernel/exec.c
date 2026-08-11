@@ -21,6 +21,27 @@ flags2perm(int flags)
   return perm;
 }
 
+static int is_script(struct inode *ip){
+    char buf[2];
+    readi(ip, 0, (uint64)buf, 0, 2);
+    return buf[0] == '#' && buf[1] == '!';
+}
+
+
+static void push_front_arg(char** argv){
+  int i = 0;
+  char** ptr = argv;
+  while(*ptr++) ++i;
+
+  char* tmp = 0;
+  while(i > 0){
+    tmp = argv[i];
+    argv[i] = argv[i-1];
+    argv[i-1] = tmp;
+    --i;
+  }
+}
+
 //
 // the implementation of the exec() system call
 //
@@ -44,6 +65,19 @@ kexec(char *path, char **argv)
     return -1;
   }
   ilock(ip);
+  if (is_script(ip)){
+     char buf[64];
+     readi(ip, 0, (uint64)buf, 0, sizeof(buf));
+     for (int i = 0, e = sizeof(buf); i != e; ++i){
+       if (buf[i] == '\n'){buf[i] = '\0'; break;}
+     }
+     push_front_arg(argv);
+     argv[0] = kalloc();
+     safestrcpy(argv[0], buf+2, strlen(buf+2)+1);
+     iunlockput(ip);
+     end_op();
+     return kexec(buf+2, argv);
+  }
 
   // Read the ELF header.
   if (readi(ip, 0, (uint64)&elf, 0, sizeof(elf)) != sizeof(elf))

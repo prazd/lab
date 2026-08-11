@@ -23,3 +23,10 @@ unsigned long to_little_endian64(unsigned long val) {
   r_ptr[7] = val_ptr[0];
   return res;
 }
+
+unsigned char cmp_str(const char* str1, const char* str2, int sz){
+  for (int i = 0; i < sz; ++i){
+    if (str1[i] != str2[i]) return 0;
+  }
+  return 1;
+}

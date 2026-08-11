@@ -1,4 +1,4 @@
-#include "memlayout.h"
+#include "memrange.h"
 unsigned long KERNBASE = 0;
 unsigned long PHYSTOP = 0;
 
