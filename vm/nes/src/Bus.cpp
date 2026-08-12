@@ -5,6 +5,8 @@ void Bus::write(unsigned short addr, unsigned char value) {
     cpu_open_bus_value = value;
     cpu_internal_bus_value = value;
 #if DEBUG_MODE
+    if (addr >= 0x0000 && addr <= 0x0fff)
+        cpu_write_set_ram[addr] = true;
     cpu_write_set_addresses[addr] = true;
     cpu_write_addresses.push_back(std::pair<unsigned short, unsigned char>{addr, unsafe_read_prg(addr)});
     cpu_addr_triggered_on_write = cpu_trigger_write_addresses[addr];

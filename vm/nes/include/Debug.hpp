@@ -1356,6 +1356,12 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
     Rectangle dump_button{};
     Rectangle clear_sets_button{};
 
+    Rectangle ram_scan_button{};
+    Rectangle scan_new_val_button{};
+    Rectangle scan_old_val_button{};
+
+    std::bitset<0x800> cpu_ram_valid;
+
     UserInput<x, y - 30, w, 30> u_input;
     enum Mode {
         CPUm, PPUm, CIRAM, OAMm, ModeCount
@@ -1371,7 +1377,10 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
             write_button{DW::rec.x+30*2, DW::rec.y+DW::rec.height, 30,30},
             pc_watch_address_button{DW::rec.x+30*3, DW::rec.y+DW::rec.height, 30,30},
             dump_button{DW::rec.x+30*4, DW::rec.y+DW::rec.height, 30,30},
-            clear_sets_button{DW::rec.x+30*5, DW::rec.y+DW::rec.height, 30,30}
+            clear_sets_button{DW::rec.x+30*5, DW::rec.y+DW::rec.height, 30,30},
+            ram_scan_button{DW::rec.x, DW::rec.y+DW::rec.height + 30, 30,30},
+            scan_new_val_button{DW::rec.x + 30, DW::rec.y+DW::rec.height + 30, 30,30},
+            scan_old_val_button{DW::rec.x + 30 * 2, DW::rec.y+DW::rec.height + 30, 30,30}
             {}
 
     void dump(Bus& bus, auto& r, std::string_view path, size_t sz){
@@ -1531,6 +1540,37 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         }
         ss << '\n';
         ss << "\nPC watch address:" << cpu.pc_watch_address << " , count:"  << std::dec << cpu.pc_watch_count << '\n';
+
+        if (mode == CPUm) {
+            if (CheckCollisionPointRec(GetMousePosition(), ram_scan_button) && IsMouseButtonPressed(0)){
+                bus.cpu_write_set_ram.reset();
+                cpu_ram_valid.set();
+            } else if (CheckCollisionPointRec(GetMousePosition(), scan_new_val_button) && IsMouseButtonPressed(0)) {
+                for (int i = 0, e = cpu_ram_valid.size(); i != e; ++i)
+                    cpu_ram_valid[i] = !cpu_ram_valid[i] ? cpu_ram_valid[i] : bus.cpu_write_set_ram[i];
+                bus.cpu_write_set_ram.reset();
+            } else if (CheckCollisionPointRec(GetMousePosition(), scan_old_val_button) && IsMouseButtonPressed(0)) {
+                for (int i = 0, e = cpu_ram_valid.size(); i != e; ++i)
+                        cpu_ram_valid[i] = !cpu_ram_valid[i] ? cpu_ram_valid[i] : !bus.cpu_write_set_ram[i];
+                bus.cpu_write_set_ram.reset();
+            }
+            size_t count = 0;
+            for (int i = 0, e = cpu_ram_valid.size(); i != e; ++i)
+                count += cpu_ram_valid[i];
+            ss << "\nTarget count:" << count << '\n';
+
+            if (count <= 20){
+                size_t out_count = 0;
+                for (int i = 0, e = cpu_ram_valid.size(); i != e; ++i) {
+                    if (cpu_ram_valid[i]) {
+                        if ((out_count % 6) == 0) ss << '\n';
+                        ss << HEX_COUT(i, 4) << ", ";
+                        ++out_count;
+                    }
+                }
+            }
+        }
+
         auto s = ss.str();
         DrawText(s.c_str(), DW::rec.x,  DW::rec.y + h - 200, 11.2, BLACK);
         DW::draw_text_button(update_target_button, "update", BLACK);
@@ -1539,6 +1579,11 @@ struct MemoryViewer: DebugWindowText<x, y, w, h> {
         DW::draw_text_button(pc_watch_address_button, "pc_watch", BLACK);
         DW::draw_text_button(dump_button, "dump", BLACK);
         DW::draw_text_button(clear_sets_button, "clear", BLACK);
+        if (mode == CPUm) {
+            DW::draw_text_button(ram_scan_button, "s_track", BLACK);
+            DW::draw_text_button(scan_new_val_button, "n_val", BLACK);
+            DW::draw_text_button(scan_old_val_button, "o_val", BLACK);
+        }
         u_input.handle();
         DW::draw_win();
         ss.str("");

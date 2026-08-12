@@ -48,6 +48,7 @@ struct Bus {
     static inline std::bitset<0x10000> cpu_pc_read_set_addresses;
     static inline std::bitset<0x10000> cpu_trigger_write_addresses;
     static inline std::bitset<0x10000> cpu_trigger_read_addresses;
+    static inline std::bitset<0x800>  cpu_write_set_ram;
 
     SimpleDequeTC<std::pair<unsigned short,unsigned char>, 10> cpu_write_addresses;
     bool cpu_addr_triggered_on_read = false;
