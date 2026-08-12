@@ -18,6 +18,8 @@ extern char etext[]; // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+//static unsigned long OFFSET = 4096000000;
+
 const uint64 HUGE_ADDRESSES[] = {
     PLIC
 };
@@ -41,9 +43,13 @@ kvmmake(void)
   kvmmaphuge(kpgtbl, PLIC, PLIC, 0x4000000, PTE_R | PTE_W);
 
   // map kernel text executable and read-only.
+//  kvmmap(kpgtbl, KERNBASE + OFFSET, KERNBASE, (uint64)etext - KERNBASE, PTE_R | PTE_X);
   kvmmap(kpgtbl, KERNBASE, KERNBASE, (uint64)etext - KERNBASE, PTE_R | PTE_X);
 
   // map kernel data and the physical RAM we'll make use of.
+//  kvmmap(kpgtbl, (uint64)etext + OFFSET, (uint64)etext, PHYSTOP - (uint64)etext,
+//         PTE_R | PTE_W);
+
   kvmmap(kpgtbl, (uint64)etext, (uint64)etext, PHYSTOP - (uint64)etext,
          PTE_R | PTE_W);
 
@@ -88,8 +94,10 @@ kvminithart()
 {
   // wait for any previous writes to the page table memory to finish.
   sfence_vma();
-
   w_satp(MAKE_SATP(kernel_pagetable));
+
+// TODO: debug
+//  w_satp_offset(OFFSET, MAKE_SATP(kernel_pagetable));
 
   // flush stale entries from the TLB.
   sfence_vma();

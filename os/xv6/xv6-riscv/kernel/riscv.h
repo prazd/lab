@@ -25,10 +25,18 @@ r_mstatus()
 }
 
 static inline uint64
-r_dtbaddr()
+r_a1()
 {
   uint64 x;
   asm volatile("mv %0, a1" : "=r"(x));
+  return x;
+}
+
+static inline uint64
+r_cycle()
+{
+  uint64 x;
+  asm volatile("rdcycle %0" : "=r"(x));
   return x;
 }
 
@@ -261,6 +269,16 @@ static inline void
 w_satp(uint64 x)
 {
   asm volatile("csrw satp, %0" : : "r"(x));
+}
+
+static inline void
+w_satp_offset(uint64 offset, uint64 x)
+{
+  asm volatile("csrw satp, %0" : : "r"(x)); // use PT
+// TODO: finish
+  asm volatile("auipc t0, 0");
+  asm volatile("add t0, t0, %0"::"r"(offset):"t0");
+  asm volatile("jalr zero, 0(t0)");
 }
 
 static inline uint64

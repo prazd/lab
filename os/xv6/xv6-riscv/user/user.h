@@ -31,6 +31,7 @@ uint64 dtbs(void);
 uint64 getpsz(void);
 uint64 printptes(void);
 uint64 printkernptes(void);
+uint64 sandbox(void);
 
 // ulib.c
 int stat(const char *, struct stat *);

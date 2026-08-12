@@ -108,6 +108,7 @@ extern uint64 sys_dtbs(void);
 extern uint64 sys_getpsz(void);
 extern uint64 sys_printptes(void);
 extern uint64 sys_printkernptes(void);
+extern uint64 sys_sandbox(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -138,8 +139,9 @@ static uint64 (*syscalls[])(void) = {
   [SYS_getmem]  sys_getmem,
   [SYS_dtbs]    sys_dtbs,
   [SYS_getpsz]  sys_getpsz,
-  [SYS_printptes]     sys_printptes,
-  [SYS_printkernptes]  sys_printkernptes,
+  [SYS_printptes]       sys_printptes,
+  [SYS_printkernptes]   sys_printkernptes,
+  [SYS_sandbox]         sys_sandbox,
   // clang-format on
 };
 

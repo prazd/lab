@@ -27,3 +27,4 @@
 #define SYS_getpsz 25
 #define SYS_printptes 26
 #define SYS_printkernptes 27
+#define SYS_sandbox 28

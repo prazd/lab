@@ -6,6 +6,22 @@
 
 volatile static int started = 0;
 
+#define LOG 0
+
+static void call(const char* str, void(*f)()){
+#if LOG
+    printk("%s:", str);
+#endif
+
+    f();
+
+#if LOG
+    printk(" OK\n");
+#endif
+}
+
+#define CALL(x) call(#x, x);
+
 // start() jumps here in supervisor mode on all CPUs.
 void
 main()
@@ -16,20 +32,19 @@ main()
     printk("\n");
     printk("xv6 kernel is booting\n");
     printk("\n");
-    kinit();            // physical page allocator
-    kvminit();          // create kernel page table
-    kvminithart();      // turn on paging
-    procinit();         // process table
-    trapinit();         // trap vectors
-    trapinithart();     // install kernel trap vector
-    plicinit();         // set up interrupt controller
-    plicinithart();     // ask PLIC for device interrupts
-    binit();            // buffer cache
-    iinit();            // inode table
-    fileinit();         // file table
-    virtio_disk_init(); // emulated hard disk
-    userinit();         // first user process
-
+    CALL(kinit)            // physical page allocator
+    CALL(kvminit)          // create kernel page table
+    CALL(kvminithart)      // turn on paging
+    CALL(procinit)         // process table
+    CALL(trapinit)         // trap vectors
+    CALL(trapinithart)     // install kernel trap vector
+    CALL(plicinit)         // set up interrupt controller
+    CALL(plicinithart)     // ask PLIC for device interrupts
+    CALL(binit)            // buffer cache
+    CALL(iinit)            // inode table
+    CALL(fileinit)         // file table
+    CALL(virtio_disk_init) // emulated hard disk
+    CALL(userinit)         // first user process
     __atomic_store_n(&started, 1, __ATOMIC_RELEASE);
   } else {
     while (__atomic_load_n(&started, __ATOMIC_ACQUIRE) == 0)

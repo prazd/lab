@@ -15,10 +15,13 @@ __attribute__((aligned(16))) char stack0[4096 * NCPU];
 void
 start()
 {
-  DTB_ADDRESS = r_dtbaddr();
+  DTB_ADDRESS = r_a1();
   set_dtb_header();
   parse_dtb();
   update_addr_range(ADDRBEGIN, ADDREND);
+
+  set_rand_seed(r_cycle());
+
   // set M Previous Privilege mode to Supervisor, for mret.
   unsigned long x = r_mstatus();
   x &= ~MSTATUS_MPP_MASK;

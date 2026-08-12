@@ -44,6 +44,7 @@ entry("dtbs");
 entry("getpsz");
 entry("printptes");
 entry("printkernptes");
+entry("sandbox");
 entry("sbrk");
 entry("pause");
 entry("uptime");

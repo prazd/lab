@@ -54,6 +54,13 @@ sys_printkernptes(void)
 }
 
 uint64
+sys_sandbox(void)
+{
+  printk("%lu\n", get_rand_state());
+  return 0;
+}
+
+uint64
 sys_fork(void)
 {
   return kfork();
