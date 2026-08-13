@@ -42,6 +42,8 @@
 // in both user and kernel space.
 #define TRAMPOLINE (MAXVA - PGSIZE)
 
+#define KVA_ASLR (MAXVA - PGSIZE * 2)
+
 // map kernel stacks beneath the trampoline,
 // each surrounded by invalid guard pages.
 #define KSTACK(p) (TRAMPOLINE - ((p) + 1) * 2 * PGSIZE)
