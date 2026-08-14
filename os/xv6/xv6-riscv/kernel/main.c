@@ -6,7 +6,7 @@
 
 volatile static int started = 0;
 
-#define LOG 0
+#define LOG 1
 
 static void call(const char* str, void(*f)()){
 #if LOG

@@ -18,22 +18,52 @@ extern char etext[]; // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
-//static unsigned long OFFSET = 4096000000;
+// TODO: debug
+#define INITHART_ADDRESS 0x20000000
+
+//static unsigned long OFFSET = 4096;
 
 const uint64 HUGE_ADDRESSES[] = {
     PLIC
 };
 
-// TODO: finish
-static inline void write_inithart_instructions(uint64 satp, uint64 offset){
-
-//  asm volatile("csrw satp, %0" : : "r"(x)); // use PT
-//  asm volatile("auipc t0, 0");
-//  asm volatile("add t0, t0, %0"::"r"(offset):"t0");
-//  asm volatile("jalr zero, 0(t0)");
-
+static inline void write_inithart_old(){
   static unsigned char instructions[] = {
-    0x73, 0x00, 0x00, 0x12, // sfence.vma zero, zero
+    0xb7,0xa2,0x22,0x01,
+    0x37,0x03,0x80,0x00,
+    0xb7,0x03,0x00,0x00,
+    0x37,0x0e,0x00,0x00,
+
+    0x33, 0x4f, 0xef, 0x01,     // xor t5, t5, t5
+
+    0x93, 0xd2, 0xc2, 0x00,     // srli t0,t0,12
+    0x33, 0x6f, 0x5f, 0x00,     //  or   t5,t5,t0
+
+    0x13, 0x53, 0xc3, 0x00,     // srli t1,t1,12
+    0x13, 0x13, 0x43, 0x01,     // slli t1,t1,20
+    0x33, 0x6f, 0x6f, 0x00,     //  or   t5,t5,t1
+
+    0x93, 0xd3, 0xc3, 0x00,     //  srli t2,t2,12
+    0x93, 0x93, 0x83, 0x02,     //  slli t2,t2,40
+    0x33, 0x6f, 0x7f, 0x00,     // or   t5,t5,t2
+
+    0x13, 0x5e, 0xce, 0x00,     //  srli t3,t3,12
+    0x13, 0x1e, 0xce, 0x03,     //  slli t3,t3,60
+    0x33, 0x6f, 0xcf, 0x01,     //  or   t5,t5,t3
+
+    0x67, 0x00, 0xf0, 0x00      // jalr zero, 0(t5)
+  };
+
+  unsigned char* ptr = (unsigned char*)(INITHART_ADDRESS);
+  unsigned char* it = instructions;
+  for (int i = 0, e = sizeof(instructions); i != e; ++i)
+    *ptr++ = *it++;
+}
+
+static inline void write_inithart_instructions(uint64 satp, uint64 offset){
+  offset += 0x800010c0;
+  static unsigned char instructions[] = {
+    0x73, 0x00, 0x00, 0x12,    // sfence.vma zero, zero
 
     // 64bit immediate
     0xb7,0x52,0x34,0x12,       //  lui t0, 0x12345 (20bit)
@@ -59,7 +89,6 @@ static inline void write_inithart_instructions(uint64 satp, uint64 offset){
     0x33, 0x6f, 0xcf, 0x01,     //  or   t5,t5,t3
 
     0x73, 0x10, 0x0f, 0x18,     // csrw satp, t5
-    0x97, 0x0f, 0x00, 0x00,     // auipc t0, 0
 
     // 64 bit immediate
     0xb7,0x52,0x34,0x12,       //  lui t0, 0x12345 (20bit)
@@ -84,11 +113,12 @@ static inline void write_inithart_instructions(uint64 satp, uint64 offset){
     0x13, 0x1e, 0xce, 0x03,     //  slli t3,t3,60
     0x33, 0x6f, 0xcf, 0x01,     //  or   t5,t5,t3
 
+    0x73, 0x00, 0x00, 0x12,    // sfence.vma zero, zero
 
-    0xb3, 0x82, 0xe2, 0x01,      // add t0, t0, t5
-    0x67, 0x80, 0x02, 0x00      // jalr zero, 0(t0)
+    0x67, 0x00, 0xf0, 0x00      // jalr zero, 0(t5)
   };
 
+// TODO: fix
 
   // 64bit immediate
   // set satp
@@ -106,17 +136,48 @@ static inline void write_inithart_instructions(uint64 satp, uint64 offset){
 
   instructions[17] =  (instructions[17] & 0xf)  | (((satp >> 56) & 0xf) << 4);
 
-  //
+
+  instructions[75] = offset & 0xff;
+  instructions[74] = (offset >> 8) & 0xff;
+  instructions[73] = (instructions[73] & 0xf) | ((offset >> 16) & 0xf0);
+
+  instructions[79] = (((offset >> 16) & 0xf) << 4)  | (((offset >> 24) & 0xf0) >> 4);
+  instructions[78] = (((offset >> 24) & 0xf) << 4)  | (((offset >> 32) & 0xf0) >> 4);
+  instructions[77] =  (instructions[77] & 0xf)  |   (((offset >> 32) & 0xf) << 4);
+
+  instructions[83] =  (((offset >> 40) & 0xf) << 4)  | (((offset >> 40) & 0xf0) >> 4);
+  instructions[82] =  (((offset >> 48) & 0xf) << 4)  | (((offset >> 48) & 0xf0) >> 4);
+  instructions[81] =  (instructions[81] & 0xf)     | (((offset >> 56) & 0xf) << 4);
+
+  instructions[85] =  (instructions[85] & 0xf)  | (((offset >> 56) & 0xf) << 4);
+
+#if 0
+  // DEBUG
   unsigned long lui_t0 = ((instructions[4] << 24) | (instructions[5] << 16) | (instructions[6] << 8)  | instructions[7])     & 0x00000000ffffffff;
   unsigned long lui_t1 = ((instructions[8] << 24) | (instructions[9] << 16) | (instructions[10] << 8)  | instructions[11])   & 0x00000000ffffffff;
   unsigned long lui_t2 = ((instructions[12] << 24) | (instructions[13] << 16) | (instructions[14] << 8)  | instructions[15]) & 0x00000000ffffffff;
   unsigned long lui_t3 = ((instructions[16] << 24) | (instructions[17] << 16) | (instructions[18] << 8)  | instructions[19]) & 0x00000000ffffffff;
+
+  unsigned long offset_lui_t0 = ((instructions[72] << 24) | (instructions[73] << 16) | (instructions[74] << 8)  | instructions[75]) & 0x00000000ffffffff;
+  unsigned long offset_lui_t1 = ((instructions[76] << 24) | (instructions[77] << 16) | (instructions[78] << 8)  | instructions[79]) & 0x00000000ffffffff;
+  unsigned long offset_lui_t2 = ((instructions[80] << 24) | (instructions[81] << 16) | (instructions[82] << 8)  | instructions[83]) & 0x00000000ffffffff;
+  unsigned long offset_lui_t3 = ((instructions[84] << 24) | (instructions[85] << 16) | (instructions[86] << 8)  | instructions[87]) & 0x00000000ffffffff;
 
 
   printk("lui_t0:%p\n", (void*)lui_t0);
   printk("lui_t1:%p\n", (void*)lui_t1);
   printk("lui_t2:%p\n", (void*)lui_t2);
   printk("lui_t3:%p\n", (void*)lui_t3);
+
+  printk("\n\nlui_t0:%p\n", (void*)offset_lui_t0);
+  printk("lui_t1:%p\n", (void*)offset_lui_t1);
+  printk("lui_t2:%p\n", (void*)offset_lui_t2);
+  printk("lui_t3:%p\n", (void*)offset_lui_t3);
+#endif
+  unsigned char* ptr = (unsigned char*)(VIRTIO0 + 4096);
+  unsigned char* it = instructions;
+  for (int i = 0, e = sizeof(instructions); i != e; ++i)
+      *ptr++ = *it++;
 }
 
 // Make a direct-map page table for the kernel.
@@ -134,29 +195,29 @@ kvmmake(void)
   // virtio mmio disk interface
   kvmmap(kpgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
 
+  kvmmap(kpgtbl, INITHART_ADDRESS, INITHART_ADDRESS, PGSIZE, PTE_R | PTE_W | PTE_X);
+
   // PLIC
   kvmmaphuge(kpgtbl, PLIC, PLIC, 0x4000000, PTE_R | PTE_W);
 
+#if 0
   // map kernel text executable and read-only.
-//  kvmmap(kpgtbl, KERNBASE + OFFSET, KERNBASE, (uint64)etext - KERNBASE, PTE_R | PTE_X);
-  kvmmap(kpgtbl, KERNBASE, KERNBASE, (uint64)etext - KERNBASE, PTE_R | PTE_X);
-
+  kvmmap(kpgtbl, KERNBASE + OFFSET, KERNBASE, (uint64)etext - KERNBASE, PTE_R | PTE_X);
   // map kernel data and the physical RAM we'll make use of.
-//  kvmmap(kpgtbl, (uint64)etext + OFFSET, (uint64)etext, PHYSTOP - (uint64)etext,
-//         PTE_R | PTE_W);
-//
+  kvmmap(kpgtbl, (uint64)etext + OFFSET, (uint64)etext, PHYSTOP - (uint64)etext,
+         PTE_R | PTE_W);
+#else
+  kvmmap(kpgtbl, KERNBASE, KERNBASE, (uint64)etext - KERNBASE, PTE_R | PTE_X);
   kvmmap(kpgtbl, (uint64)etext, (uint64)etext, PHYSTOP - (uint64)etext,
          PTE_R | PTE_W);
+#endif
 
   // map the trampoline for trap entry/exit to
   // the highest virtual address in the kernel.
   kvmmap(kpgtbl, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
 
-  //
-  kvmmap(kpgtbl, KVA_ASLR, KVA_ASLR, PGSIZE, PTE_R | PTE_X);
-
-  // test
-  write_inithart_instructions(0x1122334455667788, 0);
+//  write_inithart_instructions(MAKE_SATP(kernel_pagetable), OFFSET);
+  write_inithart_old();
 
   // allocate and map a kernel stack for each process.
   proc_mapstacks(kpgtbl);
@@ -193,12 +254,15 @@ kvminit(void)
 void
 kvminithart()
 {
-  // wait for any previous writes to the page table memory to finish.
+
+  printk("JMP\n");
+  asm volatile ("jalr zero, 0(%0)" :: "r"(INITHART_ADDRESS):"memory");
+
+//  wait for any previous writes to the page table memory to finish.
   sfence_vma();
 
   w_satp(MAKE_SATP(kernel_pagetable));
-// TODO: debug
-//  w_satp_offset(OFFSET, MAKE_SATP(kernel_pagetable));
+
   // flush stale entries from the TLB.
   sfence_vma();
 }
