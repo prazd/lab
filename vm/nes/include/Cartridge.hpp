@@ -47,6 +47,7 @@ struct Cartridge {
     bool trainer_present = false;
     bool is_alternative_nametable = false;
     unsigned short mapper_num = 0;
+    unsigned short submapper_num = 0;
     unsigned short prg_rom_sz = 0;
     unsigned short chr_rom_sz = 0;
     unsigned char prg_ram_sz = 0;
@@ -85,6 +86,7 @@ struct Cartridge {
         switch (current_format) {
             case NES2_0: {
                 mapper_num = ((buffer[Flag8] & 0xf) << 8) | (((buffer[Flag7] >> 4) & 0xf) << 4) | ((buffer[Flag6] >> 4) & 0xf);
+                submapper_num = (buffer[Flag8] & 0xf0) >> 4;
                 prg_rom_sz = (((buffer[Flag9]) & 0xf) << 8) | (buffer[Flag4]);
                 chr_rom_sz = (((buffer[Flag9]) >> 4) & 0xf << 8) | (buffer[Flag5]);
                 prg_ram_sz = (buffer[Flag10]) & 0xf;

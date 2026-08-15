@@ -245,10 +245,10 @@ void PPU::tile_data_fetch(Bus& bus) {
             current_step = PTL;
             break;}  // fetch attribute table byte
         case PTL: {
-            pattern_table_l = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, false, (bus.ppuctrl >> 4) & 1));
+            pattern_table_l = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, false, bus.ppuctrl & 0x10));
             current_step = PTH; break;}     // pattern table tile low
         case PTH: {
-            pattern_table_h = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, true, (bus.ppuctrl >> 4) & 1));
+            pattern_table_h = tile_byte_from_addr(bus, to_pattern_addr(((v >> 12) & 0x7), nt_byte, true, bus.ppuctrl & 0x10));
             shift_register_low &= 0xff00;
             shift_register_low |=  pattern_table_l;
             shift_register_high &= 0xff00;
@@ -386,6 +386,11 @@ void PPU::draw_pixel(Bus &bus) {
     else
 #endif
         update_internal_display(palette[pixel_index]);
+
+#if DEBUG_MODE
+    if (show_current_pixel && current_x < std::size(displays[0]))
+        displays[current_display_index][current_x] = RED;
+#endif
 
     shift_register_high <<= 1;
     shift_register_low <<= 1;

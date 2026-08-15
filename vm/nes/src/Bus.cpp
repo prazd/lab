@@ -62,7 +62,8 @@ void Bus::write(unsigned short addr, unsigned char value) {
                 ppu_t |= (((ppuaddr & 0x7f) << 8));
             }
             if (ppu_w){
-                ppu_t &= 0x3fff;
+                // TODO: check
+//                ppu_t &= 0x3fff;
                 mapper.update_state(ppu_t, ppu_v);
                 ppu_v = ppu_t;
 #if DEBUG_MODE
@@ -532,6 +533,7 @@ void Bus::adjust_cpu_mirroring_unsafe(unsigned short& addr) {
 }
 
 void Bus::adjust_ppu_mirroring(unsigned short& addr) {
+    addr &= 0x3fff; // TODO: check
     if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
         addr = constants::IMAGE_PALETTE_BEGIN + (addr % 32);
     if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)
@@ -542,6 +544,7 @@ void Bus::adjust_ppu_mirroring(unsigned short& addr) {
 }
 
 void Bus::adjust_ppu_mirroring_unsafe(unsigned short& addr) {
+    addr &= 0x3fff; // TODO: check
     if (addr >= constants::PALETTES_MIRROR_BEGIN && addr <= constants::PALETTES_MIRROR_END)
         addr = constants::IMAGE_PALETTE_BEGIN + (addr % 32);
     if (addr == 0x3f10 || addr == 0x3f14 || addr == 0x3f18 || addr == 0x3f1c)

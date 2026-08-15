@@ -205,7 +205,8 @@ namespace mappers {
     struct AxROM {
         unsigned char bank = 0;
         bool single_screen_nt = false;
-        inline void handle(unsigned short addr, unsigned char val){
+        inline void handle(const std::vector<unsigned char>& rom, unsigned short addr, unsigned char val){
+            val = val & read_prg_rom(rom, addr); // bus conflict  (TODO: check)
             bank = val & 0x7;
             single_screen_nt = val & 0x10;
         }
@@ -449,7 +450,7 @@ struct Mapper {
                 uxrom.handle(addr, value); break;
             case CNROM: {cnrom.handle(addr, value);  break;}
             case MMC3:  {mmc3.tick_irq(addr); mmc3.handle(addr, value); update_screen_mirroring(false); break;}
-            case AXROM: {axrom.handle(addr, value); update_screen_mirroring(false); break;}
+            case AXROM: {axrom.handle(prg, addr, value); update_screen_mirroring(false); break;}
             default: return;
         }
     }

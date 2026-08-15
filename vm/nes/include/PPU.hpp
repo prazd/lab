@@ -58,8 +58,8 @@ struct PPU {
     bool is_sprite_off = false;
     bool run = false;
     bool fill_white_background = true;
-
-
+    bool show_current_pixel = false;
+    unsigned char prev_pixel_res = 0;
     struct PixelMixingDebugView {
         enum Mode: unsigned char {
             Bg = 0,

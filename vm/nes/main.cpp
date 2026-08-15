@@ -503,6 +503,8 @@ struct NESVM {
                         cpu.stop_requested = !cpu.stop_requested;
                     if (IsKeyPressed(KEY_X))
                         grid_view_enable = !grid_view_enable;
+                    if (IsKeyPressed(KEY_Z))
+                        ppu.show_current_pixel = !ppu.show_current_pixel;
 
                     if (IsKeyPressed(KEY_ONE) ||
                         IsKeyPressed(KEY_TWO) ||
@@ -596,7 +598,8 @@ int main(){
 //    /Users/prazd/Desktop/dev/nes-test-roms/test_apu_2/test_6.nes
 // /Users/prazd/Desktop/dev/FinalFantasy.nes - debug
 
+///Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes
 // TODO: AccuracyCoin (APU reg activation debug)
-    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // 929a
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes"}.run(); // 929a
 #endif
 }
