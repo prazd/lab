@@ -13,7 +13,7 @@ unsigned char PPU::tile_byte_from_addr(Bus& bus, unsigned short addr) {
 //    |+-------------- H: Half of pattern table (0: "left"; 1: "right")
 //    +--------------- 0: Pattern table is at $0000-$1FFF
     unsigned char y_offset = addr & 0x7;
-    bool bit_plane = (addr >> 3) & 1;
+    bool bit_plane = addr & 0x8;
     unsigned char tile_number = (addr >> 4) & 0xff;
     unsigned short base = (addr >> 12) & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN;
 
@@ -307,7 +307,7 @@ void PPU::draw_pixel(Bus &bus) {
     size_t scanline_x = current_x % 256;
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
         if (secondary_oam[i].x_pos <= scanline_x && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
-                is_horizontal_flip = (secondary_oam[i].attrib >> 6) & 1;
+                is_horizontal_flip = secondary_oam[i].attrib & 0x40;
                 auto l_sprite_data =
                         is_horizontal_flip ?
                         ((secondary_oam[i].shift_h & 1) << 1)  | (secondary_oam[i].shift_l  & 1)
@@ -354,7 +354,7 @@ void PPU::draw_pixel(Bus &bus) {
     }
 #endif
 
-    unsigned char attrib_high_bit = is_sprite ? ((sprite_attrib >> 1) & 1) : (attributes_high >> (15-bus.ppu_x)) & 1;
+    unsigned char attrib_high_bit = is_sprite ? (sprite_attrib & 0x2) : (attributes_high >> (15-bus.ppu_x)) & 1;
     unsigned char attrib_low_bit = is_sprite ? ((sprite_attrib) & 1) : (attributes_low >> (15-bus.ppu_x)) & 1;
 
     unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
@@ -398,7 +398,7 @@ void PPU::draw_pixel(Bus &bus) {
     attributes_high <<= 1;
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
         if (secondary_oam[i].x_pos <= scanline_x && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
-            if ((secondary_oam[i].attrib >> 6) & 1){
+            if (secondary_oam[i].attrib & 0x40){
                 secondary_oam[i].shift_l >>= 1;
                 secondary_oam[i].shift_h >>= 1;
             } else {
@@ -417,9 +417,9 @@ void PPU::secondary_oam_fill(Bus& bus){
             bus.read_chr( last_address);
         }
         for (size_t i = 0, e = secondary_oam_buffer.size(); i != e; ++i) {
-            bool is_vertical_flip = (secondary_oam_buffer[i].attrib >> 7) & 1;
+            bool is_vertical_flip = secondary_oam_buffer[i].attrib & 0x80;
             auto pt_base = (bus.sprite_mode == Bus::SpriteMode::m8x8 ?
-                            (!((bus.ppuctrl >> 3) & 1) ? constants::PATTERN_TABLE0_BEGIN
+                            (!(bus.ppuctrl & 0x8) ? constants::PATTERN_TABLE0_BEGIN
                                                        : constants::PATTERN_TABLE1_BEGIN) :
                             (secondary_oam_buffer[i].pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN
                                                                   : constants::PATTERN_TABLE0_BEGIN));
@@ -485,7 +485,6 @@ void PPU::tick(Bus& bus) {
         if (current_scanline_cycle == 1) { // todo: debug (2)
             update_current_display();
             bus.nmi_interrupt_flip_flop = false; // todo: check
-            bus.clear_nmi_cycle = current_cycle; // todo: check
             bus.ppustatus &= 0x3f;
             bus.nmi_reject = false; // TODO: check
         } else if (current_scanline_cycle == 257) {
@@ -509,6 +508,5 @@ void PPU::tick(Bus& bus) {
 #endif
     }
     bus.ppu_current_y = current_y;
-    bus.ppu_current_scanline = current_scanline_cycle;
     prev_ppuctrl_val = bus.ppuctrl;
 }

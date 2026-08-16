@@ -82,10 +82,8 @@ struct Bus {
     bool nmi_interrupt_flip_flop = false;
     bool nmi_reject = false;
     size_t ppu_current_y = 0;
-    size_t ppu_current_scanline = 0;
     size_t status_read_cycle = 0;
     size_t current_nmi_cycle = 0;
-    size_t clear_nmi_cycle = 0;
     size_t current_ppu_cycle = 0;
     bool ppu_irq_interrupt_flip_flop = false;
     bool apu_irq_interrupt_flip_flop = false;
@@ -93,8 +91,6 @@ struct Bus {
     unsigned char cpu_internal_bus_value{};
     unsigned char cpu_open_bus_value{};
     unsigned char ppu_open_bus_value{};
-    unsigned short last_ppu_address = 0;
-    unsigned short last_read_address = 0;
 
     size_t instructions_count = 0;
     size_t last_instruction_num_read = 0;

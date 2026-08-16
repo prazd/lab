@@ -66,12 +66,12 @@ struct GameGenie {
             if (game_mode) return;
             game_mode = value & 1;
 
-            data[0].active =  !((value >> 4) & 1);
-            data[0].compare = ((value >> 1) & 1);
-            data[1].active = !((value >> 5) & 1);
-            data[1].compare = ((value >> 2) & 1);
-            data[2].active = !((value >> 6) & 1);
-            data[2].compare = ((value >> 3) & 1);
+            data[0].active =  !(value & 0x10);
+            data[0].compare = (value & 0x2);
+            data[1].active = !(value & 0x20);
+            data[1].compare = (value & 0x4);
+            data[2].active = !(value & 0x40);
+            data[2].compare = (value & 0x8);
         }
 
     }

@@ -78,9 +78,9 @@ struct Cartridge {
 
         if (current_format == NES2_0 || current_format == iNES) {
             is_horizontal_arrangement = !((buffer[Flag6]) & 1);
-            is_battery = (buffer[Flag6] >> 1) & 1;
-            trainer_present = (buffer[Flag6] >> 2) & 1;
-            is_alternative_nametable = (buffer[Flag6] >> 3) & 1;
+            is_battery = buffer[Flag6] & 0x2;
+            trainer_present = buffer[Flag6] & 0x4;
+            is_alternative_nametable = buffer[Flag6] & 0x8;
         }
 
         switch (current_format) {

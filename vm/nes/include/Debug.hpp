@@ -266,8 +266,8 @@ struct NameTableView: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                                 auto res = ((((h_tile >> 7) & 1) << 1) | (l_tile >> 7) & 1);
                                 h_tile <<= 1;
                                 l_tile <<= 1;
-                                auto attrib_high_bit = (attrib_value >> 1) & 1;
-                                auto attrib_low_bit = attrib_value & 1;
+                                bool attrib_high_bit = attrib_value & 0x2;
+                                bool attrib_low_bit = attrib_value & 1;
                                 unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
                                 unsigned short r_index = constants::IMAGE_PALETTE_BEGIN;
                                 r_index += ((res != 0) * index);
@@ -500,7 +500,9 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
 
     bool next = false;
     bool selected_move_active = false;
+    bool updated_pc_move = false;
     unsigned short selected_line_pc = 0;
+    unsigned short saved_pc{};
     unsigned short base{};
     unsigned short pc{};
     unsigned char selected_scanline{};
@@ -517,8 +519,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle line_button;
     UserInput<x, y - 30, w, 30> u_input;
 
-    Rectangle button1; // next
-    Rectangle button2; //
+    Rectangle button1;
+    Rectangle button2;
     Rectangle button3;
     Rectangle button4;
     Rectangle button5;
@@ -529,8 +531,6 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle button10;
     Rectangle button11;
     Rectangle button12;
-    Rectangle button13;
-    Rectangle button14;
 
     Rectangle asm_dump_button;
     Rectangle state_dump_button;
@@ -540,9 +540,6 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     Rectangle stress_button;
 
 
-    Rectangle sync_button;
-    Rectangle change_mode_button;
-
     Disassembler(CPU& cpu, Bus& bus): base(cpu.pc),
                                       line_button{DW::rec.x - 20, DW::rec.y, 10, 10},
                                       button1{DW::rec.x, DW::rec.y + h, 40, 40},
@@ -551,15 +548,12 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
                                       button4{DW::rec.x + 40 * 3, DW::rec.y + h, 40, 40},
                                       button5{DW::rec.x + 40 * 4, DW::rec.y + h, 40, 40},
                                       button6{DW::rec.x + 40 * 5, DW::rec.y + h, 40, 40},
-                                      button7{DW::rec.x + 40 * 6, DW::rec.y + h, 40, 40},
-                                      button8{DW::rec.x + 40 * 7, DW::rec.y + h, 40, 40},
-                                      sync_button{DW::rec.x, DW::rec.y + h + 40, 40, 40},
-                                      change_mode_button{DW::rec.x + 40, DW::rec.y + h + 40, 40, 40},
+                                      button7{DW::rec.x, DW::rec.y + h + 40, 40, 40},
+                                      button8{DW::rec.x + 40, DW::rec.y + h + 40, 40, 40},
                                       button9{DW::rec.x + 40*2, DW::rec.y + h + 40, 40, 40},
                                       button10{DW::rec.x + 40*3, DW::rec.y + h + 40, 40, 40},
                                       button11{DW::rec.x + 40*4, DW::rec.y + h + 40, 40, 40},
                                       button12{DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40},
-                                      button14{DW::rec.x + 40 * 8, DW::rec.y + h, 40, 40},
                                       asm_dump_button{DW::rec.x + w, DW::rec.y + 40, 40, 40},
                                       state_dump_button{DW::rec.x + w, DW::rec.y + 40 * 2, 40, 40},
                                       state_import_button{DW::rec.x + w, DW::rec.y + 40 * 3, 40, 40},
@@ -646,7 +640,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     }
 
     void snap_handle(CPU& cpu, PPU& ppu, Bus& bus, auto& snap_storage){
-        if (CheckCollisionPointRec(GetMousePosition(), button14) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
+        if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             snap_storage.step_back(bus, cpu, ppu);
             handle(cpu);
             cpu.debug_run = false;
@@ -654,26 +648,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
     }
 
     void draw(CPU& cpu, PPU& ppu, Bus& bus, APU& apu, Cartridge& cartridge) {
-        line_button = {DW::rec.x - 20, DW::rec.y, 10, 10};
-        button1 = {DW::rec.x, DW::rec.y + h, 40, 40};
-        button2 = {DW::rec.x + 40, DW::rec.y + h, 40, 40};
-        button3 = {DW::rec.x + 40 * 2, DW::rec.y + h, 40, 40};
-        button4 = {DW::rec.x + 40 * 3, DW::rec.y + h, 40, 40};
-        button5 = {DW::rec.x + 40 * 4, DW::rec.y + h, 40, 40};
-        button6 = {DW::rec.x + 40 * 5, DW::rec.y + h, 40, 40};
-        button7 = {DW::rec.x + 40 * 6, DW::rec.y + h, 40, 40};
-        button8 = {DW::rec.x + 40 * 7, DW::rec.y + h, 40, 40};
-        button14 = {DW::rec.x + 40 * 8, DW::rec.y + h, 40, 40};
-        button9 = {DW::rec.x + 40*2, DW::rec.y + h + 40, 40, 40};
-        button10 = {DW::rec.x + 40*3, DW::rec.y + h + 40, 40, 40};
-        button11 = {DW::rec.x + 40*4, DW::rec.y + h + 40, 40, 40};
-        button12 = {DW::rec.x + 40*5, DW::rec.y + h + 40, 40, 40};
-        asm_dump_button = {DW::rec.x + w, DW::rec.y + 40, 40, 40};
-
         u_input.rec = {DW::rec.x, DW::rec.y-30, w, 30};
-
-        change_mode_button = {DW::rec.x + 40, DW::rec.y + h + 40, 40, 40};
-        sync_button = {DW::rec.x, DW::rec.y + h + 40, 40, 40};
 
         pc = base;
 
@@ -690,19 +665,22 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             selected_line_pc = (unsigned short) val;
             selected_move_active = !selected_move_active;
             ppu.fill_white_background = !selected_move_active;
-        // trigger search
-        } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
+        } else if (CheckCollisionPointRec(GetMousePosition(), button6) && IsMouseButtonPressed(0)){
+            saved_pc = cpu.pc;
+            updated_pc_move = true;
+        } else if (CheckCollisionPointRec(GetMousePosition(), button9) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
+            // trigger search
             unsigned short addr = DW::hex_to_ushort(u_input.s, 16);
             bus.adjust_cpu_mirroring_unsafe(addr);
             bus.cpu_trigger_write_addresses[addr] = true;
-        }   else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
+        }   else if (CheckCollisionPointRec(GetMousePosition(), button10) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             unsigned short addr = DW::hex_to_ushort(u_input.s, 16);
             bus.adjust_cpu_mirroring_unsafe(addr);
             bus.cpu_trigger_read_addresses[addr] = true;
-        }   else if (CheckCollisionPointRec(GetMousePosition(), button7) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
+        }   else if (CheckCollisionPointRec(GetMousePosition(), button11) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             bus.cpu_trigger_read_addresses = 0;
             bus.cpu_trigger_write_addresses = 0;
-        } else if (CheckCollisionPointRec(GetMousePosition(), button8) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
+        } else if (CheckCollisionPointRec(GetMousePosition(), button12) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
             trigger_search = !trigger_search;
             bus.cpu_addr_triggered_on_write = !trigger_search;
             bus.cpu_addr_triggered_on_read = !trigger_search;
@@ -745,9 +723,9 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             bus.ppu_addr_triggered_on_read = !trigger_search;
             ppu.fill_white_background = !trigger_search;
         }
-        else if (CheckCollisionPointRec(GetMousePosition(), sync_button) && IsMouseButtonPressed(0))
+        else if (CheckCollisionPointRec(GetMousePosition(), button7) && IsMouseButtonPressed(0))
             should_sync = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), change_mode_button) && IsMouseButtonPressed(0))
+        else if (CheckCollisionPointRec(GetMousePosition(), button8) && IsMouseButtonPressed(0))
             run_mode = static_cast<RunMode>((run_mode + 1) % RunModeCount);
         else if (CheckCollisionPointRec(GetMousePosition(), asm_dump_button) && IsMouseButtonPressed(0)){
             std::vector<unsigned short> subroutines_addresses{};
@@ -843,12 +821,8 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button2, " jmp", GREEN, 15.f);
             DW::draw_text_button(button3, " step", GREEN, 15.f);
             DW::draw_text_button(button4, " ntjmp", GREEN, 15.f);
-
-            DW::draw_text_button(button5, " wadd", GREEN, 15.f);
-            DW::draw_text_button(button6, " radd", GREEN, 15.f);
-            DW::draw_text_button(button7, " clear", GREEN, 15.f);
-            DW::draw_text_button(button8, " trun", GREEN, 15.f);
-            DW::draw_text_button(button14, " prev", GREEN, 15.f);
+            DW::draw_text_button(button5, " prev", GREEN, 15.f);
+            DW::draw_text_button(button6, " new_pc", GREEN, 15.f);
 
         } else {
             DW::draw_text_button(button1, "frame", GREEN, 15.f);
@@ -857,20 +831,21 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             DW::draw_text_button(button4, " linej", GREEN, 15.f);
             DW::draw_text_button(button5, " dot", GREEN, 15.f);
             DW::draw_text_button(button6, " run", GREEN, 15.f);
-
-            DW::draw_text_button(button9, " wadd", GREEN, 15.f);
-            DW::draw_text_button(button10, " radd", GREEN, 15.f);
-            DW::draw_text_button(button11, " clear", GREEN, 15.f);
-            DW::draw_text_button(button12, " trun", GREEN, 15.f);
         }
+
+        DW::draw_text_button(button7, " state", GREEN, 15.f);
+        DW::draw_text_button(button8, " mode", GREEN, 15.f);
+        DW::draw_text_button(button9, " wadd", GREEN, 15.f);
+        DW::draw_text_button(button10, " radd", GREEN, 15.f);
+        DW::draw_text_button(button11, " clear", GREEN, 15.f);
+        DW::draw_text_button(button12, " trun", GREEN, 15.f);
+
         DW::draw_text_button(asm_dump_button, " d_asm", GREEN, 15.f);
         DW::draw_text_button(state_dump_button, " d_state", GREEN, 15.f);
         DW::draw_text_button(state_import_button, " i_state", GREEN, 15.f);
         DW::draw_text_button(load_save_button, " load_save", GREEN, 15.f);
         DW::draw_text_button(save_button, " save", GREEN, 15.f);
         DW::draw_text_button(stress_button, " stress", stress_speed ? GREEN : RED, 15.f);
-        DW::draw_text_button(sync_button, " state", GREEN, 15.f);
-        DW::draw_text_button(change_mode_button, " mode", GREEN, 15.f);
         u_input.handle();
         ss.str("");
     }
@@ -1683,8 +1658,8 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
                     for (int j = 0; j < 8; ++j) {
                         auto pt_index =  *(bus.oam + ((oam_index + j) * 4) + 1);
                         auto attrib =    *(bus.oam + ((oam_index + j) * 4) + 2);
-                        bool is_vertical_flip = (attrib >> 7) & 1;
-                        bool is_horizontal_flip = ((attrib >> 6) & 1);
+                        bool is_vertical_flip = attrib & 0x80;
+                        bool is_horizontal_flip = attrib & 0x40;
 
                         unsigned char updated_pt_index =
                                 bus.sprite_mode ==  Bus::SpriteMode::m8x8 ? pt_index : (pt_index & 0xfe);
@@ -1698,14 +1673,14 @@ struct SpriteTilesViewer: DebugWindowWithTexture<x, y, w, h, t_w, t_h> {
 
                         auto pt_base =
                                 bus.sprite_mode == Bus::SpriteMode::m8x8 ?
-                                       ((bus.ppuctrl >> 3) & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN) :
+                                       (bus.ppuctrl & 0x8 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN) :
                                 (pt_index & 1 ? constants::PATTERN_TABLE1_BEGIN : constants::PATTERN_TABLE0_BEGIN);
 
                         unsigned char shift_l = bus.unsafe_read_chr(pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (k % 8)) : (k % 8)));
                         unsigned char shift_h = bus.unsafe_read_chr(pt_base + (current_index * 16) + (is_vertical_flip ? (7 - (k % 8)) : (k % 8)) + 8);
 
-                        unsigned char attrib_high_bit = (attrib >> 3) & 1;
-                        unsigned char attrib_low_bit = (attrib >> 2) & 1;
+                        bool attrib_high_bit = attrib & 0x8;
+                        bool attrib_low_bit = attrib & 0x4;
                         for (int l = 0; l < 8; ++l) {
                             auto res =
                                     is_horizontal_flip ?

@@ -69,7 +69,6 @@ void Bus::write(unsigned short addr, unsigned char value) {
 #if DEBUG_MODE
                 start_v_value = ppu_v;
 #endif
-                last_ppu_address = ppu_v;
             }
             ppu_w = !ppu_w;
             return;
@@ -239,7 +238,6 @@ void Bus::inc_ppu_v_y() {
 // All regs for debug
 unsigned char Bus::read_prg_internal(unsigned short addr) {
     adjust_cpu_mirroring(addr);
-    last_read_address = addr;
 #if DEBUG_MODE
     cpu_read_set_addresses[addr] = true;
     cpu_addr_triggered_on_read = cpu_trigger_read_addresses[addr];
@@ -291,7 +289,7 @@ unsigned char Bus::read_prg_internal(unsigned short addr) {
 
         // https://www.nesdev.org/wiki/PPU_registers#PPUDATA_-_VRAM_data_($2007_read/write)
         case constants::PPUDATA:     {
-            if (ppu_v >= constants::IMAGE_PALETTE_BEGIN){
+            if ((ppu_v & 0x3fff) >= constants::IMAGE_PALETTE_BEGIN){
                 auto val = read_chr(ppu_v);
                 if (ppumask & 1) val &= 0xf0;
                 auto res = (val & 0x3f) | (ppu_open_bus_value & 0xc0);
@@ -604,6 +602,5 @@ void Bus::reset(){
     apu_irq_interrupt_flip_flop = false;
     ppu_irq_interrupt_flip_flop = false;
     open_bus_value_cycles = 0;
-    last_ppu_address = 0;
     mapper.reset();
 }

@@ -150,8 +150,8 @@ namespace mappers {
                     regs_bank_value[selected_bank] = value;
                 } else { // select bank
                     selected_bank = static_cast<Regs>(value & 0x7);
-                    a12_inversion = (value >> 7) & 1;
-                    prg_banks_mode = (value >> 6) & 1;
+                    a12_inversion = (value & 0x80);
+                    prg_banks_mode = (value & 0x40);
                 }
             } else if (addr >= 0xa000 && addr <= 0xbffe) {
                 if (!(addr & 1)) is_vertical = !(value & 1);

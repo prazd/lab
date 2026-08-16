@@ -168,9 +168,11 @@ struct NESVM {
                 dis.trigger_search = cpu.debug_run = !(bus.cpu_addr_triggered_on_write || bus.cpu_addr_triggered_on_read);
             } else if (reg_info.is_cpu_watching()){
                 cpu.debug_run = true;
+            } else if (dis.updated_pc_move){
+                dis.updated_pc_move = cpu.debug_run = (cpu.pc == dis.saved_pc);
             }
-        } while((dis.selected_move_active || dis.trigger_search || reg_info.is_cpu_watching()) && current_tick < constants::CPU_FRAME_CYCLE);
-        if (!dis.selected_move_active || !dis.trigger_search || !reg_info.is_cpu_watching())
+        } while((dis.selected_move_active || dis.trigger_search || reg_info.is_cpu_watching() || dis.updated_pc_move) && current_tick < constants::CPU_FRAME_CYCLE);
+        if (!dis.selected_move_active || !dis.trigger_search || !reg_info.is_cpu_watching() || !dis.updated_pc_move)
             dis.handle(cpu);
     }
 
@@ -600,6 +602,6 @@ int main(){
 
 ///Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes
 // TODO: AccuracyCoin (APU reg activation debug)
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes"}.run(); // 929a
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/scanline/scanline.nes"}.run(); // c5e3/c5c8
 #endif
 }
