@@ -36,7 +36,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
             return;}
         case constants::PPUMASK:   { ppumask = value; return;}
         case constants::OAMADDR:   { oamaddr = value; return;}
-        case constants::OAMDATA:   { oamdata = value; oam[oamaddr++] = value;return;}
+        case constants::OAMDATA:   { oam[oamaddr++] = oamdata = value; return;}
         case constants::PPUSCROLL: {
             ppuscroll = value;
             if (!ppu_w){
@@ -61,15 +61,7 @@ void Bus::write(unsigned short addr, unsigned char value) {
                 ppu_t &= 0xff;
                 ppu_t |= (((ppuaddr & 0x7f) << 8));
             }
-            if (ppu_w){
-                // TODO: check
-//                ppu_t &= 0x3fff;
-                mapper.update_state(ppu_t, ppu_v);
-                ppu_v = ppu_t;
-#if DEBUG_MODE
-                start_v_value = ppu_v;
-#endif
-            }
+            if (ppu_w) ppu_v_update_delay = 2;
             ppu_w = !ppu_w;
             return;
         }

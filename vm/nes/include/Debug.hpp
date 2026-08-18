@@ -665,7 +665,7 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
             selected_line_pc = (unsigned short) val;
             selected_move_active = !selected_move_active;
             ppu.fill_white_background = !selected_move_active;
-        } else if (CheckCollisionPointRec(GetMousePosition(), button6) && IsMouseButtonPressed(0)){
+        } else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == CPU_M && IsMouseButtonPressed(0)){
             saved_pc = cpu.pc;
             updated_pc_move = true;
         } else if (CheckCollisionPointRec(GetMousePosition(), button9) && run_mode == CPU_M && mouse_button_pred(pressed_mode)) {
@@ -698,9 +698,9 @@ struct Disassembler: DebugWindowText<x, y, w, h> {
         } else if (CheckCollisionPointRec(GetMousePosition(), button4) && run_mode == PPU_M && mouse_button_pred(pressed_mode)) {
             selected_scanline = (unsigned char)DW::hex_to_ushort(u_input.s, 10);
             selected_scanline_active = true;
-        } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == PPU_M && mouse_button_pred(pressed_mode))
+        } else if (CheckCollisionPointRec(GetMousePosition(), button5) && run_mode == PPU_M && mouse_button_pred(pressed_mode)) {
             is_one_tick_ppu_active = true;
-        else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == PPU_M && IsMouseButtonPressed(0)){
+        } else if (CheckCollisionPointRec(GetMousePosition(), button6) && run_mode == PPU_M && IsMouseButtonPressed(0)){
             ppu.run = !ppu.run;
             ppu.fill_white_background = !ppu.run;
             cpu_to_fetch_req = true;
@@ -942,6 +942,7 @@ struct RegsInfo: DebugWindowText<x, y, w, h> {
     bool get_watch_status(RegNum rn){
         return (watch_status >> rn) & 1;
     }
+    // TODO: check
     bool is_cpu_watching(){
         return watch_status & 0x3f;
     }

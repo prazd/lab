@@ -354,8 +354,8 @@ void PPU::draw_pixel(Bus &bus) {
     }
 #endif
 
-    unsigned char attrib_high_bit = is_sprite ? (sprite_attrib & 0x2) : (attributes_high >> (15-bus.ppu_x)) & 1;
-    unsigned char attrib_low_bit = is_sprite ? ((sprite_attrib) & 1) : (attributes_low >> (15-bus.ppu_x)) & 1;
+    bool attrib_high_bit = is_sprite ? (sprite_attrib & 0x2) : (attributes_high >> (15-bus.ppu_x)) & 1;
+    bool attrib_low_bit = is_sprite ? ((sprite_attrib) & 1) : (attributes_low >> (15-bus.ppu_x)) & 1;
 
     unsigned char index = (((attrib_high_bit << 1) | attrib_low_bit) << 2) | res;
 
@@ -451,6 +451,16 @@ void PPU::secondary_oam_fill(Bus& bus){
 }
 
 void PPU::tick(Bus& bus) {
+    if (bus.ppu_v_update_delay){
+        --bus.ppu_v_update_delay;
+        if (!bus.ppu_v_update_delay) {
+            bus.ppu_v = bus.ppu_t;
+            bus.mapper.update_state(bus.ppu_t, bus.ppu_v);
+#if DEBUG_MODE
+            bus.start_v_value = bus.ppu_v;
+#endif
+        }
+    }
     if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256) {
         draw_pixel(bus);
         sprite_evaluate_tick(bus);

@@ -205,7 +205,7 @@ struct NESVM {
                 dis.trigger_search = !(bus.ppu_addr_triggered_on_read || bus.ppu_addr_triggered_on_write);
             } else if (dis.selected_scanline_active) {
                 dis.selected_scanline_active = (ppu.current_y != dis.selected_scanline);
-            } else if (dis.cpu_to_fetch_req){
+            } else if (!ppu.run && dis.cpu_to_fetch_req){
                 dis.cpu_to_fetch_req = cpu.istep != CPU::Fetch;
             }
             bus.tick();
@@ -602,6 +602,6 @@ int main(){
 
 ///Users/prazd/Desktop/dev/nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes
 // TODO: AccuracyCoin (APU reg activation debug)
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/scanline/scanline.nes"}.run(); // c5e3/c5c8
+    NESVM{"/Users/prazd/Desktop/dev/AccuracyCoin/AccuracyCoin.nes"}.run(); // c5e3/c5c8
 #endif
 }
