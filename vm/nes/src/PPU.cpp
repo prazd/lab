@@ -25,7 +25,7 @@ unsigned short PPU::to_pattern_addr(unsigned char y, unsigned char tile_n, bool 
 }
 
 // https://www.nesdev.org/wiki/PPU_sprite_evaluation
-void PPU::sprite_evaluate_tick(Bus &bus) {
+void PPU::sprite_evaluate_tick(Bus& bus) {
     int sprite_sz = bus.sprite_mode == Bus::SpriteMode::m8x8 ? 8 : 16;
     // TODO: finish
     if (current_scanline_cycle <= 64){
@@ -38,23 +38,24 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                 //    On even cycles, data is written to secondary OAM
                  if (current_scanline_cycle & 1){
                      if (!copy_in_progress) {
-                         current_oam_index = 4 * sprite_evaluation_index; // y_pos
-                         tmp_oam_value = bus.oam[current_oam_index];
+                         tmp_oam_value = bus.oam[bus.oamaddr];
                          copy_in_progress = ((current_y >= tmp_oam_value  && current_y < tmp_oam_value + sprite_sz)
                                  && tmp_oam_value <= 239
                                  &&
-                                 !(bus.oam[current_oam_index] == 0 &&
-                                 bus.oam[current_oam_index+1] == 0 &&
-                                 bus.oam[current_oam_index+2] == 0 &&
-                                 bus.oam[current_oam_index+3] == 0)
+                                 !(bus.oam[bus.oamaddr] == 0 &&
+                                 bus.oam[bus.oamaddr+1] == 0 &&
+                                 bus.oam[bus.oamaddr+2] == 0 &&
+                                 bus.oam[bus.oamaddr+3] == 0)
                                  ); // + sprite height
                          if (!copy_in_progress) {
                              current_sprite_evaluation_step = SpriteIncrement;
                          }
                      } else {
-                         tmp_oam_value = bus.oam[current_oam_index + copy_step_count];
+                         tmp_oam_value = bus.oam[bus.oamaddr + copy_step_count];
                      }
                  } else {
+                     if (current_scanline_cycle == 66)
+                         tmp_sprite.is_zero_sprite = true;
                      if (copy_in_progress) {
                          switch (copy_step_count) {
                              case 0:  {tmp_sprite.y_pos  =   tmp_oam_value;   break;}
@@ -64,22 +65,23 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                          }
                          ++copy_step_count;
                          if (copy_step_count == 4){
-                             tmp_sprite.sprite_index = sprite_evaluation_index;
                              secondary_oam_buffer.push_back(tmp_sprite);
                              copy_step_count = 0;
                              copy_in_progress = false;
                              current_sprite_evaluation_step = SpriteIncrement;
+                             tmp_sprite.is_zero_sprite = false;
                          }
                      }
                  }
                  break;
             }
             case SpriteIncrement: {
-                ++sprite_evaluation_index;
-                if (secondary_oam_buffer.size() == 8 && sprite_evaluation_index != 64) {
+                bus.ppu_oamfetch_count += 4;
+                bus.oamaddr += 4;
+                if (secondary_oam_buffer.size() == 8 && bus.ppu_oamfetch_count != 256) {
                     current_sprite_evaluation_step = SpriteOverflow;
                     bus.ppustatus |= 1 << 5;
-                } else if (secondary_oam_buffer.size() <= 8 && sprite_evaluation_index == 64) {
+                } else if (secondary_oam_buffer.size() <= 8 && bus.ppu_oamfetch_count == 256) {
                     current_sprite_evaluation_step = SpriteFinish;
                 } else {
                     current_sprite_evaluation_step = SpriteCopy;
@@ -102,8 +104,9 @@ void PPU::sprite_evaluate_tick(Bus &bus) {
                         }
                     }
                     if (!copy_in_progress) {
-                        ++sprite_evaluation_index;
-                        if (sprite_evaluation_index == 64) {
+                        bus.oamaddr += 4;
+                        bus.ppu_oamfetch_count += 4;
+                        if (bus.ppu_oamfetch_count == 256) {
                             current_sprite_evaluation_step = SpriteFinish;
                         }
                     }
@@ -303,8 +306,9 @@ void PPU::draw_pixel(Bus &bus) {
     bool is_horizontal_flip = false;
     bool universal_background = false;
     unsigned char oam_index{};
-    unsigned char cur_oam_index = secondary_oam.size() > 0 ? secondary_oam[0].oam_index : 0;
+//    unsigned char cur_oam_index = secondary_oam.size() > 0 ? secondary_oam[0].oam_index : 0;
     size_t scanline_x = current_x % 256;
+    bool is_zero_sprite = false;
     for (size_t i = 0, e = secondary_oam.size(); i != e; ++i){
         if (secondary_oam[i].x_pos <= scanline_x && (secondary_oam[i].shift_l > 0 || secondary_oam[i].shift_h > 0)) {
                 is_horizontal_flip = secondary_oam[i].attrib & 0x40;
@@ -313,13 +317,14 @@ void PPU::draw_pixel(Bus &bus) {
                         ((secondary_oam[i].shift_h & 1) << 1)  | (secondary_oam[i].shift_l  & 1)
                                            : (((secondary_oam[i].shift_h >> 7) & 1) << 1) | (secondary_oam[i].shift_l >> 7) & 1;
                 if (!l_sprite_data) continue;
-                if (cur_oam_index > (secondary_oam[i].oam_index)) continue;
-                oam_index = secondary_oam[i].oam_index;
+//                if (cur_oam_index > (secondary_oam[i].oam_index)) continue;
+//                oam_index = secondary_oam[i].oam_index;
                 sprite_data = l_sprite_data;
+                is_zero_sprite = secondary_oam[i].is_zero_sprite;
 
                 sprite_attrib = secondary_oam[i].attrib & 0x3;
                 is_bg_prio = (secondary_oam[i].attrib >> 5) & 1;
-                cur_oam_index = oam_index;
+//                cur_oam_index = oam_index;
                 break;
         }
     }
@@ -336,7 +341,7 @@ void PPU::draw_pixel(Bus &bus) {
         res = (universal_background = !(bus.ppumask & 0x8), bg_data); // TODO: check
     } else if (bg_data != 0 && sprite_data != 0) { // zero hit
         // TODO: debug
-        if (oam_index == 0 && bus.ppumask & 0x10 && bus.ppumask & 0x8 && ((current_x & 0xff) != 0xff) && !(bus.ppustatus & (0x80)) && !(bus.ppustatus & 0x40)){
+        if (is_zero_sprite && bus.ppumask & 0x10 && bus.ppumask & 0x8 && ((current_x & 0xff) != 0xff) && !(bus.ppustatus & (0x80)) && !(bus.ppustatus & 0x40)){
             bus.ppustatus |= (1 << 6);
         }
         res = (!is_bg_prio && (bus.ppumask & 0x10)) ? (is_sprite = true, sprite_data) : (universal_background = !(bus.ppumask & 0x8), bg_data); // TODO: check
@@ -443,9 +448,11 @@ void PPU::secondary_oam_fill(Bus& bus){
                     .shift_h =  h,
                     .x_pos =  secondary_oam_buffer[i].x_pos,
                     .attrib  =  secondary_oam_buffer[i].attrib,
-                    .oam_index =  secondary_oam_buffer[i].sprite_index,
+                    .is_zero_sprite =  secondary_oam_buffer[i].is_zero_sprite,
             });
         }
+        bus.oamaddr = 0;
+        bus.ppu_oamfetch_count = 0;
     }
     secondary_oam_buffer.reset();
 }
@@ -463,7 +470,7 @@ void PPU::tick(Bus& bus) {
     }
     if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256) {
         draw_pixel(bus);
-        sprite_evaluate_tick(bus);
+        if (bus.ppumask & 0x18) sprite_evaluate_tick(bus);
     }
     if (current_y < 240 && current_scanline_cycle == 257)
         secondary_oam_fill(bus);
@@ -491,7 +498,7 @@ void PPU::tick(Bus& bus) {
     }
 
     if (current_y == 261){
-        sprite_evaluate_tick(bus);
+        if (bus.ppumask & 0x18) sprite_evaluate_tick(bus);
         if (current_scanline_cycle == 1) { // todo: debug (2)
             update_current_display();
             bus.nmi_interrupt_flip_flop = false; // todo: check
@@ -511,7 +518,6 @@ void PPU::tick(Bus& bus) {
 #endif
         current_sprite_evaluation_step = SpriteCopy;
         current_scanline_cycle = 0;
-        current_oam_index = sprite_evaluation_index = 0;
         current_y = current_y == 261 ? (++frames_count, current_x = 0) : current_y + 1;
 #if DEBUG_MODE
         assert(current_step == NT);

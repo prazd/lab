@@ -20,6 +20,7 @@ struct DebugWindow {
     }
 
     static void draw_text_button(Rectangle rec, const char* text, Color c, float font_sz = 10.1f){
+        DrawRectangle(rec.x, rec.y, rec.width, rec.height, CheckCollisionPointRec(GetMousePosition(), rec) && IsMouseButtonDown(0) ? GRAY : WHITE);
         DrawRectangleLinesEx(rec, 1.f, BLACK);
         DrawText(text, rec.x, rec.y, font_sz, c);
     }
@@ -1613,7 +1614,7 @@ struct SpriteInfo: DebugWindowText<x, y, w, h> {
                 << (unsigned)ppu.secondary_oam_buffer[i].pt_index << ' '
                 << ((unsigned)ppu.secondary_oam_buffer[i].attrib & 0xe3)<< ' '
                 << (unsigned)ppu.secondary_oam_buffer[i].x_pos << ' '
-                << (unsigned)ppu.secondary_oam_buffer[i].sprite_index << '\n';
+                << (unsigned)ppu.secondary_oam_buffer[i].is_zero_sprite << '\n';
             }
         } else if (info_version == FullOAMV) {
             ss << "OAM:\n";

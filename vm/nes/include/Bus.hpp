@@ -119,6 +119,7 @@ struct Bus {
     bool ppu_w{};
     unsigned char ppu_x{};
     unsigned char ppu_v_update_delay = 0;
+    size_t ppu_oamfetch_count = 0;
 
     void apu_enable_handle();
     size_t dmc_rate_counter = 0;

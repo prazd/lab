@@ -91,7 +91,7 @@ struct PPU {
         unsigned char attrib{};
         unsigned char x_pos{};
         // internal
-        unsigned char sprite_index{};
+        bool is_zero_sprite = 0;
     };
 
     struct SpriteData {
@@ -99,7 +99,7 @@ struct PPU {
         unsigned char shift_h{};
         unsigned char x_pos{};
         unsigned char attrib{};
-        unsigned char oam_index{};
+        bool is_zero_sprite{};
     };
 
     SimpleDequeTC<Sprite, 8> secondary_oam_buffer{};
