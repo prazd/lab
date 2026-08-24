@@ -102,6 +102,7 @@ struct PPU {
         bool is_zero_sprite{};
     };
 
+    bool oam_buffer_overflow = false;
     SimpleDequeTC<Sprite, 8> secondary_oam_buffer{};
     SimpleDequeTC<SpriteData, 8> secondary_oam{};
 

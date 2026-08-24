@@ -1545,9 +1545,10 @@ void CPU::interrupt_handle(Bus& bus) {
 void CPU::update_interrupt_request(Bus& bus){
     // TODO: check
     if (iop.size() == 1){
-        if ((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop  && bus.current_ppu_cycle - bus.current_nmi_cycle >= 2)){
+        if (((bus.ppustatus & 0x80 && bus.ppuctrl & 0x80 && bus.nmi_interrupt_flip_flop) || bus.is_ppu_nmi_latch_active) && bus.current_ppu_cycle - bus.current_nmi_cycle >= 2){
             set_interrupt_req(NMI, true);
             bus.nmi_interrupt_flip_flop = false;
+            bus.is_ppu_nmi_latch_active = false;
         } else if (((bus.apu_irq_interrupt_flip_flop && bus.master_clock - bus.apu_fc_irq_set_cycle > 2) || bus.ppu_irq_interrupt_flip_flop) &&
                    ((!sr.get(StatusReg::I)) || i_set_before_sei) && !is_interrupt_requested(IRQ)
                 ){

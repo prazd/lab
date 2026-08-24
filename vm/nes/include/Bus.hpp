@@ -80,7 +80,9 @@ struct Bus {
     bool dma_active = false;
     unsigned dma_index = 0;
     bool nmi_interrupt_flip_flop = false;
-    bool nmi_reject = false;
+    bool is_ppu_nmi_latch_active = false;
+    unsigned char ppu_mask_update_delay = 0;
+    unsigned char ppu_mask_next_value = 0;
     size_t ppu_current_y = 0;
     size_t status_read_cycle = 0;
     size_t current_nmi_cycle = 0;

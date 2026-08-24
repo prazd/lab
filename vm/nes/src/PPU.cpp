@@ -65,7 +65,10 @@ void PPU::sprite_evaluate_tick(Bus& bus) {
                          }
                          ++copy_step_count;
                          if (copy_step_count == 4){
-                             secondary_oam_buffer.push_back(tmp_sprite);
+                             if (secondary_oam_buffer.size() < 8)
+                                secondary_oam_buffer.push_back(tmp_sprite);
+                             else
+                                 oam_buffer_overflow = bus.ppu_oamfetch_count != 256;
                              copy_step_count = 0;
                              copy_in_progress = false;
                              current_sprite_evaluation_step = SpriteIncrement;
@@ -78,7 +81,9 @@ void PPU::sprite_evaluate_tick(Bus& bus) {
             case SpriteIncrement: {
                 bus.ppu_oamfetch_count += 4;
                 bus.oamaddr += 4;
-                if (secondary_oam_buffer.size() == 8 && bus.ppu_oamfetch_count != 256) {
+                // TODO: debug
+                if (oam_buffer_overflow) {
+                    oam_buffer_overflow = false;
                     current_sprite_evaluation_step = SpriteOverflow;
                     bus.ppustatus |= 1 << 5;
                 } else if (secondary_oam_buffer.size() <= 8 && bus.ppu_oamfetch_count == 256) {
@@ -468,6 +473,12 @@ void PPU::tick(Bus& bus) {
 #endif
         }
     }
+    if (bus.ppu_mask_update_delay){
+        --bus.ppu_mask_update_delay;
+        if (!bus.ppu_mask_update_delay)
+            bus.ppumask = bus.ppu_mask_next_value;
+    }
+
     if (current_y < 240 && current_scanline_cycle >= 1 && current_scanline_cycle <= 256) {
         draw_pixel(bus);
         if (bus.ppumask & 0x18) sprite_evaluate_tick(bus);
@@ -483,7 +494,7 @@ void PPU::tick(Bus& bus) {
 
     ++current_scanline_cycle;
 
-    if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1) && !bus.nmi_reject) { // TODO: check
+    if (current_y == 241 && current_scanline_cycle == 1 && (current_cycle - bus.status_read_cycle > 1)) {
         bus.ppustatus &= 0x5f; // todo: check zero hit value set to zero
         bus.ppustatus |= 1 << 7;
         bus.current_nmi_cycle = current_cycle;
@@ -492,21 +503,19 @@ void PPU::tick(Bus& bus) {
 
     if (((current_y == 241 && current_scanline_cycle > 1) || current_y >= 242) && current_y < 261
      && bus.ppuctrl & 0x80 && !(prev_ppuctrl_val & 0x80) && bus.ppustatus & 0x80) {
-//        bus.ppustatus |= 1 << 7; TODO: check
         bus.current_nmi_cycle = current_cycle;
         bus.nmi_interrupt_flip_flop = true;
+        bus.is_ppu_nmi_latch_active = true;
     }
 
     if (current_y == 261){
         if (bus.ppumask & 0x18) sprite_evaluate_tick(bus);
-        if (current_scanline_cycle == 1) { // todo: debug (2)
+        if (current_scanline_cycle == 1) {
             update_current_display();
-            bus.nmi_interrupt_flip_flop = false; // todo: check
-            bus.ppustatus &= 0x3f;
-            bus.nmi_reject = false; // TODO: check
+            bus.nmi_interrupt_flip_flop = false;
+            bus.ppustatus &= 0x7f;
         } else if (current_scanline_cycle == 257) {
             secondary_oam_fill(bus);
-            // TODO: debug
         } else if (current_scanline_cycle == 340 && bus.ppumask & 0x8 && (frames_count & 1)) {
             ++current_scanline_cycle;
         }
@@ -522,6 +531,9 @@ void PPU::tick(Bus& bus) {
 #if DEBUG_MODE
         assert(current_step == NT);
 #endif
+        if (current_y == 261){
+            bus.ppustatus &= 0x8f;
+        }
     }
     bus.ppu_current_y = current_y;
     prev_ppuctrl_val = bus.ppuctrl;

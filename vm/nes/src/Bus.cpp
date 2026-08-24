@@ -34,7 +34,9 @@ void Bus::write(unsigned short addr, unsigned char value) {
             ppu_t |= ((ppuctrl & 0x3) << 10);
             sprite_mode = static_cast<SpriteMode>((ppuctrl >> 5) & 1);
             return;}
-        case constants::PPUMASK:   { ppumask = value; return;}
+// https://www.nesdev.org/wiki/PPU_programmer_reference
+// Toggling rendering takes effect approximately 3-4 dots after the write. This delay is required by Battletoads to avoid a crash.
+        case constants::PPUMASK:   { ppu_mask_update_delay = 4;  ppu_mask_next_value = value; return;}
         case constants::OAMADDR:   { oamaddr = value; return;}
         case constants::OAMDATA:   { oam[oamaddr++] = oamdata = value; return;}
         case constants::PPUSCROLL: {

@@ -121,7 +121,7 @@ struct CPU {
     };
 
     static constexpr Instruction branch_instructions[] = {
-            BCC,BCS,BNE,BEQ,BPL,BMI,BVC,BVS,BIT,
+            BCC,BCS,BNE,BEQ,BPL,BMI,BVC,BVS,
     };
 
     AddressingResult dummy_read(Bus& bus, AddressingResult);
