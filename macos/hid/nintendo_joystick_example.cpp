@@ -28,83 +28,58 @@ namespace NintendoJoystick {
 
     struct KeyPressed {
         unsigned short state{};
-        void set(Button b) {
-            state |= (1 << static_cast<int>(b));
+        void set(Button b, bool val) {
+            state &= ~(1 << b);
+            state |= (val << b);
         }
 
-        void off(Button b) {
-            state &= ~(1 << static_cast<int>(b));
-        }
-
-        bool get(Button b) {
+        bool get(Button b) const {
             return (state >> static_cast<int>(b)) & 1;
         }
     };
 
-    template <typename Callback, typename PressedBuffer = std::vector<Button>>
+    template <typename Callback>
     class HIDDevice {
         static constexpr int vendor_id = 8406;
         static constexpr int product_id = 42784;
         static constexpr int page = kHIDPage_GenericDesktop;
         static constexpr int usage_game_pad = kHIDUsage_GD_GamePad;
         static inline __IOHIDManager* manager = nullptr;
-        static inline unsigned char report_buffer[8]{};
         static inline Callback callback;
-        static inline PressedBuffer pressed =         PressedBuffer(12);
-        static inline PressedBuffer prev_pressed =    PressedBuffer(12);
+        static inline unsigned long prev_report_buffer{};
+        static inline unsigned long report_buffer{};
         static inline KeyPressed kp;
-        
 
-        static void update_Button_and_run_callback(){
-            prev_pressed = pressed;
-            pressed.clear();
-            if (report_buffer[0] == 0x10)  pressed.push_back(L1);
-            if (report_buffer[0] == 0x20)  pressed.push_back(R1);
-            if (report_buffer[0] == 0x40)  pressed.push_back(L2);
-            if (report_buffer[0] == 0x80)  pressed.push_back(R2);
-
-            if (report_buffer[2] == 0x0)   pressed.push_back(DPadUp);
-            if (report_buffer[2] == 0x2)   pressed.push_back(DPadRight);
-            if (report_buffer[2] == 0x4)   pressed.push_back(DPadDown);
-            if (report_buffer[2] == 0x6)   pressed.push_back(DPadLeft);
-
-            if (report_buffer[0] & 0x2)    pressed.push_back(B);
-            if (report_buffer[0] & 0x4)    pressed.push_back(A);
-            if (report_buffer[2] == 0x8f)  pressed.push_back(Select);
-            if (report_buffer[1] == 0x10)  pressed.push_back(Start);
-
-
-            if (!(report_buffer[3] == 0x80 && report_buffer[4] == 0x80)){
-                if (report_buffer[3] <= 0x40 && report_buffer[4] <= 0xf0)
-                    pressed.push_back(DPadLeft);
-
-                if (report_buffer[3] >= 0xc0 && report_buffer[4] <= 0xf0)
-                    pressed.push_back(DPadRight);
-
-                if (report_buffer[3] && report_buffer[4] >= 0xc0)
-                    pressed.push_back(DPadDown);
-
-                if (report_buffer[3] && report_buffer[4] <= 0x40)
-                    pressed.push_back(DPadUp);
-            }
-
-            if (prev_pressed.size() > pressed.size()) {
-                for(size_t i = 0, e = prev_pressed.size(); i != e; ++i){
-                    if (!std::any_of(pressed.begin(), pressed.end(),[&](auto el){ return el == prev_pressed[i];})){
-                        kp.set(prev_pressed[i]);
-                    }
-                }
-            }
-
+        static void update_buttons_and_run_callback(){
+            std::cout << std::hex << std::setw(16) << std::setfill('0') << report_buffer << '\n';
             //     (4)
             //     00
             // 00      FF (3)
             //     FF
-            callback(pressed);
+            callback(kp);
+            if (prev_report_buffer == report_buffer) return;
+            auto rb0 = report_buffer & 0xff;
+            auto rb1 = report_buffer & 0xff00;
+            auto rb2 = report_buffer & 0xff0000;
+            auto rb3 = report_buffer & 0xff000000;
+            auto rb4 = report_buffer & 0xff00000000;
 
-            for (int i = 0; i < 8; ++i)
-                std::cout << std::hex << std::setw(2) << std::setfill('0') << (unsigned)report_buffer[i] << ' ';
-            std::cout << '\n';
+            kp.set(L1, (rb0 == 0x10));
+            kp.set(R1, (rb0 == 0x20));
+            kp.set(L2, (rb0 == 0x40));
+            kp.set(R2, (rb0 == 0x80));
+
+            kp.set(DPadUp,    (rb2 == 0x0) || (!(rb3 == 0x80000000 && rb4 == 0x8000000000) && rb3 && rb4 <= 0x4000000000));
+            kp.set(DPadRight, (rb2 == 0x020000) || (!(rb3 == 0x80000000 && rb4 == 0x8000000000) && rb3 >= 0xc0000000 && rb4 <= 0xf000000000));
+            kp.set(DPadDown,  (rb2 == 0x040000) || (!(rb3 == 0x80000000 && rb4 == 0x8000000000) && rb3 && rb4 >= 0xc000000000));
+            kp.set(DPadLeft,  (rb2 == 0x060000) || (!(rb3 == 0x80000000 && rb4 == 0x8000000000) && rb3 <= 0x40000000 && rb4 <= 0xf000000000));
+
+            kp.set(A, (rb0 & 0x2));
+            kp.set(B, (rb0 & 0x4));
+            kp.set(Select, (rb2 == 0x8f0000));
+            kp.set(Start, (rb1 == 0x1000));
+
+            prev_report_buffer = report_buffer;
         }
 
         static void device_matching_callback(void* context, IOReturn result, void* sender, IOHIDDeviceRef device) {
@@ -115,14 +90,14 @@ namespace NintendoJoystick {
                 std::abort();
                 return;
             }
-            IOHIDDeviceRegisterInputReportCallback(device, report_buffer, sizeof(report_buffer), input_report_callback, nullptr);
+            IOHIDDeviceRegisterInputReportCallback(device, (unsigned char*)&report_buffer, sizeof(report_buffer), input_report_callback, nullptr);
             IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
         }
 
         static void input_report_callback(void* context, IOReturn result, void* sender, IOHIDReportType type,
                                 unsigned reportID, unsigned char* report, CFIndex reportLength) {
             if (result != kIOReturnSuccess || reportLength == 0) return;
-            update_Button_and_run_callback();
+            update_buttons_and_run_callback();
         }
 
         static CFArrayRef create_matching_array() {
@@ -185,45 +160,33 @@ namespace NintendoJoystick {
             CFRelease(manager);
         }
         static bool is_key_released(Button b) {
-            if (!kp.get(b)) return false;
-            kp.off(b);
-            return true;
+            return !kp.get(b);
         }
     };
 };
 
 void example() {
     using namespace NintendoJoystick;
-    auto callback = [](auto& pressed) {
-          for (auto el: pressed) {
-                switch(el){
-                    case DPadDown: {std::cout << "Down ";    break;}
-                    case DPadUp:   {std::cout << "Up ";      break;}
-                    case DPadLeft: {std::cout << "Left ";    break;}
-                    case DPadRight:{std::cout << "Right ";   break;}
+    auto callback = [](auto& state) {
+          unsigned char count = 0;
+          if (auto s = state.get(Button::DPadDown); (count += s, s))   std::cout << "Down ";
+          if (auto s = state.get(Button::DPadUp);   (count += s, s))   std::cout << "Up ";
+          if (auto s = state.get(Button::DPadLeft); (count += s, s))  std::cout << "Left ";
+          if (auto s = state.get(Button::DPadRight); (count += s, s)) std::cout << "Right ";
+          if (auto s = state.get(Button::A); (count += s, s)) std::cout << "A ";
+          if (auto s = state.get(Button::B); (count += s, s)) std::cout << "B ";
+          if (auto s = state.get(Button::Select); (count += s, s)) std::cout << "Select ";
+          if (auto s = state.get(Button::Start); (count += s, s)) std::cout << "Start ";
 
-                    case A:        {std::cout << "A ";       break;}
-                    case B:        {std::cout << "B ";       break;}
-                    case Select:   {std::cout << "Select ";  break;}
-                    case Start:    {std::cout << "Start ";   break;}
-
-                    case L1:       {std::cout << "L1 ";  break;}
-                    case L2:       {std::cout << "L2 ";   break;}
-                    case R1:       {std::cout << "R1 ";  break;}
-                    case R2:       {std::cout << "R2 ";   break;}
-                    default:       {std::cout << "Unknown "; break;}
-                }
-            }
-           
-            if (!pressed.empty()) std::cout << "\n";
+          if (auto s = state.get(L1); (count += s, s)) std::cout << "L1 ";
+          if (auto s = state.get(L2); (count += s, s)) std::cout << "L2 ";
+          if (auto s = state.get(R1); (count += s, s)) std::cout << "R1 ";
+          if (auto s = state.get(R2); (count += s, s)) std::cout << "R2 ";
+          if (count) std::cout << '\n';
     };
     HIDDevice<decltype(callback)>::init();
     for(;;){
         HIDDevice<decltype(callback)>::step(0.01);
-        if (HIDDevice<decltype(callback)>::is_key_released(L1)){
-            std::cout << "L1 down\n";
-
-        }
     }
     HIDDevice<decltype(callback)>::release();
 }
