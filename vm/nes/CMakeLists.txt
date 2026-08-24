@@ -5,8 +5,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 #set(SANITIZER_FLAGS "-fsanitize=undefined")
-set(OPTIMIZE_FLAGS "-O3 -march=native -fno-rtti")
-#set(OPTIMIZE_FLAGS "-g -O0")
+#set(OPTIMIZE_FLAGS "-O3 -march=native -fno-rtti")
+set(OPTIMIZE_FLAGS "-g -O0")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZER_FLAGS} ${OPTIMIZE_FLAGS}")
 set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} ${SANITIZER_FLAGS} ${OPTIMIZE_FLAGS}")
@@ -27,11 +27,17 @@ set(SOURCES
     main.cpp
 )
 
-set_source_files_properties(
-        src/PPU.cpp
-        PROPERTIES
-        COMPILE_OPTIONS "-g;-O0"
-)
+#set_source_files_properties(
+#        src/PPU.cpp
+#        PROPERTIES
+#        COMPILE_OPTIONS "-g;-O0"
+#)
 
 add_executable(${PROJECT_NAME} ${SOURCES})
-target_link_libraries(${PROJECT_NAME} PRIVATE raylib SDL2::SDL2)
+target_link_libraries(${PROJECT_NAME} PRIVATE
+        raylib
+        SDL2::SDL2
+        "$<LINK_LIBRARY:FRAMEWORK,IOKit>"
+        "$<LINK_LIBRARY:FRAMEWORK,CoreFoundation>"
+        "$<LINK_LIBRARY:FRAMEWORK,Foundation>"
+)

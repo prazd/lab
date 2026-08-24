@@ -276,22 +276,38 @@ struct NESVM {
             ss.str("");
         }
 
-        if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_S))
+        bool pressed_up =
+#if JOYSTICK
+                bus.c.hid_device.is_pressed(NintendoJoystick::Button::DPadUp);
+#else
+        IsKeyPressed(KEY_W);
+#endif
+        bool pressed_down =
+#if JOYSTICK
+                bus.c.hid_device.is_pressed(NintendoJoystick::Button::DPadDown);
+#else
+        IsKeyPressed(KEY_S);
+#endif
+        if (pressed_up || pressed_down)
             if (cartridge.selected_index == cartridge.select_begin){
-                cartridge.select_begin = wrap(cartridge.select_begin, -IsKeyPressed(KEY_W),
+                cartridge.select_begin = wrap(cartridge.select_begin, -pressed_up,
                      0, (int)(cartridge.select_files.size()-1));
-                cartridge.select_end = wrap(cartridge.select_end , -IsKeyPressed(KEY_W),
+                cartridge.select_end = wrap(cartridge.select_end , -pressed_up,
                      0, (int)(cartridge.select_files.size()-1));
             } else if (cartridge.selected_index == cartridge.select_end ){
-                cartridge.select_begin = wrap(cartridge.select_begin, IsKeyPressed(KEY_S),
+                cartridge.select_begin = wrap(cartridge.select_begin, pressed_down,
                              0, (int)(cartridge.select_files.size()-1));
-                cartridge.select_end  = wrap(cartridge.select_end , IsKeyPressed(KEY_S),
+                cartridge.select_end  = wrap(cartridge.select_end , pressed_down,
                            0, (int)(cartridge.select_files.size()-1));
             }
         cartridge.selected_index =
-                wrap(cartridge.selected_index, -IsKeyPressed(KEY_W) + IsKeyPressed(KEY_S),
+                wrap(cartridge.selected_index, -pressed_up + pressed_down,
                      0, (int)(cartridge.select_files.size()-1));
+#if JOYSTICK
+        if (bus.c.hid_device.is_pressed(NintendoJoystick::Button::A)){
+#else
         if (IsKeyPressed(KEY_ENTER)){
+#endif
             cartridge.read(cartridge.selected_files_path + cartridge.select_files[cartridge.selected_index]);
             read_cartridge_data();
             cartridge.selected = true;
@@ -434,6 +450,7 @@ struct NESVM {
         });
         Vector2 resolution = {(float)constants::DISPLAY_PIXELS_WIDTH, (float)constants::DISPLAY_PIXELS_HEIGHT};
         bool shaders_mode = false;
+        bool show_fps = false;
 #endif
 
         while(!WindowShouldClose()){
@@ -528,23 +545,35 @@ struct NESVM {
                 if (grid_view_enable) dtg.draw(22.4f,22.4f);
             }
 #else
-            if (IsKeyPressed(KEY_Z)) shaders_mode = !shaders_mode;
-            shaders.handle();
-            if (shaders_mode) {
-                BeginShaderMode(shader_data.s);
-                DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,(float)GetScreenWidth(), (float)GetScreenHeight()}, {0, 0},0, WHITE);
-                EndShaderMode();
-            } else
-#if ROM_SELECT_ON
-        if (cartridge.selected){
-#endif                
-            DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,(float)GetScreenWidth(), (float)GetScreenHeight()}, {0, 0},0, WHITE);
-#if ROM_SELECT_ON
-        } else {
-            rom_select_handle(0,0,GetScreenWidth(),GetScreenHeight());
-        }
-#endif                
+
+#if JOYSTICK
+            if (bus.c.hid_device.is_pressed(NintendoJoystick::Button::L1))
+                show_fps = !show_fps;
+            if (bus.c.hid_device.is_pressed(NintendoJoystick::Button::R1))
+                shaders_mode = !shaders_mode;
+#else
+            if (IsKeyPressed(KEY_C))
+                show_fps = !show_fps;
+            if (IsKeyPressed(KEY_Z))
+                shaders_mode = !shaders_mode;
 #endif
+
+
+            shaders.handle();
+            if (shaders_mode) BeginShaderMode(shader_data.s);
+#if ROM_SELECT_ON
+                if (cartridge.selected) {
+#endif
+                    DrawTexturePro(display_texture, {0, 0, (float)display_texture.width, (float)display_texture.height},  {0, 0,(float)GetScreenWidth(), (float)GetScreenHeight()}, {0, 0},0, WHITE);
+#if ROM_SELECT_ON
+                } else {
+                    rom_select_handle(0,0,GetScreenWidth(),GetScreenHeight());
+                }
+#endif
+            if (show_fps && !shaders_mode) DrawFPS(0, 0);
+            if (shaders_mode) EndShaderMode();
+#endif                
+
 #if 0
             DrawFPS(0,0);
 #endif
@@ -553,6 +582,9 @@ struct NESVM {
 #if APU_ON
         SDL_CloseAudioDevice(audio_dev);
         SDL_Quit();
+#endif
+#if JOYSTICK
+        bus.c.hid_device.release();
 #endif
         CloseWindow();
     }
