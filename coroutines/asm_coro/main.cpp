@@ -6,6 +6,9 @@
 #include <utility>
 #include <cassert>
 
+extern "C" void store_rip(void*);
+extern "C" void load_rip(void*);
+
 #define SAVE_BEFORE_CALL\
     asm("movq %%rsp, %0" : "=r"(Coro::tmp.rsp1));\
 
@@ -24,14 +27,20 @@
     asm("movq %%r15, %0" : "=r"(Coro::tmp.regs[Coro::State::R15]));\
     if (Coro::f_s->need_restore) {RESTORE}\
 
+#define PROLOGUE_S\
+    if (Coro::f_s->need_restore) {RESTORE_S}\
+
 #define EPILOGUE\
     Coro::f_s->done = true;\
+    asm("pop %rdi");\
 
-#define YIELD \
+#define SAVE_STACK\
     asm("movq %%rsp, %0" : "=r"(Coro::f_s->begin)); \
     asm("movq %%rbp, %0" : "=r"(Coro::f_s->end)); \
     memcpy(Coro::f_s->stack, (void*)(Coro::f_s->begin), Coro::f_s->end-Coro::f_s->begin);\
     Coro::f_s->top = Coro::f_s->end-Coro::f_s->begin;\
+
+#define SAVE_REGS\
     asm("movq %%rax, %0" : "=r"(Coro::f_s->regs[Coro::State::RAX]));\
     asm("movq %%rbx, %0" : "=r"(Coro::f_s->regs[Coro::State::RBX]));\
     asm("movq %%rcx, %0" : "=r"(Coro::f_s->regs[Coro::State::RCX]));\
@@ -51,14 +60,28 @@
     asm("movq %0,%%r13"  :: "m"(Coro::tmp.regs[Coro::State::R13])  : "r13");\
     asm("movq %0,%%r14"  :: "m"(Coro::tmp.regs[Coro::State::R14])  : "r14");\
     asm("movq %0,%%r15"  :: "m"(Coro::tmp.regs[Coro::State::R15])  : "r15");\
-    asm("call *%0" :: "r"((uintptr_t)Coro::save_rip) : "memory");\
+
+#define YIELD \
+    SAVE_STACK \
+    SAVE_REGS \
+    asm("movq %0, %%rdi" :: "r"((uintptr_t)&(Coro::f_s->regs[Coro::State::RIP])) : "rdi");\
+    asm("call *%0" :: "r"((uintptr_t)store_rip) : "memory");\
     asm("leave");\
     asm("ret");\
 
-#define RESTORE \
+#define YIELD_S\
+    SAVE_REGS\
+    asm("movq %0, %%rdi" :: "r"((uintptr_t)&(Coro::f_s->regs[Coro::State::RIP])) : "rdi");\
+    asm("call *%0" :: "r"((uintptr_t)store_rip) : "memory");\
+    asm("leave");\
+    asm("ret");\
+
+#define RESTORE_STACK\
         size_t rsp = 0;\
         asm("movq %%rsp, %0" : "=r"(rsp));\
         memcpy((void*)rsp, Coro::f_s->stack, Coro::f_s->top);\
+
+#define RESTORE_REGS\
         asm("movq %0,%%rbx" :: "m"(Coro::f_s->regs[Coro::State::RBX]) : "rbx");\
         asm("movq %0,%%rcx" :: "m"(Coro::f_s->regs[Coro::State::RCX]) : "rcx");\
         asm("movq %0,%%rdx" :: "m"(Coro::f_s->regs[Coro::State::RDX]) : "rdx");\
@@ -72,7 +95,19 @@
         asm("movq %0,%%r13" :: "m"(Coro::f_s->regs[Coro::State::R13]) : "r13");\
         asm("movq %0,%%r14" :: "m"(Coro::f_s->regs[Coro::State::R14]) : "r14");\
         asm("movq %0,%%r15" :: "m"(Coro::f_s->regs[Coro::State::R15]) : "r15");\
-        asm("call *%0" :: "r"((uintptr_t)Coro::restore_rip) : "memory");\
+
+#define RESTORE \
+        RESTORE_STACK\
+        RESTORE_REGS\
+        asm("push %rdi");\
+        asm("movq %0,%%rdi" :: "r"(&Coro::f_s->regs[Coro::State::RIP]) : "rdi");\
+        asm("call *%0" :: "r"((uintptr_t)load_rip) : "memory");\
+
+#define RESTORE_S\
+        RESTORE_REGS\
+        asm("push %rdi");\
+        asm("movq %0,%%rdi" :: "r"(&Coro::f_s->regs[Coro::State::RIP]) : "rdi");\
+        asm("call *%0" :: "r"((uintptr_t)load_rip) : "memory");\
 
 struct Coro {
     struct State {
@@ -102,16 +137,16 @@ struct Coro {
             int x = 10;
         }
     };
+    
+    // TODO: debug
     static void restore_rip(){
         asm("movq %0,8(%%rsp)" :: "r"(Coro::f_s->regs[Coro::State::RIP]) : "memory");
     }
-        
-    // TODO: debug
+    
     static void save_rip(){
         asm("movq 8(%%rsp), %0" : "=r"(Coro::f_s->regs[Coro::State::RIP]));
         Coro::f_s->regs[Coro::State::RIP] += 2;
     }
-
 
     // TODO: handle args
     static inline std::vector<State> states;
@@ -134,7 +169,6 @@ struct Coro {
                     SAVE_AFTER_CALL
                     assert(Coro::tmp.rsp1 == Coro::tmp.rsp2);
                     if ((f_s && !f_s->need_restore)) f_s->need_restore = true;
-            
                 }
                 if ((f_s && f_s->done)) done = true;
             }
@@ -142,6 +176,17 @@ struct Coro {
         }
     }
 };
+
+__attribute__((optimize("-fno-omit-frame-pointer")))
+void foo_stackless(){
+    PROLOGUE_S
+    printf("Foo_s:1\n");
+    YIELD_S
+    printf("Foo_s:2\n");
+    YIELD_S
+    printf("Foo_s:3\n");
+    EPILOGUE
+}
 
 __attribute__((optimize("-fno-omit-frame-pointer")))
 void foo(){
@@ -172,8 +217,10 @@ void bar(){
 }
 
 int main(){
-    Coro::add(foo);
-    Coro::add(foo);
-    Coro::add(bar);
+    // TODO: debug
+    // Coro::add(foo);
+    // Coro::add(foo);
+    Coro::add(foo_stackless);
+    // Coro::add(bar);
     Coro::run();
 }
