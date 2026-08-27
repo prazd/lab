@@ -1938,6 +1938,7 @@ struct APUView: DebugWindowText<x, y, w, h> {
                 << "  Output level:"    << std::hex <<  (int)bus.dmc_output_level << '\n'
                 << "  IRQ enable:"    << std::hex <<  (int)apu.dmc_ch.irq_enable << '\n'
                 << "  Bytes remaining:"    << std::hex <<  (int)bus.dmc_bytes_remaining << '\n'
+                << "  Rate counter next:"    << std::hex <<  (int)bus.ntsc_rates[bus.dmc_rate_index] << '\n'
                 << "  DMA address:"   << std::hex <<  (int)bus.dmc_dma_address  << '\n';
                 break;
             }

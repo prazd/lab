@@ -637,6 +637,6 @@ int main(){
 // TODO: AccuracyCoin (APU reg activation debug)
 //    /Users/prazd/Desktop/dev/nes-test-roms/scanline/scanline.nes
 //    /Users/prazd/Desktop/dev/nes-test-roms/nmi_sync/demo_ntsc.nes
-    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/scanline/scanline.nes"}.run(); // c5e3/c5c8
+    NESVM{"/Users/prazd/Desktop/dev/nes-test-roms/sprdma_and_dmc_dma/sprdma_and_dmc_dma.nes"}.run(); // c5e3/c5c8
 #endif
 }

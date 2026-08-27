@@ -49,13 +49,16 @@ void PPU::sprite_evaluate_tick(Bus& bus) {
                                  ); // + sprite height
                          if (!copy_in_progress) {
                              current_sprite_evaluation_step = SpriteIncrement;
+                         } else if (secondary_oam_buffer.size() == 8){
+                             bus.ppustatus |= 1 << 5;
+                             current_sprite_evaluation_step = SpriteOverflow;
+                             copy_in_progress = false;
                          }
                      } else {
                          tmp_oam_value = bus.oam[bus.oamaddr + copy_step_count];
                      }
                  } else {
-                     if (current_scanline_cycle == 66)
-                         tmp_sprite.is_zero_sprite = true;
+                     if (current_scanline_cycle == 66) tmp_sprite.is_zero_sprite = true;
                      if (copy_in_progress) {
                          switch (copy_step_count) {
                              case 0:  {tmp_sprite.y_pos  =   tmp_oam_value;   break;}
@@ -65,10 +68,7 @@ void PPU::sprite_evaluate_tick(Bus& bus) {
                          }
                          ++copy_step_count;
                          if (copy_step_count == 4){
-                             if (secondary_oam_buffer.size() < 8)
-                                secondary_oam_buffer.push_back(tmp_sprite);
-                             else
-                                 oam_buffer_overflow = bus.ppu_oamfetch_count != 256;
+                             secondary_oam_buffer.push_back(tmp_sprite);
                              copy_step_count = 0;
                              copy_in_progress = false;
                              current_sprite_evaluation_step = SpriteIncrement;
@@ -81,12 +81,7 @@ void PPU::sprite_evaluate_tick(Bus& bus) {
             case SpriteIncrement: {
                 bus.ppu_oamfetch_count += 4;
                 bus.oamaddr += 4;
-                // TODO: debug
-                if (oam_buffer_overflow) {
-                    oam_buffer_overflow = false;
-                    current_sprite_evaluation_step = SpriteOverflow;
-                    bus.ppustatus |= 1 << 5;
-                } else if (secondary_oam_buffer.size() <= 8 && bus.ppu_oamfetch_count == 256) {
+                if (secondary_oam_buffer.size() <= 8 && bus.ppu_oamfetch_count == 256) {
                     current_sprite_evaluation_step = SpriteFinish;
                 } else {
                     current_sprite_evaluation_step = SpriteCopy;
@@ -466,8 +461,8 @@ void PPU::tick(Bus& bus) {
     if (bus.ppu_v_update_delay){
         --bus.ppu_v_update_delay;
         if (!bus.ppu_v_update_delay) {
-            bus.ppu_v = bus.ppu_t;
             bus.mapper.update_state(bus.ppu_t, bus.ppu_v);
+            bus.ppu_v = bus.ppu_t;
 #if DEBUG_MODE
             bus.start_v_value = bus.ppu_v;
 #endif

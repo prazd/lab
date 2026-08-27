@@ -7,6 +7,24 @@
 #include <algorithm>
 #include <execinfo.h>
 
+template <typename ... T>
+inline void fatal(T&& ... args){
+    void* buffer[64]{};
+    int n = backtrace(buffer, 64);
+    auto syms = backtrace_symbols(buffer, n);
+    for (int i = 0; i < n; ++i)
+        std::cerr << syms[i] << '\n';
+    (std::cerr << ... << args);
+    free(syms);
+    std::abort();
+}
+
+template <typename ... T>
+inline void fatalc(bool cond, T&& ... args){
+    if (!cond) return;
+    fatal(std::forward<T>(args)...);
+}
+
 template <typename T, size_t sz>
 struct SimpleDeque {
     int current_sz = 0;
@@ -53,6 +71,9 @@ struct SimpleDeque {
 
     template <typename U>
     void push_back(U&& value){
+#if DEBUG_MODE
+        fatalc(current_sz == sz, "Overflow");
+#endif
         new (buffer + current_sz++ * sizeof(T)) T(std::forward<U>(value));
     }
 
@@ -119,6 +140,9 @@ struct SimpleDequeTC {
 
     template <typename U>
     void push_back(U&& value){
+#if DEBUG_MODE
+        fatalc(current_sz == sz, "Overflow");
+#endif
         buffer[current_sz++] = value;
     }
 
@@ -336,15 +360,4 @@ T wrap(T current, int add, T min, T max){
            (r > max ? min : max);
 }
 
-template <typename ... T>
-inline void fatal(T&& ... args){
-    void* buffer[64]{};
-    int n = backtrace(buffer, 64);
-    auto syms = backtrace_symbols(buffer, n);
-    for (int i = 0; i < n; ++i)
-        std::cerr << syms[i] << '\n';
-    (std::cerr << ... << args);
-    free(syms);
-    std::abort();
-}
 #endif

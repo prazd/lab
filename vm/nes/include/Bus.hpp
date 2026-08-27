@@ -19,9 +19,9 @@ struct Bus {
             return;
         }
         if (dma_state == Read){
-            auto addr = oam_dma_address + dma_index;
+            unsigned short addr = oam_dma_address + dma_index;
             if (!((addr >= 0x4000 && addr <= 0x4019) && (last_arg_addr < 0x4000 || last_arg_addr > 0x4019)))
-                dma_value = read_prg(oam_dma_address + dma_index);
+                dma_value = read_prg(addr);
         } else {
             oam[dma_index++] = dma_value;
             dma_active = (dma_index != 256);
