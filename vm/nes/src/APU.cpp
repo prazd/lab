@@ -161,8 +161,6 @@ void APU::tick(Bus& bus) {
     }
 
     if (bus.apu_enable_req){
-// TODO:
-//        if (dmc_ch.dmc_dma_counter <= 2)
         pulse_ch1.length_counter = bus.apu_is_enable(Bus::Pulse1) ? pulse_ch1.length_counter : 0;
         pulse_ch2.length_counter = bus.apu_is_enable(Bus::Pulse2) ? pulse_ch2.length_counter : 0;
         triangle_ch.length_counter = bus.apu_is_enable(Bus::Triangle) ? triangle_ch.length_counter : 0;
@@ -267,10 +265,8 @@ void APU::tick(Bus& bus) {
         }
     }
 
-// TODO: debug
-#if 1
+
     dmc_ch.tick(bus);
-#endif
 
     if (bus.frame_counter_reset) {
         if (bus.frame_counter_reset_ticks) { --bus.frame_counter_reset_ticks; }
@@ -304,7 +300,7 @@ void DMCChan::tick(Bus &bus) {
     if (!irq_enable) bus.apu_control &= 0x7f;
     bus.dmc_rate_index = chan_freq_val & 0xf;
 
-    if (!bus.dmc_bytes_remaining && is_loop){
+    if (!bus.dmc_bytes_remaining && is_loop && bus.apu_is_enable(Bus::DMC)){
         auto s_len = bus.unsafe_read_prg(constants::DMC_CHAN_SAMPLE_LENGTH);
         bus.dmc_bytes_remaining = (s_len << 4) | 1;
         bus.dmc_dma_address = dma_base_address;
@@ -321,11 +317,11 @@ void DMCChan::tick(Bus &bus) {
     }
 
     if (bus.dmc_dma_counter && bus.dmc_dma_in_progress) {
-// TODO: debug         
+// TODO: debug
 //        if (bus.dmc_dma_counter == 3){
 //// TODO: check
 ////            if (bus.last_arg_addr == 0x4016){
-////                if (!(bus.apu_current_tick & 1)) bus.unsafe_read_prg(bus.last_arg_addr);
+//                if (!(bus.apu_current_tick & 1)) bus.unsafe_read_prg(bus.last_arg_addr);
 //                bus.dmc_dma_read_prg(bus.last_arg_addr); // TODO: debug
 //        }
         --bus.dmc_dma_counter;
@@ -359,9 +355,6 @@ void DMCChan::tick(Bus &bus) {
         --bus.dmc_shift_count;
         if (bus.apu_is_enable(Bus::DMC))
             wrap(bus.dmc_output_level, (bus.dmc_shift_reg & 1) ? 2 : -2, (char)0, (char)127);
-
-        if (!bus.dmc_shift_count) bus.dmc_shift_count = 8;
-
         if (prev_count && !bus.dmc_shift_count && bus.apu_is_enable(Bus::DMC)){
             if (!(bus.dmc_sample_buffer.empty() && bus.dmc_bytes_remaining)){
                 bus.dmc_shift_reg = bus.dmc_sample_buffer.back(); bus.dmc_sample_buffer.pop_back();
@@ -372,5 +365,6 @@ void DMCChan::tick(Bus &bus) {
             bus.dmc_dma_counter = 4; // TODO: check
             bus.dmc_dma_in_progress = true;
         }
+        if (!bus.dmc_shift_count) bus.dmc_shift_count = 8;
     }
 }
