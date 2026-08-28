@@ -133,6 +133,8 @@ void Bus::write(unsigned short addr, unsigned char value) {
         apu_noise_length_counter = true;
     } else if (addr == constants::DMC_CHAN_SAMPLE_ADDRESS) {
         apu_dmc_dma_address_update = true;
+    } else if (addr == constants::DMC_CHAN_DIRECT_LOAD) {
+        apu_dmc_output_level_update = true;
     }
     cpu_map[addr] = value;
 }
@@ -144,8 +146,6 @@ void Bus::apu_enable_handle() {
     if (dmc_bytes_remaining) return;
     auto s_len = unsafe_read_prg(constants::DMC_CHAN_SAMPLE_LENGTH);
     dmc_bytes_remaining = (s_len << 4) | 1;
-    auto chan_direct_load_val = unsafe_read_prg(constants::DMC_CHAN_DIRECT_LOAD);
-    dmc_output_level = (char)(chan_direct_load_val & 0x7f);
     auto s_addr = unsafe_read_prg(constants::DMC_CHAN_SAMPLE_ADDRESS);
     dmc_dma_address = 0xc000 | s_addr << 6;
     if (dmc_sample_buffer.empty()){

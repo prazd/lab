@@ -159,15 +159,14 @@ struct Bus {
     bool apu_noise_start_flag = false;
     bool apu_noise_envelope_update = false;
     bool apu_noise_length_counter = false;
+    bool apu_noise_chan_loop_update = false;
 
     bool apu_triangle_length_counter = false;
     bool apu_triangle_timer_period = false;
     bool apu_triangle_linear_counter_update = false;
 
-    bool apu_noise_chan_loop_update = false;
-
     bool apu_dmc_dma_address_update{};
-
+    bool apu_dmc_output_level_update{};
 
     Controller c;
     bool latch_req = false;
