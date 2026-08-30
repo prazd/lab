@@ -57,17 +57,22 @@ struct MC68K {
     AddressMode to_adress_mode(unsigned char);
 
     enum Instruction {
-        ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,
-        ASL,ASR,BCC,BCHG,BCLR,BFCHG,BFCLR,BFEXTS,
-        BFEXTU,BFFFO,BFINS,BFSET,BFTST,BKPT,
-        BRA,BSET,BSR,BTST,CALLM,CAS,CAS2,CHK,CHK2,
-        CLR, CMP, CMPA,CMPI,CMPM,CMP2,
-        cpBcc,cpDBcc,cpGEN,cpScc,cpTRAPcc,
-        DBcc, DIVS, DIVSL,DIVU,DIVUL,EOR,
-        EORI,EORItoCCR,EXG,EXT,ILLEGAL,
-        JMP,JSR,LEA,LINKw,LINKl,LSL,LSR,
-        MOVE,MOVEA,MOVEfromCCR,MOVEtoCCR,MOVEfromSR,
-        MOVEM,MOVEP,MOVEQ,
+        ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,ASL,ASR,
+        BCC,BCHG,BCLR,BRA,BSET,BSR,BTST,
+        CHK,CLR, CMP, CMPA,CMPI,CMPM,
+        DBcc, DIVS, DIVSL,DIVU,DIVUL,
+        EOR,EORI,EORItoCCR,EXG,EXT,
+        ILLEGAL,
+        JMP,JSR,
+        LEA,LINKw,LINKl,LSL,LSR,
+        MOVE,MOVEA,MOVEtoCCR,MOVEfromSR,MOVEM,MOVEP,MOVEQ,MULS,MULU,
+        NBCD,NEG,NEGX,NOP,NOT,
+        OR,ORI,ORItoCCR,
+        PEA,
+        ROL,ROR,ROXL,ROXR,RTM,RTR,RTS,
+        SBCD,Scc,SUB,SUBA,SUBI,SUBQ,SUBX,SWAP,
+        TAS,TRAP,TRAPV,TST,
+        UNLK,
     };
 
     struct DecodedInfo {
