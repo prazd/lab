@@ -7,13 +7,18 @@ struct MC68K {
     unsigned usp{};
     // Supervisor stack pointer
     unsigned ssp{};
+    // Vector base register
+    unsigned vbr{};
+    // Alternate function code registers
+    unsigned sfc{};
+    unsigned dfc{};
     
     // Status register
     unsigned short sreg{};
     enum SREG: unsigned short {
         Carry=0x0,Overflow=0x2,Zero=0x4,Negative=0x8,Extend=0x10,
         Interrupt0=0x100,Interrupt1=0x200,Interrupt2=0x400,
-        SupervisorState=0x2000,TraceMode=0x8000
+        State0=0x1000,State1=0x2000,TraceMode0=0x4000,TraceMode1=0x8000
     };
     inline void set_sreg(SREG s, bool val){
         sreg &= ~(1 << s);
@@ -25,22 +30,58 @@ struct MC68K {
 
     // GPR
     // Data registers
-    enum DREG {D0,D1,D2,D3,D4,D5,D6,D7};
+    enum DREG: unsigned char {D0,D1,D2,D3,D4,D5,D6,D7};
     unsigned dregs[8]{};
     
     // Address registers
-    enum AREG {A0,A1,A2,A3,A4,A5,A6,A7};
+    enum AREG: unsigned char {A0,A1,A2,A3,A4,A5,A6,A7};
     unsigned aregs[8]{};
 
 
-    enum AddressingModes{
-        RegisterDirect,
-        RegisterIndirect,
-        Absolute,
-        ProgramCounterRelative,
+    enum AddressMode: unsigned char{
+        DataRegisterDirectMode,
+        AddressRegisterDirectMode,
+        AddressRegisterIndirectMode,
+        AddressRegisterIndirectPostIncMode,
+        AddressRegisterIndirectPreDecMode,
+        AddressRegisterIndirectDisplacementMode,
+        AddressRegisterIndirectIndexMode,
+        ProgramCounterInderectDisplacementMode,
+        ProgramCounterInderectIndexMode,
+        AbsoluteShort,
+        AbsoluteLong,
         Immediate,
-        Implied,
+        Unknown,
     };
 
+    AddressMode to_adress_mode(unsigned char);
+
+    enum Instruction {
+        ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,
+        ASL,ASR,BCC,BCHG,BCLR,BFCHG,BFCLR,BFEXTS,
+        BFEXTU,BFFFO,BFINS,BFSET,BFTST,BKPT,
+        BRA,BSET,BSR,BTST,CALLM,CAS,CAS2,CHK,CHK2,
+        CLR, CMP, CMPA,CMPI,CMPM,CMP2,
+        cpBcc,cpDBcc,cpGEN,cpScc,cpTRAPcc,
+        DBcc, DIVS, DIVSL,DIVU,DIVUL,EOR,
+        EORI,EORItoCCR,EXG,EXT,ILLEGAL,
+        JMP,JSR,LEA,LINKw,LINKl,LSL,LSR,
+        MOVE,MOVEA,MOVEfromCCR,MOVEtoCCR,MOVEfromSR,
+        MOVEM,MOVEP,MOVEQ,
+    };
+
+    struct DecodedInfo {
+        Instruction i;
+        bool address_reg{};
+        unsigned char rx{};
+        unsigned char ry{};
+        unsigned char d1{};
+        unsigned char d2{};
+        unsigned char d3{};
+        unsigned char d4{};
+        AddressMode effective_address{};
+    };
+
+    DecodedInfo decode(unsigned short);
 };
 #endif

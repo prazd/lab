@@ -19,6 +19,7 @@ include_directories(include)
 find_package(raylib REQUIRED HINTS ${RAYLIB_DIR})
 
 set(SOURCES    
+    src/CPU.cpp
     main.cpp
 )
 
