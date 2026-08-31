@@ -1,9 +1,10 @@
 #ifndef SMD_CONSTANTS_HPP
 #define SMD_CONSTANTS_HPP
+#include <iostream>
 #define DEBUG_MODE 0
 
 #if !DEBUG_MODE
-#define S_MODE static
+#define S_MODE static inline
 #else
 #define S_MODE
 #endif

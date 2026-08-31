@@ -1,5 +1,6 @@
 #ifndef SMD_CPU_HPP
 #define SMD_CPU_HPP
+#include "BUS.hpp"
 struct MC68K {
     // SPR
     unsigned pc{};
@@ -59,7 +60,7 @@ struct MC68K {
     enum Instruction {
         ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,ASL,ASR,
         BCC,BCHG,BCLR,BRA,BSET,BSR,BTST,
-        CHK,CLR, CMP, CMPA,CMPI,CMPM,
+        CHK,CLR,CMP,CMPA,CMPI,CMPM,
         DBcc, DIVS, DIVSL,DIVU,DIVUL,
         EOR,EORI,EORItoCCR,EXG,EXT,
         ILLEGAL,
@@ -84,9 +85,15 @@ struct MC68K {
         unsigned char d2{};
         unsigned char d3{};
         unsigned char d4{};
-        AddressMode effective_address{};
+        unsigned mask{};
+        unsigned sign_bit{};
+        AddressMode addr_mode{};
+        unsigned char effective_address{};
     };
 
+    unsigned& read_operand(unsigned char effective_address);
     DecodedInfo decode(unsigned short);
+
+    void exec(DecodedInfo di, BUS& bus);
 };
 #endif
