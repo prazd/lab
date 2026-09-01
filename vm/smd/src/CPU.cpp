@@ -1,6 +1,13 @@
 #include "CPU.hpp"
 #include "BUS.hpp"
 
+
+void MC68K::tick(BUS& bus){
+    auto opcode = prefetch_q.get();
+    auto val = decode(opcode);
+    // TODO: 
+}
+
 MC68K::AddressMode to_adress_mode(unsigned char val){
     unsigned char mode_field = (val >> 3) & 0x7;
     unsigned char reg_field = val & 0x7;
@@ -19,13 +26,27 @@ MC68K::AddressMode to_adress_mode(unsigned char val){
     return MC68K::Unknown;
 }
 
-// TODO:
-unsigned& MC68K::read_operand(unsigned char effective_address){}
+unsigned& MC68K::read_operand(unsigned char effective_address, BUS& bus){
+    // auto am = to_adress_mode(effective_address);
+    // TODO:
+    // switch(am.type){
+    //     case MC68K::DataRegisterDirectMode:             return dregs[effective_address & 0x7];
+    //     case MC68K::AddressRegisterDirectMode:          return aregs[effective_address & 0x7];
+    //     case MC68K::AddressRegisterIndirectMode:        return bus.mc68kmem[aregs[effective_address & 0x7]];
+    //     case MC68K::AddressRegisterIndirectPostIncMode: {
+    //         auto r = return bus.mc68kmem[aregs[effective_address & 0x7]]; 
+    //         aregs[effective_address & 0x7] += opsz;
+    //         return r;
+    //     }
+    //     case MC68K::AddressRegisterIndirectPreDecMode:       return bus.mc68kmem[aregs[effective_address & 0x7] -= operand_sz];
+    // }
+    return dregs[effective_address & 0x7];
+}
 
 void MC68K::exec(DecodedInfo di, BUS& bus) {
     switch(di.i){
         case MC68K::ADD:{
-            unsigned& operand = read_operand(di.effective_address);
+            unsigned& operand = read_operand(di.effective_address, bus);
             unsigned res = (dregs[di.rx] & di.mask) + (operand & di.mask);
             set_sreg(Extend, res > di.mask);
             set_sreg(Carry,  res > di.mask);
@@ -38,14 +59,14 @@ void MC68K::exec(DecodedInfo di, BUS& bus) {
             break;
         }
         case MC68K::ADDA: {
-            auto res = dregs[di.rx] + read_operand(di.effective_address);
+            auto res = dregs[di.rx] + read_operand(di.effective_address, bus);
             dregs[di.rx] = res;
             break;
         }
     }
 }
 
-MC68K::DecodedInfo decode(unsigned short val){
+MC68K::DecodedInfo MC68K::decode(unsigned short val) {
     if ((((val >> 12) & 0xf) == 0b1100) && (((val >> 4) & 0x1f) == 0b10000)) {
         return {MC68K::ABCD, bool(val & 0x8), (unsigned char)((val >> 9) & 0x7), (unsigned char)(val & 0x7)};
     }
@@ -54,13 +75,14 @@ MC68K::DecodedInfo decode(unsigned short val){
         unsigned char rx = (val >> 9) & 0x7;
         unsigned mask{};
         unsigned sign_bit{};
+        
         switch(opmode){
             case 0b000:
-            case 0b100: sign_bit = 0x80; mask = 0x000000ff; break;
+            case 0b100: {opsz = MC68K::BYTE; sign_bit = 0x80; mask = 0x000000ff; break;}
             case 0b001:
             case 0b011:
-            case 0b101: sign_bit = 0x8000; mask = 0x0000ffff; break;
-            default:    sign_bit = 0x80000000; mask = 0xffffffff; break;
+            case 0b101: {opsz = MC68K::WORD; sign_bit = 0x8000; mask = 0x0000ffff; break;}
+            default:    {opsz = MC68K::LONG; sign_bit = 0x80000000; mask = 0xffffffff; break;}
         }
         return {
             .i = (opmode == 0b011 || opmode == 0b111) ? MC68K::ADDA : MC68K::ADD,
@@ -68,7 +90,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .d1 = opmode,
             .mask = mask,
             .sign_bit = sign_bit,
-            .addr_mode = to_adress_mode((unsigned char)(val & 0x3f)),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -77,7 +98,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::ADDI,
             .d1 = sz,
-            .addr_mode = to_adress_mode((unsigned char)(val & 0x3f)),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -89,7 +109,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .i = MC68K::ADDQ,
             .d1 = data,
             .d2 = sz,
-            .addr_mode = to_adress_mode((unsigned char)(val & 0x3f)),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -114,7 +133,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .i = MC68K::AND,
             .rx = rx,
             .d1 = opmode,
-            .addr_mode = to_adress_mode((unsigned char)(val & 0x3f)),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -124,7 +142,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::ANDI,
             .d1 = sz,
-            .addr_mode = to_adress_mode((unsigned char)(val & 0x3f)),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -138,7 +155,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .d1 = count_reg,
             .d2 = sz,
             .d3 = i_r,
-            .addr_mode = to_adress_mode(val & 0x3f)
         };
     }
 
@@ -159,7 +175,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = ((val >> 6) & 0x7) == 0x5 ? MC68K::BCHG : MC68K::BCLR,
             .d1 = reg,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -178,7 +193,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::BSET,
             .d1 = reg,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -188,7 +202,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::BSR,
             .d1 = displacement,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -198,7 +211,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::BTST,
             .d1 = reg,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -210,7 +222,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .i = MC68K::CHK,
             .d1 = reg,
             .d2 = sz,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -221,7 +232,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::CLR,
             .d1 = sz,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -234,7 +244,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .i = (opmode == 0b11 || opmode == 0b111) ? MC68K::CMPA : MC68K::CMP,
             .d1 = reg,
             .d2 = opmode,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -244,7 +253,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::CMPI,
             .d1 = sz,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -278,7 +286,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::DIVS,
             .d1 = reg,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -287,7 +294,6 @@ MC68K::DecodedInfo decode(unsigned short val){
     if ((val >> 6) == 0x131) {
         return {
             .i = MC68K::DIVSL,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -297,7 +303,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::DIVU,
             .d1 = reg,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -308,7 +313,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::DIVUL,
             .d1 = reg,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -320,7 +324,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .i = MC68K::EOR,
             .d1 = reg,
             .d2 = opmode,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -330,7 +333,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::EORI,
             .d1 = sz,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -372,7 +374,6 @@ MC68K::DecodedInfo decode(unsigned short val){
     if (val == 0x13b) {
         return {
             .i = MC68K::JMP,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -380,7 +381,6 @@ MC68K::DecodedInfo decode(unsigned short val){
     if (val == 0x13a) {
         return {
             .i = MC68K::JSR,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -390,7 +390,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::LEA,
             .d1 = reg,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -430,8 +429,8 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::MOVE,
             .d1 = sz,
-            .d2 = to_adress_mode((val >> 6) & 0x3f),
-            .d3 = to_adress_mode(val & 0x3f),
+            .d2 = (unsigned char)((val >> 6) & 0x3f),
+            .d3 = (unsigned char)(val & 0x3f),
         };
     }
 
@@ -442,7 +441,7 @@ MC68K::DecodedInfo decode(unsigned short val){
             .i = MC68K::MOVEA,
             .d1 = sz,
             .d2 = dst,
-            .d3 = to_adress_mode(val & 0x3f),
+            .d3 = (unsigned char)(val & 0x3f),
         };
     }
 
@@ -450,7 +449,6 @@ MC68K::DecodedInfo decode(unsigned short val){
     if ((val >> 6) == 0x113) {
         return {
             .i = MC68K::MOVEtoCCR,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -463,7 +461,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .i = MC68K::MOVEM,
             .d1 = sz,
             .d2 = dr,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -475,7 +472,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .i = MC68K::MOVEM,
             .d1 = sz,
             .d2 = dr,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -507,7 +503,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::MULS,
             .d1 = reg,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -517,7 +512,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::MULU,
             .d1 = reg,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -527,7 +521,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::MULU,
             .d1 = reg,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -535,7 +528,6 @@ MC68K::DecodedInfo decode(unsigned short val){
     if ((val >> 6) == 0x120) {
         return {
             .i = MC68K::NBCD,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -543,7 +535,6 @@ MC68K::DecodedInfo decode(unsigned short val){
     if ((val >> 8) == 0x44) {
         return {
             .i = MC68K::NEG,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -551,7 +542,6 @@ MC68K::DecodedInfo decode(unsigned short val){
     if ((val >> 8) == 0x44) {
         return {
             .i = MC68K::NEG,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -561,7 +551,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::NEGX,
             .d1 = sz,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -575,7 +564,6 @@ MC68K::DecodedInfo decode(unsigned short val){
     if ((val >> 8) == 0x46) {
         return {
             .i = MC68K::NOT,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -587,7 +575,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .i = MC68K::OR,
             .d1 = reg,
             .d2 = opmode,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -597,7 +584,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::ORI,
             .d1 = sz,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -607,7 +593,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::ORItoCCR,
             .d1 = sz,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -621,7 +606,6 @@ MC68K::DecodedInfo decode(unsigned short val){
     if ((val >> 6) == 0x121) {
         return {
             .i = MC68K::PEA,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -629,7 +613,6 @@ MC68K::DecodedInfo decode(unsigned short val){
     if ((val >> 6) == 0x121) {
         return {
             .i = MC68K::PEA,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -711,7 +694,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::Scc,
             .d1 = cond,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -723,7 +705,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .i = (opmode == 0b11 || opmode == 0b111) ?  MC68K::SUBA : MC68K::SUB,
             .d1 = reg,
             .d2 = opmode,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -733,7 +714,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::SUBI,
             .d1 = sz,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -745,7 +725,6 @@ MC68K::DecodedInfo decode(unsigned short val){
             .i = MC68K::SUBQ,
             .d1 = data,
             .d2 = sz,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -776,7 +755,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         unsigned char reg = val & 0x7;
         return {
             .i = MC68K::TAS,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
@@ -801,7 +779,6 @@ MC68K::DecodedInfo decode(unsigned short val){
         return {
             .i = MC68K::TST,
             .d1 = sz,
-            .addr_mode = to_adress_mode(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
