@@ -275,6 +275,8 @@ struct DebugLineParseVM {
             }
         } state;
         std::vector<State> commited_states;
+        unsigned long commited_states_max_addr = 0;
+        unsigned long commited_states_min_addr = 0xffffffffffffffff;
 
         unsigned char* it = 0;
        
@@ -371,8 +373,15 @@ struct DebugLineParseVM {
             assert(ptr == vm_bytecode_ptr);
             it = (unsigned char*)ptr;
             exec();
+            min_max_commited_address_set();
         }
 
+        inline void min_max_commited_address_set(){
+            for (auto& s: commited_states){
+                commited_states_max_addr = (s.address > commited_states_max_addr) ? s.address : commited_states_max_addr;
+                commited_states_min_addr = (s.address < commited_states_min_addr) ? s.address : commited_states_min_addr;
+            }
+        }
         inline void parse_header_v5(const std::vector<char>& f, size_t debug_line_offset, size_t debug_line_str_offset){
             auto ptr = f.data() + debug_line_offset;
             auto debug_str_ptr = f.data() + debug_line_str_offset;  
@@ -437,6 +446,7 @@ struct DebugLineParseVM {
             ++ptr;
             it = (unsigned char*)ptr;
             exec();
+            min_max_commited_address_set();
         }
 
         inline void parse_header(const std::vector<char>& f, size_t debug_line_offset, size_t debug_line_str_offset = 0){
@@ -465,6 +475,36 @@ struct DebugLineParseVM {
                 }
             }
             return nullptr;
+        }
+
+        State get_next_state_by_file_and_line(const std::string& filename, size_t line){
+            int current_file_index = -1;
+            for (size_t i = 0, e = lists.file_entries.size(); i != e; ++i){
+                if (lists.file_entries[i].name == filename){
+                    current_file_index = i + 1;
+                    break;
+                }
+            }
+            if (current_file_index == -1 || current_file_index == commited_states.size()-1) return State{};
+            size_t l = 0;
+            for (size_t i = 0, e = commited_states.size(); i != e; ++i){
+                if (commited_states[i].line == line && commited_states[i].file == current_file_index && i + 1 != e && commited_states[i + 1].line != line) {
+                    return commited_states[i + 1];
+                }
+            }
+            // TODO: check
+            return {};
+        }
+        
+
+        State state_by_address(uintptr_t address){
+            // TODO: check
+            for (size_t i = 0, e = commited_states.size(); i != e; ++i){
+                if (commited_states[i].address == address) {
+                    return commited_states[i];
+                }
+            }
+            return {};
         }
 
         uintptr_t get_next_instruction_address(uintptr_t address){
@@ -516,7 +556,10 @@ struct DebugLineParseVM {
                     commited_states.push_back(state); state = State{}; 
                     state.set_flag(DebugLineParseVM::State::IsStmt, is_stmt);
                     break;}
-                case DW_LNE_set_discriminator: {/*todo*/ break;}
+                case DW_LNE_set_discriminator: {
+                    // TODO:
+                    decode_leb128<size_t>(it);
+                    break;}
                 case DW_LNE_define_file: {
                     auto name = read_str(it);  
                     size_t dir_index = decode_leb128<size_t>(it);
@@ -530,6 +573,11 @@ struct DebugLineParseVM {
                     std::cout << "Adress:" << state.address << '\n';
 #endif                
                     break;}
+                 default: {
+                    std::cout << "UNKNOWN opcode:" << *(it-1) << '\n';
+                    std::abort();
+                 }
+                    
             }
             assert(it == ptr);
         }

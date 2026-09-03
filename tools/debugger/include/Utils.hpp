@@ -7,6 +7,8 @@
 
 #define PRINT(s)     std::cout << std::hex << #s << ":" << s << '\n';
 #define PRINT_INT(s) std::cout << std::hex << #s << ":" << int(s) << '\n';
+#define PRINT_ERRNO(s) std::cout << s << strerror(errno) << '\n';  
+#define FATAL_ERRNO(s) PRINT_ERRNO(s) std::abort();
 
 template <typename T, typename U>
 T parse_to(U ptr){
