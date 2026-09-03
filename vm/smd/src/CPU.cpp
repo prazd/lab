@@ -1,10 +1,61 @@
 #include "CPU.hpp"
 #include "BUS.hpp"
 
-
 void MC68K::tick(BUS& bus){
-    auto opcode = prefetch_q.get();
-    auto val = decode(opcode);
+    switch(iops_q.front()){
+        case FetchDec: {
+            auto opcode = prefetch_q.get();
+            decoded_info = decode(opcode);
+            iops_q.pop_front();
+            break;
+        }
+        case BusReadOperandA: {
+            bus.mc68k_r(decoded_info.operand_a_address, decoded_info.read_mode);
+            iops_q.pop_front();
+            break;
+        }
+        case BusReadWaitOperandA: {
+            if (!bus.mc68k_r_in_progress) {
+                if (decoded_info.f_a_read)
+                    decoded_info.operand_a_data1 = bus.mc68k_data;
+                else 
+                   decoded_info.operand_a_data2 = bus.mc68k_data;
+                decoded_info.f_a_read = !decoded_info.f_a_read;
+                iops_q.pop_front();
+            }
+            break;
+        }
+        case BusReadOperandB: {
+            bus.mc68k_r(decoded_info.operand_b_address, decoded_info.read_mode);
+            iops_q.pop_front();
+            break;
+        }
+        case BusReadWaitOperandB: {
+            if (!bus.mc68k_r_in_progress) {
+                if (decoded_info.f_a_read)
+                    decoded_info.operand_b_data1 = bus.mc68k_data;
+                else 
+                   decoded_info.operand_b_data2 = bus.mc68k_data;
+                decoded_info.f_b_read = !decoded_info.f_b_read;
+                iops_q.pop_front();
+            }
+            break;
+        }
+        case BusWrite: {
+            bus.mc68k_w(w_address, w_data, bus_mode);
+            iops_q.pop_front();
+            break;
+        }
+        case BusWriteWait: {
+            if (!bus.mc68k_w_in_progress) {iops_q.pop_front();}
+            break;
+        }
+        case ExecAdd: {
+            // TODO:
+            break;
+        }
+    }
+  
     // TODO: 
 }
 

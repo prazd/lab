@@ -114,6 +114,20 @@ struct MC68K {
         UNLK,
     };
 
+    enum InternalOps: unsigned char {
+        FetchDec,
+        BusReadOperandA,
+        BusReadWaitOperandA,
+
+        BusReadOperandB,
+        BusReadWaitOperandB,
+        BusWrite,
+        BusWriteWait,
+        ExecAdd,
+    };
+    
+    SimpleDequeT<InternalOps, 20> iops_q;
+
     struct DecodedInfo {
         Instruction i;
         bool address_reg{};
@@ -129,7 +143,24 @@ struct MC68K {
         unsigned i_address{};
         AddressMode addr_mode{};
         unsigned char effective_address{};
-    };
+
+        BUS::Mode read_mode{};
+
+        OperandSize operand_a_sz{};
+        OperandSize operand_b_sz{};
+        bool f_a_read = true;
+        bool f_b_read = true;
+        unsigned operand_a_address{};
+        unsigned operand_b_address{};
+        unsigned short operand_a_data1{};
+        unsigned short operand_a_data2{};
+        unsigned short operand_b_data1{};
+        unsigned short operand_b_data2{};
+    } decoded_info;
+    
+    unsigned w_address{};
+    unsigned short w_data{};
+    BUS::Mode bus_mode{};
 
     unsigned& read_operand(unsigned char effective_address, BUS& bus);
     DecodedInfo decode(unsigned short);
