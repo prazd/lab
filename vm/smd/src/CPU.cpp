@@ -1,48 +1,82 @@
 #include "CPU.hpp"
 #include "BUS.hpp"
 
+unsigned MC68K::sign_extend_to_l(unsigned short v) {
+    return v & 0x8000 ? (0xffff0000 | v) : v;
+}
+
+void MC68K::fill_read_req(unsigned addr, BusReadDest brd, OperandSize sz) {
+    iops_q.push_back({.address = addr, .brd = brd, .iop = BusReadReq, .req_count = 1});
+    iops_q.push_back({.iop = BusReadWait});
+    if (sz != LONG) return;
+    iops_q.push_back({.address = addr, .brd = BusReadDest((int)brd + 1), .iop = BusReadReq, .req_count = 2});
+    iops_q.push_back({.iop = BusReadWait});
+}
+
+void MC68K::ea_fill(unsigned char val){
+    auto am = to_adress_mode(val);
+    ea_reg_n = val & 0x7;
+    switch(am) {
+        case DataRegisterDirectMode:    ea_reg_type = Dn; break;
+        case AddressRegisterDirectMode: ea_reg_type = An; break;
+        case AddressRegisterIndirectMode: {
+            fill_read_req(aregs[ea_reg_n], BRDOperandA1, opsz);
+            break; 
+        }
+        case AddressRegisterIndirectPreDecMode: {
+            aregs[ea_reg_n] -= opsz;
+            // TODO: check
+            iops_q.push_back({.iop = Nop});
+            iops_q.push_back({.iop = Nop});
+            fill_read_req(aregs[ea_reg_n], BRDOperandA1, opsz);
+            break;
+        }
+        case AddressRegisterIndirectPostIncMode: {
+            // TODO: check
+            fill_read_req(aregs[ea_reg_n], BRDOperandA1, opsz);
+            aregs[ea_reg_n] += opsz;
+            break;
+        }
+        case AddressRegisterIndirectDisplacementMode: {
+            fill_read_req(pc + 2, BRDSignExtend, WORD);
+            break;
+        }
+    }
+}
+
 void MC68K::tick(BUS& bus){
-    switch(iops_q.front()){
+    switch(iops_q.front().iop){
         case FetchDec: {
             auto opcode = prefetch_q.get();
             decoded_info = decode(opcode);
             iops_q.pop_front();
             break;
         }
-        case BusReadOperandA: {
-            bus.mc68k_r(decoded_info.operand_a_address, decoded_info.read_mode);
+        case BusReadReq: {
+            // TODO: check bus_mode
+            bus.mc68k_r(bus_address, bus_mode);
             iops_q.pop_front();
             break;
         }
-        case BusReadWaitOperandA: {
+        case BusReadWait: {
             if (!bus.mc68k_r_in_progress) {
-                if (decoded_info.f_a_read)
-                    decoded_info.operand_a_data1 = bus.mc68k_data;
-                else 
-                   decoded_info.operand_a_data2 = bus.mc68k_data;
-                decoded_info.f_a_read = !decoded_info.f_a_read;
+                switch(iops_q.front().brd) {
+                    case BRDOperandA1: operand_a_w1 = bus.mc68k_data; break;
+                    case BRDOperandA2: operand_a_w2 = bus.mc68k_data; operands_a_to_long(); break;
+                    case BRDOperandB1: operand_b_w1 = bus.mc68k_data; break;
+                    case BRDOperandB2: operand_b_w2 = bus.mc68k_data; operands_b_to_long(); break;
+            
+                    case BRDSignExtend: {
+                        fill_read_req(aregs[ea_reg_n] + sign_extend_to_l(bus.mc68k_data), BRDOperandA1, opsz);
+                        break;
+                    }
+                }
                 iops_q.pop_front();
             }
             break;
         }
-        case BusReadOperandB: {
-            bus.mc68k_r(decoded_info.operand_b_address, decoded_info.read_mode);
-            iops_q.pop_front();
-            break;
-        }
-        case BusReadWaitOperandB: {
-            if (!bus.mc68k_r_in_progress) {
-                if (decoded_info.f_a_read)
-                    decoded_info.operand_b_data1 = bus.mc68k_data;
-                else 
-                   decoded_info.operand_b_data2 = bus.mc68k_data;
-                decoded_info.f_b_read = !decoded_info.f_b_read;
-                iops_q.pop_front();
-            }
-            break;
-        }
-        case BusWrite: {
-            bus.mc68k_w(w_address, w_data, bus_mode);
+        case BusWriteReq: {
+            bus.mc68k_w(iops_q.front().address, bus_data, bus_mode);
             iops_q.pop_front();
             break;
         }
@@ -50,6 +84,7 @@ void MC68K::tick(BUS& bus){
             if (!bus.mc68k_w_in_progress) {iops_q.pop_front();}
             break;
         }
+        case Nop: {iops_q.pop_front(); break;}
         case ExecAdd: {
             // TODO:
             break;
@@ -59,7 +94,7 @@ void MC68K::tick(BUS& bus){
     // TODO: 
 }
 
-MC68K::AddressMode to_adress_mode(unsigned char val){
+MC68K::AddressMode MC68K::to_adress_mode(unsigned char val){
     unsigned char mode_field = (val >> 3) & 0x7;
     unsigned char reg_field = val & 0x7;
     if (mode_field == 0b000) return MC68K::DataRegisterDirectMode;

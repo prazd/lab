@@ -93,7 +93,7 @@ struct MC68K {
         AddressMode type{};
     };
 
-    AddressModeVal to_adress_mode(unsigned char);
+    AddressMode to_adress_mode(unsigned char);
 
     enum Instruction {
         ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,ASL,ASR,
@@ -114,19 +114,52 @@ struct MC68K {
         UNLK,
     };
 
-    enum InternalOps: unsigned char {
-        FetchDec,
-        BusReadOperandA,
-        BusReadWaitOperandA,
+    enum RegType {
+        Dn,An
+    };
+    enum BusReadDest: unsigned char {
+        BRDOperandA1,
+        BRDOperandA2,
+        BRDOperandB1,
+        BRDOperandB2,
+        BRDSignExtend,
+    };
 
-        BusReadOperandB,
-        BusReadWaitOperandB,
-        BusWrite,
+    enum InternalOp: unsigned char {
+        FetchDec,
+        BusReadReq,
+        BusReadWait,
+        BusWriteReq,
         BusWriteWait,
+
+        // Effective address
+        Nop,
+        RegDec,
+        RegInc,
         ExecAdd,
     };
-    
-    SimpleDequeT<InternalOps, 20> iops_q;
+
+
+    RegType ea_reg_type;
+    unsigned char ea_reg_n{};
+
+    void ea_fill(unsigned char);
+
+    void fill_read_req(unsigned addr, BusReadDest, OperandSize);
+
+    unsigned sign_extend_to_l(unsigned short);
+
+    unsigned char dest_reg{};
+    unsigned char source_reg{};
+
+    struct IntOperationReq{
+        unsigned address{};
+        BusReadDest brd{};
+        InternalOp iop{};
+        unsigned char req_count{};
+    };
+
+    SimpleDequeT<IntOperationReq, 20> iops_q;
 
     struct DecodedInfo {
         Instruction i;
@@ -152,14 +185,22 @@ struct MC68K {
         bool f_b_read = true;
         unsigned operand_a_address{};
         unsigned operand_b_address{};
-        unsigned short operand_a_data1{};
-        unsigned short operand_a_data2{};
-        unsigned short operand_b_data1{};
-        unsigned short operand_b_data2{};
     } decoded_info;
-    
-    unsigned w_address{};
-    unsigned short w_data{};
+
+    unsigned short operand_a_w1{};
+    unsigned short operand_a_w2{};
+    unsigned short operand_b_w1{};
+    unsigned short operand_b_w2{};
+    unsigned operand_a_l{};
+    unsigned operand_b_l{};
+    inline void operands_a_to_long(){operand_a_l = (operand_a_w2 << 16) | operand_a_w1;}
+    inline void operands_b_to_long(){operand_b_l = (operand_b_w2 << 16) | operand_b_w1;}
+
+    AddressMode am{};
+    unsigned effective_address_value{};
+
+    unsigned bus_address{};
+    unsigned short bus_data{};
     BUS::Mode bus_mode{};
 
     unsigned& read_operand(unsigned char effective_address, BUS& bus);
