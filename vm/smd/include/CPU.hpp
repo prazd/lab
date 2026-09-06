@@ -61,11 +61,6 @@ struct MC68K {
         Unknown,
     };
 
-    struct AddressModeVal {
-        unsigned* ptr{};
-        AddressMode type{};
-    };
-
     AddressMode to_adress_mode(unsigned char);
 
     enum Instruction {
@@ -90,6 +85,7 @@ struct MC68K {
     enum RegType {
         Dn,An
     };
+
     enum BusReadDest: unsigned char {
         BRDOperandA1,
         BRDOperandA2,
@@ -109,16 +105,28 @@ struct MC68K {
         Nop,
         RegDec,
         RegInc,
-        ExecAdd,
     };
 
+// TODO:
+    enum ALUOp {
+        ALUADD,
+    };
+    unsigned short arg1{};
+    unsigned short arg2{};
+    ALUOp alu_op{};
+    unsigned char count{};
+    unsigned short res{};
+    void req(unsigned short, unsigned short, ALUOp);
 
+    unsigned ea_address{};
+    AddressMode ea_mode;
     RegType ea_reg_type;
     unsigned char ea_reg_n{};
 
     void ea_fill(unsigned char);
 
-    void fill_read_req(unsigned addr, BusReadDest, OperandSize);
+    void fill_bus_read_req(unsigned, BusReadDest, OperandSize);
+    void fill_bus_write_req(unsigned, unsigned, OperandSize);
 
     template <std::integral T>
     requires(std::is_same_v<T, unsigned char> || 
@@ -129,14 +137,12 @@ struct MC68K {
             (is_word ? (0xffff0000 | v) : (0xffffff00 | v)) : v;
     };
 
-    unsigned char dest_reg{};
-    unsigned char source_reg{};
-
     struct IntOperationReq{
         unsigned address{};
-        BusReadDest brd{};
         InternalOp iop{};
-        unsigned char req_count{};
+        BusReadDest brd{};
+        unsigned short bus_data{};
+        BUS::Mode bus_mode{};
     };
 
     SimpleDequeT<IntOperationReq, 20> iops_q;
@@ -157,24 +163,47 @@ struct MC68K {
         AddressMode addr_mode{};
         unsigned char effective_address{};
 
+        unsigned char opmode{};
         BUS::Mode read_mode{};
+        OperandSize opsz;
+        bool is_ea{};
+    } di;
 
-        OperandSize operand_a_sz{};
-        OperandSize operand_b_sz{};
-        bool f_a_read = true;
-        bool f_b_read = true;
-        unsigned operand_a_address{};
-        unsigned operand_b_address{};
-    } decoded_info;
+    unsigned char d1{};
+    unsigned char d2{};
+    unsigned char d3{};
+    unsigned char d4{};
+    unsigned sign_bit{};
+    unsigned mask{};
+
+    inline void update_mask_n_sign_bit(){
+        switch (opsz) {
+            case BYTE: sign_bit = 0x80; mask = 0x000000ff; break;
+            case WORD: sign_bit = 0x8000; mask = 0x0000ffff; break;
+            case LONG: sign_bit = 0x80000000; mask = 0xffffffff; break;
+        }
+    };
 
     unsigned short absolute_l_w1{};
+
+    enum Dest{
+        DSTAn,DSTDn,DSTMem,
+    } dst;
+    unsigned dst_addr{};
+    unsigned dst_value{};
+    unsigned char reg_n{};
+    void write_dst();
 
     unsigned short operand_a_w1{};
     unsigned short operand_a_w2{};
     unsigned short operand_b_w1{};
     unsigned short operand_b_w2{};
+    unsigned short res_w1{};
+    unsigned short res_w2{};
+
     unsigned operand_a_l{};
     unsigned operand_b_l{};
+
     inline void operands_a_to_long(){operand_a_l = (operand_a_w2 << 16) | operand_a_w1;}
     inline void operands_b_to_long(){operand_b_l = (operand_b_w2 << 16) | operand_b_w1;}
 
@@ -199,8 +228,10 @@ struct MC68K {
         return v;
     }
     inline void fill_prefetch_req(){
-        fill_read_req(prefetch_addr, BRDPrefetchQ, WORD);
+        fill_bus_read_req(prefetch_addr, BRDPrefetchQ, WORD);
         prefetch_addr += 2;
     }
+
+    void set_ea_dst();
 };
 #endif

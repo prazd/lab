@@ -1,5 +1,6 @@
 #ifndef SMD_BUS_HPP
 #define SMD_BUS_HPP
+#include <cassert>
 #include "Constants.hpp"
 struct BUS {
     S_MODE unsigned char mc68kmem[1 << 24]{};
@@ -19,6 +20,9 @@ struct BUS {
         mc68k_mode = m;
     }
     inline void mc68k_w(unsigned address, unsigned short data, Mode m){
+#if DEBUG_MODE
+        assert(!(address & 1));
+#endif
         mc68k_address = address;
         mc68k_data = data;
         mc68k_tick_count = 4;
@@ -54,6 +58,13 @@ struct BUS {
             }
         }
     }
-
+    inline unsigned short mc68k_get() const {
+        switch (mc68k_mode) {
+            case UDS: return (mc68k_data >> 8) & 0xff;
+            case LDS: return mc68k_data & 0xff;
+            default:
+                return mc68k_data;
+        }
+    }
 };
 #endif
