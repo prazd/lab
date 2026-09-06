@@ -15,33 +15,6 @@ struct MC68K {
     // Alternate function code registers
     unsigned sfc{};
     unsigned dfc{};
-
-    struct PrefetchQ {
-        unsigned prefetch_addr{};
-        SimpleDequeT<unsigned short, 2> q;
-        unsigned char prefetch_q_ticks = 4;
-        inline void prefetch(BUS& bus){
-            if (q.size() != 2) {
-                --prefetch_q_ticks;
-                    if (!prefetch_q_ticks) {
-                    unsigned short d = 
-                        (bus.mc68kmem[prefetch_addr + 1] << 8) | bus.mc68kmem[prefetch_addr];
-                    q.push_back(d);
-                    prefetch_q_ticks = 4;
-                    prefetch_addr+=2;
-                }
-            }
-        }
-        inline unsigned short get(){
-            auto res = q.front();
-            q.pop_front();
-            return res;
-        }
-        inline void set_address(unsigned addr) {
-            prefetch_addr = addr;
-        }
-    } prefetch_q;
-
     
     // Status register
     unsigned short sreg{};
@@ -122,7 +95,7 @@ struct MC68K {
         BRDOperandA2,
         BRDOperandB1,
         BRDOperandB2,
-        BRDSignExtend,
+        BRDPrefetchQ,
     };
 
     enum InternalOp: unsigned char {
@@ -147,7 +120,14 @@ struct MC68K {
 
     void fill_read_req(unsigned addr, BusReadDest, OperandSize);
 
-    unsigned sign_extend_to_l(unsigned short);
+    template <std::integral T>
+    requires(std::is_same_v<T, unsigned char> || 
+             std::is_same_v<T, unsigned short>)
+    unsigned sign_extend_to_l(T v) {
+        bool is_word = std::is_same_v<T, unsigned short>;
+        return v & (is_word ? 0x8000 : 0x80) ? 
+            (is_word ? (0xffff0000 | v) : (0xffffff00 | v)) : v;
+    };
 
     unsigned char dest_reg{};
     unsigned char source_reg{};
@@ -187,6 +167,8 @@ struct MC68K {
         unsigned operand_b_address{};
     } decoded_info;
 
+    unsigned short absolute_l_w1{};
+
     unsigned short operand_a_w1{};
     unsigned short operand_a_w2{};
     unsigned short operand_b_w1{};
@@ -208,5 +190,17 @@ struct MC68K {
 
     void exec(DecodedInfo di, BUS& bus);
     void tick(BUS& bus);
+
+    unsigned prefetch_addr{};
+    SimpleDequeT<unsigned short, 2> prefetch_q{};
+    inline unsigned short read_prefetch_q(){
+        auto v = prefetch_q.front();
+        prefetch_q.pop_front();
+        return v;
+    }
+    inline void fill_prefetch_req(){
+        fill_read_req(prefetch_addr, BRDPrefetchQ, WORD);
+        prefetch_addr += 2;
+    }
 };
 #endif

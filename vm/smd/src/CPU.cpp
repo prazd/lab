@@ -1,27 +1,29 @@
 #include "CPU.hpp"
 #include "BUS.hpp"
 
-unsigned MC68K::sign_extend_to_l(unsigned short v) {
-    return v & 0x8000 ? (0xffff0000 | v) : v;
-}
-
 void MC68K::fill_read_req(unsigned addr, BusReadDest brd, OperandSize sz) {
     iops_q.push_back({.address = addr, .brd = brd, .iop = BusReadReq, .req_count = 1});
-    iops_q.push_back({.iop = BusReadWait});
+    iops_q.push_back({.iop = BusReadWait, .brd = brd});
     if (sz != LONG) return;
-    iops_q.push_back({.address = addr, .brd = BusReadDest((int)brd + 1), .iop = BusReadReq, .req_count = 2});
-    iops_q.push_back({.iop = BusReadWait});
+    iops_q.push_back({.address = addr+2, .brd = BusReadDest((int)brd + 1), .iop = BusReadReq, .req_count = 2});
+    iops_q.push_back({.iop = BusReadWait, .brd = brd});
 }
 
 void MC68K::ea_fill(unsigned char val){
     auto am = to_adress_mode(val);
     ea_reg_n = val & 0x7;
     switch(am) {
-        case DataRegisterDirectMode:    ea_reg_type = Dn; break;
-        case AddressRegisterDirectMode: ea_reg_type = An; break;
+        case DataRegisterDirectMode:    ea_reg_type = Dn; operand_a_l = dregs[ea_reg_n]; break;
+        case AddressRegisterDirectMode: ea_reg_type = An; operand_a_l = aregs[ea_reg_n]; break;
         case AddressRegisterIndirectMode: {
             fill_read_req(aregs[ea_reg_n], BRDOperandA1, opsz);
             break; 
+        }
+        case AddressRegisterIndirectPostIncMode: {
+            // TODO: check
+            fill_read_req(aregs[ea_reg_n], BRDOperandA1, opsz);
+            aregs[ea_reg_n] += opsz;
+            break;
         }
         case AddressRegisterIndirectPreDecMode: {
             aregs[ea_reg_n] -= opsz;
@@ -31,14 +33,66 @@ void MC68K::ea_fill(unsigned char val){
             fill_read_req(aregs[ea_reg_n], BRDOperandA1, opsz);
             break;
         }
-        case AddressRegisterIndirectPostIncMode: {
-            // TODO: check
-            fill_read_req(aregs[ea_reg_n], BRDOperandA1, opsz);
-            aregs[ea_reg_n] += opsz;
+        case AddressRegisterIndirectDisplacementMode: {
+            auto pv = read_prefetch_q();
+            auto address = aregs[ea_reg_n] + sign_extend_to_l(pv);
+            fill_prefetch_req();
+            fill_read_req(address, BRDOperandA1, opsz);
             break;
         }
-        case AddressRegisterIndirectDisplacementMode: {
-            fill_read_req(pc + 2, BRDSignExtend, WORD);
+        case AddressRegisterIndirectIndexMode: {
+            auto pv = read_prefetch_q();
+            auto regn = (pv >> 12) & 0x7;
+            auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
+            xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
+            auto addr = aregs[ea_reg_n] + 
+                sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;     
+    
+            fill_prefetch_req();
+            iops_q.push_back({.iop = Nop});
+            iops_q.push_back({.iop = Nop}); // calc time
+            fill_read_req(addr, BRDOperandA1, opsz);
+            break;
+        }
+        case ProgramCounterInderectDisplacementMode: {
+            auto pv = read_prefetch_q();
+            fill_prefetch_req();
+            fill_read_req(pc + sign_extend_to_l(pv), BRDOperandA1, opsz);
+            break;
+        }
+        case ProgramCounterInderectIndexMode: {
+            auto pv = read_prefetch_q();
+            auto regn = (pv >> 12) & 0x7;
+            auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
+            xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
+            auto addr = pc + 
+                sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
+            fill_prefetch_req();
+            iops_q.push_back({.iop = Nop});
+            iops_q.push_back({.iop = Nop}); // calc time
+            fill_read_req(addr, BRDOperandA1, opsz);    
+            break;
+        }
+        case AbsoluteShort: {
+            operand_a_w1 = read_prefetch_q();
+            fill_read_req(prefetch_addr, BRDPrefetchQ, WORD);
+            break;
+        }
+        case AbsoluteLong: {
+            operand_a_w1 = read_prefetch_q();
+            operand_a_w2 = read_prefetch_q();
+            operands_a_to_long();
+            fill_prefetch_req();
+            fill_prefetch_req();
+            break;
+        }
+         case Immediate: {
+            operand_a_w1 = read_prefetch_q();
+            fill_prefetch_req();
+            if (opsz != LONG) break;
+            operand_a_w2 = read_prefetch_q();
+            operands_a_to_long();
+            fill_prefetch_req();
             break;
         }
     }
@@ -47,7 +101,8 @@ void MC68K::ea_fill(unsigned char val){
 void MC68K::tick(BUS& bus){
     switch(iops_q.front().iop){
         case FetchDec: {
-            auto opcode = prefetch_q.get();
+            // TODO: update
+            auto opcode = read_prefetch_q();
             decoded_info = decode(opcode);
             iops_q.pop_front();
             break;
@@ -65,11 +120,7 @@ void MC68K::tick(BUS& bus){
                     case BRDOperandA2: operand_a_w2 = bus.mc68k_data; operands_a_to_long(); break;
                     case BRDOperandB1: operand_b_w1 = bus.mc68k_data; break;
                     case BRDOperandB2: operand_b_w2 = bus.mc68k_data; operands_b_to_long(); break;
-            
-                    case BRDSignExtend: {
-                        fill_read_req(aregs[ea_reg_n] + sign_extend_to_l(bus.mc68k_data), BRDOperandA1, opsz);
-                        break;
-                    }
+                    case BRDPrefetchQ: {prefetch_q.push_back(bus.mc68k_data); break;}
                 }
                 iops_q.pop_front();
             }
