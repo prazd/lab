@@ -59,6 +59,24 @@ unsigned char MC68K::ea_fetch_cycles(MC68K::AddressMode ea, MC68K::OperandSize s
     }
 }
 
+void MC68K::fill_bus_write_req(unsigned address, unsigned value, OperandSize sz) {
+    auto even_addr = address & 0xfffffffe;
+    if (sz == BYTE){
+        auto val = (unsigned short)(value & 0xff);
+        val = (val << 8) | val; // duplicate
+        iops_q.push_back({.address = even_addr, .iop = BusWriteReq, .bus_data = val,.bus_mode = (address & 1) ? BUS::LDS : BUS::UDS});
+        iops_q.push_back({.iop = BusWriteWait});
+    } else if (sz == WORD) {
+        iops_q.push_back({.address = even_addr, .iop = BusWriteReq, .bus_data = (unsigned short)(value & 0xffff), .bus_mode = BUS::UDS_LDS});
+        iops_q.push_back({.iop = BusWriteWait});
+    } else if (sz == LONG){
+        iops_q.push_back({.address = even_addr, .iop = BusWriteReq, .bus_data = (unsigned short)((value >> 16) & 0xffff), .bus_mode = BUS::UDS_LDS});
+        iops_q.push_back({.iop = BusWriteWait});
+        iops_q.push_back({.address = even_addr + 2, .iop = BusWriteReq, .bus_data = (unsigned short)(value & 0xffff), .bus_mode = BUS::UDS_LDS});
+        iops_q.push_back({.iop = BusWriteWait});
+    }
+}
+
 void MC68K::fill_bus_read_req(unsigned addr, BusReadDest brd, OperandSize sz) {
     auto even_addr = addr & 0xfffffffe;
     switch (sz) {
