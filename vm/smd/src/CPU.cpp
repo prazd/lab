@@ -10,8 +10,8 @@ void MC68K::req(unsigned short a, unsigned short b, ALUOp op){
 
 void MC68K::set_ea_dst() {
     switch (ea_mode) {
-        case DataRegisterDirectMode:    dst = DSTDn; reg_n = ea_reg_n;  break;
-        case AddressRegisterDirectMode: dst = DSTAn; reg_n = ea_reg_n;  break;
+        case DataRegisterDirectMode:    dst = DSTDn; dst_reg_n = ea_reg_n;  break;
+        case AddressRegisterDirectMode: dst = DSTAn; dst_reg_n = ea_reg_n;  break;
         default:
             dst = DSTMem; dst_addr = ea_address; break;
     }
@@ -19,27 +19,43 @@ void MC68K::set_ea_dst() {
 
 void MC68K::write_dst() {
     switch (dst) {
-        case DSTDn:  dregs[reg_n] &= ~mask; dregs[reg_n] |= dst_value & mask; break;
-        case DSTAn:  aregs[reg_n] &= ~mask; aregs[reg_n] |= dst_value & mask; break;
+        case DSTDn:  dregs[dst_reg_n] &= ~mask; dregs[dst_reg_n] |= dst_value & mask; break;
+        case DSTAn:  aregs[dst_reg_n] &= ~mask; aregs[dst_reg_n] |= dst_value & mask; break;
         case DSTMem: fill_bus_write_req(dst_addr, dst_value, opsz); break;
     }
 }
 
-void MC68K::fill_bus_write_req(unsigned address, unsigned value, OperandSize sz) {
-    auto even_addr = address & 0xfffffffe;
-    if (sz == BYTE){
-        auto val = (unsigned short)(value & 0xff);
-        val = (val << 8) | val; // duplicate
-        iops_q.push_back({.address = even_addr, .iop = BusWriteReq, .bus_data = val,.bus_mode = (address & 1) ? BUS::LDS : BUS::UDS});
-        iops_q.push_back({.iop = BusWriteWait});
-    } else if (sz == WORD) {
-        iops_q.push_back({.address = even_addr, .iop = BusWriteReq, .bus_data = (unsigned short)(value & 0xffff), .bus_mode = BUS::UDS_LDS});
-        iops_q.push_back({.iop = BusWriteWait});
-    } else if (sz == LONG){
-        iops_q.push_back({.address = even_addr, .iop = BusWriteReq, .bus_data = (unsigned short)((value >> 16) & 0xffff), .bus_mode = BUS::UDS_LDS});
-        iops_q.push_back({.iop = BusWriteWait});
-        iops_q.push_back({.address = even_addr + 2, .iop = BusWriteReq, .bus_data = (unsigned short)(value & 0xffff), .bus_mode = BUS::UDS_LDS});
-        iops_q.push_back({.iop = BusWriteWait});
+unsigned char MC68K::ea_fetch_cycles(MC68K::AddressMode ea, MC68K::OperandSize sz) {
+    switch (am) {
+        case AddressRegisterDirectMode:
+        case DataRegisterDirectMode: {
+            return 0;
+        }
+        case AddressRegisterIndirectMode:
+        case AddressRegisterIndirectPostIncMode:{
+            return sz == LONG ? 8 : 4;
+        }
+        case AddressRegisterIndirectPreDecMode: {
+            return sz == LONG ? 10 : 6;
+        }
+        case ProgramCounterInderectDisplacementMode:
+        case AddressRegisterIndirectDisplacementMode: {
+            return  sz == LONG ? 12 : 8;
+        }
+        case ProgramCounterInderectIndexMode:
+        case AddressRegisterIndirectIndexMode: {
+            return  sz == LONG ? 14 : 10;
+        }
+        case AbsoluteShort: {
+            return 4;
+        }
+        case AbsoluteLong: {
+            return 8;
+        }
+        case Immediate: {
+            return sz == LONG ? 8 : 4;
+        }
+        default: return 0;
     }
 }
 
@@ -63,6 +79,33 @@ void MC68K::fill_bus_read_req(unsigned addr, BusReadDest brd, OperandSize sz) {
             iops_q.push_back({.iop = BusReadWait, .brd = brd});
             break;
         }
+    }
+}
+
+//https://github.com/larsbrinkhoff/m68k-microcode/blob/master/doc/Yacht.txt
+unsigned char MC68K::exec_cycles(const DecodedInfo& di) {
+    auto ea = to_adress_mode(di.effective_address);
+    switch (di.i) {
+        //        #<data>,CCR     check
+        case EORI:
+        case ORI:
+        case ANDI:
+        case SUBI:
+        case ADDI: {
+            if (ea == DataRegisterDirectMode) return di.opsz == LONG ? 16 : 8;
+            return di.opsz == LONG ? 20 : 16;
+        }
+        case MOVEtoCCR: return 12;
+        case NBCD: return (ea == DataRegisterDirectMode ? 6 : 8);
+        case Scc : return (di.opmode ? (ea == DataRegisterDirectMode ? 4 : 8) : (ea == DataRegisterDirectMode ? 6 : 8));
+        case CMPI: return (di.opsz == LONG ? (ea == DataRegisterDirectMode ? 14 : 12) : 8);
+        case BCHG:
+        case BSET: {
+            if (di.opsz == BYTE) return opmode ? 12 : 8;
+            // TODO: immediate use
+            return opmode ? (dregs[di.d1] > 15 ? 12 : 10) : (di.immediate > 15 ? 8 : 6);
+        }
+        // TODO: continue
     }
 }
 
@@ -137,7 +180,7 @@ void MC68K::ea_fill(unsigned char val){
             operand_a_w1 = read_prefetch_q();
             // TODO: check
             ea_address = pc + 2;
-            fill_bus_read_req(prefetch_addr, BRDPrefetchQ, WORD);
+            fill_prefetch_req();
             break;
         }
         case AbsoluteLong: {
@@ -170,6 +213,10 @@ void MC68K::tick(BUS& bus){
             auto opcode = read_prefetch_q();
             fill_prefetch_req();
             di = decode(opcode);
+            opsz = di.opsz;
+            update_mask_n_sign_bit();
+            opmode = di.opmode;
+            mask = di.mask;
             if (di.is_ea) ea_fill(di.effective_address);
             iops_q.pop_front();
             break;
@@ -224,42 +271,35 @@ MC68K::AddressMode MC68K::to_adress_mode(unsigned char val){
     return MC68K::Unknown;
 }
 
-unsigned& MC68K::read_operand(unsigned char effective_address, BUS& bus){
-    // auto am = to_adress_mode(effective_address);
-    // TODO:
-    // switch(am.type){
-    //     case MC68K::DataRegisterDirectMode:             return dregs[effective_address & 0x7];
-    //     case MC68K::AddressRegisterDirectMode:          return aregs[effective_address & 0x7];
-    //     case MC68K::AddressRegisterIndirectMode:        return bus.mc68kmem[aregs[effective_address & 0x7]];
-    //     case MC68K::AddressRegisterIndirectPostIncMode: {
-    //         auto r = return bus.mc68kmem[aregs[effective_address & 0x7]]; 
-    //         aregs[effective_address & 0x7] += opsz;
-    //         return r;
-    //     }
-    //     case MC68K::AddressRegisterIndirectPreDecMode:       return bus.mc68kmem[aregs[effective_address & 0x7] -= operand_sz];
-    // }
-    return dregs[effective_address & 0x7];
+
+void MC68K::fill_exec(MC68K::Instruction i) {
+
 }
 
 void MC68K::exec(DecodedInfo di, BUS& bus) {
     switch(di.i){
         case MC68K::ADD:{
-            unsigned& operand = read_operand(di.effective_address, bus);
-            unsigned res = (dregs[di.rx] & di.mask) + (operand & di.mask);
+            operands_a_to_long();
+            unsigned res = (dregs[rx] & mask) + (operand_a_l & mask);
             // TODO: move to function
-            set_sreg(Extend, res > di.mask);
-            set_sreg(Carry,  res > di.mask);
-            set_sreg(Negative, res & di.sign_bit);
-            set_sreg(Zero,      (res & di.mask) == 0);
-            set_sreg(Overflow, ((dregs[di.rx] & di.sign_bit) == (operand & di.sign_bit)) && ((res & di.sign_bit) != (operand & di.sign_bit)));
-            unsigned& v = (di.d1 == 0b000 || di.d1 == 0b001 || di.d1 == 0b010) ? dregs[di.rx] : operand;
-            v &= ~di.mask;
-            v |= res & di.mask;
+            set_sreg(Extend, res > mask);
+            set_sreg(Carry,  res > mask);
+            set_sreg(Negative, res & sign_bit);
+            set_sreg(Zero,      (res & mask) == 0);
+            set_sreg(Overflow, ((dregs[rx] & sign_bit) == (operand_a_l & sign_bit)) && ((res & sign_bit) != (operand_a_l & sign_bit)));
+            // TODO: check
+            dst_value = res & mask;
+            if (opmode == 0b000 || opmode == 0b001 || opmode == 0b010) {
+                dst = DSTDn;
+                dst_reg_n = di.rx;
+            } else {
+                set_ea_dst();
+            }
             break;
         }
         case MC68K::ADDA: {
-            auto res = dregs[di.rx] + read_operand(di.effective_address, bus);
-            dregs[di.rx] = res;
+//            auto res = dregs[di.rx] + read_operand(di.effective_address, bus);
+//            dregs[di.rx] = res;
             break;
         }
     }
@@ -267,7 +307,14 @@ void MC68K::exec(DecodedInfo di, BUS& bus) {
 
 MC68K::DecodedInfo MC68K::decode(unsigned short val) {
     if ((((val >> 12) & 0xf) == 0b1100) && (((val >> 4) & 0x1f) == 0b10000)) {
-        return {MC68K::ABCD, bool(val & 0x8), (unsigned char)((val >> 9) & 0x7), (unsigned char)(val & 0x7)};
+        return {
+            .i = MC68K::ABCD,
+            .opmode = (unsigned char)((val >> 3) & 0x1), // r/m
+            .address_reg = bool(val & 0x8),
+            .rx = (unsigned char)((val >> 9) & 0x7),
+            .ry = (unsigned char)(val & 0x7)
+
+        };
     }
     if ((((val >> 12) & 0xf) == 0b1101)) {
         unsigned char opmode = (val >> 6) & 0x7;
@@ -283,10 +330,10 @@ MC68K::DecodedInfo MC68K::decode(unsigned short val) {
         }
         return {
             .i = (opmode == 0b011 || opmode == 0b111) ? MC68K::ADDA : MC68K::ADD,
-            .rx = rx, 
-            .opmode = opmode,
+            .rx = rx,
             .operand_sz = sz,
             .effective_address = (unsigned char)(val & 0x3f),
+            .opmode = opmode,
             .is_ea = true,
         };
     }

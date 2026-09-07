@@ -108,6 +108,9 @@ struct MC68K {
     };
 
 // TODO:
+// Execution
+    unsigned char exec_count = 0;
+
     enum ALUOp {
         ALUADD,
     };
@@ -115,7 +118,6 @@ struct MC68K {
     unsigned short arg2{};
     ALUOp alu_op{};
     unsigned char count{};
-    unsigned short res{};
     void req(unsigned short, unsigned short, ALUOp);
 
     unsigned ea_address{};
@@ -159,13 +161,13 @@ struct MC68K {
         unsigned char operand_sz{};
         unsigned mask{};
         unsigned sign_bit{};
-        unsigned i_address{};
         AddressMode addr_mode{};
         unsigned char effective_address{};
-
+        unsigned immediate{}; // TODO: update
         unsigned char opmode{};
         BUS::Mode read_mode{};
         OperandSize opsz;
+        unsigned char cycles{};
         bool is_ea{};
     } di;
 
@@ -173,6 +175,8 @@ struct MC68K {
     unsigned char d2{};
     unsigned char d3{};
     unsigned char d4{};
+    unsigned char rx{};
+    unsigned char opmode{};
     unsigned sign_bit{};
     unsigned mask{};
 
@@ -191,7 +195,7 @@ struct MC68K {
     } dst;
     unsigned dst_addr{};
     unsigned dst_value{};
-    unsigned char reg_n{};
+    unsigned char dst_reg_n{};
     void write_dst();
 
     unsigned short operand_a_w1{};
@@ -214,7 +218,6 @@ struct MC68K {
     unsigned short bus_data{};
     BUS::Mode bus_mode{};
 
-    unsigned& read_operand(unsigned char effective_address, BUS& bus);
     DecodedInfo decode(unsigned short);
 
     void exec(DecodedInfo di, BUS& bus);
@@ -231,7 +234,10 @@ struct MC68K {
         fill_bus_read_req(prefetch_addr, BRDPrefetchQ, WORD);
         prefetch_addr += 2;
     }
+    unsigned char exec_cycles(const DecodedInfo& di);
+    unsigned char ea_fetch_cycles(AddressMode am, OperandSize sz);
 
+    void fill_exec(Instruction);
     void set_ea_dst();
 };
 #endif
