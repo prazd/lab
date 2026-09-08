@@ -119,10 +119,71 @@ unsigned char MC68K::exec_cycles(const DecodedInfo& di) {
         case CMPI: return (di.opsz == LONG ? (ea == DataRegisterDirectMode ? 14 : 12) : 8);
         case BCHG:
         case BSET: {
-            if (di.opsz == BYTE) return opmode ? 12 : 8;
+            if (di.opsz == BYTE) return di.opmode ? 12 : 8;
             // TODO: immediate use
-            return opmode ? (dregs[di.d1] > 15 ? 12 : 10) : (di.immediate > 15 ? 8 : 6);
+            return di.opmode ? (di.immediate > 15 ? 12 : 10) : (dregs[di.d1] > 15 ? 8 : 6);
         }
+        case BCLR: {
+            if (di.opsz == BYTE) return di.opmode ? 12 : 8;
+            // TODO: immediate use
+            return di.opmode ? (di.immediate > 15 ? 14 : 12) : (dregs[di.d1] > 15 ? 10 : 8);
+        }
+        case BTST: {
+            if (di.opmode) return di.opsz == BYTE ? 8 : 10;
+            return (di.opsz == LONG || ea == Immediate) ? 6 : 4;
+        }
+        case MOVEA: {
+            if (di.opsz == WORD) {
+                switch (ea) {
+                    case DataRegisterDirectMode:
+                    case AddressRegisterDirectMode: return 4;
+                    case AddressRegisterIndirectMode:
+                    case AddressRegisterIndirectPostIncMode: return 8;
+                    case AddressRegisterIndirectPreDecMode: return 10;
+                    case AddressRegisterIndirectDisplacementMode: return 12;
+                    case AddressRegisterIndirectIndexMode: return 14;
+                    case AbsoluteShort: return 12;
+                    case AbsoluteLong: return 16;
+                    case Immediate: return 8;
+                }
+            }
+            switch (ea) {
+                case DataRegisterDirectMode:
+                case AddressRegisterDirectMode: return 4;
+                case AddressRegisterIndirectMode:
+                case AddressRegisterIndirectPostIncMode: return 12;
+                case AddressRegisterIndirectPreDecMode: return 14;
+                case AddressRegisterIndirectDisplacementMode: return 16;
+                case AddressRegisterIndirectIndexMode: return 18;
+                case AbsoluteShort: return 16;
+                case AbsoluteLong: return 20;
+                case Immediate: return 12;
+            }
+        }
+        case CLR:
+        case NEGX:
+        case NEG:
+        case NOT: {
+            if (di.opsz == BYTE)
+                return ea == DataRegisterDirectMode ? 4 : 8;
+            return ea == DataRegisterDirectMode ? 6 : 12;
+        }
+        case ADDA:
+        case SUBA:{
+            if (di.opsz == LONG)
+                return (ea == DataRegisterDirectMode || ea == AddressRegisterDirectMode || ea == Immediate) ?  8 : 6;
+            return 8;
+        }
+        case ADDX:
+        case SUBX: {
+            return opmode ? (di.opsz == LONG ? 30 : 18) : (di.opsz == LONG ? 8 : 4);
+        }
+        case CMP: {
+            return di.opsz == LONG ? 6 : 4;
+        }
+        case CMPA: return 6;
+        case CMPM: return di.opsz == LONG ? 20 : 12;
+        case EOR:  return di.opsz == LONG ? (ea == DataRegisterDirectMode ? 8 : 12) : (ea == DataRegisterDirectMode ? 4 : 8);
         // TODO: continue
     }
 }
@@ -290,9 +351,7 @@ MC68K::AddressMode MC68K::to_adress_mode(unsigned char val){
 }
 
 
-void MC68K::fill_exec(MC68K::Instruction i) {
-
-}
+void MC68K::fill_exec(MC68K::Instruction i) {}
 
 void MC68K::exec(DecodedInfo di, BUS& bus) {
     switch(di.i){
