@@ -23,6 +23,11 @@ struct CPUID {
         asm volatile("cpuid" : "=c"(rcx): "a"(1) : "rbx","rdx");
         return rcx & 0x8000'0000;
     }
+
+    bool waitpkg(){
+        asm volatile("cpuid" : "=c"(rcx): "a"(7), "c"(0): "rbx","rdx");
+        return rcx & 0x20;
+    }
 };
 
 int main(){
@@ -30,5 +35,6 @@ int main(){
     auto d = cpuid.vendor();
     std::cout << "Vendor:" << d.data() << '\n';
     std::cout << "Hypervisor:" << (int)cpuid.hypervisor() << '\n';
+    std::cout << "WAITPKG:" << (int)cpuid.waitpkg() << '\n';
     return 0;
 }
