@@ -3,67 +3,73 @@
 #include <cassert>
 #include "Constants.hpp"
 struct BUS {
-    S_MODE unsigned char mc68kmem[1 << 24]{};
+    S_MODE unsigned char m68kmem[1 << 24]{};
     S_MODE unsigned char z80mem[1 << 16]{};
-    enum Mode {UDS,LDS,UDS_LDS};
-    Mode mc68k_mode = UDS_LDS;
-    unsigned mc68k_address{};
-    unsigned short mc68k_data{};
-    unsigned char mc68k_tick_count{};
-    unsigned char mc68k_w_sz{};
-    bool mc68k_r_in_progress = false;
-    bool mc68k_w_in_progress = false;
-    inline void mc68k_r(unsigned address, Mode m){
-        mc68k_address = address;
-        mc68k_tick_count = 4;
-        mc68k_r_in_progress = true;
-        mc68k_mode = m;
+    enum MemSrc{M68Km, Z80m} memsrc = M68Km;
+    enum Mode {UDS,LDS,UDS_LDS} mode = UDS_LDS;
+    unsigned address{};
+    unsigned short m68k_data{};
+    unsigned char  z80_data{};
+    unsigned char tick_count{};
+
+    bool r_in_progress = false;
+    bool w_in_progress = false;
+
+    inline void m68k_r_req(unsigned address, Mode m){
+        address = address;
+        tick_count = 4;
+        r_in_progress = true;
+        memsrc = M68Km;
+        mode = m;
     }
-    inline void mc68k_w(unsigned address, unsigned short data, Mode m){
+    inline void m68k_w_req(unsigned address, unsigned short data, Mode m){
 #if DEBUG_MODE
         assert(!(address & 1));
 #endif
-        mc68k_address = address;
-        mc68k_data = data;
-        mc68k_tick_count = 4;
-        mc68k_w_in_progress = true;
-        mc68k_mode = m;
+        address = address;
+        data = data;
+        memsrc = M68Km;
+        tick_count = 4;
+        w_in_progress = true;
+        mode = m;
     }
-    inline void mc68k_tick(){
-        if (mc68k_tick_count){
-            --mc68k_tick_count;
+    inline void tick(){
+        if (tick_count){
+            --tick_count;
             // TODO: DTACK logic
-            if (!mc68k_tick_count) {
-                if (mc68k_r_in_progress) {
-                    switch(mc68k_mode) {
-                        case UDS: {mc68k_data &= 0xff; mc68k_data |= (mc68kmem[mc68k_address] << 8); break;}
-                        case LDS: {mc68k_data &= 0xff00; mc68k_data |= mc68kmem[mc68k_address + 1]; break;}
-                        case UDS_LDS: {
-                            mc68k_data = (mc68kmem[mc68k_address] << 8) | mc68kmem[mc68k_address + 1]; break;
+            if (!tick_count) {
+                if (memsrc == M68Km) {
+                    if (r_in_progress) {
+                        switch(mode) {
+                            case UDS: {m68k_data &= 0xff;   m68k_data |= (m68kmem[address] << 8); break;}
+                            case LDS: {m68k_data &= 0xff00; m68k_data |= m68kmem[address + 1]; break;}
+                            case UDS_LDS: {
+                                m68k_data = (m68kmem[address] << 8) | m68kmem[address + 1]; break;
+                            }
                         }
-                    }
-                    mc68k_r_in_progress = false;
-                } else if (mc68k_w_in_progress) {
-                    switch(mc68k_mode) {
-                        case UDS: {mc68kmem[mc68k_address] = (unsigned char)((mc68k_data >> 8) & 0xff); break;}
-                        case LDS: {mc68kmem[mc68k_address + 1] = (unsigned char)((mc68k_data) & 0xff); break;}
-                        case UDS_LDS:{
-                            mc68kmem[mc68k_address] = (unsigned char)((mc68k_data >> 8) & 0xff);
-                            mc68kmem[mc68k_address + 1] = (unsigned char)((mc68k_data) & 0xff);
-                            break;
+                        r_in_progress = false;
+                    } else if (w_in_progress) {
+                        switch(mode) {
+                            case UDS: {m68kmem[address] = (unsigned char)((m68k_data >> 8) & 0xff); break;}
+                            case LDS: {m68kmem[address + 1] = (unsigned char)((m68k_data) & 0xff); break;}
+                            case UDS_LDS:{
+                                m68kmem[address] = (unsigned char)((m68k_data >> 8) & 0xff);
+                                m68kmem[address + 1] = (unsigned char)((m68k_data) & 0xff);
+                                break;
+                            }
                         }
+                        w_in_progress = false;
                     }
-                    mc68k_w_in_progress = false;
                 }
             }
         }
     }
-    inline unsigned short mc68k_get() const {
-        switch (mc68k_mode) {
-            case UDS: return (mc68k_data >> 8) & 0xff;
-            case LDS: return mc68k_data & 0xff;
+    inline unsigned short m68k_get() const {
+        switch (mode) {
+            case UDS: return (m68k_data >> 8) & 0xff;
+            case LDS: return m68k_data & 0xff;
             default:
-                return mc68k_data;
+                return m68k_data;
         }
     }
 };

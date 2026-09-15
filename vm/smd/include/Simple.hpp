@@ -37,6 +37,8 @@ struct SimpleDequeT{
         return arr[cur_sz-1];
     }
 
+    void clear(){cur_sz = 0;}
+
     auto begin(){
         return arr;
     }

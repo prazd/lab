@@ -3,7 +3,7 @@
 #include <queue>
 #include "BUS.hpp"
 #include "Simple.hpp"
-struct MC68K {
+struct M68K {
     // SPR
     unsigned pc{};
     // User stack pointer
@@ -15,7 +15,15 @@ struct MC68K {
     // Alternate function code registers
     unsigned sfc{};
     unsigned dfc{};
-    
+
+    enum ConditionCode{
+        CC_CC, CC_CS,CC_EQ,
+        CC_GE,CC_GT,CC_HI,CC_LE,
+        CC_LS,CC_LT,CC_MI,CC_NE,CC_PL,CC_VC,CC_VS
+    };
+
+    bool is_cond(ConditionCode cc);
+
     // Status register
     unsigned short sreg{};
     enum SREG: unsigned short {
@@ -64,7 +72,7 @@ struct MC68K {
     AddressMode to_adress_mode(unsigned char);
 
     enum Instruction {
-        ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,ASL,ASR,
+        ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,ASL,ASR,ANDItoCCR,
         BCC,BCHG,BCLR,BRA,BSET,BSR,BTST,
         CHK,CLR,CMP,CMPA,CMPI,CMPM,
         DBcc, DIVS, DIVSL,DIVU,DIVUL,
@@ -158,6 +166,7 @@ struct MC68K {
         unsigned char d2{};
         unsigned char d3{};
         unsigned char d4{};
+        unsigned dl{};
         unsigned char operand_sz{};
         unsigned mask{};
         unsigned sign_bit{};
