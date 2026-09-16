@@ -16,10 +16,24 @@ struct M68K {
     unsigned sfc{};
     unsigned dfc{};
 
-    enum ConditionCode{
+    enum ConditionCode: unsigned char {
         CC_CC, CC_CS,CC_EQ,
         CC_GE,CC_GT,CC_HI,CC_LE,
         CC_LS,CC_LT,CC_MI,CC_NE,CC_PL,CC_VC,CC_VS
+    };
+
+    // TODO: exception handing
+    enum ExceptionVector {
+        EV_ResetInitialSSP=0x0,
+        EV_ResetInitialPC=0x4,
+        EV_AccessFault=0x8,
+        EV_AddressErr=0xc,
+        EV_IllegalInstruction=0x10,
+        EV_ZeroDivide=0x14,
+        EV_CheckInstruction=0x18,
+        EV_TRAPV=0x1c,
+        EV_PrivilegeViolation=0x20,
+        EV_Trace=0x24,
     };
 
     bool is_cond(ConditionCode cc);
