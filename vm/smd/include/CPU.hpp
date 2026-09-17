@@ -49,7 +49,7 @@ struct M68K {
         sreg &= ~(1 << s);
         sreg |= (val << s);
     }
-    inline bool get_srge(SREG s){
+    inline bool get_sreg(SREG s){
         return sreg & s;
     }
 
@@ -89,9 +89,14 @@ struct M68K {
         ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,ASL,ASR,ANDItoCCR,
         BCC,BCHG,BCLR,BRA,BSET,BSR,BTST,
         CHK,CLR,CMP,CMPA,CMPI,CMPM,
-        DBcc, DIVS, DIVSL,DIVU,DIVUL,
+        DBcc, DIVS,
+//        TODO: check
+//        DIVSL ,
+//        DIVUL
+        DIVU,
         EOR,EORI,EORItoCCR,EXG,EXT,
         ILLEGAL,
+
         JMP,JSR,
         LEA,LINKw,LINKl,LSL,LSR,
         MOVE,MOVEA,MOVEtoCCR,MOVEfromSR,MOVEM,MOVEP,MOVEQ,MULS,MULU,
