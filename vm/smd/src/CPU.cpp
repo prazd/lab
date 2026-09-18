@@ -102,7 +102,7 @@ void M68K::fill_bus_read_req(unsigned addr, BusReadDest brd, OperandSize sz) {
 
 //https://github.com/larsbrinkhoff/M68K-microcode/blob/master/doc/Yacht.txt
 unsigned char M68K::exec_cycles(const DecodedInfo& di) {
-    auto ea = to_adress_mode(di.effective_address);
+    auto ea = to_adress_mode(di.effective_address, true);
     switch (di.i) {
         //        #<data>,CCR     check
         case EORI:
@@ -188,8 +188,75 @@ unsigned char M68K::exec_cycles(const DecodedInfo& di) {
     }
 }
 
+void M68K::ea_write(unsigned char ea_val, unsigned val) {
+    // TODO: check
+    auto mode = to_adress_mode(ea_val, false);
+    auto reg_n = (ea_val >> 3) & 0x7;
+    switch(mode) {
+        case DataRegisterDirectMode:    dregs[reg_n] &= ~mask; dregs[reg_n] |= (val & mask); break;
+        case AddressRegisterDirectMode: aregs[reg_n] &= ~mask; aregs[reg_n] |= (val & mask); break;
+        case AddressRegisterIndirectMode: {
+            fill_bus_write_req(aregs[reg_n], val, opsz);
+            break;
+        }
+        case AddressRegisterIndirectPostIncMode: {
+            fill_bus_write_req(aregs[ea_reg_n], val, opsz);
+            aregs[ea_reg_n] += opsz;
+            break;
+        }
+        case AddressRegisterIndirectPreDecMode: {
+            aregs[ea_reg_n] -= opsz;
+            // TODO: check
+            iops_q.push_back({.iop = Nop});
+            iops_q.push_back({.iop = Nop});
+            fill_bus_write_req(aregs[ea_reg_n], val, opsz);
+            break;
+        }
+        case AddressRegisterIndirectDisplacementMode: {
+            auto pv = read_prefetch_q();
+            fill_prefetch_req();
+            fill_bus_write_req(aregs[ea_reg_n] + sign_extend_to_l(pv), val, opsz);
+            break;
+        }
+        case AddressRegisterIndirectIndexMode: {
+            auto pv = read_prefetch_q();
+            auto regn = (pv >> 12) & 0x7;
+            auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
+            xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
+            auto addr = aregs[ea_reg_n] +
+                         sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
+
+            fill_prefetch_req();
+            iops_q.push_back({.iop = Nop});
+            iops_q.push_back({.iop = Nop}); // calc time
+            fill_bus_write_req(addr, val, opsz);
+            break;
+        }
+        case ProgramCounterInderectDisplacementMode: {
+            auto pv = read_prefetch_q();
+            auto addr = pc + sign_extend_to_l(pv);
+            fill_prefetch_req();
+            fill_bus_write_req(addr, val, opsz);
+            break;
+        }
+        case ProgramCounterInderectIndexMode: {
+            auto pv = read_prefetch_q();
+            auto regn = (pv >> 12) & 0x7;
+            auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
+            xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
+            auto addr = pc +
+                         sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
+            fill_prefetch_req();
+            iops_q.push_back({.iop = Nop});
+            iops_q.push_back({.iop = Nop}); // calc time
+            fill_bus_write_req(addr, val, opsz);
+            break;
+        }
+    }
+}
+
 void M68K::ea_fill(unsigned char val){
-    ea_mode = to_adress_mode(val);
+    ea_mode = to_adress_mode(val, true);
     ea_reg_n = val & 0x7;
     switch(ea_mode) {
         case DataRegisterDirectMode:    ea_reg_type = Dn; operand_a_l = dregs[ea_reg_n]; break;
@@ -332,9 +399,9 @@ void M68K::tick(BUS& bus){
     }
 }
 
-M68K::AddressMode M68K::to_adress_mode(unsigned char val){
-    unsigned char mode_field = (val >> 3) & 0x7;
-    unsigned char reg_field = val & 0x7;
+M68K::AddressMode M68K::to_adress_mode(unsigned char val, bool mr){
+    unsigned char mode_field = mr ? (val >> 3) & 0x7 : val & 0x7;
+    unsigned char reg_field = mr ? val & 0x7 : (val >> 3) & 0x7;
     if (mode_field == 0b000) return DataRegisterDirectMode;
     if (mode_field == 0b001) return AddressRegisterDirectMode;
     if (mode_field == 0b010) return AddressRegisterIndirectMode;
@@ -349,6 +416,7 @@ M68K::AddressMode M68K::to_adress_mode(unsigned char val){
     if (mode_field == 0b111 && reg_field == 0b100) return Immediate;
     return Unknown;
 }
+
 
 bool M68K::is_cond(M68K::ConditionCode cc) {
     switch (cc) {
@@ -649,6 +717,99 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             // TODO: EV_IllegalInstruction
             break;
         }
+        case JMP: {
+            // TODO: check
+            pc = aregs[(di.d1 & 0x7)];
+            break;
+        }
+        case JSR: {
+            usp-=4;
+            fill_bus_write_req(usp, pc, LONG);
+            pc = aregs[(di.d1 & 0x7)];
+            break;
+        }
+        case LEA: {
+            aregs[di.d1] = aregs[di.d2 & 0x7];
+            break;
+        }
+        case LINK: {
+            usp-=4;
+            fill_bus_write_req(usp,  aregs[di.d1], LONG);
+            aregs[di.d1] = usp;
+            usp += sign_extend_to_l((unsigned short)di.dl);
+            break;
+        }
+        case LSR: {
+            auto n = (di.d2 ? (dregs[di.d3 & 0x7] & 0x3f) : (di.d3 & 0x7));
+            if (n > opsz * 8) {
+                set_sreg(Extend,   0);
+                set_sreg(Negative, 0);
+                set_sreg(Zero,      1);
+                set_sreg(Carry,   0);
+                set_sreg(Overflow,  0);
+                dregs[di.d1] &= ~mask;
+                break;
+            }
+            if (!di.d2 && !n) n = 8;
+            auto res = (dregs[di.d1] & mask)  >> n;
+            set_sreg(Extend,   n != 0 ? ((dregs[di.d1] & mask) >> (n - 1)) & 1 : get_sreg(Extend));
+            set_sreg(Negative, res & sign_bit);
+            set_sreg(Zero,      (res & mask) == 0);
+            set_sreg(Carry,   n != 0 ? ((dregs[di.d1] & mask) >> (n - 1)) & 1 : 0);
+            set_sreg(Overflow,  0);
+            dregs[di.d1] &= ~mask;
+            dregs[di.d1] |= res;
+            break;
+        }
+        case LSL: {
+            auto n = (di.d2 ? (dregs[di.d3 & 0x7] & 0x3f) : (di.d3 & 0x7));
+            if (n > opsz * 8) {
+                set_sreg(Extend,   0);
+                set_sreg(Negative, 0);
+                set_sreg(Zero,      1);
+                set_sreg(Carry,   0);
+                set_sreg(Overflow,  0);
+                dregs[di.d1] &= ~mask;
+                break;
+            }
+            if (!di.d2 && !n) n = 8;
+            auto res = (dregs[di.d1] & mask) << n;
+            auto bound = (opsz * 8) - n;
+            set_sreg(Extend,   n != 0 ? ((dregs[di.d1] & mask) >> bound) & 1 : get_sreg(Extend));
+            set_sreg(Negative, res & sign_bit);
+            set_sreg(Zero,      (res & mask) == 0);
+            set_sreg(Carry,   n != 0 ? ((dregs[di.d1] & mask) >> bound) & 1 : 0);
+            set_sreg(Overflow,  0);
+            dregs[di.d1] &= ~mask;
+            dregs[di.d1] |= res;
+            break;
+        }
+
+        case MOVE: {
+            set_sreg(Negative, operand_a_l & sign_bit);
+            set_sreg(Zero,      (operand_a_l & mask) == 0);
+            set_sreg(Carry,   0);
+            set_sreg(Overflow,  0);
+            ea_write(di.d1, operand_a_l);
+            break;
+        }
+
+        case MOVEA: {
+            aregs[di.d1] = di.opsz == WORD ? sign_extend_to_l((unsigned short)(operand_a_l & mask)) : operand_a_l;
+            break;
+        }
+
+        case MOVEtoCCR: {
+            sreg &= 0xff00;
+            sreg |= (operand_a_l & 0xff);
+            break;
+        }
+
+        case MOVEfromSR: {
+            ea_write(di.d1, sreg);
+            break;
+        }
+
     }
 }
 
@@ -1042,14 +1203,14 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if (val == 0x13b) {
         return {
             .i = JMP,
-            .effective_address = (unsigned char)(val & 0x3f),
+            .d1 = (unsigned char)(val & 0x3f), // EA
         };
     }
 
     if (val == 0x13a) {
         return {
             .i = JSR,
-            .effective_address = (unsigned char)(val & 0x3f),
+            .d1 = (unsigned char)(val & 0x3f), // EA
         };
     }
     
@@ -1058,23 +1219,18 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = LEA,
             .d1 = reg,
-            .effective_address = (unsigned char)(val & 0x3f),
+            .d2 = (unsigned char)(val & 0x3f), // EA
         };
     }
 
     if ((val >> 3) == 0x9ca) {
         unsigned char reg = (val) & 0x7;
+        auto displacement = read_prefetch_q();
+        fill_prefetch_req();
         return {
-            .i = LINKw,
+            .i = LINK,
             .d1 = reg,
-        };
-    }
-
-    if ((val >> 3) == 0x901) {
-        unsigned char reg = (val) & 0x7;
-        return {
-            .i = LINKl,
-            .d1 = reg,
+            .dl = displacement,
         };
     }
 
@@ -1083,33 +1239,56 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char i_r = (val >> 5) & 0x1;
         unsigned char sz = (val >> 6) & 0x3;
         unsigned char count_reg = (val >> 9) & 0x7;
+        OperandSize opsz;
+        if (sz == 0x0){
+            opsz = BYTE;
+        } else if (sz == 0x1){
+            opsz = WORD;
+        } else {
+            opsz = LONG;
+        }
+
         return {
             .i = (val & 0x100) ? LSL : LSR,
             .d1 = reg,
             .d2 = i_r,
-            .d3 = sz,
-            .d4 = count_reg
+            .d3 = count_reg,
+            .opsz = opsz,
         };
     }
 
     if (!(val >> 14)) {
         unsigned char sz = (val >> 12) & 0x3;
+        OperandSize opsz{};
+        if (sz == 0x0){
+            opsz = BYTE;
+        } else if (sz == 0x3) {
+            opsz = WORD;
+        } else {
+            opsz = LONG;
+        }
         return {
             .i = MOVE,
-            .d1 = sz,
-            .d2 = (unsigned char)((val >> 6) & 0x3f),
-            .d3 = (unsigned char)(val & 0x3f),
+            .d1 = (unsigned char)((val >> 6) & 0x3f),
+            .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = opsz,
         };
     }
 
     if (!(val >> 14) && ((val >> 6) & 0x7) == 0x1) {
         unsigned char sz = (val >> 12) & 0x3;
         unsigned char dst = (val >> 9) & 0x7;
+        OperandSize opsz{};
+        if (sz == 0x3){
+            opsz = WORD;
+        } else {
+            opsz = LONG;
+        }
         return {
             .i = MOVEA,
-            .d1 = sz,
-            .d2 = dst,
-            .d3 = (unsigned char)(val & 0x3f),
+            .d1 = dst,
+            .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = opsz,
         };
     }
 
@@ -1118,8 +1297,18 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = MOVEtoCCR,
             .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = WORD,
         };
     }
+
+    if ((val >> 6) == 0x103) {
+        return {
+            .i = MOVEfromSR,
+            .d1 = (unsigned char)(val & 0x3f),
+            .opsz = WORD,
+        };
+    }
+
 
 
     if ((val >> 11) == 0x9 && ((val >> 7) & 0x7) == 0x1) {

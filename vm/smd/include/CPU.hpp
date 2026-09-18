@@ -83,7 +83,7 @@ struct M68K {
         Unknown,
     };
 
-    AddressMode to_adress_mode(unsigned char);
+    AddressMode to_adress_mode(unsigned char, bool);
 
     enum Instruction {
         ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,ASL,ASR,ANDItoCCR,
@@ -98,8 +98,11 @@ struct M68K {
         ILLEGAL,
 
         JMP,JSR,
-        LEA,LINKw,LINKl,LSL,LSR,
-        MOVE,MOVEA,MOVEtoCCR,MOVEfromSR,MOVEM,MOVEP,MOVEQ,MULS,MULU,
+        LEA,LINK,LSL,LSR,
+
+        MOVE,MOVEA,MOVEtoCCR,MOVEfromSR,
+
+        MOVEM,MOVEP,MOVEQ,MULS,MULU,
         NBCD,NEG,NEGX,NOP,NOT,
         OR,ORI,ORItoCCR,
         PEA,
@@ -153,6 +156,7 @@ struct M68K {
     unsigned char ea_reg_n{};
 
     void ea_fill(unsigned char);
+    void ea_write(unsigned char, unsigned val);
 
     void fill_bus_read_req(unsigned, BusReadDest, OperandSize);
     void fill_bus_write_req(unsigned, unsigned, OperandSize);
