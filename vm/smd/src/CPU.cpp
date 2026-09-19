@@ -100,6 +100,30 @@ void M68K::fill_bus_read_req(unsigned addr, BusReadDest brd, OperandSize sz) {
     }
 }
 
+void M68K::fill_bus_read_req_reg(unsigned addr, BusReadDest brd, OperandSize sz, unsigned char reg_n) {
+    auto even_addr = addr & 0xfffffffe;
+    switch (sz) {
+        case BYTE: {
+            iops_q.push_back({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = ((addr & 1) ? BUS::LDS : BUS::UDS)});
+            iops_q.push_back({.iop = BusReadWait, .brd = brd, .reg_n = reg_n, .opsz = sz});
+            break;
+        }
+        case WORD: {
+            iops_q.push_back({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = BUS::UDS_LDS});
+            iops_q.push_back({.iop = BusReadWait, .brd = brd, .reg_n = reg_n, .opsz = sz});
+            break;
+        }
+        case LONG: {
+            iops_q.push_back({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = BUS::UDS_LDS});
+            iops_q.push_back({.iop = BusReadWait, .brd = brd, .opsz = sz});
+            iops_q.push_back({.address = even_addr + 2, .iop = BusReadReq, .brd = BusReadDest((int)brd + 1), .bus_mode = BUS::UDS_LDS});
+            iops_q.push_back({.iop = BusReadWait, .brd = brd, .opsz = sz});
+            break;
+        }
+    }
+}
+
+
 //https://github.com/larsbrinkhoff/M68K-microcode/blob/master/doc/Yacht.txt
 unsigned char M68K::exec_cycles(const DecodedInfo& di) {
     auto ea = to_adress_mode(di.effective_address, true);
@@ -255,6 +279,56 @@ void M68K::ea_write(unsigned char ea_val, unsigned val) {
     }
 }
 
+unsigned M68K::to_ea_address(unsigned char ea_val) {
+    // TODO: check
+    auto mode = to_adress_mode(ea_val, false);
+    auto reg_n = (ea_val >> 3) & 0x7;
+    switch(mode) {
+        case AddressRegisterIndirectMode: {
+            return aregs[reg_n];
+        }
+        case AddressRegisterIndirectPostIncMode: {
+            return std::exchange(aregs[ea_reg_n],aregs[ea_reg_n] + opsz);
+        }
+        case AddressRegisterIndirectPreDecMode: {
+            aregs[ea_reg_n] -= opsz;
+            return aregs[ea_reg_n];
+        }
+        case AddressRegisterIndirectDisplacementMode: {
+            auto pv = read_prefetch_q();
+            fill_prefetch_req();
+            return aregs[ea_reg_n] + sign_extend_to_l(pv);
+        }
+        case AddressRegisterIndirectIndexMode: {
+            auto pv = read_prefetch_q();
+            auto regn = (pv >> 12) & 0x7;
+            auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
+            xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
+            auto addr = aregs[ea_reg_n] +
+                        sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
+            fill_prefetch_req();
+            return addr;
+        }
+        case ProgramCounterInderectDisplacementMode: {
+            auto pv = read_prefetch_q();
+            auto addr = pc + sign_extend_to_l(pv);
+            fill_prefetch_req();
+            return addr;
+        }
+        case ProgramCounterInderectIndexMode: {
+            auto pv = read_prefetch_q();
+            auto regn = (pv >> 12) & 0x7;
+            auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
+            xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
+            auto addr = pc +
+                        sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
+            fill_prefetch_req();
+            return addr;
+        }
+    }
+    return 0;
+}
+
 void M68K::ea_fill(unsigned char val){
     ea_mode = to_adress_mode(val, true);
     ea_reg_n = val & 0x7;
@@ -381,6 +455,38 @@ void M68K::tick(BUS& bus){
                     case BRDOperandB1: operand_b_w1 = bus.m68k_get(); break;
                     case BRDOperandB2: operand_b_w2 = bus.m68k_get(); operands_b_to_long(); break;
                     case BRDPrefetchQ: {prefetch_q.push_back(bus.m68k_data); break;}
+                    case BRDDataRegisterL: {
+                        switch (iopv.opsz) {
+                            case BYTE: dregs[iopv.reg_n] = sign_extend_to_l((unsigned char)(bus.m68k_get() & 0xff)); break;
+                            case WORD: dregs[iopv.reg_n] = sign_extend_to_l(bus.m68k_get()); break;
+                            case LONG: dregs[iopv.reg_n] &= 0xffff0000; dregs[iopv.reg_n] |= bus.m68k_get(); break;
+                        }
+                        break;
+                    }
+                    case BRDDataRegisterH: {
+                        dregs[iopv.reg_n] &= 0xffff; dregs[iopv.reg_n] |= (bus.m68k_get() << 16);
+                        break;
+                    }
+                    case BRDAddressRegisterL: {
+                        switch (iopv.opsz) {
+                            case BYTE: aregs[iopv.reg_n] = sign_extend_to_l((unsigned char)(bus.m68k_get() & 0xff)); break;
+                            case WORD: aregs[iopv.reg_n] = sign_extend_to_l(bus.m68k_get()); break;
+                            case LONG: aregs[iopv.reg_n] &= 0xffff0000; aregs[iopv.reg_n] |= (bus.m68k_get() & 0xff); break;
+                        }
+                        break;
+                    }
+                    case BRDAddressRegisterH: {
+                        aregs[iopv.reg_n] &= 0xffff; aregs[iopv.reg_n] |= (bus.m68k_get() << 16);
+                        break;
+                    }
+                    case BRDDataRegisterByteL: {
+                        aregs[iopv.reg_n] &= 0xff; aregs[iopv.reg_n] |= ((bus.m68k_get() >> 8) & 0xff); // TODO: check
+                        break;
+                    }
+                    case BRDDataRegisterByteH: {
+                        aregs[iopv.reg_n] &= 0xff00; aregs[iopv.reg_n] |= ((bus.m68k_get() >> 8) & 0xff); // TODO: check
+                        break;
+                    }
                 }
                 iops_q.pop_front();
             }
@@ -810,6 +916,125 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             break;
         }
 
+        case MOVEM: {
+            unsigned short r_mask = read_prefetch_q();
+            auto m = to_adress_mode(di.d2, true);
+            fill_prefetch_req();
+            auto addr = to_ea_address(di.d2);
+            // TODO: maybe refactoring
+            if (m != AddressRegisterIndirectPreDecMode){
+                if (di.d1){
+                    for (int i = 0; i < 8; ++i){
+                        if (r_mask & 1){
+                            fill_bus_read_req_reg(addr, BRDDataRegisterL,di.opsz, i);
+                            addr += 2;
+                            if (di.opsz == LONG){
+                                fill_bus_read_req_reg(addr, BRDDataRegisterH,di.opsz, i);
+                                addr += 2;
+                            }
+                        }
+                        r_mask >>= 1;
+                    }
+
+                    for (int i = 0; i < 8; ++i){
+                        if (r_mask & 1){
+                            fill_bus_read_req_reg(addr, BRDAddressRegisterL,di.opsz, i);
+                            addr += 2;
+                            if (di.opsz == LONG){
+                                fill_bus_read_req_reg(addr, BRDAddressRegisterH,di.opsz, i);
+                                addr += 2;
+                            }
+                        }
+                        r_mask >>= 1;
+                    }
+
+                } else {
+                    for (int i = 0; i < 8; ++i) {
+                        if (r_mask & 1) {
+                            fill_bus_write_req(addr,dregs[i],di.opsz);
+                            addr += 2;
+                        }
+                        r_mask >>= 1;
+                    }
+
+                    for (int i = 0; i < 8; ++i) {
+                        if (r_mask & 1) {
+                            fill_bus_write_req(addr,aregs[i],di.opsz);
+                            addr += 2;
+                        }
+                        r_mask >>= 1;
+                    }
+                }
+            } else {
+                if (di.d1){
+                    for (int i = 0; i < 8; ++i){
+                        if (r_mask & 1){
+                            addr -= di.opsz == LONG ? 4 : 2;
+                            fill_bus_read_req_reg(addr, BRDAddressRegisterL,di.opsz, 7-i);
+                            if (di.opsz == LONG){
+                                fill_bus_read_req_reg(addr + 2, BRDAddressRegisterH,di.opsz, 7-i);
+                            }
+                        }
+                        r_mask >>= 1;
+                    }
+
+                    for (int i = 0; i < 8; ++i){
+                        if (r_mask & 1){
+                            addr -= di.opsz == LONG ? 4 : 2;
+                            fill_bus_read_req_reg(addr, BRDDataRegisterL,di.opsz, 7-i);
+                            if (di.opsz == LONG){
+                                fill_bus_read_req_reg(addr + 2, BRDDataRegisterH,di.opsz, 7-i);
+                            }
+                        }
+                        r_mask >>= 1;
+                    }
+
+                } else {
+                    for (int i = 0; i < 8; ++i) {
+                        if (r_mask & 1) {
+                            addr -= di.opsz == LONG ? 4 : 2;
+                            fill_bus_write_req(addr,aregs[7-i],di.opsz);
+                        }
+                        r_mask >>= 1;
+                    }
+
+                    for (int i = 0; i < 8; ++i) {
+                        if (r_mask & 1) {
+                            addr -= di.opsz == LONG ? 4 : 2;
+                            fill_bus_write_req(addr,dregs[7-i],di.opsz);
+                        }
+                        r_mask >>= 1;
+                    }
+                }
+            }
+            if (m == AddressRegisterIndirectPostIncMode || m == AddressRegisterIndirectPreDecMode)
+                aregs[(di.d2 >> 3) & 0x7] = addr;
+            break;
+        }
+        case MOVEP: {
+            // TODO: check
+            auto addr = aregs[di.d3] + sign_extend_to_l(read_prefetch_q());
+            fill_prefetch_req();
+            if (di.d2 == 0x4){
+                // WORD mem->reg
+                // TODO: check
+                fill_bus_read_req_reg(addr, BRDDataRegisterByteH, BYTE, di.d1);
+                fill_bus_read_req_reg(addr+2, BRDDataRegisterByteL, BYTE, di.d1);
+            } else if (di.d2 == 0x5){
+                // LONG mem->reg
+                fill_bus_read_req_reg(addr, BRDDataRegisterH, WORD, di.d1);
+                fill_bus_read_req_reg(addr+2, BRDDataRegisterL, WORD, di.d1);
+            } else if (di.d2 == 0x6) {
+                // WORD reg->MEM
+                fill_bus_write_req(addr,(dregs[di.d1] >> 8) & 0xff, BYTE);
+                fill_bus_write_req(addr + 2,dregs[di.d1] & 0xff, BYTE);
+            } else {
+                // LONG reg->MEM
+                fill_bus_write_req(addr,(dregs[di.d1] >> 16) & 0xffff, WORD);
+                fill_bus_write_req(addr + 2,dregs[di.d1] & 0xffff, WORD);
+            }
+            break;
+        }
     }
 }
 
@@ -1314,11 +1539,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((val >> 11) == 0x9 && ((val >> 7) & 0x7) == 0x1) {
         unsigned char sz = (val >> 6) & 0x1;
         unsigned char dr = (val >> 10) & 0x1;
+        auto opsz = !sz ? WORD : LONG;
         return {
             .i = MOVEM,
-            .d1 = sz,
-            .d2 = dr,
-            .effective_address = (unsigned char)(val & 0x3f),
+            .d1 = dr,
+            .d2 = (unsigned char)(val & 0x3f),
         };
     }
 

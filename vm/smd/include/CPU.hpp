@@ -122,6 +122,15 @@ struct M68K {
         BRDOperandB1,
         BRDOperandB2,
         BRDPrefetchQ,
+        // TODO: check L/H
+        BRDDataRegisterL,
+        BRDDataRegisterH,
+        BRDAddressRegisterL,
+        BRDAddressRegisterH,
+
+        BRDDataRegisterByteL,
+        BRDDataRegisterByteH,
+
     };
 
     enum InternalOp: unsigned char {
@@ -157,8 +166,10 @@ struct M68K {
 
     void ea_fill(unsigned char);
     void ea_write(unsigned char, unsigned val);
+    unsigned to_ea_address(unsigned char);
 
     void fill_bus_read_req(unsigned, BusReadDest, OperandSize);
+    void fill_bus_read_req_reg(unsigned, BusReadDest, OperandSize, unsigned char);
     void fill_bus_write_req(unsigned, unsigned, OperandSize);
 
     template <std::integral T>
@@ -176,6 +187,8 @@ struct M68K {
         BusReadDest brd{};
         unsigned short bus_data{};
         BUS::Mode bus_mode{};
+        unsigned char reg_n{};
+        OperandSize opsz{};
     };
 
     SimpleDequeT<IntOperationReq, 20> iops_q;
