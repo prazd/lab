@@ -1,5 +1,27 @@
 #ifndef SMD_SIMPLE_HPP
 #define SMD_SIMPLE_HPP
+
+unsigned to_bcd(unsigned val){
+    unsigned res{};
+    unsigned m = 1;
+    while(val){
+        res += (m * (val & 0xf));
+        m *= 10;
+        val >>= 4;
+    }
+    return res;
+}
+
+unsigned from_bcd(unsigned val){
+    unsigned res{};
+    unsigned nibble_i = 0;
+    while(val){
+        res |= ((val % 10) << (4 * nibble_i++));
+        val /= 10;
+    }
+    return res;
+}
+
 template <typename T, size_t sz>
 struct SimpleDequeT{
     T arr[sz]{};

@@ -1035,6 +1035,83 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             }
             break;
         }
+        case MOVEQ: {
+            dregs[di.d1] = sign_extend_to_l(di.d2);
+            set_sreg(Carry,   0);
+            set_sreg(Overflow,  0);
+            set_sreg(Negative, dregs[di.d1] & sign_bit);
+            set_sreg(Zero,      (dregs[di.d1] & mask) == 0);
+            break;
+        }
+        case MULS: {
+            int res = (short)(dregs[di.d1] & 0xffff) * (short)(operand_a_l & 0xffff);
+            set_sreg(Carry,   0);
+            set_sreg(Overflow,  res > std::numeric_limits<short>::max() || res < std::numeric_limits<short>::min());
+            set_sreg(Negative, res & 0x8000'0000);
+            set_sreg(Zero,      res == 0);
+            dregs[di.d1] = res;
+            break;
+        }
+        case MULU: {
+            unsigned res = (unsigned short)(dregs[di.d1] & 0xffff) * (unsigned short)(operand_a_l & 0xffff);
+            set_sreg(Carry,   0);
+            set_sreg(Overflow,  res > std::numeric_limits<unsigned short>::max());
+            set_sreg(Negative, res & 0x8000'0000);
+            set_sreg(Zero,      res == 0);
+            dregs[di.d1] = res;
+            break;
+        }
+        case NBCD: {
+            // TODO: check
+            int res = 100 - to_bcd(operand_a_l) - get_sreg(Extend);
+            bool c_e =  (to_bcd(operand_a_l) + get_sreg(Extend)) > 0;
+            set_sreg(Carry,  c_e);
+            set_sreg(Extend,  c_e);
+            set_sreg(Zero,      res != 0 ? 0 : get_sreg(Zero));
+            dst_value = from_bcd(res);
+            set_ea_dst();
+            break;
+        }
+
+        case NEG: {
+            // TODO: check
+            int res = 0 - operand_a_l;
+            set_sreg(Negative, res & sign_bit);
+            set_sreg(Carry,  operand_a_l != 0);
+            set_sreg(Extend,  operand_a_l != 0);
+            set_sreg(Zero,      operand_a_l == 0);
+            if (di.opsz == BYTE)
+                set_sreg(Overflow, res < std::numeric_limits<char>::min());
+            else if (di.opsz == WORD)
+                set_sreg(Overflow, res < std::numeric_limits<short>::min());
+            else
+                set_sreg(Overflow, res < std::numeric_limits<int>::min());
+            dst_value = res;
+            set_ea_dst();
+            break;
+        }
+
+        case NEGX: {
+            // TODO: check
+            int res = (0 - operand_a_l - get_sreg(Extend)) & mask;
+            bool c_e = operand_a_l + get_sreg(Extend) > 0;
+            if (di.opsz == BYTE)
+                set_sreg(Overflow, operand_a_l == std::numeric_limits<char>::min() && get_sreg(Extend));
+            else if (di.opsz == WORD)
+                set_sreg(Overflow, operand_a_l == std::numeric_limits<short>::min() && get_sreg(Extend));
+            else
+                set_sreg(Overflow, operand_a_l == std::numeric_limits<int>::min() && get_sreg(Extend));
+            set_sreg(Negative, res & sign_bit);
+            set_sreg(Carry,  c_e);
+            set_sreg(Extend,  c_e);
+            set_sreg(Zero,      res != 0 ? 0 : get_sreg(Zero));
+            dst_value = res;
+            set_ea_dst();
+            break;
+        }
+
+        case NOP: break;
+
     }
 }
 
@@ -1574,7 +1651,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char reg = (val >> 9) & 0x7;
         unsigned char data = val & 0xff;
         return {
-            .i = MOVEP,
+            .i = MOVEQ,
             .d1 = reg,
             .d2 = data,
         };
@@ -1586,6 +1663,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = MULS,
             .d1 = reg,
             .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = WORD,
+
         };
     }
 
@@ -1595,6 +1674,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = MULU,
             .d1 = reg,
             .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = WORD,
         };
     }
 
@@ -1610,29 +1690,41 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((val >> 6) == 0x120) {
         return {
             .i = NBCD,
+            .d1 = (unsigned char)(val & 0x3f),
             .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = BYTE,
         };
     }
 
     if ((val >> 8) == 0x44) {
+        unsigned char sz = ((val >> 6) & 0x3);
+        OperandSize opsz{};
+        if (sz == 0x0){
+            opsz = BYTE;
+        } else if (sz == 0x1){
+            opsz = WORD;
+        } else {
+            opsz = LONG;
+        }
         return {
             .i = NEG,
             .effective_address = (unsigned char)(val & 0x3f),
-        };
-    }
-
-    if ((val >> 8) == 0x44) {
-        return {
-            .i = NEG,
-            .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = opsz,
         };
     }
 
     if ((val >> 8) == 0x40) {
         unsigned char sz = (val >> 6) & 0x3;
+        OperandSize opsz{};
+        if (sz == 0x0){
+            opsz = BYTE;
+        } else if (sz == 0x1){
+            opsz = WORD;
+        } else {
+            opsz = LONG;
+        }
         return {
             .i = NEGX,
-            .d1 = sz,
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
