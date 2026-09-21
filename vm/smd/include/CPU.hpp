@@ -106,7 +106,8 @@ struct M68K {
         NBCD,NEG,NEGX,NOP,NOT,
         OR,ORI,ORItoCCR,
         PEA,
-        ROL,ROR,ROXL,ROXR,RTM,RTR,RTS,
+        ROL,ROR,ROXL,ROXR,RTR,RTS,
+
         SBCD,Scc,SUB,SUBA,SUBI,SUBQ,SUBX,SWAP,
         TAS,TRAP,TRAPV,TST,
         UNLK,
@@ -131,6 +132,9 @@ struct M68K {
         BRDDataRegisterByteL,
         BRDDataRegisterByteH,
 
+        BRD_PC_L,
+        BRD_PC_H,
+        BRD_SREG,
     };
 
     enum InternalOp: unsigned char {

@@ -22,6 +22,28 @@ unsigned from_bcd(unsigned val){
     return res;
 }
 
+template <std::integral T>
+T rotl(T val, size_t count, size_t bits = sizeof(T) * CHAR_BIT){
+    while(count){
+        bool b = (val >> (bits-1)) & 1;
+        val <<= 1;
+        val &= ((1 << bits) - 1);
+        val &= (~1 & ((1 << bits) - 1));
+        val |= b;
+    }
+    return val;
+}
+
+template <std::integral T>
+T rotr(T val, size_t count, size_t bits = sizeof(T) * CHAR_BIT){
+    while(count){
+        bool b = val & 1;
+        val >>= 1;
+        val |= (b << (bits-1));
+    }
+    return val;
+}
+
 template <typename T, size_t sz>
 struct SimpleDequeT{
     T arr[sz]{};
