@@ -502,6 +502,26 @@ void M68K::tick(BUS& bus){
                         sreg = bus.m68k_get();
                         break;
                     }
+                    case BRD_DL1_L: {
+                        dl1 &= 0xffff0000;
+                        dl1 |= bus.m68k_get();
+                        break;
+                    }
+                    case BRD_DL1_H: {
+                        dl1 &= 0xffff;
+                        dl1 |= (bus.m68k_get() << 16);
+                        break;
+                    }
+                    case BRD_DL2_L: {
+                        dl2 &= 0xffff0000;
+                        dl2 |= bus.m68k_get();
+                        break;
+                    }
+                    case BRD_DL2_H: {
+                        dl2 &= 0xffff;
+                        dl2 |= (bus.m68k_get() << 16);
+                        break;
+                    }
                 }
                 iops_q.pop_front();
             }
@@ -571,7 +591,11 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             set_sreg(Carry,  res > mask);
             set_sreg(Negative, res & sign_bit);
             set_sreg(Zero,      (res & mask) == 0);
-            set_sreg(Overflow, ((dregs[rx] & sign_bit) == (operand_a_l & sign_bit)) && ((res & sign_bit) != (operand_a_l & sign_bit)));
+            // TODO: check
+            if (opmode == 0b000 || opmode == 0b001 || opmode == 0b010)
+                set_sreg(Overflow, ((dregs[rx] & sign_bit) == (operand_a_l & sign_bit)) && ((res & sign_bit) != (dregs[rx] & sign_bit)));
+            else
+                set_sreg(Overflow, ((dregs[rx] & sign_bit) == (operand_a_l & sign_bit)) && ((res & sign_bit) != (operand_a_l & sign_bit)));
             // TODO: check
             dst_value = res & mask;
             if (opmode == 0b000 || opmode == 0b001 || opmode == 0b010) {
@@ -1258,6 +1282,112 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             usp += 4;
             break;
         }
+
+        case SBCD: {
+            // TODO: check
+            unsigned a = di.opmode ? to_bcd(dl1 & mask) : to_bcd(dregs[di.rx] & mask);
+            unsigned b = di.opmode ? to_bcd(dl2 & mask) : to_bcd(dregs[di.ry] & mask);
+            bool carry = (b + get_sreg(Extend)) > (a & mask);
+            unsigned res = mod<unsigned>(a - b - get_sreg(Extend), 100);
+            set_sreg(Extend, carry);
+            set_sreg(Carry,  carry);
+            set_sreg(Zero,      res ? 0 : get_sreg(Zero));
+            if (di.opmode){
+                fill_bus_write_req(aregs[di.rx], from_bcd(res), di.opsz);
+            } else {
+                dregs[di.rx] &= ~mask;
+                dregs[di.rx] |= from_bcd(res);
+            }
+            break;
+        }
+
+        case Scc: {
+            unsigned char res = is_cond((ConditionCode)di.d1) ? 0xff : 0x0;
+            dst_value = res;
+            set_ea_dst();
+            break;
+            // TODO: check
+            //  A subsequent NEG.B instruction with the same effective address can be used to change the Scc result from TRUE or FALSE to the equivalent arithmetic value (TRUE = 1, FALSE = 0).
+            //  In the MC68000 and MC68008, a memory destination is read before it is written.
+        }
+        case SUB: {
+            // TODO: check
+            unsigned long res{};
+            if (di.opmode == 0x0 || di.opmode == 0x1 || di.opmode == 0x2){
+                res = (dregs[di.d1] & mask) - (operand_a_l & mask);
+                set_sreg(Extend, (operand_a_l & mask) > (dregs[di.d1] & mask));
+                set_sreg(Carry,  (operand_a_l & mask) > (dregs[di.d1] & mask));
+                set_sreg(Overflow, ((dregs[di.d1] & sign_bit) == (operand_a_l & sign_bit)) && ((res & sign_bit) != (dregs[di.d1] & sign_bit)));
+            } else {
+                res = (operand_a_l & mask) - (dregs[di.d1] & mask);
+                set_sreg(Extend, (dregs[di.d1] & mask) > (operand_a_l & mask));
+                set_sreg(Carry,  (dregs[di.d1] & mask) > (operand_a_l & mask));
+                set_sreg(Overflow, ((dregs[di.d1] & sign_bit) == (operand_a_l & sign_bit)) && ((res & sign_bit) != (operand_a_l  & sign_bit)));
+            }
+            set_sreg(Negative, res & sign_bit);
+            set_sreg(Zero,      (res & mask) == 0);
+
+            res &= mask;
+            if (di.opmode == 0x0 || di.opmode == 0x1 || di.opmode == 0x2){
+                dregs[di.d1] &= ~mask;
+                dregs[di.d1] |= res;
+            } else {
+                dst_value = res;
+                set_ea_dst();
+            }
+            break;
+        }
+
+        case SUBA: {
+            aregs[di.d1] -= (opsz == WORD ? sign_extend_to_l((unsigned short)operand_a_l) : operand_a_l);
+            break;
+        }
+
+        case SUBI: {
+            auto res = (operand_a_l & mask) - (di.dl & mask);
+            set_sreg(Extend, (di.dl & mask) > (operand_a_l & mask));
+            set_sreg(Carry,  (di.dl & mask) > (operand_a_l & mask));
+            set_sreg(Overflow, ((di.dl & sign_bit) == (operand_a_l & sign_bit)) && ((res & sign_bit) != (operand_a_l & sign_bit)));
+            set_sreg(Negative, res & sign_bit);
+            set_sreg(Zero,      (res & mask) == 0);
+            dst_value = res & mask;
+            set_ea_dst();
+            break;
+        }
+
+        case SUBQ: {
+            auto imm = di.d1 + 1;
+            auto res = (operand_a_l & mask) - imm;
+            set_sreg(Extend, imm > (operand_a_l & mask));
+            set_sreg(Carry,  imm > (operand_a_l & mask));
+            set_sreg(Overflow, ((imm & sign_bit) == (operand_a_l & sign_bit)) && ((res & sign_bit) != (operand_a_l & sign_bit)));
+            set_sreg(Negative, res & sign_bit);
+            set_sreg(Zero,      (res & mask) == 0);
+            dst_value = res & mask;
+            set_ea_dst();
+            break;
+        }
+
+        case SUBX: {
+            // TODO: finish (predecrement)
+            unsigned a = di.opmode ? dl1 & mask : dregs[di.rx] & mask;
+            unsigned b = di.opmode ? dl2 & mask : dregs[di.ry] & mask;
+            unsigned res = a - b - get_sreg(Extend);
+            set_sreg(Extend, (b + get_sreg(Extend)) > (a & mask));
+            set_sreg(Carry,  (b + get_sreg(Extend)) > (a & mask));
+            set_sreg(Overflow, (((b + get_sreg(Extend)) & sign_bit) == (a & sign_bit)) &&
+                                        ((res & sign_bit) != (a & sign_bit)));
+            set_sreg(Negative, res & sign_bit);
+            set_sreg(Zero,      res ? 0 : get_sreg(Zero));
+            if (di.opmode){
+                fill_bus_write_req(aregs[di.rx], res, di.opsz);
+            } else {
+                dregs[di.rx] &= ~mask;
+                dregs[di.rx] |= res;
+            }
+            break;
+        }
+
 
     }
 }
@@ -2031,7 +2161,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = SBCD,
             .rx = rx,
             .ry = ry,
-            .d1 = rm,
+            .opmode = rm,
+            .opsz = BYTE,
         };
     }
 
@@ -2040,38 +2171,92 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = Scc,
             .d1 = cond,
+            .opsz = BYTE,
             .effective_address = (unsigned char)(val & 0x3f),
         };
     }
 
-    if ((val >> 12) == 0x9) {
+    if ((val >> 12) == 0x9 &&  !(((val >> 6) & 0x7) == 0b11 || ((val >> 6) & 0x7) == 0b111)) {
         unsigned char reg = (val >> 9) & 0x7;
         unsigned char opmode = (val >> 6) & 0x7;
+        OperandSize opsz{};
+        if (opmode == 0x0 || opmode == 0x4){
+            opsz = BYTE;
+        } else if (opmode == 0x1 || opmode == 0x5) {
+            opsz = WORD;
+        } else {
+            opsz = LONG;
+        }
         return {
-            .i = (opmode == 0b11 || opmode == 0b111) ?  SUBA : SUB,
+            .i =  SUB,
             .d1 = reg,
             .d2 = opmode,
             .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = opsz,
         };
     }
 
+    if ((val >> 12) == 0x9 && (((val >> 6) & 0x7) == 0b11 || ((val >> 6) & 0x7) == 0b111)) {
+        unsigned char reg = (val >> 9) & 0x7;
+        unsigned char opmode = (val >> 6) & 0x7;
+        OperandSize opsz{};
+        if (opmode == 0b11){
+            opsz = WORD;
+        } else {
+            opsz = LONG;
+        }
+        return {
+                .i = SUBA,
+                .d1 = reg,
+                .d2 = opmode,
+                .effective_address = (unsigned char)(val & 0x3f),
+                .opsz = opsz,
+        };
+    }
+
+
     if ((val >> 8) == 0x4) {
         unsigned char sz = (val >> 6) & 0x3;
+        OperandSize opsz{};
+        unsigned imm = read_prefetch_q();
+        fill_prefetch_req();
+        if (sz == 0x0){
+            opsz = BYTE;
+            imm &= 0xff;
+        } else if (sz == 0x1){
+            opsz = WORD;
+        } else {
+            opsz = LONG;
+            // TODO: check
+            unsigned l = read_prefetch_q();
+            fill_prefetch_req();
+            imm = (imm << 16) | l;
+        }
         return {
             .i = SUBI,
-            .d1 = sz,
+            .dl = imm,
             .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = opsz,
         };
     }
 
     if ((val >> 12) == 0x5 && ((val >> 8) & 0x1)) {
         unsigned char data = (val >> 9) & 0x7;
         unsigned char sz = (val >> 6) & 0x3;
+        OperandSize opsz{};
+        if (sz == 0x0){
+            opsz = BYTE;
+        } else if (sz == 0x1) {
+            opsz = WORD;
+        } else {
+            opsz = LONG;
+        }
         return {
             .i = SUBQ,
             .d1 = data,
             .d2 = sz,
             .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = opsz,
         };
     }
 
@@ -2080,12 +2265,41 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char ry = (val >> 9) & 0x7;
         unsigned char sz = (val >> 6) & 0x3;
         unsigned char rm = (val >> 3) & 0x1;
+
+        OperandSize opsz{};
+        if (sz == 0x0){
+            opsz = BYTE;
+        } else if (sz == 0x1){
+            opsz = WORD;
+        } else {
+            opsz = LONG;
+        }
+
+        if (rm){
+            // TODO: predecrement
+            switch (opsz) {
+                case BYTE:
+                case WORD: {
+                    fill_bus_write_req(aregs[rx],BRD_DL1_L, opsz);
+                    fill_bus_write_req(aregs[ry],BRD_DL2_L, opsz);
+                    break;
+                }
+                case LONG: {
+                    fill_bus_write_req(aregs[rx],BRD_DL1_H, opsz);
+                    fill_bus_write_req(aregs[rx] + 2,BRD_DL1_L, opsz);
+                    fill_bus_write_req(aregs[ry],BRD_DL2_H, opsz);
+                    fill_bus_write_req(aregs[ry] + 2,BRD_DL2_L, opsz);
+                    break;
+                }
+            }
+        }
+
         return {
             .i = SUBX,
             .rx = rx,
             .ry = ry,
             .d1 = sz,
-            .d2 = rm,
+            .opmode = rm,
         };
     }
 

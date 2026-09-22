@@ -108,8 +108,9 @@ struct M68K {
         PEA,
         ROL,ROR,ROXL,ROXR,RTR,RTS,
 
-        SBCD,Scc,SUB,SUBA,SUBI,SUBQ,SUBX,SWAP,
-        TAS,TRAP,TRAPV,TST,
+        SBCD,Scc,SUB,SUBA,SUBI,SUBQ,SUBX,
+
+        SWAP,TAS,TRAP,TRAPV,TST,
         UNLK,
     };
 
@@ -135,6 +136,10 @@ struct M68K {
         BRD_PC_L,
         BRD_PC_H,
         BRD_SREG,
+        BRD_DL1_L,
+        BRD_DL1_H,
+        BRD_DL2_L,
+        BRD_DL2_H,
     };
 
     enum InternalOp: unsigned char {
@@ -226,6 +231,8 @@ struct M68K {
     unsigned char d4{};
     unsigned char rx{};
     unsigned char opmode{};
+    unsigned dl1{};
+    unsigned dl2{};
     unsigned sign_bit{};
     unsigned mask{};
 

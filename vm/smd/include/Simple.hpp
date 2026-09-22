@@ -1,6 +1,11 @@
 #ifndef SMD_SIMPLE_HPP
 #define SMD_SIMPLE_HPP
 
+template <std::integral T>
+T mod(T t, size_t m){
+    return ((t % m) + m) % m;
+}
+
 unsigned to_bcd(unsigned val){
     unsigned res{};
     unsigned m = 1;
