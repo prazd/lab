@@ -193,41 +193,74 @@ struct M68K {
 
     struct DecodedInfo {
         Instruction i;
-        bool address_reg{};
         unsigned char rx{};
         unsigned char ry{};
-        unsigned char d1{};
-        unsigned char d2{};
-        unsigned char d3{};
-        unsigned char d4{};
-        unsigned dl{};
-        unsigned char operand_sz{};
-        unsigned mask{};
-        unsigned sign_bit{};
-        AddressMode addr_mode{};
+        unsigned char d1_b{};
+        unsigned char d2_b{};
+        unsigned char d3_b{};
+        unsigned d_l{};
+        unsigned prefetched{};
         unsigned char effective_address{};
+        bool read_ea{};
         unsigned immediate{}; // TODO: update
         unsigned char opmode{};
-        BUS::Mode read_mode{};
-        OperandSize opsz;
-        unsigned char cycles{};
-        bool is_ea{};
+        OperandSize opsz{};
+        unsigned sign_bit{};
+        unsigned mask{};
+
+        bool read_displacement{};
+        bool read_displacement_by_value{};
+        bool read_predec_args{}; // todo: check
+        bool read_prefetch{};
     } di;
 
-    unsigned char d1{};
-    unsigned char d2{};
-    unsigned char d3{};
-    unsigned char d4{};
-    unsigned char rx{};
-    unsigned char opmode{};
-    unsigned sign_bit{};
-    unsigned mask{};
+    inline void read_displacement() {
+        di.d_l = read_n_fill_prefetch_q();
+        if (di.opsz == BYTE){
+            di.d_l &= 0xff;
+        } else if (di.opsz == LONG){
+            di.d_l <<= 16;
+            di.d_l |= read_n_fill_prefetch_q();
+        }
+    }
+
+    inline void fill_predec_args(){
+        switch (opsz) {
+            case BYTE:
+            case WORD: {
+                fill_bus_read_req(aregs[di.rx]-=opsz,BRDOperandA1, opsz);
+                fill_bus_read_req(aregs[di.ry]-=opsz,BRDOperandB1, opsz);
+                break;
+            }
+            case LONG: {
+                fill_bus_read_req(aregs[di.rx]-=2,BRDOperandA1, WORD);
+                fill_bus_read_req(aregs[di.rx]-=2,BRDOperandA2, WORD);
+                fill_bus_read_req(aregs[di.ry]-=2,BRDOperandB1, WORD);
+                fill_bus_read_req(aregs[di.ry]-=2,BRDOperandB2, WORD);
+                break;
+            }
+        }
+    }
+
+    inline void read_displacement_by_value() {
+        di.d_l = read_n_fill_prefetch_q();
+        if (di.d_l & 0xff) {
+            di.d_l &= 0xff;
+            opsz = BYTE;
+        }else if (di.d_l) {
+            opsz = WORD;
+        } else if (!di.d_l) {
+            di.d_l |= (read_n_fill_prefetch_q() << 16);
+            opsz = LONG;
+        }
+    }
+
 
     inline void update_mask_n_sign_bit(){
         switch (opsz) {
-            case BYTE: sign_bit = 0x80; mask = 0x000000ff; break;
-            case WORD: sign_bit = 0x8000; mask = 0x0000ffff; break;
-            case LONG: sign_bit = 0x80000000; mask = 0xffffffff; break;
+            case BYTE: di.sign_bit = 0x80; di.mask = 0x000000ff; break;
+            case WORD: di.sign_bit = 0x8000; di.mask = 0x0000ffff; break;
+            case LONG: di.sign_bit = 0x80000000; di.mask = 0xffffffff; break;
         }
     };
 
@@ -261,7 +294,7 @@ struct M68K {
     unsigned short bus_data{};
     BUS::Mode bus_mode{};
 
-    DecodedInfo decode(unsigned short);
+    static DecodedInfo decode(unsigned short);
 
     void exec(DecodedInfo di, BUS& bus);
     void tick(BUS& bus);
@@ -271,6 +304,12 @@ struct M68K {
     inline unsigned short read_prefetch_q(){
         auto v = prefetch_q.front();
         prefetch_q.pop_front();
+        return v;
+    }
+    inline unsigned short read_n_fill_prefetch_q(){
+        auto v = prefetch_q.front();
+        prefetch_q.pop_front();
+        fill_prefetch_req();
         return v;
     }
     inline void fill_prefetch_req(){

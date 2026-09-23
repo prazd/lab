@@ -2,6 +2,13 @@
 #define SMD_SIMPLE_HPP
 
 template <std::integral T>
+size_t popcount(T val){
+    size_t n = 0;
+    while(val) {val &= val - 1; ++n;}
+    return n;
+}
+
+template <std::integral T>
 T mod(T t, size_t m){
     return ((t % m) + m) % m;
 }
