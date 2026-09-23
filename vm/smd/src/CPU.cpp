@@ -1,12 +1,6 @@
 #include "CPU.hpp"
 #include "BUS.hpp"
 
-void M68K::req(unsigned short a, unsigned short b, ALUOp op){
-    arg1 = a;
-    arg2 = b;
-    alu_op = op;
-    count = 4; // TODO: check
-}
 
 void M68K::set_ea_dst() {
     switch (ea_mode) {
@@ -502,26 +496,6 @@ void M68K::tick(BUS& bus){
                         sreg = bus.m68k_get();
                         break;
                     }
-                    case BRD_DL1_L: {
-                        dl1 &= 0xffff0000;
-                        dl1 |= bus.m68k_get();
-                        break;
-                    }
-                    case BRD_DL1_H: {
-                        dl1 &= 0xffff;
-                        dl1 |= (bus.m68k_get() << 16);
-                        break;
-                    }
-                    case BRD_DL2_L: {
-                        dl2 &= 0xffff0000;
-                        dl2 |= bus.m68k_get();
-                        break;
-                    }
-                    case BRD_DL2_H: {
-                        dl2 &= 0xffff;
-                        dl2 |= (bus.m68k_get() << 16);
-                        break;
-                    }
                 }
                 iops_q.pop_front();
             }
@@ -698,9 +672,9 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             break;
         }
         case BSR: {
-            usp-=4;
+            SP-=4;
             // TODO: PC to next instruction
-            fill_bus_write_req(usp, pc, LONG);
+            fill_bus_write_req(SP, pc, LONG);
             if (di.opsz == BYTE) pc += sign_extend_to_l((unsigned char)(di.dl));
             else pc += sign_extend_to_l((unsigned short)(di.dl));
             break;
@@ -868,8 +842,8 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             break;
         }
         case JSR: {
-            usp-=4;
-            fill_bus_write_req(usp, pc, LONG);
+            SP-=4;
+            fill_bus_write_req(SP, pc, LONG);
             pc = aregs[(di.d1 & 0x7)];
             break;
         }
@@ -878,10 +852,10 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             break;
         }
         case LINK: {
-            usp-=4;
-            fill_bus_write_req(usp,  aregs[di.d1], LONG);
-            aregs[di.d1] = usp;
-            usp += sign_extend_to_l((unsigned short)di.dl);
+            SP-=4;
+            fill_bus_write_req(SP,  aregs[di.d1], LONG);
+            aregs[di.d1] = SP;
+            SP += sign_extend_to_l((unsigned short)di.dl);
             break;
         }
         case LSR: {
@@ -1196,8 +1170,8 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
         }
         case PEA: {
             // TODO: check
-            usp-=4;
-            fill_bus_write_req(usp, operand_a_l, LONG);
+            SP-=4;
+            fill_bus_write_req(SP, operand_a_l, LONG);
             break;
         }
 
@@ -1269,24 +1243,24 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
         }
 
         case RTR: {
-            fill_bus_read_req(usp, BRD_SREG, WORD);
-            fill_bus_read_req(usp + 2, BRD_PC_H, WORD);
-            fill_bus_read_req(usp + 4, BRD_PC_L, WORD);
-            usp += 6;
+            fill_bus_read_req(SP, BRD_SREG, WORD);
+            fill_bus_read_req(SP + 2, BRD_PC_H, WORD);
+            fill_bus_read_req(SP + 4, BRD_PC_L, WORD);
+            SP += 6;
             break;
         }
 
         case RTS: {
-            fill_bus_read_req(usp, BRD_PC_H, WORD);
-            fill_bus_read_req(usp + 2, BRD_PC_L, WORD);
-            usp += 4;
+            fill_bus_read_req(SP, BRD_PC_H, WORD);
+            fill_bus_read_req(SP + 2, BRD_PC_L, WORD);
+            SP += 4;
             break;
         }
 
         case SBCD: {
             // TODO: check
-            unsigned a = di.opmode ? to_bcd(dl1 & mask) : to_bcd(dregs[di.rx] & mask);
-            unsigned b = di.opmode ? to_bcd(dl2 & mask) : to_bcd(dregs[di.ry] & mask);
+            unsigned a = di.opmode ? to_bcd(operand_a_l & mask) : to_bcd(dregs[di.rx] & mask);
+            unsigned b = di.opmode ? to_bcd(operand_b_l & mask) : to_bcd(dregs[di.ry] & mask);
             bool carry = (b + get_sreg(Extend)) > (a & mask);
             unsigned res = mod<unsigned>(a - b - get_sreg(Extend), 100);
             set_sreg(Extend, carry);
@@ -1369,9 +1343,9 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
         }
 
         case SUBX: {
-            // TODO: finish (predecrement)
-            unsigned a = di.opmode ? dl1 & mask : dregs[di.rx] & mask;
-            unsigned b = di.opmode ? dl2 & mask : dregs[di.ry] & mask;
+            // TODO: check
+            unsigned a = di.opmode ? operand_a_l & mask : dregs[di.rx] & mask;
+            unsigned b = di.opmode ? operand_b_l & mask : dregs[di.ry] & mask;
             unsigned res = a - b - get_sreg(Extend);
             set_sreg(Extend, (b + get_sreg(Extend)) > (a & mask));
             set_sreg(Carry,  (b + get_sreg(Extend)) > (a & mask));
@@ -1387,8 +1361,44 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             }
             break;
         }
+        case SWAP:{
+            rotl(dregs[di.d1], 16);
+            break;
+        }
+        case TAS: {
+            set_sreg(Carry,  0);
+            set_sreg(Overflow, 0);
+            set_sreg(Negative, operand_a_l & sign_bit);
+            set_sreg(Zero,      (operand_a_l & mask) == 0);
+            operand_a_l |= 1 << 7;
+            dst_value = operand_a_l & 0xff;
+            set_ea_dst();
+            break;
+        }
+        case TRAP:{
+            // TODO: vector exceptions
+            break;
+        }
+        case TRAPV:{
+            // TODO: vector exceptions
+            break;
+        }
 
+        case TST: {
+            set_sreg(Carry,  0);
+            set_sreg(Overflow, 0);
+            set_sreg(Negative, operand_a_l & sign_bit);
+            set_sreg(Zero,      (operand_a_l & mask) == 0);
+            break;
+        }
 
+        case UNLK:{
+            SP = aregs[di.d1];
+            fill_bus_read_req_reg(SP, BRDAddressRegisterH, WORD, di.d1);
+            fill_bus_read_req_reg(SP, BRDAddressRegisterL, WORD, di.d1);
+            SP += 4;
+            break;
+        }
     }
 }
 
@@ -1678,14 +1688,6 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    // TODO: check
-//    if ((val >> 6) == 0x131) {
-//        return {
-//            .i = DIVSL,
-//            .effective_address = (unsigned char)(val & 0x3f),
-//        };
-//    }
-
     if ((val >> 12) == 0x8 && ((val >> 6) & 0x7) == 0x3) {
         unsigned char reg = (val >> 9) & 0x7;
         return {
@@ -1695,15 +1697,6 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    // TODO: check
-//    if ((val >> 6) == 0x131) {
-//        unsigned char reg = (val >> 9) & 0x7;
-//        return {
-//            .i = DIVUL,
-//            .d1 = reg,
-//            .effective_address = (unsigned char)(val & 0x3f),
-//        };
-//    }
 
     if ((val >> 12) == 0xb) {
         unsigned char reg = (val >> 9) & 0x7;
@@ -2133,11 +2126,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         else opsz = LONG;
 
         return {
-                .i = (val & 0x100) ? ROXR : ROXL,
-                .d1 = count_reg,
-                .d2 = i_r,
-                .d3 = d_r,
-                .opsz = opsz
+            .i = (val & 0x100) ? ROXR : ROXL,
+            .d1 = count_reg,
+            .d2 = i_r,
+            .d3 = d_r,
+            .opsz = opsz
         };
     }
 
@@ -2157,6 +2150,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char rx = val & 0x7;
         unsigned char ry = (val >> 9) & 0x7;
         unsigned char rm = (val >> 3) & 0x1;
+        // TODO: check
+        fill_bus_write_req(--aregs[rx],BRDOperandA1, BYTE);
+        fill_bus_write_req(--aregs[ry],BRDOperandB1, BYTE);
         return {
             .i = SBCD,
             .rx = rx,
@@ -2206,11 +2202,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             opsz = LONG;
         }
         return {
-                .i = SUBA,
-                .d1 = reg,
-                .d2 = opmode,
-                .effective_address = (unsigned char)(val & 0x3f),
-                .opsz = opsz,
+            .i = SUBA,
+            .d1 = reg,
+            .d2 = opmode,
+            .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = opsz,
         };
     }
 
@@ -2276,19 +2272,19 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         }
 
         if (rm){
-            // TODO: predecrement
+            // TODO: check
             switch (opsz) {
                 case BYTE:
                 case WORD: {
-                    fill_bus_write_req(aregs[rx],BRD_DL1_L, opsz);
-                    fill_bus_write_req(aregs[ry],BRD_DL2_L, opsz);
+                    fill_bus_write_req(aregs[rx]-=opsz,BRDOperandA1, opsz);
+                    fill_bus_write_req(aregs[ry]-=opsz,BRDOperandB1, opsz);
                     break;
                 }
                 case LONG: {
-                    fill_bus_write_req(aregs[rx],BRD_DL1_H, opsz);
-                    fill_bus_write_req(aregs[rx] + 2,BRD_DL1_L, opsz);
-                    fill_bus_write_req(aregs[ry],BRD_DL2_H, opsz);
-                    fill_bus_write_req(aregs[ry] + 2,BRD_DL2_L, opsz);
+                    fill_bus_write_req(aregs[rx]-=2,BRDOperandA1, WORD);
+                    fill_bus_write_req(aregs[rx]-=2,BRDOperandA2, WORD);
+                    fill_bus_write_req(aregs[ry]-=2,BRDOperandB1, WORD);
+                    fill_bus_write_req(aregs[ry]-=2,BRDOperandB2, WORD);
                     break;
                 }
             }
@@ -2308,6 +2304,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = SWAP,
             .d1 = reg,
+            .opsz = WORD,
         };
     }
 
@@ -2336,10 +2333,18 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
 
     if ((val >> 8) == 0x4a) {
         unsigned char sz = (val >> 6) & 0x3;
+        OperandSize opsz{};
+        if (sz == 0x0){
+            opsz = BYTE;
+        } else if (sz == 0x1){
+            opsz = WORD;
+        } else {
+            opsz = LONG;
+        }
         return {
             .i = TST,
-            .d1 = sz,
             .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = opsz,
         };
     }
 

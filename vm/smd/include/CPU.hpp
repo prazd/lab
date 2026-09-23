@@ -4,12 +4,18 @@
 #include "BUS.hpp"
 #include "Simple.hpp"
 struct M68K {
+    enum Mode {
+        UserMode, SupervisorMode
+    } mode = UserMode;
     // SPR
     unsigned pc{};
     // User stack pointer
     unsigned usp{};
     // Supervisor stack pointer
     unsigned ssp{};
+
+    #define SP (mode == UserMode ? usp : ssp)
+
     // Vector base register
     unsigned vbr{};
     // Alternate function code registers
@@ -17,7 +23,7 @@ struct M68K {
     unsigned dfc{};
 
     enum ConditionCode: unsigned char {
-        CC_CC, CC_CS,CC_EQ,
+        CC_CC,CC_CS,CC_EQ,
         CC_GE,CC_GT,CC_HI,CC_LE,
         CC_LS,CC_LT,CC_MI,CC_NE,CC_PL,CC_VC,CC_VS
     };
@@ -136,10 +142,6 @@ struct M68K {
         BRD_PC_L,
         BRD_PC_H,
         BRD_SREG,
-        BRD_DL1_L,
-        BRD_DL1_H,
-        BRD_DL2_L,
-        BRD_DL2_H,
     };
 
     enum InternalOp: unsigned char {
@@ -151,22 +153,9 @@ struct M68K {
 
         // Effective address
         Nop,
-        RegDec,
-        RegInc,
     };
 
 // TODO:
-// Execution
-    unsigned char exec_count = 0;
-
-    enum ALUOp {
-        ALUADD,
-    };
-    unsigned short arg1{};
-    unsigned short arg2{};
-    ALUOp alu_op{};
-    unsigned char count{};
-    void req(unsigned short, unsigned short, ALUOp);
 
     unsigned ea_address{};
     AddressMode ea_mode;
@@ -231,8 +220,6 @@ struct M68K {
     unsigned char d4{};
     unsigned char rx{};
     unsigned char opmode{};
-    unsigned dl1{};
-    unsigned dl2{};
     unsigned sign_bit{};
     unsigned mask{};
 
