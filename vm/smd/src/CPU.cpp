@@ -1,7 +1,6 @@
 #include "CPU.hpp"
 #include "BUS.hpp"
 
-
 void M68K::set_ea_dst() {
     switch (ea_mode) {
         case DataRegisterDirectMode:    dst = DSTDn; dst_reg_n = ea_reg_n;  break;
@@ -282,40 +281,37 @@ void M68K::ea_write(unsigned char ea_val, unsigned val) {
             break;
         }
         case AddressRegisterIndirectDisplacementMode: {
-            auto pv = read_prefetch_q();
-            fill_prefetch_req();
+            auto pv = read_n_fill_prefetch_q();
             fill_bus_write_req(aregs[ea_reg_n] + sign_extend_to_l(pv), val, opsz);
             break;
         }
         case AddressRegisterIndirectIndexMode: {
-            auto pv = read_prefetch_q();
+            auto pv = read_n_fill_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
             xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
             auto addr = aregs[ea_reg_n] +
                          sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
 
-            fill_prefetch_req();
             iops_q.push_back({.iop = Nop});
             iops_q.push_back({.iop = Nop}); // calc time
             fill_bus_write_req(addr, val, opsz);
             break;
         }
         case ProgramCounterInderectDisplacementMode: {
-            auto pv = read_prefetch_q();
+            auto pv = read_n_fill_prefetch_q();
             auto addr = pc + sign_extend_to_l(pv);
-            fill_prefetch_req();
             fill_bus_write_req(addr, val, opsz);
             break;
         }
         case ProgramCounterInderectIndexMode: {
-            auto pv = read_prefetch_q();
+            auto pv = read_n_fill_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
             xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
             auto addr = pc +
                          sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
-            fill_prefetch_req();
+
             iops_q.push_back({.iop = Nop});
             iops_q.push_back({.iop = Nop}); // calc time
             fill_bus_write_req(addr, val, opsz);
@@ -340,34 +336,30 @@ unsigned M68K::to_ea_address(unsigned char ea_val) {
             return aregs[ea_reg_n];
         }
         case AddressRegisterIndirectDisplacementMode: {
-            auto pv = read_prefetch_q();
-            fill_prefetch_req();
+            auto pv = read_n_fill_prefetch_q();
             return aregs[ea_reg_n] + sign_extend_to_l(pv);
         }
         case AddressRegisterIndirectIndexMode: {
-            auto pv = read_prefetch_q();
+            auto pv = read_n_fill_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
             xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
             auto addr = aregs[ea_reg_n] +
                         sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
-            fill_prefetch_req();
             return addr;
         }
         case ProgramCounterInderectDisplacementMode: {
-            auto pv = read_prefetch_q();
+            auto pv = read_n_fill_prefetch_q();
             auto addr = pc + sign_extend_to_l(pv);
-            fill_prefetch_req();
             return addr;
         }
         case ProgramCounterInderectIndexMode: {
-            auto pv = read_prefetch_q();
+            auto pv = read_n_fill_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
             xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
             auto addr = pc +
                         sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
-            fill_prefetch_req();
             return addr;
         }
     }
@@ -401,70 +393,61 @@ void M68K::ea_fill(unsigned char val){
             break;
         }
         case AddressRegisterIndirectDisplacementMode: {
-            auto pv = read_prefetch_q();
+            auto pv = read_n_fill_prefetch_q();
             ea_address = aregs[ea_reg_n] + sign_extend_to_l(pv);
-            fill_prefetch_req();
             fill_bus_read_req(ea_address, BRDOperandA1, opsz);
             break;
         }
         case AddressRegisterIndirectIndexMode: {
-            auto pv = read_prefetch_q();
+            auto pv = read_n_fill_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
             xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
             ea_address = aregs[ea_reg_n] +
                 sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;     
-    
-            fill_prefetch_req();
+
             iops_q.push_back({.iop = Nop});
             iops_q.push_back({.iop = Nop}); // calc time
             fill_bus_read_req(ea_address, BRDOperandA1, opsz);
             break;
         }
         case ProgramCounterInderectDisplacementMode: {
-            auto pv = read_prefetch_q();
+            auto pv = read_n_fill_prefetch_q();
             ea_address = pc + sign_extend_to_l(pv);
-            fill_prefetch_req();
             fill_bus_read_req(ea_address, BRDOperandA1, opsz);
             break;
         }
         case ProgramCounterInderectIndexMode: {
-            auto pv = read_prefetch_q();
+            auto pv = read_n_fill_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
             xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
             ea_address = pc +
                 sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
-            fill_prefetch_req();
             iops_q.push_back({.iop = Nop});
             iops_q.push_back({.iop = Nop}); // calc time
             fill_bus_read_req(ea_address, BRDOperandA1, opsz);
             break;
         }
         case AbsoluteShort: {
-            operand_a_w1 = read_prefetch_q();
+            operand_a_w1 = read_n_fill_prefetch_q();
             // TODO: check
             ea_address = pc + 2;
-            fill_prefetch_req();
             break;
         }
         case AbsoluteLong: {
-            operand_a_w1 = read_prefetch_q();
-            operand_a_w2 = read_prefetch_q();
+            operand_a_w1 = read_n_fill_prefetch_q();
+            operand_a_w2 = read_n_fill_prefetch_q();
             // TODO: check
             ea_address = pc + 2;
             operands_a_to_long();
-            fill_prefetch_req();
-            fill_prefetch_req();
             break;
         }
          case Immediate: {
-            operand_a_w1 = read_prefetch_q();
-            fill_prefetch_req();
+            operand_a_w1 = read_n_fill_prefetch_q();
             if (opsz != LONG) break;
-            operand_a_w2 = read_prefetch_q();
+            operand_a_w2 = read_n_fill_prefetch_q();
             operands_a_to_long();
-            fill_prefetch_req();
             break;
         }
     }
@@ -473,10 +456,9 @@ void M68K::ea_fill(unsigned char val){
 void M68K::tick(BUS& bus){
     auto iopv = iops_q.front();
     switch(iopv.iop){
-        case FetchDec: {
+        case FetchDecode: {
             // TODO: update
-            auto opcode = read_prefetch_q();
-            fill_prefetch_req();
+            auto opcode = read_n_fill_prefetch_q();
             di = decode(opcode);
             opsz = di.opsz;
             update_mask_n_sign_bit();
@@ -484,6 +466,7 @@ void M68K::tick(BUS& bus){
             if (di.read_displacement) read_displacement();
             if (di.read_displacement_by_value) read_displacement_by_value();
             if (di.read_prefetch) di.prefetched = read_n_fill_prefetch_q();
+            if (di.read_predec_args) fill_predec_args();
             iops_q.pop_front();
             break;
         }
@@ -1077,8 +1060,7 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
         }
         case MOVEP: {
             // TODO: check
-            auto addr = aregs[di.d3_b] + sign_extend_to_l(read_prefetch_q());
-            fill_prefetch_req();
+            auto addr = aregs[di.d3_b] + sign_extend_to_l(read_n_fill_prefetch_q());
             if (di.d2_b == 0x4){
                 // WORD mem->reg
                 // TODO: check
@@ -1450,6 +1432,43 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             SP += 4;
             break;
         }
+
+        case ANDItoSR: {
+            if (!get_sreg(SupervisorMode))
+                // TODO: TRAP
+                break;
+            sreg &= read_n_fill_prefetch_q();
+            break;
+        }
+
+        case EORItoSR: {
+            if (!get_sreg(SupervisorMode))
+                // TODO: TRAP
+                break;
+            sreg ^= read_n_fill_prefetch_q();
+            break;
+        }
+
+        case MOVEtoSR: {
+            if (!get_sreg(SupervisorMode))
+                // TODO: TRAP
+                break;
+            sreg = operand_a_l & di.mask;
+            break;
+        }
+
+        case MOVEUSP: {
+            if (!get_sreg(SupervisorMode))
+                // TODO: TRAP
+                break;
+
+            if (di.d1_b)
+                usp = aregs[di.rx];
+             else
+                aregs[di.rx] = usp;
+            break;
+        }
+        
     }
 }
 
@@ -1770,20 +1789,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     }
 
     if ((val >> 8) == 0xa) {
-        // TODO: check
         unsigned char sz = (val >> 6) & 0x3;
-        OperandSize opsz{};
-        if (sz == 0x0){
-            opsz = BYTE;
-        } else if (sz == 0x1){
-            opsz = WORD;
-        } else {
-            opsz = LONG;
-        }
         return {
             .i = EORI,
             .d1_b = sz,
-            .opsz = opsz,
+            .opsz = (OperandSize)(1 << sz),
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .read_displacement = true,
@@ -1863,21 +1873,12 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char i_r = (val >> 5) & 0x1;
         unsigned char sz = (val >> 6) & 0x3;
         unsigned char count_reg = (val >> 9) & 0x7;
-        OperandSize opsz;
-        if (sz == 0x0){
-            opsz = BYTE;
-        } else if (sz == 0x1){
-            opsz = WORD;
-        } else {
-            opsz = LONG;
-        }
-
         return {
             .i = (val & 0x100) ? LSL : LSR,
             .d1_b = reg,
             .d2_b = i_r,
             .d3_b = count_reg,
-            .opsz = opsz,
+            .opsz = (OperandSize)(1 << sz),
         };
     }
 
@@ -2029,35 +2030,20 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
 
     if ((val >> 8) == 0x44) {
         unsigned char sz = ((val >> 6) & 0x3);
-        OperandSize opsz{};
-        if (sz == 0x0){
-            opsz = BYTE;
-        } else if (sz == 0x1){
-            opsz = WORD;
-        } else {
-            opsz = LONG;
-        }
         return {
             .i = NEG,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
-            .opsz = opsz,
+            .opsz = (OperandSize)(1 << sz),
         };
     }
 
     if ((val >> 8) == 0x40) {
         unsigned char sz = (val >> 6) & 0x3;
-        OperandSize opsz{};
-        if (sz == 0x0){
-            opsz = BYTE;
-        } else if (sz == 0x1){
-            opsz = WORD;
-        } else {
-            opsz = LONG;
-        }
         return {
             .i = NEGX,
             .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = (OperandSize)(1 << sz),
             .read_ea = true,
         };
     }
@@ -2070,17 +2056,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
 
     if ((val >> 8) == 0x46) {
         unsigned char sz = (val >> 6) & 0x3;
-        OperandSize opsz{};
-        if (sz == 0x0){
-            opsz = BYTE;
-        } else if (sz == 0x1){
-            opsz = WORD;
-        } else {
-            opsz = LONG;
-        }
         return {
             .i = NOT,
-            .opsz = opsz,
+            .opsz = (OperandSize)(1 << sz),
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
         };
@@ -2139,18 +2117,12 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char sz = (val >> 6) & 0x3;
         unsigned char i_r = (val >> 5) & 0x1;
         unsigned char d_r = (val >> 8) & 0x1;
-
-        OperandSize opsz{};
-        if (sz == 0x0) opsz = BYTE;
-        else if (sz == 0x1) opsz = WORD;
-        else opsz = LONG;
-
         return {
             .i = (val & 0x100) ?  ROR : ROL,
             .d1_b = count_reg,
             .d2_b = i_r,
             .d3_b = d_r,
-            .opsz = opsz
+            .opsz = (OperandSize)(1 << sz),
         };
     }
 
@@ -2160,18 +2132,12 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char sz = (val >> 6) & 0x3;
         unsigned char i_r = (val >> 5) & 0x1;
         unsigned char d_r = (val >> 8) & 0x1;
-
-        OperandSize opsz{};
-        if (sz == 0x0) opsz = BYTE;
-        else if (sz == 0x1) opsz = WORD;
-        else opsz = LONG;
-
         return {
             .i = (val & 0x100) ? ROXR : ROXL,
             .d1_b = count_reg,
             .d2_b = i_r,
             .d3_b = d_r,
-            .opsz = opsz
+            .opsz = (OperandSize)(1 << sz),
         };
     }
 
@@ -2255,40 +2221,24 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
 
     if ((val >> 8) == 0x4) {
         unsigned char sz = (val >> 6) & 0x3;
-        OperandSize opsz{};
-        if (sz == 0x0){
-            opsz = BYTE;
-        } else if (sz == 0x1){
-            opsz = WORD;
-        } else {
-            opsz = LONG;
-        }
         return {
             .i = SUBI,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .read_displacement = true,
-            .opsz = opsz,
+            .opsz = (OperandSize)(1 << sz),
         };
     }
 
     if ((val >> 12) == 0x5 && ((val >> 8) & 0x1)) {
         unsigned char data = (val >> 9) & 0x7;
         unsigned char sz = (val >> 6) & 0x3;
-        OperandSize opsz{};
-        if (sz == 0x0){
-            opsz = BYTE;
-        } else if (sz == 0x1) {
-            opsz = WORD;
-        } else {
-            opsz = LONG;
-        }
         return {
             .i = SUBQ,
             .d1_b = data,
             .d2_b = sz,
             .effective_address = (unsigned char)(val & 0x3f),
-            .opsz = opsz,
+            .opsz = (OperandSize)(1 << sz),
         };
     }
 
@@ -2297,16 +2247,6 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char ry = (val >> 9) & 0x7;
         unsigned char sz = (val >> 6) & 0x3;
         unsigned char rm = (val >> 3) & 0x1;
-
-        OperandSize opsz{};
-        if (sz == 0x0){
-            opsz = BYTE;
-        } else if (sz == 0x1){
-            opsz = WORD;
-        } else {
-            opsz = LONG;
-        }
-
         return {
             .i = SUBX,
             .rx = rx,
@@ -2314,6 +2254,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d1_b = sz,
             .opmode = rm,
             .read_predec_args = !!rm,
+            .opsz = (OperandSize)(1 << sz),
         };
     }
 
@@ -2352,18 +2293,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
 
     if ((val >> 8) == 0x4a) {
         unsigned char sz = (val >> 6) & 0x3;
-        OperandSize opsz{};
-        if (sz == 0x0){
-            opsz = BYTE;
-        } else if (sz == 0x1){
-            opsz = WORD;
-        } else {
-            opsz = LONG;
-        }
         return {
             .i = TST,
             .effective_address = (unsigned char)(val & 0x3f),
-            .opsz = opsz,
+            .opsz = (OperandSize)(1 << sz),
         };
     }
 
@@ -2372,6 +2305,39 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = UNLK,
             .d1_b = reg,
+        };
+    }
+
+    if (val == 0x27c){
+        return {
+            .i = ANDItoSR,
+            .opsz = WORD,
+        };
+    }
+
+    if (val == 0xa7c){
+        return {
+            .i = EORItoSR,
+            .opsz = WORD,
+        };
+    }
+
+    if ((val >> 6) == 0x11b){
+        return {
+            .i = MOVEtoSR,
+            .opsz = WORD,
+            .effective_address = (unsigned char)(val & 0x3f),
+            .read_ea = true,
+        };
+    }
+
+    if ((val >> 4) == 0x4e6){
+        unsigned char dr = (val >> 3) & 0x1;
+        return {
+            .i = MOVEUSP,
+            .rx = (unsigned char)(val & 0x7),
+            .d1_b = dr,
+            .opsz = LONG,
         };
     }
 

@@ -4,17 +4,12 @@
 #include "BUS.hpp"
 #include "Simple.hpp"
 struct M68K {
-    enum Mode {
-        UserMode, SupervisorMode
-    } mode = UserMode;
     // SPR
     unsigned pc{};
     // User stack pointer
     unsigned usp{};
     // Supervisor stack pointer
     unsigned ssp{};
-
-    #define SP (mode == UserMode ? usp : ssp)
 
     // Vector base register
     unsigned vbr{};
@@ -49,7 +44,7 @@ struct M68K {
     enum SREG: unsigned short {
         Carry=0x0,Overflow=0x2,Zero=0x4,Negative=0x8,Extend=0x10,
         Interrupt0=0x100,Interrupt1=0x200,Interrupt2=0x400,
-        State0=0x1000,State1=0x2000,TraceMode0=0x4000,TraceMode1=0x8000
+        SupervisorMode=0x2000,TraceMode0=0x4000,TraceMode1=0x8000
     };
     inline void set_sreg(SREG s, bool val){
         sreg &= ~(1 << s);
@@ -58,6 +53,7 @@ struct M68K {
     inline bool get_sreg(SREG s){
         return sreg & s;
     }
+    #define SP (!get_sreg(SupervisorMode) ? usp : ssp)
 
     // GPR
     // Data registers
@@ -71,7 +67,6 @@ struct M68K {
     enum OperandSize: unsigned char {BYTE=0x1,WORD=0x2,LONG=0x4};
 
     OperandSize opsz = BYTE;
-
 
     enum AddressMode: unsigned char{
         DataRegisterDirectMode,
@@ -118,6 +113,12 @@ struct M68K {
 
         SWAP,TAS,TRAP,TRAPV,TST,
         UNLK,
+
+//  Supervisor
+        ANDItoSR,
+        EORItoSR,
+        MOVEtoSR,
+        MOVEUSP,
     };
 
     enum RegType {
@@ -145,7 +146,7 @@ struct M68K {
     };
 
     enum InternalOp: unsigned char {
-        FetchDec,
+        FetchDecode,
         BusReadReq,
         BusReadWait,
         BusWriteReq,
@@ -301,11 +302,6 @@ struct M68K {
 
     unsigned prefetch_addr{};
     SimpleDequeT<unsigned short, 2> prefetch_q{};
-    inline unsigned short read_prefetch_q(){
-        auto v = prefetch_q.front();
-        prefetch_q.pop_front();
-        return v;
-    }
     inline unsigned short read_n_fill_prefetch_q(){
         auto v = prefetch_q.front();
         prefetch_q.pop_front();
