@@ -527,6 +527,18 @@ void M68K::tick(BUS& bus){
                         break;
                     }
 
+                    case BRD_SSP_H:{
+                        ssp &= 0xffff;
+                        ssp |= (bus.m68k_get() << 16);
+                        break;
+                    }
+
+                    case BRD_SSP_L:{
+                        ssp &= 0xffff0000;
+                        ssp |= bus.m68k_get();
+                        break;
+                    }
+
                     case BRD_SREG:{
                         sreg = bus.m68k_get();
                         break;
@@ -1468,7 +1480,53 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
                 aregs[di.rx] = usp;
             break;
         }
-        
+
+        case ORItoSR: {
+            if (!get_sreg(SupervisorMode))
+                // TODO: TRAP
+                break;
+            sreg |= read_n_fill_prefetch_q();
+            break;
+        }
+
+        case RESET: {
+            if (!get_sreg(SupervisorMode)){
+                // TODO: check
+                pc = EV_TRAPV;
+                break;
+            }
+            fill_bus_read_req(EV_ResetInitialSSP, BRD_SSP_H, WORD);
+            fill_bus_read_req(EV_ResetInitialSSP, BRD_SSP_L, WORD);
+            fill_bus_read_req(EV_ResetInitialPC, BRD_PC_H, WORD);
+            fill_bus_read_req(EV_ResetInitialPC, BRD_PC_L, WORD);
+            break;
+        }
+
+        case RTE: {
+            if (!get_sreg(SupervisorMode)){
+                // TODO: check
+                pc = EV_TRAPV;
+                break;
+            }
+            fill_bus_read_req(ssp, BRD_SREG, WORD);
+            fill_bus_read_req(ssp+2, BRD_PC_H, WORD);
+            fill_bus_read_req(ssp+4, BRD_PC_L, WORD);
+            ssp+=6;
+            break;
+        }
+
+        case STOP:{
+            if (!get_sreg(SupervisorMode)){
+                // TODO: check
+                pc = EV_TRAPV;
+                break;
+            }
+            sreg = read_n_fill_prefetch_q();
+            // TODO: check
+            break;
+        }
+
+
     }
 }
 
@@ -2338,6 +2396,31 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .rx = (unsigned char)(val & 0x7),
             .d1_b = dr,
             .opsz = LONG,
+        };
+    }
+
+    if (val == 0x7c){
+        return {
+            .i = ORItoSR,
+            .opsz = WORD,
+        };
+    }
+
+    if (val == 0x4e70){
+        return {
+            .i = RESET,
+        };
+    }
+
+    if (val == 0x4e73){
+        return {
+            .i = RTE,
+        };
+    }
+
+    if (val == 0x4e72){
+        return {
+            .i = STOP,
         };
     }
 

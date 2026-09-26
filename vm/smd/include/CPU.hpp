@@ -119,6 +119,10 @@ struct M68K {
         EORItoSR,
         MOVEtoSR,
         MOVEUSP,
+        ORItoSR,
+        RESET,
+        RTE,
+        STOP,
     };
 
     enum RegType {
@@ -142,7 +146,10 @@ struct M68K {
 
         BRD_PC_L,
         BRD_PC_H,
+        BRD_SSP_L,
+        BRD_SSP_H,
         BRD_SREG,
+
     };
 
     enum InternalOp: unsigned char {
