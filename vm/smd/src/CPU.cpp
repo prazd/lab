@@ -599,11 +599,24 @@ bool M68K::is_cond(M68K::ConditionCode cc) {
     }
 }
 
-
 void M68K::fill_exec(M68K::Instruction i) {}
 
 void M68K::exec(DecodedInfo di, BUS& bus) {
     switch(di.i){
+        case ABCD: {
+            unsigned char a = di.opmode ? (operand_a_l & 0xff) : dregs[di.rx];
+            unsigned char b = di.opmode ? (operand_b_l & 0xff) : dregs[di.ry];
+
+            unsigned res = to_bcd(a) + to_bcd(b) + get_sreg(Extend);
+            set_sreg(Carry,  res >= 100);
+            set_sreg(Extend,  res >= 100);
+            set_sreg(Zero,      res != 0 ? 0 : get_sreg(Zero));
+            if (di.opmode)
+                fill_bus_write_req(aregs[di.rx], from_bcd(res % 100) & 0xff, BYTE);
+            else
+                dregs[di.rx] = from_bcd(res % 100) & 0xff;
+            break;
+        }
         case ADD:{
             operands_a_to_long();
             unsigned res = (dregs[di.rx] & di.mask) + (operand_a_l & di.mask);
@@ -733,11 +746,8 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
         }
         case CHK: {
             auto val = sign_extend_to_l((unsigned short)(dregs[di.d1_b] & 0xffff));
-            if (val < 0) {
-                // TODO: exception
-            } else if (val > operand_a_l){
-                // TODO: exception
-            }
+            if (val < 0 || val > operand_a_l)
+                jump(EV_CheckInstruction);
             break;
         }
         case CLR: {
@@ -797,10 +807,10 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
         }
 
         case DIVS: {
-            // TODO: check
-            if (!operand_a_l)
-                // TODO: Trap EV_ZeroDivide
+            if (!operand_a_l){
+                jump(EV_ZeroDivide);
                 break;
+            }
             auto res1 = ((int)dregs[di.d1_b] / (short)operand_a_l);
             auto res2 = ((int)dregs[di.d1_b] % (short)operand_a_l);
             set_sreg(Carry,   0);
@@ -812,10 +822,10 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
         }
 
         case DIVU: {
-            // TODO: check
-            if (!operand_a_l)
-                // TODO: Trap EV_ZeroDivide
+            if (!operand_a_l){
+                jump(EV_ZeroDivide);
                 break;
+            }
             auto res1 = (dregs[di.d1_b] / (unsigned short)operand_a_l);
             auto res2 = (dregs[di.d1_b] % (unsigned short)operand_a_l);
             set_sreg(Carry,   0);
@@ -884,14 +894,13 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             break;
         }
         case JMP: {
-            // TODO: check
-            pc = aregs[(di.d1_b & 0x7)];
+            jump(aregs[(di.d1_b & 0x7)]);
             break;
         }
         case JSR: {
             SP-=4;
             fill_bus_write_req(SP, pc, LONG);
-            pc = aregs[(di.d1_b & 0x7)];
+            jump(aregs[(di.d1_b & 0x7)]);
             break;
         }
         case LEA: {
@@ -1421,11 +1430,16 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             break;
         }
         case TRAP:{
-            // TODO: vector exceptions
+            set_sreg(SupervisorMode, 1);
+            ssp-=4;
+            fill_bus_write_req(ssp, pc, LONG);
+            ssp-=2;
+            fill_bus_write_req(ssp, sreg, WORD);
+            jump(di.d1_b);
             break;
         }
         case TRAPV:{
-            // TODO: vector exceptions
+            if (get_sreg(Overflow)) jump(EV_TRAPV);
             break;
         }
 
@@ -1446,34 +1460,37 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
         }
 
         case ANDItoSR: {
-            if (!get_sreg(SupervisorMode))
-                // TODO: TRAP
+            if (!get_sreg(SupervisorMode)){
+                jump(EV_TRAPV);
                 break;
+            }
             sreg &= read_n_fill_prefetch_q();
             break;
         }
 
         case EORItoSR: {
-            if (!get_sreg(SupervisorMode))
-                // TODO: TRAP
+            if (!get_sreg(SupervisorMode)){
+                jump(EV_TRAPV);
                 break;
+            }
             sreg ^= read_n_fill_prefetch_q();
             break;
         }
 
         case MOVEtoSR: {
-            if (!get_sreg(SupervisorMode))
-                // TODO: TRAP
+            if (!get_sreg(SupervisorMode)){
+                jump(EV_TRAPV);
                 break;
+            }
             sreg = operand_a_l & di.mask;
             break;
         }
 
         case MOVEUSP: {
-            if (!get_sreg(SupervisorMode))
-                // TODO: TRAP
+            if (!get_sreg(SupervisorMode)){
+                jump(EV_TRAPV);
                 break;
-
+            }
             if (di.d1_b)
                 usp = aregs[di.rx];
              else
@@ -1482,17 +1499,17 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
         }
 
         case ORItoSR: {
-            if (!get_sreg(SupervisorMode))
-                // TODO: TRAP
+            if (!get_sreg(SupervisorMode)){
+                jump(EV_TRAPV);
                 break;
+            }
             sreg |= read_n_fill_prefetch_q();
             break;
         }
 
         case RESET: {
             if (!get_sreg(SupervisorMode)){
-                // TODO: check
-                pc = EV_TRAPV;
+                jump(EV_TRAPV);
                 break;
             }
             fill_bus_read_req(EV_ResetInitialSSP, BRD_SSP_H, WORD);
@@ -1504,8 +1521,7 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
 
         case RTE: {
             if (!get_sreg(SupervisorMode)){
-                // TODO: check
-                pc = EV_TRAPV;
+                jump(EV_TRAPV);
                 break;
             }
             fill_bus_read_req(ssp, BRD_SREG, WORD);
@@ -1517,8 +1533,7 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
 
         case STOP:{
             if (!get_sreg(SupervisorMode)){
-                // TODO: check
-                pc = EV_TRAPV;
+                jump(EV_TRAPV);
                 break;
             }
             sreg = read_n_fill_prefetch_q();
@@ -1532,12 +1547,14 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
 
 M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((((val >> 12) & 0xf) == 0b1100) && (((val >> 4) & 0x1f) == 0b10000)) {
+        unsigned char r =  (unsigned char)((val >> 3) & 0x1);
         return {
             .i = ABCD,
-            .opmode = (unsigned char)((val >> 3) & 0x1), // r/m
             .rx = (unsigned char)((val >> 9) & 0x7),
-            .ry = (unsigned char)(val & 0x7)
-
+            .ry = (unsigned char)(val & 0x7),
+            .opmode = r, // r/m
+            .opsz = BYTE,
+            .read_predec_args = (bool)r,
         };
     }
     if ((((val >> 12) & 0xf) == 0b1101)) {
@@ -2399,30 +2416,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if (val == 0x7c){
-        return {
-            .i = ORItoSR,
-            .opsz = WORD,
-        };
-    }
-
-    if (val == 0x4e70){
-        return {
-            .i = RESET,
-        };
-    }
-
-    if (val == 0x4e73){
-        return {
-            .i = RTE,
-        };
-    }
-
-    if (val == 0x4e72){
-        return {
-            .i = STOP,
-        };
-    }
-
+    if (val == 0x7c)   return {.i = ORItoSR,.opsz = WORD,};
+    if (val == 0x4e70) return {.i = RESET};
+    if (val == 0x4e73) return {.i = RTE};
+    if (val == 0x4e72) return {.i = STOP};
     return {};
 }

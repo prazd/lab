@@ -319,6 +319,17 @@ struct M68K {
         fill_bus_read_req(prefetch_addr, BRDPrefetchQ, WORD);
         prefetch_addr += 2;
     }
+    inline void reset_prefetch_q(){
+        prefetch_q.clear();
+        fill_prefetch_req();
+        fill_prefetch_req();
+    }
+
+    inline void jump(unsigned addr){
+        pc = addr;
+        reset_prefetch_q();
+    }
+
     unsigned char exec_cycles(const DecodedInfo& di);
     unsigned char ea_fetch_cycles(AddressMode am, OperandSize sz);
 
