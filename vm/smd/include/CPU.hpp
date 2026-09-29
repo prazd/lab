@@ -11,12 +11,6 @@ struct M68K {
     // Supervisor stack pointer
     unsigned ssp{};
 
-    // Vector base register
-    unsigned vbr{};
-    // Alternate function code registers
-    unsigned sfc{};
-    unsigned dfc{};
-
     enum ConditionCode: unsigned char {
         CC_CC,CC_CS,CC_EQ,
         CC_GE,CC_GT,CC_HI,CC_LE,
@@ -219,6 +213,7 @@ struct M68K {
         bool read_displacement{};
         bool read_displacement_by_value{};
         bool read_predec_args{}; // todo: check
+        bool read_postinc_args{}; // todo: check
         bool read_prefetch{};
     } di;
 
@@ -245,6 +240,25 @@ struct M68K {
                 fill_bus_read_req(aregs[di.rx]-=2,BRDOperandA2, WORD);
                 fill_bus_read_req(aregs[di.ry]-=2,BRDOperandB1, WORD);
                 fill_bus_read_req(aregs[di.ry]-=2,BRDOperandB2, WORD);
+                break;
+            }
+        }
+    }
+
+
+    inline void fill_post_inc_args(){
+        switch (opsz) {
+            case BYTE:
+            case WORD: {
+                fill_bus_read_req(std::exchange(aregs[di.rx], aregs[di.rx]+opsz), BRDOperandA1, opsz);
+                fill_bus_read_req(std::exchange(aregs[di.ry], aregs[di.ry]+opsz), BRDOperandA1, opsz);
+                break;
+            }
+            case LONG: {
+                fill_bus_read_req(std::exchange(aregs[di.rx], aregs[di.rx]+2), BRDOperandA1, WORD);
+                fill_bus_read_req(std::exchange(aregs[di.rx], aregs[di.rx]+2), BRDOperandA2, WORD);
+                fill_bus_read_req(std::exchange(aregs[di.ry], aregs[di.ry]+2), BRDOperandB1, WORD);
+                fill_bus_read_req(std::exchange(aregs[di.ry], aregs[di.ry]+2), BRDOperandB2, WORD);
                 break;
             }
         }
