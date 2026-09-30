@@ -78,7 +78,7 @@ struct M68K {
         Unknown,
     };
 
-    AddressMode to_adress_mode(unsigned char, bool);
+    static AddressMode to_adress_mode(unsigned char, bool);
 
     enum Instruction {
         ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,ASL,ASR,ANDItoCCR,
@@ -246,6 +246,7 @@ struct M68K {
     }
 
 
+    // TODO: check
     inline void fill_post_inc_args(){
         switch (opsz) {
             case BYTE:

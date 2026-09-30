@@ -122,7 +122,30 @@ unsigned char M68K::exec_cycles(const DecodedInfo& di) {
     auto ea = to_adress_mode(di.effective_address, true);
     switch (di.i) {
         //        #<data>,CCR     check
-        case EORI:
+        case ADD:
+        case SUB: {
+            // TODO: check
+            if (di.opmode && di.opsz == LONG)
+                return (ea == DataRegisterDirectMode || ea == AddressRegisterDirectMode || ea == Immediate) ? 4 : 2;
+            return 0;
+        }
+        case ADDQ:
+        case SUBQ: {
+            return di.opsz == LONG ? 4 : 0;
+        }
+        case SBCD:
+        case ABCD: {
+            return 2;
+        }
+
+        case AND:
+        case OR:{
+            if (di.opsz != LONG) return 0;
+            return (ea == DataRegisterDirectMode || ea == Immediate) ? 4 : 2;
+        }
+
+        case EORItoSR:
+        case EORItoCCR:
         case ORI:
         case ANDI:
         case SUBI:
@@ -207,6 +230,20 @@ unsigned char M68K::exec_cycles(const DecodedInfo& di) {
         case EOR:
         case PEA:
         case MOVEM: return 0;
+
+
+        case ASL:
+        case ASR:
+        case LSL:
+        case LSR:
+        case ROL:
+        case ROR:
+        case ROXL:
+        case ROXR:{
+            // TODO: finish
+            return 0;
+        }
+
     }
 }
 
@@ -581,13 +618,13 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             set_sreg(Negative, res & di.sign_bit);
             set_sreg(Zero,      (res & di.mask) == 0);
             // TODO: check
-            if (di.opmode == 0b000 || di.opmode == 0b001 || di.opmode == 0b010)
+            if (di.opmode)
                 set_sreg(Overflow, ((dregs[di.rx] & di.sign_bit) == (operand_a_l & di.sign_bit)) && ((res & di.sign_bit) != (dregs[di.rx] & di.sign_bit)));
             else
                 set_sreg(Overflow, ((dregs[di.rx] & di.sign_bit) == (operand_a_l & di.sign_bit)) && ((res & di.sign_bit) != (operand_a_l & di.sign_bit)));
             // TODO: check
             dst_value = res & di.mask;
-            if (di.opmode == 0b000 || di.opmode == 0b001 || di.opmode == 0b010) {
+            if (di.opmode) {
                 dst = DSTDn;
                 dst_reg_n = di.rx;
             } else {
@@ -646,13 +683,14 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             break;
         }
         case AND: {
-            unsigned res = (dregs[di.rx] & di.mask) & (operand_a_l & di.mask);
+            unsigned res = ((dregs[di.rx]) & (operand_a_l)) & di.mask;
             set_sreg(Carry,  0);
             set_sreg(Overflow, 0);
             set_sreg(Negative, res & di.sign_bit);
             set_sreg(Zero,      (res & di.mask) == 0);
             dst_value = res & di.mask;
-            if (di.opmode == 0b000 || di.opmode == 0b001 || di.opmode == 0b010) {
+            if (di.opmode) {
+                // TODO: check
                 dst = DSTDn;
                 dst_reg_n = di.rx;
             } else {
@@ -666,6 +704,61 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             sreg |= res;
             break;
         }
+
+        case ANDI:{
+            auto res = ((operand_a_l) & (di.d_l)) & di.mask;
+            set_sreg(Carry,  0);
+            set_sreg(Overflow, 0);
+            set_sreg(Negative, res & di.sign_bit);
+            set_sreg(Zero,      (res & di.mask) == 0);
+            dst_value = res;
+            set_ea_dst();
+            break;
+        }
+
+
+        case ASR: {
+            // TODO: check
+            auto shift = di.d3_b ? dregs[di.d1_b] & 0x3f : (!di.d1_b ? 8 : di.d1_b);
+            unsigned long res = dregs[di.d2_b] & di.mask;
+            bool last_v = 0;
+            bool is_signed = dregs[di.d2_b] & di.sign_bit;
+            for (size_t i = 0; i < shift; ++i){
+                last_v = res & 1;
+                res >>= 1;
+                res |= (is_signed << ((CHAR_BIT * di.opsz)-1));
+            }
+            set_sreg(Extend,  shift ? last_v : get_sreg(Extend));
+            set_sreg(Carry,   shift ? last_v : 0);
+            set_sreg(Negative, res & di.sign_bit);
+            set_sreg(Zero,      (res & di.mask) == 0);
+            dregs[di.d2_b] &= ~di.mask;
+            dregs[di.d2_b] |= res & di.mask;
+            break;
+        }
+
+        case ASL:{
+            // TODO: check
+            auto shift = di.d3_b ? dregs[di.d1_b] & 0x3f : (!di.d1_b ? 8 : di.d1_b);
+            bool v = false;
+            unsigned long res = dregs[di.d2_b] & di.mask;
+            bool is_signed = dregs[di.d2_b] & di.sign_bit;
+            bool last_v{};
+            for (size_t i = 0; i < shift; ++i){
+                last_v = res & di.sign_bit;
+                res <<= 1;
+                if (((bool)(res & di.sign_bit)) != is_signed) v = true;
+            }
+            set_sreg(Extend,  shift ? last_v : get_sreg(Extend));
+            set_sreg(Carry,   shift ? last_v : 0);
+            set_sreg(Negative, res & di.sign_bit);
+            set_sreg(Overflow, v);
+            set_sreg(Zero,      (res & di.mask) == 0);
+            dregs[di.d2_b] &= ~di.mask;
+            dregs[di.d2_b] |= res & di.mask;
+            break;
+        }
+
         case BCC: {
             pc += is_cond((ConditionCode)di.d1_b) ? (di.d_l & di.mask) : 0;
             prefetch_q.clear();
@@ -1299,7 +1392,7 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
         case SUB: {
             // TODO: check
             unsigned long res{};
-            if (di.opmode == 0x0 || di.opmode == 0x1 || di.opmode == 0x2){
+            if (di.opmode){
                 res = (dregs[di.d1_b] & di.mask) - (operand_a_l & di.mask);
                 set_sreg(Extend, (operand_a_l & di.mask) > (dregs[di.d1_b] & di.mask));
                 set_sreg(Carry,  (operand_a_l & di.mask) > (dregs[di.d1_b] & di.mask));
@@ -1314,7 +1407,7 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             set_sreg(Zero,      (res & di.mask) == 0);
 
             res &= di.mask;
-            if (di.opmode == 0x0 || di.opmode == 0x1 || di.opmode == 0x2){
+            if (di.opmode){
                 dregs[di.d1_b] &= ~di.mask;
                 dregs[di.d1_b] |= res;
             } else {
@@ -1499,7 +1592,6 @@ void M68K::exec(DecodedInfo di, BUS& bus) {
             break;
         }
 
-
     }
 }
 
@@ -1533,7 +1625,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = sz,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
-            .opmode = opmode,
+            .opmode = (opmode == 0b000 || opmode == 0b001 || opmode == 0b010),
         };
     }
 
@@ -1580,9 +1672,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = AND,
             .rx = rx,
-            .opmode = opmode,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .opmode = (opmode == 0b000 || opmode == 0b001 || opmode == 0b010),
         };
     }
 
@@ -1593,6 +1685,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d1_b = sz,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .opsz = (OperandSize)(1 << sz),
+            .read_displacement = true,
         };
     }
 
@@ -1600,11 +1694,13 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char sz = (val >> 6) & 0x3;
         unsigned char count_reg = (val >> 9) & 0x7;
         unsigned char i_r = (val >> 5) & 1;
+        unsigned char reg = (val & 0x7);
         return {
             .i = (val & 0x100) ? ASL : ASR,
             .d1_b = count_reg,
-            .d2_b = sz,
+            .d2_b = reg,
             .d3_b = i_r,
+            .opsz = (OperandSize)(1 << sz),
         };
     }
 
@@ -2225,7 +2321,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i =  SUB,
             .d1_b = reg,
-            .d2_b = opmode,
+            .d2_b = (opmode == 0x0 || opmode == 0x1 || opmode == 0x2),
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
