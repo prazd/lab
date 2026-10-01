@@ -78,7 +78,7 @@ struct M68K {
         Unknown,
     };
 
-    static AddressMode to_adress_mode(unsigned char, bool);
+    static AddressMode to_address_mode(unsigned char, bool);
 
     enum Instruction {
         ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,ASL,ASR,ANDItoCCR,
@@ -148,6 +148,7 @@ struct M68K {
 
     enum InternalOp: unsigned char {
         FetchDecode,
+        ReadEA,
         BusReadReq,
         BusReadWait,
         BusWriteReq,
@@ -218,12 +219,13 @@ struct M68K {
     } di;
 
     inline void read_displacement() {
-        di.d_l = read_n_fill_prefetch_q();
+        // TODO: check
+        di.d_l = read_prefetch_q();
         if (di.opsz == BYTE){
             di.d_l &= 0xff;
         } else if (di.opsz == LONG){
             di.d_l <<= 16;
-            di.d_l |= read_n_fill_prefetch_q();
+            di.d_l |= read_prefetch_q();
         }
     }
 
@@ -266,14 +268,14 @@ struct M68K {
     }
 
     inline void read_displacement_by_value() {
-        di.d_l = read_n_fill_prefetch_q();
+        di.d_l = read_prefetch_q();
         if (di.d_l & 0xff) {
             di.d_l &= 0xff;
             opsz = BYTE;
         }else if (di.d_l) {
             opsz = WORD;
         } else if (!di.d_l) {
-            di.d_l |= (read_n_fill_prefetch_q() << 16);
+            di.d_l |= (read_prefetch_q() << 16);
             opsz = LONG;
         }
     }
@@ -330,6 +332,12 @@ struct M68K {
         fill_prefetch_req();
         return v;
     }
+    inline unsigned short read_prefetch_q(){
+        auto v = prefetch_q.front();
+        prefetch_q.pop_front();
+        return v;
+    }
+
     inline void fill_prefetch_req(){
         fill_bus_read_req(prefetch_addr, BRDPrefetchQ, WORD);
         prefetch_addr += 2;
