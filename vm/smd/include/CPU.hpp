@@ -61,6 +61,7 @@ struct M68K {
     enum OperandSize: unsigned char {BYTE=0x1,WORD=0x2,LONG=0x4};
 
     OperandSize opsz = BYTE;
+    size_t exec_cycles = 0;
 
     enum AddressMode: unsigned char{
         DataRegisterDirectMode,
@@ -147,15 +148,13 @@ struct M68K {
     };
 
     enum InternalOp: unsigned char {
-        FetchDecode,
         ReadEA,
         BusReadReq,
         BusReadWait,
         BusWriteReq,
         BusWriteWait,
-
-        // Effective address
-        Nop,
+        INOP,
+        Execute,
     };
 
 // TODO:
@@ -165,11 +164,13 @@ struct M68K {
     RegType ea_reg_type;
     unsigned char ea_reg_n{};
 
+    void ea_address_calc(unsigned char);
     void ea_fill(unsigned char);
     void ea_write(unsigned char, unsigned val);
     unsigned to_ea_address(unsigned char);
 
     void fill_bus_read_req(unsigned, BusReadDest, OperandSize);
+    void fill_bus_read_req_front(unsigned, BusReadDest, OperandSize);
     void fill_bus_read_req_reg(unsigned, BusReadDest, OperandSize, unsigned char);
     void fill_bus_write_req(unsigned, unsigned, OperandSize);
 
@@ -190,9 +191,16 @@ struct M68K {
         BUS::Mode bus_mode{};
         unsigned char reg_n{};
         OperandSize opsz{};
+        bool parallel_run{};
+        Instruction i{};
     };
 
     SimpleDequeT<IntOperationReq, 20> iops_q;
+
+    inline void iop_push_nops(size_t n){
+        for (size_t i = 0; i < n; ++i)
+            iops_q.push_back({.iop = INOP});
+    }
 
     struct DecodedInfo {
         Instruction i;
@@ -205,6 +213,7 @@ struct M68K {
         unsigned prefetched{};
         unsigned char effective_address{};
         bool read_ea{};
+        bool calc_ea{};
         unsigned immediate{}; // TODO: update
         unsigned char opmode{};
         OperandSize opsz{};
@@ -342,8 +351,13 @@ struct M68K {
         fill_bus_read_req(prefetch_addr, BRDPrefetchQ, WORD);
         prefetch_addr += 2;
     }
+    inline void fill_prefetch_req_front(){
+        fill_bus_read_req_front(prefetch_addr, BRDPrefetchQ, WORD);
+        prefetch_addr += 2;
+    }
     inline void reset_prefetch_q(){
         prefetch_q.clear();
+        prefetch_addr = pc;
         fill_prefetch_req();
         fill_prefetch_req();
     }
@@ -353,7 +367,7 @@ struct M68K {
         reset_prefetch_q();
     }
 
-    unsigned char exec_cycles(const DecodedInfo& di);
+    unsigned char calc_exec_cycles(const DecodedInfo& di);
     unsigned char ea_fetch_cycles(AddressMode am, OperandSize sz);
 
     void fill_exec(Instruction);

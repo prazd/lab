@@ -93,6 +93,10 @@ struct SimpleDequeT{
         return arr[cur_sz-1];
     }
 
+    bool empty() const {
+        return !cur_sz;
+    }
+
     void clear(){cur_sz = 0;}
 
     auto begin(){
