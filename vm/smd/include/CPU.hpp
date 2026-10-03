@@ -71,8 +71,8 @@ struct M68K {
         AddressRegisterIndirectPreDecMode,
         AddressRegisterIndirectDisplacementMode,
         AddressRegisterIndirectIndexMode,
-        ProgramCounterInderectDisplacementMode,
-        ProgramCounterInderectIndexMode,
+        ProgramCounterIndirectDisplacementMode,
+        ProgramCounterIndirectIndexMode,
         AbsoluteShort,
         AbsoluteLong,
         Immediate,
@@ -86,9 +86,6 @@ struct M68K {
         BCC,BCHG,BCLR,BRA,BSET,BSR,BTST,
         CHK,CLR,CMP,CMPA,CMPI,CMPM,
         DBcc, DIVS,
-//        TODO: check
-//        DIVSL ,
-//        DIVUL
         DIVU,
         EOR,EORI,EORItoCCR,EXG,EXT,
         ILLEGAL,
@@ -96,17 +93,14 @@ struct M68K {
         JMP,JSR,
         LEA,LINK,LSL,LSR,
 
-        MOVE,MOVEA,MOVEtoCCR,MOVEfromSR,
-
-        MOVEM,MOVEP,MOVEQ,MULS,MULU,
+        MOVE,MOVEA,MOVEtoCCR,MOVEfromSR,MOVEM,MOVEP,MOVEQ,MULS,MULU,
         NBCD,NEG,NEGX,NOP,NOT,
         OR,ORI,ORItoCCR,
         PEA,
         ROL,ROR,ROXL,ROXR,RTR,RTS,
 
-        SBCD,Scc,SUB,SUBA,SUBI,SUBQ,SUBX,
-
-        SWAP,TAS,TRAP,TRAPV,TST,
+        SBCD,Scc,SUB,SUBA,SUBI,SUBQ,SUBX,SWAP,
+        TAS,TRAP,TRAPV,TST,
         UNLK,
 
 //  Supervisor
@@ -120,6 +114,26 @@ struct M68K {
         STOP,
     };
 
+    static constexpr std::string_view instructions_str[] = {
+            "ABCD","ADD","ADDA","ADDI","ADDQ","ADDX","AND","ANDI","ASL","ASR","ANDItoCCR",
+            "BCC","BCHG","BCLR","BRA","BSET","BSR","BTST",
+            "CHK","CLR","CMP","CMPA","CMPI","CMPM",
+            "DBcc", "DIVS", "DIVU",
+            "EOR","EORI","EORItoCCR","EXG","EXT",
+            "ILLEGAL",
+            "JMP", "JSR",
+            "LEA", "LINK", "LSL", "LSR",
+            "MOVE", "MOVEA","MOVEtoCCR", "MOVEfromSR","MOVEM","MOVEP","MOVEQ","MULS","MULU",
+            "NBCD","NEG","NEGX","NOP","NOT",
+            "OR","ORI","ORItoCCR",
+            "PEA",
+
+            "ROL","ROR","ROXL","ROXR","RTR","RTS",
+            "SBCD","Scc","SUB","SUBA","SUBI","SUBQ","SUBX","SWAP",
+            "TAS","TRAP","TRAPV","TST",
+            "UNLK"
+    };
+
     enum RegType {
         Dn,An
     };
@@ -129,6 +143,7 @@ struct M68K {
         BRDOperandA2,
         BRDOperandB1,
         BRDOperandB2,
+
         BRDPrefetchQ,
         // TODO: check L/H
         BRDDataRegisterL,
@@ -214,17 +229,18 @@ struct M68K {
         unsigned char effective_address{};
         bool read_ea{};
         bool calc_ea{};
-        unsigned immediate{}; // TODO: update
         unsigned char opmode{};
         OperandSize opsz{};
         unsigned sign_bit{};
         unsigned mask{};
+
 
         bool read_displacement{};
         bool read_displacement_by_value{};
         bool read_predec_args{}; // todo: check
         bool read_postinc_args{}; // todo: check
         bool read_prefetch{};
+        unsigned char i_sz{};
     } di;
 
     inline void read_displacement() {
@@ -298,6 +314,18 @@ struct M68K {
         }
     };
 
+    static inline unsigned char ea_i_sz(unsigned char val){
+        switch (to_address_mode(val, true)) {
+            case AddressRegisterIndirectDisplacementMode:
+            case AddressRegisterIndirectIndexMode:
+            case ProgramCounterIndirectDisplacementMode:
+            case ProgramCounterIndirectIndexMode:
+            case AbsoluteShort: return 2;
+            case AbsoluteLong: return 4;
+            default: return 0;
+        }
+    }
+
     unsigned short absolute_l_w1{};
 
     enum Dest{
@@ -312,8 +340,6 @@ struct M68K {
     unsigned short operand_a_w2{};
     unsigned short operand_b_w1{};
     unsigned short operand_b_w2{};
-    unsigned short res_w1{};
-    unsigned short res_w2{};
 
     unsigned operand_a_l{};
     unsigned operand_b_l{};
@@ -322,11 +348,6 @@ struct M68K {
     inline void operands_b_to_long(){operand_b_l = (operand_b_w2 << 16) | operand_b_w1;}
 
     AddressMode am{};
-    unsigned effective_address_value{};
-
-    unsigned bus_address{};
-    unsigned short bus_data{};
-    BUS::Mode bus_mode{};
 
     static DecodedInfo decode(unsigned short);
 
@@ -372,5 +393,7 @@ struct M68K {
 
     void fill_exec(Instruction);
     void set_ea_dst();
+
+
 };
 #endif

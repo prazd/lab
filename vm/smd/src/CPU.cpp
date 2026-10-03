@@ -34,11 +34,11 @@ unsigned char M68K::ea_fetch_cycles(M68K::AddressMode ea, M68K::OperandSize sz) 
         case AddressRegisterIndirectPreDecMode: {
             return sz == LONG ? 10 : 6;
         }
-        case ProgramCounterInderectDisplacementMode:
+        case ProgramCounterIndirectDisplacementMode:
         case AddressRegisterIndirectDisplacementMode: {
             return  sz == LONG ? 12 : 8;
         }
-        case ProgramCounterInderectIndexMode:
+        case ProgramCounterIndirectIndexMode:
         case AddressRegisterIndirectIndexMode: {
             return  sz == LONG ? 14 : 10;
         }
@@ -324,13 +324,13 @@ void M68K::ea_write(unsigned char ea_val, unsigned val) {
             fill_bus_write_req(addr, val, opsz);
             break;
         }
-        case ProgramCounterInderectDisplacementMode: {
+        case ProgramCounterIndirectDisplacementMode: {
             auto pv = read_prefetch_q();
             auto addr = pc + sign_extend_to_l(pv);
             fill_bus_write_req(addr, val, opsz);
             break;
         }
-        case ProgramCounterInderectIndexMode: {
+        case ProgramCounterIndirectIndexMode: {
             auto pv = read_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
@@ -373,12 +373,12 @@ unsigned M68K::to_ea_address(unsigned char ea_val) {
                         sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
             return addr;
         }
-        case ProgramCounterInderectDisplacementMode: {
+        case ProgramCounterIndirectDisplacementMode: {
             auto pv = read_prefetch_q();
             auto addr = pc + sign_extend_to_l(pv);
             return addr;
         }
-        case ProgramCounterInderectIndexMode: {
+        case ProgramCounterIndirectIndexMode: {
             auto pv = read_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
@@ -430,13 +430,13 @@ void M68K::ea_address_calc(unsigned char val){
             iops_q.push_back({.iop = INOP}); // calc time
             break;
         }
-        case ProgramCounterInderectDisplacementMode: {
+        case ProgramCounterIndirectDisplacementMode: {
             // TODO: check
             auto pv = read_n_fill_prefetch_q();
             ea_address = pc + sign_extend_to_l(pv);
             break;
         }
-        case ProgramCounterInderectIndexMode: {
+        case ProgramCounterIndirectIndexMode: {
             auto pv = read_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
@@ -525,7 +525,7 @@ void M68K::tick(BUS& bus){
         }
         case BusReadReq: {
             // TODO: check bus_mode
-            bus.m68k_r_req(iopv.address, bus_mode);
+            bus.m68k_r_req(iopv.address, iopv.bus_mode);
             iops_q.pop_front();
             break;
         }
@@ -613,11 +613,14 @@ void M68K::tick(BUS& bus){
         case INOP: {iops_q.pop_front(); break;}
         case Execute:{exec(di, bus); break;}
     }
-//
-//    if (iopv.parallel_run){
-//        exec(di, bus);
-//    }
+
 }
+
+// read opcode (prefetch queue)
+// read dst src
+// prefetch if need
+//
+
 
 M68K::AddressMode M68K::to_address_mode(unsigned char val, bool mr){
     unsigned char mode_field = mr ? (val >> 3) & 0x7 : val & 0x7;
@@ -631,8 +634,8 @@ M68K::AddressMode M68K::to_address_mode(unsigned char val, bool mr){
     if (mode_field == 0b110) return AddressRegisterIndirectIndexMode;
     if (mode_field == 0b111 && reg_field == 0b000) return AbsoluteShort;
     if (mode_field == 0b111 && reg_field == 0b001) return AbsoluteLong;
-    if (mode_field == 0b111 && reg_field == 0b010) return ProgramCounterInderectDisplacementMode;
-    if (mode_field == 0b111 && reg_field == 0b011) return ProgramCounterInderectIndexMode;
+    if (mode_field == 0b111 && reg_field == 0b010) return ProgramCounterIndirectDisplacementMode;
+    if (mode_field == 0b111 && reg_field == 0b011) return ProgramCounterIndirectIndexMode;
     if (mode_field == 0b111 && reg_field == 0b100) return Immediate;
     return Unknown;
 }
@@ -1704,6 +1707,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opmode = r, // r/m
             .opsz = BYTE,
             .read_predec_args = (bool)r,
+            .i_sz = 2
         };
     }
     if ((((val >> 12) & 0xf) == 0b1101)) {
@@ -1725,6 +1729,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = (opmode == 0b000 || opmode == 0b001 || opmode == 0b010),
+            .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f)),
         };
     }
 
@@ -1732,9 +1737,12 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char sz = (val >> 6) & 0x3;
         return {
             .i = ADDI,
-            .d1_b = sz,
             .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = (OperandSize)(1 << sz),
             .read_ea = true,
+            .read_displacement = true,
+            // TODO: update imm + ea logic
+            .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f) + (1 << sz)),
         };
     }
 
@@ -1744,9 +1752,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = ADDQ,
             .d1_b = data,
-            .d2_b = sz,
+            .opsz = (OperandSize)(1 << sz),
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f)),
         };
     }
 
@@ -1762,6 +1771,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d1_b = rm,
             .opsz = (OperandSize)(1 << sz),
             .read_predec_args = (bool)rm,
+            .i_sz = 2,
         };
     }
 
@@ -1774,6 +1784,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = (opmode == 0b000 || opmode == 0b001 || opmode == 0b010),
+            .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f)),
         };
     }
 
@@ -1786,26 +1797,37 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .read_ea = true,
             .opsz = (OperandSize)(1 << sz),
             .read_displacement = true,
+            .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f) + (1 << sz)),
         };
     }
 
+    if (val == 0x23c) {
+        return {
+            .i = ANDItoCCR,
+            .opsz = BYTE,
+            .read_displacement = true,
+            .i_sz = 4,
+        };
+    }
+
+
+    // TODO: ASL/ASR EA version
     if ((val >> 12) == 0xe && !(val & 0x18)){
         unsigned char sz = (val >> 6) & 0x3;
         unsigned char count_reg = (val >> 9) & 0x7;
         unsigned char i_r = (val >> 5) & 1;
         unsigned char reg = (val & 0x7);
+
         return {
             .i = (val & 0x100) ? ASL : ASR,
             .d1_b = count_reg,
             .d2_b = reg,
             .d3_b = i_r,
             .opsz = (OperandSize)(1 << sz),
+            .i_sz = 2,
         };
     }
 
-    if (val == 0x23c) {
-        return {.i = ANDItoCCR};
-    }
 
     if (val >> 12 == 0x6) {
         unsigned char cond = (val >> 8) & 0xf;
@@ -1816,9 +1838,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d_l = d8,
             .opsz = (val & 0xff) ? BYTE : WORD,
             .read_displacement = !d8,
+            .i_sz = (unsigned char)(2 + ((val & 0xff) ? BYTE : WORD)),
         };
     }
 
+    // TODO: check
     if ((val >> 6) == 0x21){
         return {
             .i = BCHG,
@@ -1827,6 +1851,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opmode = 1,
             .opsz = BYTE,
             .read_displacement = true,
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f) + 2),
         };
     }
 
@@ -1838,6 +1863,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = 0,
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f)),
         };
     }
 
@@ -1855,11 +1881,14 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if (val == 0x22){
         unsigned char reg = (val >> 9) & 0x7;
         return {
-            .i =  BCLR,
+            .i = BCLR,
             .d1_b = reg,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = 1,
+            .opsz = BYTE, // TODO: check
+            .read_displacement = true,
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f) + 2),
         };
     }
 
@@ -1870,22 +1899,40 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = BRA,
             .opsz = opsz,
             .d_l = displacement,
+            .i_sz = (unsigned char)(2 + (opsz == BYTE ? 0 : opsz)),
         };
     }
 
+    // TODO: check instruction
     if (!(val >> 12) && ((val >> 6) & 0x7) == 0x7) {
         unsigned char reg = (val >> 9) & 0x7;
         return {
             .i = BSET,
             .d1_b = reg,
             .effective_address = (unsigned char)(val & 0x3f),
+            .opmode = 0,
             .read_ea = true,
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f)),
+        };
+    }
+
+    // TODO: check
+    if ((val >> 6) == 0x23) {
+        unsigned char reg = (val >> 9) & 0x7;
+        return {
+            .i = BSET,
+            .d1_b = reg,
+            .effective_address = (unsigned char)(val & 0x3f),
+            .opsz = BYTE,
+            .read_ea = true,
+            .read_displacement = true,
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f) + 2),
         };
     }
 
     if ((val >> 8) == 0b0110'0001) {
         unsigned displacement = 0;
-        OperandSize opsz;
+        OperandSize opsz{};
         if (val & 0xff){
             displacement = val & 0xff;
             opsz = BYTE;
@@ -1896,9 +1943,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = BSR,
             .d_l = displacement,
             .opsz = opsz,
-            .effective_address = (unsigned char)(val & 0x3f),
-            .read_ea = true,
             .read_displacement = opsz != BYTE,
+            .i_sz = (unsigned char)(2 + (opsz == BYTE ? 0 : opsz)),
         };
     }
 
@@ -1909,6 +1955,21 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d1_b = reg,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f)),
+        };
+    }
+
+    // TODO: check instruction
+    if ((val >> 6) == 0x20) {
+        unsigned char reg = (val >> 9) & 0x7;
+        return {
+            .i = BTST,
+            .d1_b = reg,
+            .effective_address = (unsigned char)(val & 0x3f),
+            .read_ea = true,
+            .read_displacement = true,
+            .opsz = BYTE,
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f) + 2),
         };
     }
 
@@ -1921,6 +1982,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d2_b = sz,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f)),
         };
     }
 
@@ -1932,6 +1994,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d1_b = sz,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f)),
         };
     }
 
@@ -1945,16 +2008,21 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d2_b = opmode,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f)),
         };
     }
 
     if ((val >> 8) == 0xc) {
         unsigned char sz = (val >> 6) & 0x3;
+        auto opsz = (OperandSize)(1 << sz);
         return {
             .i = CMPI,
             .d1_b = sz,
+            .opsz = opsz,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .read_displacement = true,
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f) + (opsz == LONG ? 4 : 2)),
         };
     }
 
@@ -1969,6 +2037,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .ry = ry,
             .opsz = (OperandSize)(1 << sz),
             .read_postinc_args = true,
+            .i_sz = 2,
         };
     }
 
@@ -1980,6 +2049,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d1_b = cond,
             .d2_b = reg,
             .read_displacement = true,
+            .i_sz = 4,
         };
     }
 
@@ -1991,6 +2061,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d1_b = reg,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = 2, // TODO: check
         };
     }
 
@@ -2001,9 +2072,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d1_b = reg,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = 2, // TODO: check
         };
     }
-
 
     if ((val >> 12) == 0xb) {
         unsigned char reg = (val >> 9) & 0x7;
