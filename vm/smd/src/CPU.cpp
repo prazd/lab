@@ -2076,6 +2076,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
+
     if ((val >> 12) == 0xb) {
         unsigned char reg = (val >> 9) & 0x7;
         unsigned char opmode = (val >> 6) & 0x7;
@@ -2085,11 +2086,14 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opmode = opmode,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f)))
         };
     }
 
+    // TODO: check
     if ((val >> 8) == 0xa) {
         unsigned char sz = (val >> 6) & 0x3;
+        auto opsz = (OperandSize)(1 << sz);
         return {
             .i = EORI,
             .d1_b = sz,
@@ -2097,6 +2101,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .read_displacement = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f) + (opsz == LONG ? 4 : 2))),
         };
     }
 
@@ -2104,6 +2109,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = EORItoCCR,
             .opsz = BYTE,
+            .i_sz = 4,
         };
     }
 
@@ -2116,6 +2122,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .rx = rx,
             .ry = ry,
             .opmode = opmode,
+            .i_sz = 2,
         };
     }
 
@@ -2126,12 +2133,14 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = EXT,
             .d1_b = reg,
             .opmode = opmode,
+            .i_sz = 2,
         };
     }
 
     if (val == 0x4afc) {
         return {
             .i = ILLEGAL,
+            .i_sz = 2,
         };
     }
 
@@ -2140,6 +2149,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = JMP,
             .d1_b = (unsigned char)(val & 0x3f), // EA
             .calc_ea = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2148,6 +2158,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = JSR,
             .d1_b = (unsigned char)(val & 0x3f), // EA
             .calc_ea = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
     
@@ -2157,6 +2168,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = LEA,
             .d1_b = reg,
             .d2_b = (unsigned char)(val & 0x3f), // EA
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2167,6 +2179,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d1_b = reg,
             .read_displacement = true,
             .opsz = WORD,
+            .i_sz = 4, // TODO: check
         };
     }
 
@@ -2181,6 +2194,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d2_b = i_r,
             .d3_b = count_reg,
             .opsz = (OperandSize)(1 << sz),
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2200,6 +2214,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f) + ea_i_sz(((val >> 6) & 0x3f)))),
         };
     }
 
@@ -2218,6 +2233,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2228,6 +2244,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = WORD,
+            .i_sz = 2,
         };
     }
 
@@ -2236,11 +2253,13 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = MOVEfromSR,
             .d1_b = (unsigned char)(val & 0x3f),
             .opsz = WORD,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
 
 
+    // TODO: check
     if ((val >> 11) == 0x9 && ((val >> 7) & 0x7) == 0x1) {
         unsigned char sz = (val >> 6) & 0x1;
         unsigned char dr = (val >> 10) & 0x1;
@@ -2249,19 +2268,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = MOVEM,
             .d1_b = dr,
             .d2_b = (unsigned char)(val & 0x3f),
+            .opsz = opsz,
             .read_prefetch = true,
-        };
-    }
-
-    if ((val >> 11) == 0x9 && ((val >> 7) & 0x7) == 0x1) {
-        unsigned char sz = (val >> 6) & 0x1;
-        unsigned char dr = (val >> 10) & 0x1;
-        return {
-            .i = MOVEM,
-            .d1_b = sz,
-            .d2_b = dr,
-            .effective_address = (unsigned char)(val & 0x3f),
-            .read_ea = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f) + 2)),
         };
     }
 
@@ -2274,6 +2283,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d1_b = data_reg,
             .d2_b = opmode,
             .d3_b = address_reg,
+            .i_sz = 4,
         };
     }
 
@@ -2284,9 +2294,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = MOVEQ,
             .d1_b = reg,
             .d2_b = data,
+            .i_sz = 2,
         };
     }
 
+    // TODO: check LONG
     if ((val >> 12) == 0xc && ((val >> 6) & 0x7) == 0x7) {
         unsigned char reg = (val >> 9) & 0x7;
         return {
@@ -2295,7 +2307,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = WORD,
-
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2307,18 +2319,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = WORD,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
-    if ((val >> 12) == 0xc && ((val >> 6) & 0x7) == 0x3) {
-        unsigned char reg = (val >> 9) & 0x7;
-        return {
-            .i = MULU,
-            .d1_b = reg,
-            .effective_address = (unsigned char)(val & 0x3f),
-            .read_ea = true,
-        };
-    }
 
     if ((val >> 6) == 0x120) {
         return {
@@ -2327,6 +2331,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = BYTE,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2337,6 +2342,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = (OperandSize)(1 << sz),
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2347,12 +2353,14 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .opsz = (OperandSize)(1 << sz),
             .read_ea = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
     if (val == 0x4e71) {
         return {
             .i = NOP,
+            .i_sz = 2,
         };
     }
 
@@ -2363,6 +2371,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = (OperandSize)(1 << sz),
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
     
@@ -2384,16 +2393,20 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = opsz,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
     if (!(val >> 8)) {
         unsigned char sz = (val >> 6) & 0x3;
+        auto opsz = (OperandSize)(1 << sz);
         return {
             .i = ORI,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .opsz = opsz,
             .read_displacement_by_value = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f) + (opsz == LONG ? 4 : 2))),
         };
     }
 
@@ -2402,6 +2415,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = ORItoCCR,
             .read_displacement = true,
             .opsz = BYTE,
+            .i_sz = 4,
         };
     }
 
@@ -2411,9 +2425,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = PEA,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
+    // TODO: EA version
     if ((val >> 12) == 0xe && ((val >> 3) & 0x3) == 0x3) {
         unsigned char count_reg = (val >> 9) & 0x7;
         unsigned char sz = (val >> 6) & 0x3;
@@ -2425,10 +2441,12 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d2_b = i_r,
             .d3_b = d_r,
             .opsz = (OperandSize)(1 << sz),
+            .i_sz = 2,
         };
     }
 
     // TODO: check
+    // TODO: EA version
     if ((val >> 12) == 0xe && ((val >> 3) & 0x3) == 0x2) {
         unsigned char count_reg = (val >> 9) & 0x7;
         unsigned char sz = (val >> 6) & 0x3;
@@ -2440,18 +2458,21 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d2_b = i_r,
             .d3_b = d_r,
             .opsz = (OperandSize)(1 << sz),
+            .i_sz = 2,
         };
     }
 
     if (val == 0x4e77) {
         return {
             .i = RTR,
+            .i_sz = 2,
         };
     }
 
     if (val == 0x4e75) {
         return {
             .i = RTS,
+            .i_sz = 2,
         };
     }
 
@@ -2466,6 +2487,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opmode = rm,
             .opsz = BYTE,
             .read_predec_args = true,
+            .i_sz = 2,
         };
     }
 
@@ -2477,6 +2499,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = BYTE,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2498,6 +2521,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2517,18 +2541,21 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
 
     if ((val >> 8) == 0x4) {
         unsigned char sz = (val >> 6) & 0x3;
+        auto opsz = (OperandSize)(1 << sz);
         return {
             .i = SUBI,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .opsz = opsz,
             .read_displacement = true,
-            .opsz = (OperandSize)(1 << sz),
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f) + (opsz == LONG ? 4 : 2))),
         };
     }
 
@@ -2541,6 +2568,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .d2_b = sz,
             .effective_address = (unsigned char)(val & 0x3f),
             .opsz = (OperandSize)(1 << sz),
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2557,6 +2585,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opmode = rm,
             .read_predec_args = !!rm,
             .opsz = (OperandSize)(1 << sz),
+            .i_sz = 2,
         };
     }
 
@@ -2566,6 +2595,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = SWAP,
             .d1_b = reg,
             .opsz = WORD,
+            .i_sz = 2,
         };
     }
 
@@ -2575,6 +2605,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = TAS,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2583,12 +2614,14 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = TRAP,
             .d1_b = vec,
+            .i_sz = 2,
         };
     }
 
     if (val == 0x4e76) {
         return {
             .i = TRAPV,
+            .i_sz = 2,
         };
     }
 
@@ -2599,6 +2632,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = TST,
             .effective_address = (unsigned char)(val & 0x3f),
             .opsz = (OperandSize)(1 << sz),
+            .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f))),
         };
     }
 
@@ -2607,6 +2641,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = UNLK,
             .d1_b = reg,
+            .i_sz = 2,
         };
     }
 
@@ -2614,6 +2649,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = ANDItoSR,
             .opsz = WORD,
+            .i_sz = 4,
         };
     }
 
@@ -2621,6 +2657,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = EORItoSR,
             .opsz = WORD,
+            .i_sz = 4,
         };
     }
 
@@ -2630,6 +2667,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = WORD,
             .effective_address = (unsigned char)(val & 0x3f),
             .read_ea = true,
+            .i_sz = 2,
         };
     }
 
@@ -2640,12 +2678,13 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .rx = (unsigned char)(val & 0x7),
             .d1_b = dr,
             .opsz = LONG,
+            .i_sz = 2,
         };
     }
 
-    if (val == 0x7c)   return {.i = ORItoSR,.opsz = WORD,};
-    if (val == 0x4e70) return {.i = RESET};
-    if (val == 0x4e73) return {.i = RTE};
-    if (val == 0x4e72) return {.i = STOP};
+    if (val == 0x7c)  return {.i = ORItoSR,.opsz = WORD,.i_sz = 4};
+    if (val == 0x4e70) return {.i = RESET, .i_sz = 2};
+    if (val == 0x4e73) return {.i = RTE, .i_sz = 2};
+    if (val == 0x4e72) return {.i = STOP, .i_sz = 4};
     return {};
 }
