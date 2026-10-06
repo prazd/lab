@@ -1,6 +1,16 @@
 #ifndef SMD_SIMPLE_HPP
 #define SMD_SIMPLE_HPP
 
+template <size_t sz>
+struct SmallString {
+    char buf[sz]{};
+    auto begin(){return buf;}
+    auto end(){return buf + sz;}
+    std::string_view to_sv() {
+        return std::string_view(buf, sz);
+    }
+};
+
 template <std::integral T>
 size_t popcount(T val){
     size_t n = 0;

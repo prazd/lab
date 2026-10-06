@@ -134,6 +134,15 @@ struct M68K {
             "UNLK"
     };
 
+    static constexpr Instruction unsized_instructions[] = {
+            STOP,RTE,RESET,UNLK,TRAP,TRAPV,RTR,RTS,
+            NOP,ILLEGAL,
+    };
+
+    static constexpr std::string_view opsz_str[] = {
+           "","BYTE","WORD","","LONG",
+    };
+
     enum RegType {
         Dn,An
     };
@@ -172,7 +181,15 @@ struct M68K {
         Execute,
     };
 
-// TODO:
+    enum OperandType: unsigned char {
+        OT_EA,
+        OT_IMM,
+        OT_DREG,
+        OT_AREG,
+        OT_CCR,
+        OT_EMPTY,
+        OT_LABEL, // TODO: check
+    };
 
     unsigned ea_address{};
     AddressMode ea_mode;
@@ -241,6 +258,8 @@ struct M68K {
         bool read_postinc_args{}; // todo: check
         bool read_prefetch{};
         unsigned char i_sz{};
+        OperandType src_type{};
+        OperandType dst_type{};
     } di;
 
     inline void read_displacement() {
@@ -394,6 +413,6 @@ struct M68K {
     void fill_exec(Instruction);
     void set_ea_dst();
 
-
+    static SmallString<32> disassemble(const DecodedInfo& di, unsigned pc, unsigned char* mem);
 };
 #endif
