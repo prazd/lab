@@ -97,7 +97,7 @@ static int __init m_init(void){
     phys_addr_t res_pa = ((pt_s.next_pa & PAGE_MASK));
     printk(KERN_INFO "RES+OFFSET:%llx", (res_pa) | (var_va & 0xfff));
 
-    unsigned long* res_va = (unsigned long*)memremap(res_pa, PAGE_MASK, MEMREMAP_WB);
+    unsigned long* res_va = (unsigned long*)memremap(res_pa & 0xffffffffff000, PAGE_SIZE, MEMREMAP_WB);
     printk(KERN_INFO "VAR VALUE:%lu", var);
     printk(KERN_INFO "PAGE WALK VAR VALUE:%lu", *(unsigned long*)(((unsigned long)res_va) | (var_va & 0xfff)));
 
