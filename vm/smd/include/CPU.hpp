@@ -182,13 +182,16 @@ struct M68K {
     };
 
     enum OperandType: unsigned char {
+        OT_EMPTY,
         OT_EA,
         OT_IMM,
         OT_DREG,
         OT_AREG,
         OT_CCR,
-        OT_EMPTY,
+        OT_SR,
+        OT_USP,
         OT_LABEL, // TODO: check
+        OT_LIST, // TODO: check
     };
 
     unsigned ea_address{};
@@ -370,7 +373,7 @@ struct M68K {
 
     static DecodedInfo decode(unsigned short);
 
-    void exec(DecodedInfo di, BUS& bus);
+    void exec(const DecodedInfo& di, BUS& bus);
     void tick(BUS& bus);
 
     unsigned prefetch_addr{};
