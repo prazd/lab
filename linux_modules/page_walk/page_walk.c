@@ -13,7 +13,6 @@
 
 
 typedef struct {
-    void* base_va;
     phys_addr_t next_pa;
     int err;
 } PtStep;
@@ -24,15 +23,14 @@ static PtStep step(phys_addr_t pa, unsigned long var_va, size_t offset){
     PtStep ps;
     void* va = memremap(pa, PAGE_SIZE, MEMREMAP_WB);
     if (!va){
-        ps.base_va = NULL;
         ps.next_pa = 0;
         ps.err = -ENOMEM;
         return ps;
     } 
     size_t* va_z = (size_t*)va;
-    ps.base_va = va;
     ps.next_pa = ((phys_addr_t)(*(va_z + ((var_va >> offset) & 0x1ff))));
     ps.err = 0;
+    memunmap(va);
     return ps;
 }
 
@@ -67,30 +65,18 @@ static int __init m_init(void){
     printk(KERN_INFO "PDPT PA:%llx", pml4_s.next_pa);
 #endif    
     PtStep pdpt_s = step(pml4_s.next_pa & PAGE_MASK, var_va, 30);
-    if (pdpt_s.err) {
-        memunmap(pml4_s.base_va);
-        return pdpt_s.err;
-    }
+    if (pdpt_s.err) return pdpt_s.err;
 
 #if DEBUG
     printk(KERN_INFO "PD PA:%llx", pdpt_s.next_pa);
 #endif      
     PtStep pd_s = step(pdpt_s.next_pa & PAGE_MASK, var_va, 21);
-    if (pd_s.err){
-        memunmap(pml4_s.base_va);
-        memunmap(pdpt_s.base_va);
-        return pd_s.err;
-    }
+    if (pd_s.err) return pd_s.err;
 #if DEBUG
     printk(KERN_INFO "PT PA:%llx", pd_s.next_pa);
 #endif 
     PtStep pt_s = step(pd_s.next_pa & PAGE_MASK, var_va, 12);
-    if (pt_s.err){
-        memunmap(pml4_s.base_va);
-        memunmap(pdpt_s.base_va);
-        memunmap(pd_s.base_va);
-        return pt_s.err;
-    }
+    if (pt_s.err) return pt_s.err;
 
     printk(KERN_INFO "RES:%llx", (pt_s.next_pa));
     
@@ -100,12 +86,8 @@ static int __init m_init(void){
     unsigned long* res_va = (unsigned long*)memremap(res_pa & 0xffffffffff000, PAGE_SIZE, MEMREMAP_WB);
     printk(KERN_INFO "VAR VALUE:%lu", var);
     printk(KERN_INFO "PAGE WALK VAR VALUE:%lu", *(unsigned long*)(((unsigned long)res_va) | (var_va & 0xfff)));
-
-    memunmap(pml4_s.base_va);
-    memunmap(pdpt_s.base_va);
-    memunmap(pd_s.base_va);
-    memunmap(pt_s.base_va);
     memunmap(res_va);
+
     printk(KERN_INFO "_______________________");
     return 0;
 }
