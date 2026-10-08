@@ -204,9 +204,8 @@ struct M68K {
     void ea_write(unsigned char, unsigned val);
     unsigned to_ea_address(unsigned char);
 
-    void fill_bus_read_req(unsigned, BusReadDest, OperandSize);
-    void fill_bus_read_req_front(unsigned, BusReadDest, OperandSize);
-    void fill_bus_read_req_reg(unsigned, BusReadDest, OperandSize, unsigned char);
+    void fill_bus_read_req(unsigned, BusReadDest, OperandSize,unsigned char = 0);
+    void fill_bus_read_req_front(unsigned, BusReadDest, OperandSize,unsigned char = 0);
     void fill_bus_write_req(unsigned, unsigned, OperandSize);
 
     template <std::integral T>
@@ -224,7 +223,7 @@ struct M68K {
         BusReadDest brd{};
         unsigned short bus_data{};
         BUS::Mode bus_mode{};
-        unsigned char reg_n{};
+        unsigned char n{};
         OperandSize opsz{};
         bool parallel_run{};
         Instruction i{};
@@ -239,11 +238,13 @@ struct M68K {
 
     struct DecodedInfo {
         Instruction i;
-        unsigned char rx{};
-        unsigned char ry{};
+        unsigned char r_src{};
+        unsigned char r_dst{};
+
         unsigned char d1_b{};
         unsigned char d2_b{};
         unsigned char d3_b{};
+
         unsigned d_l{};
         unsigned prefetched{};
         unsigned char effective_address{};
@@ -280,15 +281,15 @@ struct M68K {
         switch (opsz) {
             case BYTE:
             case WORD: {
-                fill_bus_read_req(aregs[di.rx]-=opsz,BRDOperandA1, opsz);
-                fill_bus_read_req(aregs[di.ry]-=opsz,BRDOperandB1, opsz);
+                fill_bus_read_req(aregs[di.r_dst]-=opsz, BRDOperandA1, opsz);
+                fill_bus_read_req(aregs[di.r_src]-=opsz, BRDOperandB1, opsz);
                 break;
             }
             case LONG: {
-                fill_bus_read_req(aregs[di.rx]-=2,BRDOperandA1, WORD);
-                fill_bus_read_req(aregs[di.rx]-=2,BRDOperandA2, WORD);
-                fill_bus_read_req(aregs[di.ry]-=2,BRDOperandB1, WORD);
-                fill_bus_read_req(aregs[di.ry]-=2,BRDOperandB2, WORD);
+                fill_bus_read_req(aregs[di.r_dst]-=2, BRDOperandA1, WORD);
+                fill_bus_read_req(aregs[di.r_dst]-=2, BRDOperandA2, WORD);
+                fill_bus_read_req(aregs[di.r_src]-=2, BRDOperandB1, WORD);
+                fill_bus_read_req(aregs[di.r_src]-=2, BRDOperandB2, WORD);
                 break;
             }
         }
@@ -300,15 +301,15 @@ struct M68K {
         switch (opsz) {
             case BYTE:
             case WORD: {
-                fill_bus_read_req(std::exchange(aregs[di.rx], aregs[di.rx]+opsz), BRDOperandA1, opsz);
-                fill_bus_read_req(std::exchange(aregs[di.ry], aregs[di.ry]+opsz), BRDOperandA1, opsz);
+                fill_bus_read_req(std::exchange(aregs[di.r_dst], aregs[di.r_dst] + opsz), BRDOperandA1, opsz);
+                fill_bus_read_req(std::exchange(aregs[di.r_src], aregs[di.r_src] + opsz), BRDOperandA1, opsz);
                 break;
             }
             case LONG: {
-                fill_bus_read_req(std::exchange(aregs[di.rx], aregs[di.rx]+2), BRDOperandA1, WORD);
-                fill_bus_read_req(std::exchange(aregs[di.rx], aregs[di.rx]+2), BRDOperandA2, WORD);
-                fill_bus_read_req(std::exchange(aregs[di.ry], aregs[di.ry]+2), BRDOperandB1, WORD);
-                fill_bus_read_req(std::exchange(aregs[di.ry], aregs[di.ry]+2), BRDOperandB2, WORD);
+                fill_bus_read_req(std::exchange(aregs[di.r_dst], aregs[di.r_dst] + 2), BRDOperandA1, WORD);
+                fill_bus_read_req(std::exchange(aregs[di.r_dst], aregs[di.r_dst] + 2), BRDOperandA2, WORD);
+                fill_bus_read_req(std::exchange(aregs[di.r_src], aregs[di.r_src] + 2), BRDOperandB1, WORD);
+                fill_bus_read_req(std::exchange(aregs[di.r_src], aregs[di.r_src] + 2), BRDOperandB2, WORD);
                 break;
             }
         }
@@ -417,5 +418,6 @@ struct M68K {
     void set_ea_dst();
 
     static SmallString<32> disassemble(const DecodedInfo& di, unsigned pc, unsigned char* mem);
+    static unsigned read_imm(Instruction i, unsigned pc, unsigned char*);
 };
 #endif
