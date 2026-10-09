@@ -6,7 +6,7 @@
 #include <mach/mach.h>
 #include <fstream>
 #include <filesystem>
-#define LOG 1
+#define LOG 0
 #include "Rebind.hpp"
 #define REBIND_CALL 0
 
@@ -17,6 +17,9 @@ void* operator new(size_t n){
 }
 #endif
 
+
+// DYLD_INSERT_LIBRARIES=~/Desktop/books/cpp/cpp/tools/dyn_rebind/libmmapinfo.dylib ./a.out
+// or
 #if REBIND_CALL
 using mmap_f = void*(*)(void* addr, size_t len, int prot, int flags, int fd, off_t off);
 extern "C" void* my_mmap(void* addr, size_t len, int prot, int flags, int fd, off_t off){
