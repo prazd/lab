@@ -242,8 +242,6 @@ struct M68K {
         unsigned char r_dst{};
 
         unsigned char d1_b{};
-        unsigned char d2_b{};
-        unsigned char d3_b{};
 
         unsigned d_l{};
         unsigned prefetched{};
@@ -417,7 +415,7 @@ struct M68K {
     void fill_exec(Instruction);
     void set_ea_dst();
 
-    static SmallString<32> disassemble(const DecodedInfo& di, unsigned pc, unsigned char* mem);
-    static unsigned read_imm(Instruction i, unsigned pc, unsigned char*);
+    static SmallString<32> disassemble(const DecodedInfo& di, unsigned char* mem);
+    static unsigned read_mem(OperandSize sz, unsigned char*);
 };
 #endif
