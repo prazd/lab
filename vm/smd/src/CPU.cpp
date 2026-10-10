@@ -2991,17 +2991,41 @@ unsigned M68K::read_mem(M68K::OperandSize sz, unsigned char* mem) {
     }
 }
 
+SmallString<32> M68K::ea_to_str(const DecodedInfo& di, unsigned char* mem) {
+    auto am = to_address_mode(di.effective_address, false);
+    unsigned char reg_n = (di.effective_address >> 3) & 0x7;
+    switch (am) {
+        case DataRegisterDirectMode:      return str_num_template<32>("D&", reg_n);
+        case AddressRegisterDirectMode:   return str_num_template<32>("A&", reg_n);
+        case AddressRegisterIndirectMode: return str_num_template<32>("(A&)", reg_n);
+        case AddressRegisterIndirectPostIncMode: return str_num_template<32>("(A&)+", reg_n);
+        case AddressRegisterIndirectPreDecMode:  return str_num_template<32>("-(A&)", reg_n);
+        case AddressRegisterIndirectDisplacementMode:  return str_num_template<32>("16(A&)", reg_n);
+        case AddressRegisterIndirectIndexMode:{
+            unsigned short val = (((unsigned short)(*mem)) << 8) | *(mem + 1);
+            return str_num_template<32>("d8(A&,", reg_n) +
+                    ((val & 0x8000) ? str_num_template<32>("A&)", ((*mem) >> 12) & 0x7) :
+                        str_num_template<32>("D&)", ((*mem) >> 12) & 0x7));
+        }
+        
+        case ProgramCounterIndirectDisplacementMode: return SmallString<32>{"16(PC)"};
+        case ProgramCounterIndirectIndexMode: return str_num_template<32>("8(PC,D&)", reg_n);
+        case AbsoluteShort:  return str_num_template<32>("#&.W", read_mem(WORD, mem));
+        case AbsoluteLong:  return str_num_template<32>("#&.L", read_mem(LONG, mem));
+        default:
+            return str_num_template<32>("#&", read_mem(di.opsz, mem));
+    }
+}
+
 SmallString<32> M68K::disassemble(const M68K::DecodedInfo& di, unsigned char* mem) {
     SmallString<32> res{};
-    auto ptr = res.begin();
     auto i_str = instructions_str[di.i];
-    std::copy(std::begin(i_str), std::end(i_str), ptr);
-    ptr += i_str.size();
+    for (auto c: i_str) res.push(c);
     if (!std::any_of(std::begin(unsized_instructions), std::end(unsized_instructions), [i = di.i](auto& el){return el == i;})){
-        *ptr++ = '(';
+        res.push('(');
         auto sz_str = opsz_str[di.opsz];
-        std::copy(std::begin(sz_str), std::end(sz_str), ptr);
-        *ptr++ = ')';
+        for (auto c: sz_str) res.push(c);
+        res.push(')');
     }
     if (di.src_type == OT_IMM && di.read_displacement){
         auto imm = read_mem(di.opsz, mem + 2);

@@ -203,6 +203,7 @@ struct M68K {
     void ea_fill(unsigned char);
     void ea_write(unsigned char, unsigned val);
     unsigned to_ea_address(unsigned char);
+    static unsigned to_ea_address_mem(unsigned char, unsigned char*);
 
     void fill_bus_read_req(unsigned, BusReadDest, OperandSize,unsigned char = 0);
     void fill_bus_read_req_front(unsigned, BusReadDest, OperandSize,unsigned char = 0);
@@ -415,6 +416,7 @@ struct M68K {
     void fill_exec(Instruction);
     void set_ea_dst();
 
+    static SmallString<32> ea_to_str(const DecodedInfo&, unsigned char* mem);
     static SmallString<32> disassemble(const DecodedInfo& di, unsigned char* mem);
     static unsigned read_mem(OperandSize sz, unsigned char*);
 };
