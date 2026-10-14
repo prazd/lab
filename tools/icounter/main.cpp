@@ -8,6 +8,10 @@
 #include <chrono>
 #include <thread>
 #include <iomanip>
+#include <array>
+#include <cstring>
+#include <climits>
+
 
 user_regs_struct read_regs(int pid){
     user_regs_struct regs{};
@@ -32,21 +36,52 @@ WaitStatus wait(int pid){
     return Error;
 }
 
-// TODO: check
-unsigned long be_to_le(unsigned long value, size_t sz){
-    unsigned char* rp = (unsigned char*)(&value);
-    unsigned char* lp = rp + (sz-1);
-    while(rp != lp){
-        std::swap(*rp, *lp);
-        --lp;
-        if (rp == lp) break;
-        ++rp;
-    }
-    return value;
+unsigned char c_to_nibble(char c){
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return (c - 'a') + 10;
+    return (c-'A') + 10;
 }
 
-unsigned long mask_by_i_sz(size_t sz){
-    return (0xff'ff'ff'ff'ff'ff'ff'ff >> ((8 - sz) * CHAR_BIT));
+class Instruction {
+    unsigned char buf[15]{};
+    size_t sz{};
+public:
+    Instruction(std::string_view sv):sz((sv.size() - (sv[0] == '0' && sv[1] == 'x' ? 2 : 0))/2){
+        std::string_view i_str = (sv[0] == '0' && sv[1] == 'x') ? sv.substr(2) : sv;
+        auto ptr = i_str.begin();
+        for (size_t i = 0; i < sz; ++i)
+            buf[i] = (c_to_nibble(*ptr++) << 4) | c_to_nibble(*ptr++);
+    }
+    void reverse(){
+        unsigned char* rp = buf;
+        unsigned char* lp = rp + (sz-1);
+        while(rp != lp){
+            std::swap(*rp, *lp);
+            --lp;
+            if (rp == lp) break;
+            ++rp;
+        }
+    }
+    bool equal(const std::array<unsigned char, 15>& arr) const {
+        return std::equal(arr.begin(), arr.end(), buf);
+    }
+    size_t size() const {return sz;}
+    std::string_view to_sv() const {
+        return {(char*)buf, sz};
+    }
+};
+
+auto read_instruction(int pid, size_t sz){
+    std::array<unsigned char, 15> res{};
+    unsigned long val{};
+    auto rip = read_regs(pid).rip;
+    auto data = ptrace(PTRACE_PEEKDATA, pid, rip, 0);
+    memcpy(res.data(), &data, std::min(sz,8zu));
+    if (sz > 8){
+        data = ptrace(PTRACE_PEEKDATA, pid, rip+8, 0);
+        memcpy(res.data()+8, &data, sz-8);
+    }
+    return res;
 }
 
 int main(int argc, char* argv[]){
@@ -60,30 +95,16 @@ int main(int argc, char* argv[]){
     } else {
         waitpid(pid, 0, 0);
         size_t counter = 0;
-        std::string_view i_sv = argv[2];
-        // TODO: > 8 bytes instruction handling
-        unsigned long i_ul = std::stoul(i_sv.data(), nullptr, 16);
-        size_t i_sz = (i_sv.size() - (i_sv[0] == '0' && i_sv[1] == 'x' ? 2 : 0))/2;
+        Instruction instruction{argv[2]};
         if (argv[3]){
             std::string_view i_mode = argv[3];
-            if (i_mode == "be") i_ul = be_to_le(i_ul, i_sz);
+            if (i_mode == "le") instruction.reverse();
         }
-        std::cout << "Instruction:" << i_sv << '\n';
-        std::cout << "Size:" << i_sz << '\n';
-        unsigned long rip{};
-
-        unsigned long data{};
-        unsigned long instruction{};
-        unsigned long mask = mask_by_i_sz(i_sz);
-        std::cout << "Mask:" << std::hex << mask << std::dec << '\n';
-        std::cout << "Start...\n";
+        std::cout << "Instruction:" << argv[2] << '\n';
+        std::cout << "Size:" << instruction.size() << '\n';
+        std::cout << "In progress...\n";
         for(;;){
-            rip = read_regs(pid).rip;
-            data = ptrace(PTRACE_PEEKDATA, pid, rip, 0);
-            instruction = i_ul;
-            data &= mask;
-            instruction &= mask;
-            counter += (data == instruction);
+            counter += (instruction.equal(read_instruction(pid, instruction.size())));
             ptrace(PTRACE_SINGLESTEP, pid, 0, 0);
             if (auto res = wait(pid); res != Stopped) break;
         }
