@@ -11,17 +11,13 @@
 #include <array>
 #include <cstring>
 #include <climits>
+#include <vector>
 
 
 user_regs_struct read_regs(int pid){
     user_regs_struct regs{};
     if (ptrace(PTRACE_GETREGS, pid, NULL, &regs) == -1) std::abort();
     return regs;
-}
-
-template <typename ... Args>
-void print(Args&& ... args){
-    (std::cout << ... << args);
 }
 
 enum WaitStatus {Exited,Error,Stopped};
@@ -63,29 +59,51 @@ public:
         }
     }
     bool equal(const std::array<unsigned char, 15>& arr) const {
-        return std::equal(arr.begin(), arr.end(), buf);
+        return std::equal(arr.begin(), arr.begin() + sz, buf, buf+sz);
     }
     size_t size() const {return sz;}
+
     std::string_view to_sv() const {
         return {(char*)buf, sz};
     }
+
+    auto begin(){return buf;}
+    auto end(){return buf+sz;}
+
 };
 
-auto read_instruction(int pid, size_t sz){
+
+template <size_t sz>
+auto read_instruction(int pid){
     std::array<unsigned char, 15> res{};
     unsigned long val{};
     auto rip = read_regs(pid).rip;
     auto data = ptrace(PTRACE_PEEKDATA, pid, rip, 0);
-    memcpy(res.data(), &data, std::min(sz,8zu));
-    if (sz > 8){
+    memcpy(res.data(), &data, 8);
+    if constexpr (sz > 8){
         data = ptrace(PTRACE_PEEKDATA, pid, rip+8, 0);
         memcpy(res.data()+8, &data, sz-8);
     }
     return res;
 }
 
+template <typename It>
+void print_hex(It it, It ite){
+    std::cout << std::hex;
+    auto print_nibble = [](unsigned char nibble){
+        if (nibble >= 0 && nibble <= 9) std::cout << (char)('0' + nibble);
+        else std::cout << (char)('a' + (nibble - 10));
+    };
+    for (;it != ite;++it){
+        auto v = *it;
+        print_nibble((v >> 4) & 0xf);
+        print_nibble(v & 0xf);
+    }
+    std::cout << std::dec;
+}
+
 int main(int argc, char* argv[]){
-    assert(argc >= 2);
+    assert(argc >= 3);
     auto pid = fork();
     char* args[] = {NULL};
     char* envs[] = {NULL};
@@ -94,20 +112,46 @@ int main(int argc, char* argv[]){
         execve(argv[1], args, envs); // TODO: handle args + env
     } else {
         waitpid(pid, 0, 0);
-        size_t counter = 0;
-        Instruction instruction{argv[2]};
-        if (argv[3]){
-            std::string_view i_mode = argv[3];
-            if (i_mode == "le") instruction.reverse();
+        std::vector<std::pair<Instruction,size_t>> instructions{};
+        
+        for (size_t i = 2; i != argc; ++i){
+            Instruction instruction{argv[i]};
+            if (i + 1 != argc && std::string_view(argv[i + 1]) == "le") {instruction.reverse();++i;}
+            instructions.push_back({instruction, 0});
         }
-        std::cout << "Instruction:" << argv[2] << '\n';
-        std::cout << "Size:" << instruction.size() << '\n';
+
+        std::cout << "Instructions:\n";
+        size_t instruction_n = 0;
+        for (auto& [v, _]: instructions){
+            std::cout << '[' << instruction_n++ << "]: "; 
+            print_hex(v.begin(), v.end());
+            std::cout << '(' << v.size() << ")\n";
+        }
+
+        size_t max_i_sz{};
+        for (size_t i = 0, e = instructions.size(); i != e; ++i){
+            auto& [v,_] = instructions[i];
+            max_i_sz = v.size() > max_i_sz ? v.size() : max_i_sz;
+        }
+        auto read_f = max_i_sz > 8 ? read_instruction<15> : read_instruction<8>;
+        if (read_f == read_instruction<15>)
+            std::cout << "Read function version - 15b\n";
+        else 
+            std::cout << "Read function version - 8b\n";
+
         std::cout << "In progress...\n";
         for(;;){
-            counter += (instruction.equal(read_instruction(pid, instruction.size())));
+            auto current_instruction = read_f(pid);
+            for (auto& [v,c]: instructions)
+                c += (v.equal(current_instruction));
             ptrace(PTRACE_SINGLESTEP, pid, 0, 0);
             if (auto res = wait(pid); res != Stopped) break;
         }
-        print("Count:", counter,'\n');
+
+        std::cout << "\n\nResult:\n";
+        for (auto& [v,c]: instructions){
+            print_hex(v.begin(), v.end());
+            std::cout << ':' << c << '\n';
+        }
     }
 }
