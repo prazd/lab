@@ -115,23 +115,33 @@ struct M68K {
     };
 
     static constexpr std::string_view instructions_str[] = {
-            "ABCD","ADD","ADDA","ADDI","ADDQ","ADDX","AND","ANDI","ASL","ASR","ANDItoCCR",
+            "ABCD","ADD","ADDA","ADDI","ADDQ","ADDX","AND","ANDI","ASL","ASR","ANDI",
             "BCC","BCHG","BCLR","BRA","BSET","BSR","BTST",
             "CHK","CLR","CMP","CMPA","CMPI","CMPM",
             "DBcc", "DIVS", "DIVU",
-            "EOR","EORI","EORItoCCR","EXG","EXT",
+            "EOR","EORI","EORI","EXG","EXT",
             "ILLEGAL",
             "JMP", "JSR",
             "LEA", "LINK", "LSL", "LSR",
-            "MOVE", "MOVEA","MOVEtoCCR", "MOVEfromSR","MOVEM","MOVEP","MOVEQ","MULS","MULU",
+            "MOVE", "MOVEA","MOVE", "MOVE","MOVEM","MOVEP","MOVEQ","MULS","MULU",
             "NBCD","NEG","NEGX","NOP","NOT",
-            "OR","ORI","ORItoCCR",
+            "OR","ORI","ORI",
             "PEA",
 
             "ROL","ROR","ROXL","ROXR","RTR","RTS",
             "SBCD","Scc","SUB","SUBA","SUBI","SUBQ","SUBX","SWAP",
             "TAS","TRAP","TRAPV","TST",
-            "UNLK"
+            "UNLK",
+
+             "ANDI", // to SR
+             "EORI", // to SR
+          "MOVE", // to SR
+          "MOVE", // USP
+          "ORI", // to SR,
+
+            "RESET",
+            "RTE",
+              "STOP"
     };
 
     static constexpr Instruction unsized_instructions[] = {
@@ -139,8 +149,8 @@ struct M68K {
             NOP,ILLEGAL,
     };
 
-    static constexpr std::string_view opsz_str[] = {
-           "","BYTE","WORD","","LONG",
+    static constexpr char opsz_c[] = {
+           '\0','B','W','\0','L',
     };
 
     enum RegType {
@@ -203,7 +213,6 @@ struct M68K {
     void ea_fill(unsigned char);
     void ea_write(unsigned char, unsigned val);
     unsigned to_ea_address(unsigned char);
-    static unsigned to_ea_address_mem(unsigned char, unsigned char*);
 
     void fill_bus_read_req(unsigned, BusReadDest, OperandSize,unsigned char = 0);
     void fill_bus_read_req_front(unsigned, BusReadDest, OperandSize,unsigned char = 0);
@@ -212,7 +221,7 @@ struct M68K {
     template <std::integral T>
     requires(std::is_same_v<T, unsigned char> || 
              std::is_same_v<T, unsigned short>)
-    unsigned sign_extend_to_l(T v) {
+    static unsigned sign_extend_to_l(T v) {
         bool is_word = std::is_same_v<T, unsigned short>;
         return v & (is_word ? 0x8000 : 0x80) ? 
             (is_word ? (0xffff0000 | v) : (0xffffff00 | v)) : v;
@@ -254,6 +263,7 @@ struct M68K {
         unsigned sign_bit{};
         unsigned mask{};
 
+        unsigned label{}; //
 
         bool read_displacement{};
         bool read_displacement_by_value{};
@@ -416,8 +426,9 @@ struct M68K {
     void fill_exec(Instruction);
     void set_ea_dst();
 
-    static SmallString<32> ea_to_str(const DecodedInfo&, unsigned char* mem);
-    static SmallString<32> disassemble(const DecodedInfo& di, unsigned char* mem);
-    static unsigned read_mem(OperandSize sz, unsigned char*);
+    static SmallString<32> ea_to_str(const DecodedInfo&, const unsigned char* mem);
+    static SmallString<32> disassemble(const DecodedInfo& di, const unsigned char* mem);
+    static SmallString<32> operand_value(const DecodedInfo&, bool, const unsigned char* mem);
+    static unsigned read_mem(OperandSize sz, const unsigned char*);
 };
 #endif

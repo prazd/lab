@@ -2,20 +2,49 @@
 #define SMD_SIMPLE_HPP
 #include <array>
 
+template <std::integral T>
+inline T be_to_le(T value, size_t sz){
+    auto rp = (unsigned char*)(&value);
+    auto lp = rp + (sz-1);
+    while(rp != lp){
+        std::swap(*rp, *lp);
+        --lp;
+        if (rp == lp) break;
+        ++rp;
+    }
+    return value;
+}
+
 template <size_t cap>
 struct SmallString {
     char buf[cap]{};
     size_t sz = 0;
     SmallString() = default;
     explicit SmallString(std::string_view sv){for (auto c: sv) push(c);}
+    explicit SmallString(unsigned n){
+        while(n){
+            auto val = n & 0xf;
+            push(val < 10 ? '0' + val : 'a' + val);
+            n >>= 4;
+        }
+    }
     void reset(){sz = 0;}
     void push(char c){buf[sz++] = c;}
+    void push(std::string_view sv){for (auto c: sv) push(c);}
     auto begin(){return buf;}
     auto end(){return buf + sz;}
+
     std::string_view to_sv() {
         return std::string_view(buf, sz);
     }
-    SmallString& operator+(const SmallString& rhs){
+
+    auto operator+(const SmallString& rhs) const {
+        SmallString<cap> res(*this);
+        res += rhs;
+        return res;
+    }
+
+    SmallString& operator+=(const SmallString& rhs){
         for (size_t i = 0; i < rhs.sz; ++i) push(rhs.buf[i]);
         return *this;
     }
@@ -23,6 +52,7 @@ struct SmallString {
 
 template <size_t sz>
 auto ztoarr(size_t val){
+    // TODO: use tuple
     struct Result {
         std::array<char, sz> arr;
         size_t c_count{};

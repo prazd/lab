@@ -842,11 +842,14 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
         }
 
         case BCC: {
-            pc += is_cond((ConditionCode)di.d1_b) ? (di.d_l & di.mask) : 0;
-            prefetch_q.clear();
-            // TODO: check
-            fill_prefetch_req();
-            fill_prefetch_req();
+            if (is_cond((ConditionCode)di.d1_b)){
+                if (di.opsz == BYTE) pc += sign_extend_to_l((unsigned char)(di.d_l));
+                else pc += sign_extend_to_l((unsigned short)(di.d_l));
+                prefetch_q.clear();
+                // TODO: check
+                fill_prefetch_req();
+                fill_prefetch_req();
+            }
             break;
         }
 
@@ -2021,7 +2024,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = BRA,
             .opsz = opsz,
-            .d_l = displacement,
+            .read_displacement = !displacement,
             .i_sz = (unsigned char)(2 + (opsz == BYTE ? 0 : opsz)),
             .dst_type = OT_LABEL,
         };
@@ -2060,8 +2063,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((val >> 8) == 0b0110'0001) {
         unsigned displacement = 0;
         OperandSize opsz{};
-        if (val & 0xff){
-            displacement = val & 0xff;
+        if (auto v = (val & 0xff)){
+            displacement = v;
             opsz = BYTE;
         } else {
             opsz = WORD;
@@ -2979,7 +2982,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
 }
 
 
-unsigned M68K::read_mem(M68K::OperandSize sz, unsigned char* mem) {
+unsigned M68K::read_mem(M68K::OperandSize sz, const unsigned char* mem) {
     switch (sz) {
         case BYTE: return (*mem) & 0xff;
         case WORD: return (((*(mem + 1))) | ((unsigned)(8 << (*mem))));
@@ -2991,7 +2994,7 @@ unsigned M68K::read_mem(M68K::OperandSize sz, unsigned char* mem) {
     }
 }
 
-SmallString<32> M68K::ea_to_str(const DecodedInfo& di, unsigned char* mem) {
+SmallString<32> M68K::ea_to_str(const DecodedInfo& di, const unsigned char* mem) {
     auto am = to_address_mode(di.effective_address, false);
     unsigned char reg_n = (di.effective_address >> 3) & 0x7;
     switch (am) {
@@ -3007,7 +3010,7 @@ SmallString<32> M68K::ea_to_str(const DecodedInfo& di, unsigned char* mem) {
                     ((val & 0x8000) ? str_num_template<32>("A&)", ((*mem) >> 12) & 0x7) :
                         str_num_template<32>("D&)", ((*mem) >> 12) & 0x7));
         }
-        
+
         case ProgramCounterIndirectDisplacementMode: return SmallString<32>{"16(PC)"};
         case ProgramCounterIndirectIndexMode: return str_num_template<32>("8(PC,D&)", reg_n);
         case AbsoluteShort:  return str_num_template<32>("#&.W", read_mem(WORD, mem));
@@ -3017,20 +3020,48 @@ SmallString<32> M68K::ea_to_str(const DecodedInfo& di, unsigned char* mem) {
     }
 }
 
-SmallString<32> M68K::disassemble(const M68K::DecodedInfo& di, unsigned char* mem) {
+SmallString<32> M68K::operand_value(const M68K::DecodedInfo& di, bool src,  const unsigned char* mem) {
+    OperandType ot = src ? di.src_type : di.dst_type;
+    SmallString<32> res{};
+    if (ot == OT_IMM && di.read_displacement){
+        // TODO: check
+        auto imm_s = SmallString<32>(be_to_le(read_mem(di.opsz, mem + 2), di.i_sz));
+        for (auto c: imm_s) res.push(c);
+        // TODO: imm str
+    } else if (ot == OT_EA) {
+        auto ea_str = ea_to_str(di, mem);
+        for (auto c: ea_str.to_sv()) res.push(c);
+    } else if (ot == OT_DREG || ot == OT_AREG){
+        res.push(ot == OT_DREG ? 'D' : 'A');
+        res.push('0' + (char)di.r_src);
+    } else if (ot == OT_CCR){
+        res.push("CCR");
+    } else if (ot == OT_SR) { // TODO: check
+        res.push("SR");
+    } else if (ot == OT_LABEL){
+        // TODO: check
+        if (di.i == BSR || di.i == BRA || di.i == BCC) {
+            res += di.d_l ? SmallString<32>(sign_extend_to_l((unsigned char)di.d_l))
+                    : SmallString<32>(sign_extend_to_l((unsigned short)read_mem(di.opsz, mem))); // TODO: check mem
+        } else if (di.i == DBcc){
+            res += SmallString<32>(sign_extend_to_l((unsigned char)di.d_l));
+        }
+    }
+    // TODO: OT_LIST
+    return res;
+}
+
+SmallString<32> M68K::disassemble(const M68K::DecodedInfo& di, const unsigned char* mem) {
     SmallString<32> res{};
     auto i_str = instructions_str[di.i];
     for (auto c: i_str) res.push(c);
     if (!std::any_of(std::begin(unsized_instructions), std::end(unsized_instructions), [i = di.i](auto& el){return el == i;})){
-        res.push('(');
-        auto sz_str = opsz_str[di.opsz];
-        for (auto c: sz_str) res.push(c);
-        res.push(')');
+        res.push('.');
+        res.push( opsz_c[di.opsz]);
     }
-    if (di.src_type == OT_IMM && di.read_displacement){
-        auto imm = read_mem(di.opsz, mem + 2);
-        // TODO: imm str
-    }
+    // TODO: check operands
+    res += operand_value(di, true, mem);
+    res += operand_value(di, false, mem);
     // TODO: add to Decoded info reg info/imm
     return res;
 }
