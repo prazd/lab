@@ -5,13 +5,26 @@
 #include <typeinfo>
 #include <utility>
 #include <tuple>
+#include <vector>
 
 template <typename T>
-void print(const T& val){
+void print_tuple(const T& val){
     constexpr auto static args = std::define_static_array(std::meta::template_arguments_of(^^T));
     size_t i = 0;
     template for (constexpr std::meta::info type : args)
         std::cout << i++ << ':' <<  std::get<typename [:type:]>(val) << '\n';
+    std::cout << '\n';
+}
+
+template <typename T>
+requires(std::is_class_v<T>)
+void print_struct(const T& val){
+    constexpr std::meta::info struct_meta = ^^T;
+    constexpr auto ctx = std::meta::access_context::current();
+    template for (constexpr std::meta::info member : std::define_static_array(std::meta::nonstatic_data_members_of(struct_meta, ctx))){
+        constexpr std::string_view sv = std::meta::identifier_of(member);
+        std::cout << sv << ":" << val.[:member:] << '\n';
+    }
     std::cout << '\n';
 }
 
@@ -35,8 +48,48 @@ auto to_tuple(S& s){
     return res;    
 }
 
+
+template <size_t N, size_t MAX_N = 3>
+consteval auto gen_field_name(){
+    std::array<char,1 + MAX_N + 1> arr{'f'};
+    auto n = N;
+    do {
+        auto c = n%10;
+        arr[1] ='0'+c;
+        n=n/10;
+        if (n){
+            for (size_t i = 0; i < MAX_N; ++i)
+                std::swap(arr[1 + MAX_N-i],arr[1 + MAX_N-i-1]);
+        }
+    } while(n);
+    return std::define_static_string(arr);
+}
+
+template <typename Tuple>
+auto to_struct(Tuple& t){
+    constexpr auto static args = std::define_static_array(std::meta::template_arguments_of(^^Tuple));
+    return []<typename T, size_t ... I>(T& t, std::index_sequence<I...>){
+        struct S;
+        consteval{
+        std::vector<std::meta::info> vec;
+        size_t z = 0;
+            (vec.push_back(
+                std::meta::data_member_spec(args[I], std::meta::data_member_options{.name = gen_field_name<I>()})
+                ), ...);
+            std::meta::define_aggregate(^^S, vec);
+        }
+        S s;
+        static constexpr auto members = std::define_static_array(std::meta::nonstatic_data_members_of(^^S, std::meta::access_context::current()));
+        ((s.[:members[I]:] = std::get<I>(t)),...);
+        return s;
+
+    }(t, std::make_index_sequence<args.size()>());
+}
+
 int main(){
     S s;
     auto t = to_tuple(s);
-    print(t);
+    print_tuple(t);
+    auto s2 = to_struct(t);
+    print_struct(s2);
 }
