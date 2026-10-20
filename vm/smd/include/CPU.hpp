@@ -263,8 +263,6 @@ struct M68K {
         unsigned sign_bit{};
         unsigned mask{};
 
-        unsigned label{}; //
-
         bool read_displacement{};
         bool read_displacement_by_value{};
         bool read_predec_args{}; // todo: check

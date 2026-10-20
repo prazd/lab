@@ -1,9 +1,53 @@
 #ifndef SMD_SIMPLE_HPP
 #define SMD_SIMPLE_HPP
 #include <array>
+#include <fstream>
+
+inline auto read_file(std::string_view path){
+    std::ifstream file(path, std::ios::binary);
+    if (!file.is_open()) std::abort();
+    std::vector<char> res;
+    auto sz = std::filesystem::file_size(path);
+    res.resize(sz);
+    file.read(res.data(), sz);
+    return res;
+}
+
+inline void read_file(std::string_view path, std::vector<char>& vec){
+    std::ifstream file(path, std::ios::binary);
+    if (!file.is_open()) std::abort();
+    auto sz = std::filesystem::file_size(path);
+    vec.resize(sz);
+    file.read(vec.data(), sz);
+}
 
 template <std::integral T>
-inline T be_to_le(T value, size_t sz){
+T reverse_bits(T val){
+    size_t r = 0;
+    size_t l = (sizeof(T) * CHAR_BIT) - 1;
+    bool l_v{};
+    bool r_v{};
+    while(l > r){
+        l_v = val & (1 << l);
+        r_v = val & (1 << r);
+
+        // swap
+        l_v ^= r_v;
+        r_v ^= l_v;
+        l_v ^= r_v;
+
+        val &= (~(1 << l));
+        val |= (l_v << l);
+        val &= (~(1 << r));
+        val |= (r_v << r);
+        --l;
+        ++r;
+    }
+    return val;
+}
+
+template <std::integral T>
+T be_to_le(T value, size_t sz){
     auto rp = (unsigned char*)(&value);
     auto lp = rp + (sz-1);
     while(rp != lp){
@@ -24,7 +68,7 @@ struct SmallString {
     explicit SmallString(unsigned n){
         while(n){
             auto val = n & 0xf;
-            push(val < 10 ? '0' + val : 'a' + val);
+            push(val < 10 ? '0' + val : 'a' + (val - 10));
             n >>= 4;
         }
     }
@@ -92,7 +136,7 @@ T mod(T t, size_t m){
     return ((t % m) + m) % m;
 }
 
-unsigned to_bcd(unsigned val){
+inline unsigned to_bcd(unsigned val){
     unsigned res{};
     unsigned m = 1;
     while(val){
@@ -103,7 +147,7 @@ unsigned to_bcd(unsigned val){
     return res;
 }
 
-unsigned from_bcd(unsigned val){
+inline unsigned from_bcd(unsigned val){
     unsigned res{};
     unsigned nibble_i = 0;
     while(val){

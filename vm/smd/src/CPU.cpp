@@ -2394,7 +2394,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if (!(val >> 14)) {
+    if (!(val >> 14) && (val & 0x4)) {
         unsigned char sz = (val >> 12) & 0x3;
         OperandSize opsz{};
         if (sz == 0x0){
@@ -2985,7 +2985,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
 unsigned M68K::read_mem(M68K::OperandSize sz, const unsigned char* mem) {
     switch (sz) {
         case BYTE: return (*mem) & 0xff;
-        case WORD: return (((*(mem + 1))) | ((unsigned)(8 << (*mem))));
+        case WORD: return (((*(mem + 1))) | (((unsigned)(*mem)) << 8));
         default:
             return ((unsigned)(*mem) << 24) |
                    ((unsigned)(*(mem + 1))) << 16 |
@@ -3046,8 +3046,42 @@ SmallString<32> M68K::operand_value(const M68K::DecodedInfo& di, bool src,  cons
         } else if (di.i == DBcc){
             res += SmallString<32>(sign_extend_to_l((unsigned char)di.d_l));
         }
+    } else if (ot == OT_LIST){
+        auto am = to_address_mode(di.effective_address, false);
+        unsigned short mask = read_mem(WORD, mem);
+        if (am == AddressRegisterIndirectPreDecMode) mask = reverse_bits(mask);
+
+        // TODO: check
+        unsigned char count = 0;
+        for (size_t i = 0; i < 8; ++i){
+            auto v = mask & (1 << i);
+            if (!v){
+                if (count > 1){
+                    res += str_num_template<32>("D#", i - count);
+                    res += str_num_template<32>("-D#/", i - 1);
+                } else {
+                    res.push('D');
+                    res.push('0' + i);
+                    res.push('/');
+                }
+            } else ++count;
+        }
+        res.push(',');
+
+        for (size_t i = 8; i < 16; ++i){
+            auto v = mask & (1 << i);
+            if (!v){
+                if (count > 1){
+                    res += str_num_template<32>("A#", i - count);
+                    res += str_num_template<32>("-A#/", i - 1);
+                } else {
+                    res.push('A');
+                    res.push('0' + i);
+                    res.push('/');
+                }
+            } else ++count;
+        }
     }
-    // TODO: OT_LIST
     return res;
 }
 
