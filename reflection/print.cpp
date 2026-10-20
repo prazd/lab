@@ -26,7 +26,7 @@ void print(const T& val){
 enum E {A = 0xa, B = 0xb, C = 0xc};
 
 template <typename T>
-requires(std::is_enum_v<E>)
+requires(std::is_enum_v<T>)
 void print(){
     template for (constexpr std::meta::info member : std::define_static_array(std::meta::enumerators_of(^^T))){
         std::cout << std::meta::identifier_of(member) << ' ' << [:member:] << '\n';
@@ -43,6 +43,25 @@ consteval std::string_view to_sv(E val){
     return "";
 }
 
+int sum(int a, int b){return a + b;}
+
+template <std::meta::info F>
+requires(std::meta::is_function(F))
+void print(){
+    std::cout << std::meta::display_string_of(std::meta::return_type_of(F))<< ' ';
+    std::cout <<  std::meta::identifier_of(F);
+    static constexpr auto params = std::define_static_array(std::meta::parameters_of(F));
+    std::cout << '(';
+    size_t i = 0;
+    size_t params_sz = params.size();
+    template for (constexpr std::meta::info p: params){
+        std::cout << std::meta::display_string_of(std::meta::type_of(p));
+        if (i + 1 != params_sz) std::cout << ',';
+        ++i;
+    }
+    std::cout << ')';
+}
+
 int main() {
     S s{256, "Alex"};
     print(s);
@@ -51,4 +70,6 @@ int main() {
     std::cout << to_sv<E>(A) << '\n';
     std::cout << to_sv<E>(B) << '\n';
     std::cout << to_sv<E>(C) << '\n';
+    
+    print<^^sum>();
 }
