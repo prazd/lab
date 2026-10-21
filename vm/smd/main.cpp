@@ -11,13 +11,14 @@ struct SMD {
     Cartridge cartridge;
     M68K m68k{};
     size_t offset{};
-    SMD(std::string_view sv): cartridge(sv), offset(0x37a){}
+    SMD(std::string_view sv): cartridge(sv), offset(0x3bc){}
     void print_instruction(){
         // TODO: debug
         auto instruction = M68K::read_mem(M68K::WORD, (unsigned char*)(cartridge.buffer.data() + offset));
         auto di = M68K::decode(instruction);
         std::cout << std::hex << std::setfill('0') << std::setw(4) <<  instruction << '\n';
         std::cout << std::bitset<16>(instruction).to_string() << '\n';
+        std::cout <<std::dec<< (int)di.i_sz<< std::hex << '\n';
         auto res = M68K::disassemble(di, (unsigned char*)(cartridge.buffer.data() + offset));
         std::cout <<std::hex << std::setfill('0') << std::setw(4) << offset << ':' << res.to_sv() << '\n';
         offset += di.i_sz;
@@ -38,5 +39,7 @@ int main(){
     CloseWindow();
 #endif
     SMD smd("/Users/prazd/Desktop/dev/Sonic.gen");
-    smd.print_instruction();
+    size_t x = 0;
+    while (std::cin >> x)
+        smd.print_instruction();
 }

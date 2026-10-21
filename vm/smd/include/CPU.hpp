@@ -12,9 +12,15 @@ struct M68K {
     unsigned ssp{};
 
     enum ConditionCode: unsigned char {
-        CC_CC,CC_CS,CC_EQ,
-        CC_GE,CC_GT,CC_HI,CC_LE,
-        CC_LS,CC_LT,CC_MI,CC_NE,CC_PL,CC_VC,CC_VS
+        CC_BRA=0x0, CC_BSR=0x1,
+        CC_CC=0x4,CC_CS=0x5,CC_EQ=0x7,
+        CC_GE=0xC,CC_GT=0xe,CC_HI=0x2,CC_LE=0xf,
+        CC_LS=0x3,CC_LT=0xd,CC_MI=0xa,CC_NE=0x6,CC_PL=0xb,CC_VC=0x8,CC_VS=0x9
+    };
+    static constexpr unsigned char cond_code_list[] = {
+            CC_CC,CC_CS,CC_EQ,
+            CC_GE,CC_GT,CC_HI,CC_LE,
+            CC_LS,CC_LT,CC_MI,CC_NE,CC_PL,CC_VC, CC_VS
     };
 
     // TODO: exception handing
@@ -58,7 +64,7 @@ struct M68K {
     enum AREG: unsigned char {A0,A1,A2,A3,A4,A5,A6,A7};
     unsigned aregs[8]{};
 
-    enum OperandSize: unsigned char {BYTE=0x1,WORD=0x2,LONG=0x4};
+    enum OperandSize: unsigned char {Unsized=0x0,BYTE=0x1,WORD=0x2,LONG=0x4};
 
     OperandSize opsz = BYTE;
     size_t exec_cycles = 0;
@@ -83,7 +89,7 @@ struct M68K {
 
     enum Instruction {
         ABCD,ADD,ADDA,ADDI,ADDQ,ADDX,AND,ANDI,ASL,ASR,ANDItoCCR,
-        BCC,BCHG,BCLR,BRA,BSET,BSR,BTST,
+        Bcc,BCHG,BCLR,BRA,BSET,BSR,BTST,
         CHK,CLR,CMP,CMPA,CMPI,CMPM,
         DBcc, DIVS,
         DIVU,
@@ -116,7 +122,7 @@ struct M68K {
 
     static constexpr std::string_view instructions_str[] = {
             "ABCD","ADD","ADDA","ADDI","ADDQ","ADDX","AND","ANDI","ASL","ASR","ANDI",
-            "BCC","BCHG","BCLR","BRA","BSET","BSR","BTST",
+            "Bcc","BCHG","BCLR","BRA","BSET","BSR","BTST",
             "CHK","CLR","CMP","CMPA","CMPI","CMPM",
             "DBcc", "DIVS", "DIVU",
             "EOR","EORI","EORI","EXG","EXT",
@@ -142,6 +148,11 @@ struct M68K {
             "RESET",
             "RTE",
               "STOP"
+    };
+
+    static constexpr std::string_view cond_to_str[] = {
+            "BRA","BSR","BHI","BLS","BCC","BLS","BNE",
+            "BEQ","BVC","BVS","BMI","BPL","BGE","BLT","BGT","BLE"
     };
 
     static constexpr Instruction unsized_instructions[] = {
@@ -344,14 +355,15 @@ struct M68K {
         }
     };
 
-    static inline unsigned char ea_i_sz(unsigned char val){
-        switch (to_address_mode(val, true)) {
+    static inline unsigned char ea_i_sz(unsigned char val, size_t opsz, bool mode = true){
+        switch (to_address_mode(val, mode)) {
             case AddressRegisterIndirectDisplacementMode:
             case AddressRegisterIndirectIndexMode:
             case ProgramCounterIndirectDisplacementMode:
             case ProgramCounterIndirectIndexMode:
             case AbsoluteShort: return 2;
             case AbsoluteLong: return 4;
+            case Immediate: return opsz;
             default: return 0;
         }
     }
@@ -424,9 +436,9 @@ struct M68K {
     void fill_exec(Instruction);
     void set_ea_dst();
 
-    static SmallString<32> ea_to_str(const DecodedInfo&, const unsigned char* mem);
-    static SmallString<32> disassemble(const DecodedInfo& di, const unsigned char* mem);
-    static SmallString<32> operand_value(const DecodedInfo&, bool, const unsigned char* mem);
+    static SmallString<64> ea_to_str(const DecodedInfo&, const unsigned char* mem);
+    static SmallString<64> disassemble(const DecodedInfo& di, const unsigned char* mem);
+    static SmallString<64> operand_value(const DecodedInfo&, bool, const unsigned char* mem);
     static unsigned read_mem(OperandSize sz, const unsigned char*);
 };
 #endif
