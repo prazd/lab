@@ -7,20 +7,22 @@
 constexpr size_t HEIGHT = 800;
 constexpr size_t WIDTH = 1000;
 
+//0111'111
+
 struct SMD {
     Cartridge cartridge;
     M68K m68k{};
     size_t offset{};
-    SMD(std::string_view sv): cartridge(sv), offset(0x3bc){}
+    SMD(std::string_view sv): cartridge(sv), offset(0x344){}
     void print_instruction(){
         // TODO: debug
         auto instruction = M68K::read_mem(M68K::WORD, (unsigned char*)(cartridge.buffer.data() + offset));
         auto di = M68K::decode(instruction);
-        std::cout << std::hex << std::setfill('0') << std::setw(4) <<  instruction << '\n';
+//        std::cout << std::hex << std::setfill('0') << std::setw(4) <<  instruction << '\n';
         std::cout << std::bitset<16>(instruction).to_string() << '\n';
-        std::cout <<std::dec<< (int)di.i_sz<< std::hex << '\n';
+//        std::cout <<std::dec<< (int)di.i_sz<< std::hex << '\n';
         auto res = M68K::disassemble(di, (unsigned char*)(cartridge.buffer.data() + offset));
-        std::cout <<std::hex << std::setfill('0') << std::setw(4) << offset << ':' << res.to_sv() << '\n';
+        std::cout << std::hex << std::uppercase << offset << ':' << std::uppercase << res.to_sv() << '\n';
         offset += di.i_sz;
     }
 };
@@ -39,7 +41,8 @@ int main(){
     CloseWindow();
 #endif
     SMD smd("/Users/prazd/Desktop/dev/Sonic.gen");
-    size_t x = 0;
-    while (std::cin >> x)
+//    size_t x = 0;
+//    while (std::cin >> x)
+for (size_t i = 0; i < 40; ++i)
         smd.print_instruction();
 }

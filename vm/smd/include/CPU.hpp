@@ -1,6 +1,7 @@
 #ifndef SMD_CPU_HPP
 #define SMD_CPU_HPP
 #include <queue>
+#include <algorithm>
 #include "BUS.hpp"
 #include "Simple.hpp"
 struct M68K {
@@ -150,9 +151,13 @@ struct M68K {
               "STOP"
     };
 
-    static constexpr std::string_view cond_to_str[] = {
-            "BRA","BSR","BHI","BLS","BCC","BLS","BNE",
-            "BEQ","BVC","BVS","BMI","BPL","BGE","BLT","BGT","BLE"
+    static constexpr std::string_view bcc_cond_to_str[] = {
+            "BRA","BSR","BHI","BLS","BCC","BCS","BNE",
+            "BEQ","BVC","BVS","BPL","BMI","BGE","BLT","BGT","BLE"
+    };
+    static constexpr std::string_view dbcc_cond_to_str[] = {
+            "DBT","DBF","DBHI","DBLS","DBCC","DBCS","DBNE",
+            "DBEQ","DBVC","DBVS","DBPL","DBMI","DBGE","DBLT","DBGT","DBLE"
     };
 
     static constexpr Instruction unsized_instructions[] = {
@@ -363,7 +368,7 @@ struct M68K {
             case ProgramCounterIndirectIndexMode:
             case AbsoluteShort: return 2;
             case AbsoluteLong: return 4;
-            case Immediate: return opsz;
+            case Immediate: return (opsz == LONG ? 4 : 2); // TODO: check
             default: return 0;
         }
     }
@@ -437,8 +442,51 @@ struct M68K {
     void set_ea_dst();
 
     static SmallString<64> ea_to_str(const DecodedInfo&, const unsigned char* mem);
-    static SmallString<64> disassemble(const DecodedInfo& di, const unsigned char* mem);
+
     static SmallString<64> operand_value(const DecodedInfo&, bool, const unsigned char* mem);
     static unsigned read_mem(OperandSize sz, const unsigned char*);
+
+    static constexpr auto get_opcode_str(const M68K::DecodedInfo& di){
+        switch (di.i) {
+            case Bcc: return bcc_cond_to_str[di.d1_b];
+            case DBcc: return dbcc_cond_to_str[di.d1_b];
+            default:
+                return instructions_str[di.i];
+        }
+    }
+
+    template <bool lowercase = true>
+    static SmallString<64> disassemble(const M68K::DecodedInfo& di, const unsigned char* mem) {
+        SmallString<64> res{};
+        std::string_view i_str = get_opcode_str(di);
+        if constexpr (lowercase)
+            for (auto c: i_str) res.push_lowercase(c);
+        else
+            for (auto c: i_str) res.push(c);
+
+        if constexpr (lowercase)  {
+            if (!std::any_of(std::begin(unsized_instructions), std::end(unsized_instructions), [i = di.i](auto& el){return el == i;})){
+                res.push('.');
+                res.push_lowercase(opsz_c[di.opsz]);
+            }
+        } else {
+            if (!std::any_of(std::begin(unsized_instructions), std::end(unsized_instructions),
+                             [i = di.i](auto &el) { return el == i; })) {
+                res.push('.');
+                res.push(opsz_c[di.opsz]);
+            }
+        }
+#if 1
+        // TODO: check operands
+    res.push(' ');
+    res += operand_value(di, true, mem);
+    res.push(',');
+    res += operand_value(di, false, mem);
+    // TODO: add to Decoded info reg info/imm
+#endif
+        return res;
+    }
+
+
 };
 #endif

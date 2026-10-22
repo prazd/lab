@@ -47,6 +47,37 @@ T reverse_bits(T val){
 }
 
 template <std::integral T>
+constexpr size_t reverse_nibbles(T val){
+    size_t nibbles = sizeof(T) * 2;
+    size_t r = 0;
+    size_t l = nibbles-1;
+    while (l > r){
+        auto l_v = (val >> (l << 2)) & 0xf;
+        auto r_v = (val >> (r << 2)) & 0xf;
+
+        l_v ^= r_v;
+        r_v ^= l_v;
+        l_v ^= r_v;
+
+        val &= (~(0xf << (l << 2)));
+        val |= (l_v << (l << 2));
+
+        val &= (~(0xf << (r << 2)));
+        val |= (r_v << (r << 2));
+
+        --l;
+        ++r;
+    }
+
+    while(val){
+        if (val & 0xf) break;
+        val >>= 4;
+    }
+    return val;
+}
+
+
+template <std::integral T>
 T be_to_le(T value, size_t sz){
     auto rp = (unsigned char*)(&value);
     auto lp = rp + (sz-1);
@@ -63,32 +94,34 @@ template <size_t cap>
 struct SmallString {
     char buf[cap]{};
     size_t sz = 0;
-    SmallString() = default;
-    explicit SmallString(std::string_view sv){for (auto c: sv) push(c);}
-    explicit SmallString(unsigned n){
+    constexpr SmallString() = default;
+    constexpr explicit SmallString(std::string_view sv){for (auto c: sv) push(c);}
+    constexpr explicit SmallString(unsigned n){
+        n = reverse_nibbles(n);
         while(n){
             auto val = n & 0xf;
             push(val < 10 ? '0' + val : 'a' + (val - 10));
             n >>= 4;
         }
     }
-    void reset(){sz = 0;}
-    void push(char c){buf[sz++] = c;}
-    void push(std::string_view sv){for (auto c: sv) push(c);}
-    auto begin(){return buf;}
-    auto end(){return buf + sz;}
+    constexpr void reset(){sz = 0;}
+    constexpr void push(char c){buf[sz++] = c;}
+    constexpr void push_lowercase(char c){buf[sz++] = c + 0x20;}
+    constexpr void push(std::string_view sv){for (auto c: sv) push(c);}
+    constexpr auto begin(){return buf;}
+    constexpr auto end(){return buf + sz;}
 
-    std::string_view to_sv() {
+    constexpr std::string_view to_sv() const{
         return std::string_view(buf, sz);
     }
 
-    auto operator+(const SmallString& rhs) const {
+    constexpr auto operator+(const SmallString& rhs) const {
         SmallString<cap> res(*this);
         res += rhs;
         return res;
     }
 
-    SmallString& operator+=(const SmallString& rhs){
+    constexpr SmallString& operator+=(const SmallString& rhs){
         for (size_t i = 0; i < rhs.sz; ++i) push(rhs.buf[i]);
         return *this;
     }
