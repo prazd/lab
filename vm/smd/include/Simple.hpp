@@ -47,6 +47,18 @@ T reverse_bits(T val){
 }
 
 template <std::integral T>
+size_t nibbles_count(T val){
+    if (!val) return 0;
+    size_t nibbles_sz = (sizeof(T) << 1);
+    size_t mask = 0xfzu << ((nibbles_sz-1) << 2);
+    while(!(val & mask)){
+        val <<= 4;
+        --nibbles_sz;
+    }
+    return nibbles_sz;
+}
+
+template <std::integral T>
 constexpr size_t reverse_nibbles(T val){
     size_t nibbles = sizeof(T) * 2;
     size_t r = 0;
@@ -59,10 +71,10 @@ constexpr size_t reverse_nibbles(T val){
         r_v ^= l_v;
         l_v ^= r_v;
 
-        val &= (~(0xf << (l << 2)));
+        val &= (~(0xfzu << (l << 2)));
         val |= (l_v << (l << 2));
 
-        val &= (~(0xf << (r << 2)));
+        val &= (~(0xfzu << (r << 2)));
         val |= (r_v << (r << 2));
 
         --l;
@@ -90,24 +102,40 @@ T be_to_le(T value, size_t sz){
     return value;
 }
 
+template <size_t sz>
+auto ztoarr(size_t val){
+    std::pair<std::array<unsigned char, sz>, size_t> r;
+    size_t n = 0;
+    auto ptr = r.first.begin();
+    while(val){
+        n = val % 10;
+        *ptr++ = 0x30 + n;
+        val/=10;
+        ++r.second;
+    }
+    return r;
+}
+
 template <size_t cap>
 struct SmallString {
     char buf[cap]{};
     size_t sz = 0;
     constexpr SmallString() = default;
     constexpr explicit SmallString(std::string_view sv){for (auto c: sv) push(c);}
-    constexpr explicit SmallString(unsigned n){
+    constexpr explicit SmallString(unsigned n){push_hex(n);}
+    constexpr void reset(){sz = 0;}
+    constexpr void push(char c){buf[sz++] = c;}
+    constexpr void push_lowercase(char c){buf[sz++] = c + 0x20;}
+    constexpr void push(std::string_view sv){for (auto c: sv) push(c);}
+    constexpr void push_hex(unsigned n){
+        auto ncount = nibbles_count(n);
         n = reverse_nibbles(n);
-        while(n){
+        for (size_t i = 0; i != ncount; ++i){
             auto val = n & 0xf;
             push(val < 10 ? '0' + val : 'a' + (val - 10));
             n >>= 4;
         }
     }
-    constexpr void reset(){sz = 0;}
-    constexpr void push(char c){buf[sz++] = c;}
-    constexpr void push_lowercase(char c){buf[sz++] = c + 0x20;}
-    constexpr void push(std::string_view sv){for (auto c: sv) push(c);}
     constexpr auto begin(){return buf;}
     constexpr auto end(){return buf + sz;}
 
@@ -127,31 +155,18 @@ struct SmallString {
     }
 };
 
-template <size_t sz>
-auto ztoarr(size_t val){
-    // TODO: use tuple
-    struct Result {
-        std::array<char, sz> arr;
-        size_t c_count{};
-    } r;
-    size_t n = 0;
-    auto ptr = r.arr.begin();
-    while(val){
-        n = val % 10;
-        *ptr++ = 0x30 + n;
-        val/=10;
-        ++r.c_count;
-    }
-    return r;
-}
-
-template <size_t sz, size_t num_c_max = 10, char sym = '&'>
+template <size_t sz, bool hex = true, size_t num_c_max = 10, char sym = '&'>
 SmallString<sz> str_num_template(std::string_view t, size_t n){
     SmallString<sz> res{};
     for (char c: t){
         if (c == sym){
-            auto [arr, count] = ztoarr<num_c_max>(n);
-            for (size_t i = 0; i < count; ++i) res.push(arr[i]);
+            if constexpr (hex){
+                res.push_hex(n);
+            } else {
+                auto [arr, count] = ztoarr<num_c_max>(n);
+                std::reverse(arr.begin(), arr.begin() + count);
+                for (size_t i = 0; i < count; ++i) res.push(arr[i]);
+            }
         } else res.push(c);
     }
     return res;
