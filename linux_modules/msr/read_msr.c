@@ -13,10 +13,9 @@ enum IA32_EFER_BIT_VAL {
 
 #define PRINT_IA32(flag,res) printk(#flag":%lu",(res >> flag) & 1);
 static int __init read_msr(void){
-    unsigned long rax; // low 
-    unsigned long rdx; // high
+    unsigned long rax = 0; // low 
+    unsigned long rdx = 0; // high
     asm volatile("rdmsr":"=a"(rax),"=d"(rdx) : "c"(0xC0000080));
-
     unsigned long res = ((rdx << 32) | rax);
 
     printk(KERN_INFO "\n_____RDMSR IA32 EFER_____\n");
