@@ -122,7 +122,7 @@ struct SmallString {
     size_t sz = 0;
     constexpr SmallString() = default;
     constexpr explicit SmallString(std::string_view sv){for (auto c: sv) push(c);}
-    constexpr explicit SmallString(unsigned n){push_hex(n);}
+    constexpr explicit SmallString(unsigned n): sz(0) {push_hex(n);}
     constexpr void reset(){sz = 0;}
     constexpr void push(char c){buf[sz++] = c;}
     constexpr void push_lowercase(char c){buf[sz++] = c + 0x20;}

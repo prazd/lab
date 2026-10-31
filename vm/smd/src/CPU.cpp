@@ -36,7 +36,7 @@ unsigned char M68K::ea_fetch_cycles(M68K::AddressMode ea, M68K::OperandSize sz) 
             return sz == LONG ? 10 : 6;
         }
         case ProgramCounterIndirectDisplacementMode:
-        case AddressRegisterIndirectDisplacementMode: {
+            case AddressRegisterIndirectDisplacementMode: {
             return  sz == LONG ? 12 : 8;
         }
         case ProgramCounterIndirectIndexMode:
@@ -2165,14 +2165,14 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         }
         return {
             .i = is_cmpa ? CMPA : CMP,
-            .r_src = reg,
+            .r_dst = reg,
             .ea_src = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = opmode,
             .opsz = opsz,
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, opsz)),
             .src_type = OT_EA,
-            .dst_type = OT_DREG,
+            .dst_type = OT_AREG,
         };
     }
 
@@ -2354,7 +2354,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((val >> 6) == 0x13b) {
         return {
             .i = JMP,
-            .d1_b = (unsigned char)(val & 0x3f), // EA
+            .ea_src = (unsigned char)(val & 0x3f), // EA
             .calc_ea = true,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, Unsized))),
             .src_type = OT_EA,
@@ -2364,7 +2364,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((val >> 6) == 0x13a) {
         return {
             .i = JSR,
-            .d1_b = (unsigned char)(val & 0x3f), // EA
+            .ea_src = (unsigned char)(val & 0x3f), // EA
             .calc_ea = true,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, Unsized))),
             .src_type = OT_EA,
@@ -2502,8 +2502,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = MOVEM,
             .opmode = dr,
-            .d1_b = (unsigned char)(val & 0x3f),
+            .ea_src =  (dr ? (unsigned char)(val & 0x3f) : (unsigned char)0),
+            .ea_dst = (dr ? (unsigned char)0 : (unsigned char)(val & 0x3f)),
             .opsz = opsz,
+            .read_ea = true,
             .read_prefetch = true,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz) + 2)),
             // TODO: check
@@ -2654,7 +2656,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if (!(val >> 8)) {
+    if (!(val >> 8) && ((val >> 6) & 0x3) != 0x3) {
         unsigned char sz = (val >> 6) & 0x3;
         auto opsz = (OperandSize)(1 << sz);
         return {
@@ -2995,7 +2997,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char dr = (val >> 3) & 0x1;
         return {
             .i = MOVEUSP,
-            .r_dst = (unsigned char)(val & 0x7),
+            .r_dst =  (dr ? (unsigned char)(val & 0x7) : (unsigned char)0),
+            .r_src =  (dr ? (unsigned char)0 : (unsigned char)(val & 0x7)),
             .opmode = dr,
             .opsz = LONG,
             .i_sz = 2,
@@ -3035,70 +3038,81 @@ unsigned M68K::read_mem(M68K::OperandSize sz, const unsigned char* mem) {
     }
 }
 
-std::pair<SmallString<64>, size_t> M68K::read_operand(const M68K::DecodedInfo &di, bool src, const unsigned char* mem) {
+std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& di, bool src, const unsigned char* mem) {
     OperandType ot = src ? di.src_type : di.dst_type;
-    SmallString<64> res{};
+    SmallString<128> res{};
     size_t step = 0;
     if (ot == OT_IMM) {
         auto imm_s = di.read_displacement ?
-                    (step += (di.opsz == LONG) ? 4 : 2, SmallString<64>(be_to_le(read_mem(di.opsz, mem), di.i_sz))) :
-                    SmallString<64>(di.d_l);
+                    (step += (di.opsz == LONG) ? 4 : 2, SmallString<128>(be_to_le(read_mem(di.opsz, mem), di.opsz))) :
+                    SmallString<128>(di.d_l);
         res += imm_s;
     } else if (ot == OT_EA) {
-        auto [ea_str, s] = src ? ea_to_str(di.ea_src, di.opsz, mem) : ea_to_str<false>(di.ea_dst,di.opsz,mem);
+        // TODO: MOVE
+        auto [ea_str, s] = ea_to_str(src ? di.ea_src : di.ea_dst, di.opsz, mem);
         res += ea_str;
         step = s;
     } else if (ot == OT_DREG || ot == OT_AREG){
         res.push(ot == OT_DREG ? 'D' : 'A');
-        res.push('0' + (src ? (char)di.r_src : di.r_dst));
+        res.push('0' + (src ? (char)di.r_src : (char)di.r_dst));
     } else if (ot == OT_CCR){
         res.push("CCR");
     } else if (ot == OT_SR) { // TODO: check
         res.push("SR");
-    } else if (ot == OT_LABEL){
+    } else if (ot == OT_LABEL) {
         // TODO: check
         if (di.i == BSR || di.i == BRA || di.i == Bcc) {
-                res += (di.opsz == WORD) ? (step+=2, SmallString<64>( sign_extend_to_l((unsigned short)read_mem(di.opsz, mem)))) :
-                                            SmallString<64>(sign_extend_to_l((unsigned char)di.d_l));
-        } else if (di.i == DBcc){
+            res += (di.opsz == WORD) ? (step += 2, SmallString<128>(
+                    sign_extend_to_l((unsigned short) read_mem(di.opsz, mem)))) :
+                   SmallString<128>(sign_extend_to_l((unsigned char) di.d_l));
+        } else if (di.i == DBcc) {
             // TODO: dec
-            res += (step+=2, SmallString<64>(sign_extend_to_l((unsigned short)read_mem(di.opsz, mem))));
+            res += (step += 2, SmallString<128>(sign_extend_to_l((unsigned short) read_mem(di.opsz, mem))));
         }
+    } else if (ot == OT_USP){
+        res.push("USP");
     } else if (ot == OT_LIST){
-        auto am = to_address_mode(di.ea_src, false);
-        unsigned short mask = read_mem(WORD, mem+2);
+        auto am = to_address_mode(src ? di.ea_dst : di.ea_src, true);
+        unsigned short mask = read_mem(WORD, mem);
         step += 2;
-        if (am == AddressRegisterIndirectPreDecMode) mask = reverse_bits(mask);
+        if (am == AddressRegisterIndirectPreDecMode)
+            mask = reverse_bits(mask);
         // TODO: check
         unsigned char count = 0;
         for (size_t i = 0; i < 8; ++i){
             auto v = mask & (1 << i);
-            if (!v){
-                if (count > 1){
-                    res += str_num_template<64>("D#", i - count);
-                    res += str_num_template<64>("-D#/", i - 1);
-                } else {
-                    res.push('D');
-                    res.push('0' + i);
-                    res.push('/');
-                }
-            } else ++count;
+            if (v && !count){
+                res.push('D');
+                res.push('0' + i);
+            } else if (v && count == 1) {
+                res.push('-');
+            } else if (!v && count){
+                if (count == 1) res.push('/');
+                else {res.push('D'); res.push('0' + i-1);}
+                count = 0;
+            }
+            if (v) ++count;
         }
+        if (count) {res.push("D7");}
+        count = 0;
+
         res.push(',');
 
         for (size_t i = 8; i < 16; ++i){
             auto v = mask & (1 << i);
-            if (!v){
-                if (count > 1){
-                    res += str_num_template<64>("A#", i - count);
-                    res += str_num_template<64>("-A#/", i - 1);
-                } else {
-                    res.push('A');
-                    res.push('0' + i);
-                    res.push('/');
-                }
-            } else ++count;
+            if (v && !count){
+                res.push('A');
+                res.push('0' + (i-8));
+            } else if (v && count == 1) {
+                res.push('-');
+            } else if (!v && count){
+                if (count == 1) res.push('/');
+                else {res.push('A'); res.push('0' + (i-8)-1);}
+                count = 0;
+            }
+            if (v) ++count;
         }
+        if (count) {res.push("A7");}
     }
     return {res,step};
 }

@@ -11,7 +11,8 @@ struct SMD {
     Cartridge cartridge;
     M68K m68k{};
     size_t offset{};
-    SMD(std::string_view sv): cartridge(sv), offset(0x35c){}
+    //  1D92:
+    SMD(std::string_view sv): cartridge(sv), offset(0x1d92){}
     void print_instruction(){
         // TODO: debug
         auto instruction = M68K::read_mem(M68K::WORD, (unsigned char*)(cartridge.buffer.data() + offset));
@@ -38,9 +39,11 @@ int main(){
     }
     CloseWindow();
 #endif
+
+    // TODO: check tst
     SMD smd("/Users/prazd/Desktop/dev/Sonic.gen");
 //    size_t x = 0;
 //    while (std::cin >> x)
-for (size_t i = 0; i < 10; ++i)
+for (size_t i = 0; i < 2; ++i)
         smd.print_instruction();
 }

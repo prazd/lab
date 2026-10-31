@@ -441,34 +441,35 @@ struct M68K {
 
     void fill_exec(Instruction);
     void set_ea_dst();
-
+    
     template <bool mr = true>
-    static std::pair<SmallString<64>,size_t> ea_to_str(unsigned char ea_val, OperandSize opsz, const unsigned char* mem) {
+    static std::pair<SmallString<128>,size_t> ea_to_str(unsigned char ea_val, OperandSize opsz, const unsigned char* mem) {
         auto am = to_address_mode(ea_val, mr);
-        unsigned char reg_n = mr ? ((ea_val >> 3) & 0x7) : ea_val & 0x7;
+        // TODO: check
+        unsigned char reg_n = mr ?  ea_val & 0x7 : ((ea_val >> 3) & 0x7);
         switch (am) {
-            case DataRegisterDirectMode:      return {str_num_template<64>("D&", reg_n),0};
-            case AddressRegisterDirectMode:   return {str_num_template<64>("A&", reg_n),0};
-            case AddressRegisterIndirectMode: return {str_num_template<64>("(A&)", reg_n), 0};
-            case AddressRegisterIndirectPostIncMode: return {str_num_template<64>("(A&)+", reg_n),0};
-            case AddressRegisterIndirectPreDecMode:  return {str_num_template<64>("-(A&)", reg_n), 0};
-            case AddressRegisterIndirectDisplacementMode:  return {str_num_template<64>("16(A&)", reg_n),0};
+            case DataRegisterDirectMode:      return {str_num_template<128>("D&", reg_n),0};
+            case AddressRegisterDirectMode:   return {str_num_template<128>("A&", reg_n),0};
+            case AddressRegisterIndirectMode: return {str_num_template<128>("(A&)", reg_n), 0};
+            case AddressRegisterIndirectPostIncMode: return {str_num_template<128>("(A&)+", reg_n),0};
+            case AddressRegisterIndirectPreDecMode:  return {str_num_template<128>("-(A&)", reg_n), 0};
+            case AddressRegisterIndirectDisplacementMode:  return {str_num_template<128>("16(A&)", reg_n),0};
             case AddressRegisterIndirectIndexMode:{
                 unsigned short val = (((unsigned short)(*mem)) << 8) | *(mem + 1);
-                return {str_num_template<64>("d8(A&,", reg_n) +
-                        ((val & 0x8000) ? str_num_template<64>("A&)", ((*mem) >> 12) & 0x7) :
-                         str_num_template<64>("D&)", ((*mem) >> 12) & 0x7)), 2};
+                return {str_num_template<128>("d8(A&,", reg_n) +
+                        ((val & 0x8000) ? str_num_template<128>("A&)", ((*mem) >> 12) & 0x7) :
+                         str_num_template<128>("D&)", ((*mem) >> 12) & 0x7)), 2};
             }
-            case ProgramCounterIndirectDisplacementMode: return {SmallString<64>{"16(PC)"}, 0};
-            case ProgramCounterIndirectIndexMode: return {str_num_template<64>("8(PC,D&)", reg_n), 0};
-            case AbsoluteShort:  return {str_num_template<64>("#&.W", read_mem(WORD, mem)), 2};
-            case AbsoluteLong:  return {str_num_template<64>("#&.L", read_mem(LONG, mem)), 4};
+            case ProgramCounterIndirectDisplacementMode: return {SmallString<128>{"16(PC)"}, 0};
+            case ProgramCounterIndirectIndexMode: return {str_num_template<128>("8(PC,D&)", reg_n), 0};
+            case AbsoluteShort:  return {str_num_template<128>("#&.W", read_mem(WORD, mem)), 2};
+            case AbsoluteLong:  return {str_num_template<128>("#&.L", read_mem(LONG, mem)), 4};
             default:
-                return {str_num_template<64>("#&", read_mem(opsz, mem)), opsz == LONG ? 4 : 2};
+                return {str_num_template<128>("#&", read_mem(opsz, mem)), opsz == LONG ? 4 : 2};
         }
     }
 
-    static std::pair<SmallString<64>,size_t> read_operand(const M68K::DecodedInfo &di, bool src, const unsigned char* mem);
+    static std::pair<SmallString<128>,size_t> read_operand(const M68K::DecodedInfo &di, bool src, const unsigned char* mem);
     static unsigned read_mem(OperandSize sz, const unsigned char*);
 
     static constexpr auto get_opcode_str(const M68K::DecodedInfo& di){
@@ -481,8 +482,8 @@ struct M68K {
     }
 
     template <bool lowercase = true>
-    static SmallString<64> disassemble(const M68K::DecodedInfo& di, const unsigned char* mem) {
-        SmallString<64> res{};
+    static SmallString<128> disassemble(const M68K::DecodedInfo& di, const unsigned char* mem) {
+        SmallString<128> res{};
         std::string_view i_str = get_opcode_str(di);
         if constexpr (lowercase)
             for (auto c: i_str) res.push_lowercase(c);
@@ -501,16 +502,16 @@ struct M68K {
                 res.push(opsz_c[di.opsz]);
             }
         }
-#if 1
-    // TODO: check operands
-    mem += 2;
-    res.push(' ');
-    auto [str, step] = read_operand(di, true, mem);
-    res += str;
-    mem += step;
-    res.push(',');
-    res += read_operand(di, false, mem).first;
-#endif
+
+        if (di.src_type != OT_EMPTY || di.dst_type != OT_EMPTY){
+            mem += 2;
+            res.push(' ');
+            auto [str, step] = read_operand(di, true, mem);
+            res += str;
+            mem += step;
+            res.push(',');
+            res += read_operand(di, false, mem).first;
+        }
         return res;
     }
 };
