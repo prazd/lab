@@ -1827,7 +1827,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         auto opsz = (OperandSize)(1 << sz);
         return {
             .i = ADDI,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
             .read_displacement = true,
@@ -1845,7 +1845,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = ADDQ,
             .d1_b = data,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
             .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f, opsz)),
@@ -1885,8 +1885,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         bool mode = (opmode == 0b000 || opmode == 0b001 || opmode == 0b010);
         return {
             .i = AND,
-            .r_dst = rx,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .r_dst = (unsigned char)(mode ? rx : 0),
+            .r_src = (unsigned char)(mode ? 0 : rx),
+            .ea_src = (unsigned char)(mode ? (val & 0x3f) : (0)),
+            .ea_dst = (unsigned char)(mode ? (0) : (val & 0x3f)),
             .read_ea = true,
             .opsz = opsz,
             .opmode = mode,
@@ -1902,7 +1904,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = ANDI,
             .d1_b = sz,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
             .read_displacement = true,
@@ -1943,7 +1945,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = (val & 0x100) ? ASL : ASR,
             .opsz = WORD,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, WORD)),
             .dst_type = OT_EA,
@@ -1969,7 +1971,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((val >> 6) == 0x21){
         return {
             .i = BCHG,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = 0,
             .opsz = BYTE,
@@ -1985,7 +1987,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i =  BCHG,
             .r_src = reg,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = 1,
             .opsz = LONG, // TODO: check
@@ -2001,7 +2003,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = BCLR,
             .r_src = reg,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = 1,
             .opsz = LONG,
@@ -2014,7 +2016,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if (val == 0x22){
         return {
             .i = BCLR,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = 0,
             .opsz = BYTE, // TODO: check
@@ -2050,7 +2052,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = BSET,
             .r_src = reg,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = 1,
             .opsz = LONG,
@@ -2064,7 +2066,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((val >> 6) == 0x23) {
         return {
             .i = BSET,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .opsz = BYTE,
             .read_ea = true,
             .opmode = 0,
@@ -2099,7 +2101,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = BTST,
             .r_src = reg,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = 1,
             .opsz = LONG,
@@ -2112,7 +2114,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((val >> 6) == 0x20) {
         return {
             .i = BTST,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .read_displacement = true,
             .opmode = 0,
@@ -2144,7 +2146,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = CLR,
             .d1_b = sz,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, opsz)),
@@ -2183,7 +2185,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = CMPI,
             .d1_b = sz,
             .opsz = opsz,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .read_displacement = true,
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, opsz) + (opsz == LONG ? 4 : 2)),
@@ -2263,7 +2265,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
            return {
             .i = EOR,
             .r_src = reg,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = opmode,
             .opsz = opsz,
@@ -2282,7 +2284,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = EORI,
             .d1_b = sz,
             .opsz = opsz,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .read_displacement = true,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz) + (opsz == LONG ? 4 : 2))),
@@ -2577,7 +2579,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = NBCD,
             .d1_b = (unsigned char)(val & 0x3f),
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = BYTE,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, BYTE))),
@@ -2590,7 +2592,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         auto opsz = (OperandSize)(1 << sz);
         return {
             .i = NEG,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f,opsz))),
@@ -2603,7 +2605,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         auto opsz = (OperandSize)(1 << sz);
         return {
             .i = NEGX,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
@@ -2623,7 +2625,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         auto opsz = (OperandSize)(1 << sz);
         return {
             .i = NOT,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
@@ -2645,10 +2647,12 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         auto mode = (unsigned char)((opmode == 0x0 || opmode == 0x1 || opmode == 0x2) ? 1 : 0);
         return {
             .i = OR,
-            .r_dst = reg,
+            .r_dst = (unsigned char)(mode ? reg : 0),
+            .r_src = (unsigned char)(mode ? 0 : reg),
             .opmode = mode,
             .opsz = opsz,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_src = (unsigned char)(mode ? (val & 0x3f) : 0),
+            .ea_dst = (unsigned char)(mode ? 0 : (val & 0x3f)),
             .read_ea = true,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
             .src_type = (mode ? OT_EA : OT_DREG),
@@ -2661,7 +2665,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         auto opsz = (OperandSize)(1 << sz);
         return {
             .i = ORI,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
             .read_displacement = true,
@@ -2686,7 +2690,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((val >> 6) == 0x121) {
         return {
             .i = PEA,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = LONG,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, LONG))),
@@ -2714,7 +2718,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((val >> 9) == 0x73 && ((val >> 6) & 0x3) == 0x3) {
         return {
             .i = (val & 0x100) ?  ROR : ROL,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = WORD,
             .i_sz = 2,
@@ -2743,7 +2747,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     if ((val >> 9) == 0x72 && ((val >> 6) & 0x3) == 0x3) {
         return {
             .i = (val & 0x100) ? ROXR : ROXL,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = WORD,
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, WORD)),
@@ -2789,7 +2793,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = Scc,
             .d1_b = cond,
             .opsz = BYTE,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, BYTE))),
             .dst_type = OT_EA,
@@ -2810,9 +2814,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         auto mode = (opmode == 0x0 || opmode == 0x1 || opmode == 0x2);
         return {
             .i =  SUB,
-            .r_dst = reg,
+            .r_dst = (unsigned char)(mode ? 0 : reg),
+            .r_src = (unsigned char)(mode ? reg : 0),
             .opmode = mode,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_src = (unsigned char)(mode ?  0 : (val & 0x3f)),
+            .ea_dst = (unsigned char)(mode ? (val & 0x3f) : 0),
             .read_ea = true,
             .opsz = opsz,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
@@ -2850,7 +2856,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         auto opsz = (OperandSize)(1 << sz);
         return {
             .i = SUBI,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = opsz,
             .read_displacement = true,
@@ -2867,7 +2873,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = SUBQ,
             .d1_b = data,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .opsz = opsz,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
             .src_type = OT_IMM,
@@ -2910,7 +2916,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char reg = val & 0x7;
         return {
             .i = TAS,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opsz = BYTE,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, BYTE))),
@@ -2942,7 +2948,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         auto opsz = (OperandSize)(1 << sz);
         return {
             .i = TST,
-            .ea_src = (unsigned char)(val & 0x3f),
+            .ea_dst = (unsigned char)(val & 0x3f),
             .opsz = opsz,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
             .dst_type = OT_EA,
@@ -3044,14 +3050,21 @@ std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& 
     size_t step = 0;
     if (ot == OT_IMM) {
         auto imm_s = di.read_displacement ?
-                    (step += (di.opsz == LONG) ? 4 : 2, SmallString<128>(be_to_le(read_mem(di.opsz, mem), di.opsz))) :
+                    // TODO: check
+                    (step += (di.opsz == LONG) ? 4 : 2, SmallString<128>(be_to_le(read_mem(di.opsz == LONG ? LONG : WORD, mem), di.opsz))) :
                     SmallString<128>(di.d_l);
         res += imm_s;
     } else if (ot == OT_EA) {
         // TODO: MOVE
-        auto [ea_str, s] = ea_to_str(src ? di.ea_src : di.ea_dst, di.opsz, mem);
-        res += ea_str;
-        step = s;
+        if (di.i == MOVE && !src) {
+            auto [ea_str, s] = ea_to_str<false>(src ? di.ea_src : di.ea_dst, di.opsz, mem);
+            res += ea_str;
+            step = s;
+        } else {
+            auto [ea_str, s] = ea_to_str(src ? di.ea_src : di.ea_dst, di.opsz, mem);
+            res += ea_str;
+            step = s;
+        }
     } else if (ot == OT_DREG || ot == OT_AREG){
         res.push(ot == OT_DREG ? 'D' : 'A');
         res.push('0' + (src ? (char)di.r_src : (char)di.r_dst));

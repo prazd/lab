@@ -48,7 +48,7 @@ T reverse_bits(T val){
 
 template <std::integral T>
 size_t nibbles_count(T val){
-    if (!val) return 0;
+    if (!val) return 1;
     size_t nibbles_sz = (sizeof(T) << 1);
     size_t mask = 0xfzu << ((nibbles_sz-1) << 2);
     while(!(val & mask)){
@@ -104,7 +104,7 @@ T be_to_le(T value, size_t sz){
 
 template <size_t sz>
 auto ztoarr(size_t val){
-    std::pair<std::array<unsigned char, sz>, size_t> r;
+    std::pair<std::array<char, sz>, size_t> r;
     size_t n = 0;
     auto ptr = r.first.begin();
     while(val){

@@ -12,7 +12,7 @@ struct SMD {
     M68K m68k{};
     size_t offset{};
     //  1D92:
-    SMD(std::string_view sv): cartridge(sv), offset(0x1d92){}
+    SMD(std::string_view sv): cartridge(sv), offset(0x1e1e){}
     void print_instruction(){
         // TODO: debug
         auto instruction = M68K::read_mem(M68K::WORD, (unsigned char*)(cartridge.buffer.data() + offset));
