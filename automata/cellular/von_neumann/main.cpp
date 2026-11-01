@@ -15,18 +15,26 @@ constexpr float SELECT_MENU_W = 200;
 constexpr float SELECT_MENU_H = 200;
 
 enum State: unsigned char {
-        Empty,
         U, // base
         S, S0, S00, S01, S000, S1, S10, S11,
         C00, C10, C01, C11, 
-        T00, T01, T02, T03,       // right/up/left/down
-        T00A, T01A, T02A, T03A,   // active right/up/left/down
+        T00, T01, T02, T03,        // right/up/left/down
+        T00A, T01A, T02A, T03A,    // active right/up/left/down
         T10, T11, T12, T13,        // special right/up/left/down
-        T10A, T11A, T12A, T13A    // special  active right/up/left/down
+        T10A, T11A, T12A, T13A     // special  active right/up/left/down
 };
 
 
 enum Direction: unsigned char {UP,DOWN,LEFT,RIGHT};
+
+static constexpr State transit[] = {
+   S, S0, S00, S01, S000, S1, S10, S11,
+};
+
+static constexpr State confluent[] = {
+   C00, C10, C01, C11,
+};
+
 
 static constexpr State transport[] = {
     T00, T01, T02, T03,   // right/up/left/down
@@ -52,7 +60,7 @@ static constexpr State transport_special_active[] = {
 };
 
 
-auto figure_by_state(Direction d, float x_w, float y_w){
+auto triangle_by_state(Direction d, float x_w, float y_w){
     float x3 = x_w/2;
     float y3 = y_w/4;
     float x2 = 0;
@@ -61,19 +69,32 @@ auto figure_by_state(Direction d, float x_w, float y_w){
     float y1 = y_w/4;
     switch (d){
         // TODO: check
-        case UP:    return std::tuple(Vector2{x3,y3}, Vector2{x2,y2}, Vector2{x1,y1});       //         {x,   y}
-        case DOWN:  return std::tuple(Vector2{-x3,-y3}, Vector2{-x2,-y2}, Vector2{-x1,-y1}); // 180:    {-x, -y}
+        case UP:     return std::tuple(Vector2{x3,y3}, Vector2{x2,y2}, Vector2{x1,y1});       //         {x,   y}
+        case DOWN:   return std::tuple(Vector2{-x3,-y3}, Vector2{-x2,-y2}, Vector2{-x1,-y1}); // 180:    {-x, -y}
         case LEFT:   return std::tuple(Vector2{y3,-x3}, Vector2{y2,-x2}, Vector2{y1,-x1});    // 90:  {y,  -x}
-        case RIGHT: return std::tuple(Vector2{-y3, x3}, Vector2{-y2,x2}, Vector2{-y1, x1});   // 90:  {-y,  x}
+        case RIGHT:  return std::tuple(Vector2{-y3, x3}, Vector2{-y2,x2}, Vector2{-y1, x1});   // 90:  {-y,  x}
     }
 }
 
 struct Automata {
     struct Cell {
-       // Counter(?)  - TODO: finish
+       // Counter - TODO: finish
        // 0 0 0 | 0 0 0 0 0  
        //            State (29)
        unsigned char cell_state{};
+       unsigned char get_counter(){
+            return ((cell_state >> 5) & 0x7);
+       }
+       void set_counter(unsigned char val){
+            reset_counter();
+            cell_state |= ((val & 0x7) << 5);
+       }
+       void reset_counter(){
+            cell_state &= 0x1f;
+       }
+       void inc_counter(){
+            set_counter(get_counter() + 1);
+       }
        State get_state(){
             return (State)(cell_state & 0x1f);
        }
@@ -83,12 +104,14 @@ struct Automata {
        }
        State next_state = U;
 
+       // TODO: debug
        static State next(State current, State up, State down, State left, State right){
             bool is_signal = (down == T01A || down == T11A || up == T03A || up == T13A || 
                         left == T00A || left == T10A || right == T02A || right == T12A);
             bool is_spec_signal = (down == T11A || up == T13A || left == T10A || right == T12A);  
-            bool is_norm_signal = (down == T01A || up == T03A || left == T00A || right == T02A);     
-                      
+            bool is_norm_signal = (down == T01A || up == T03A || left == T00A || right == T02A);
+            bool is_inactive_norm_signal = (down == T01 || up == T03 || left == T00 || right == T02);
+ 
             switch (current) {
                 case U:    return is_signal ? S : U;
                 case S:    return is_signal ? S1  : S0;
@@ -101,17 +124,55 @@ struct Automata {
                 case S11:  return is_signal ? C00 : T13;
             }
             if (std::any_of(std::begin(transport_normal), std::end(transport_normal), [current](auto el){return el == current;})){
+                if (current == T03 && (up == C01    ||   up == C11)) return T03A;
+                if (current == T01 && (down == C01  || down == C11)) return T01A;
+                if (current == T00 && (left == C01  || left == C11)) return T00A;
+                if (current == T02 && (right == C01 || right == C11)) return T02A;
                 return is_norm_signal ? (State)(current + 4): (State)(is_spec_signal ? U : current);
             }
             if (std::any_of(std::begin(transport_normal_active), std::end(transport_normal_active), [current](auto el){return el == current;})){
+                if (current == T03A && (up == C01    ||   up == C11)) return T03A;
+                if (current == T01A && (down == C01  || down == C11)) return T01A;
+                if (current == T00A && (left == C01  || left == C11)) return T00A;
+                if (current == T02A && (right == C01 || right == C11)) return T02A;
                 return is_norm_signal ? (State)(current): (State)(is_spec_signal ? U : current-4);
             }
             if (std::any_of(std::begin(transport_special), std::end(transport_special), [current](auto el){return el == current;})){
+                if (current == T13 && (up == C01    ||   up == C11)) return T13;
+                if (current == T11 && (down == C01  || down == C11)) return T11;
+                if (current == T10 && (left == C01  || left == C11)) return T10;
+                if (current == T12 && (right == C01 || right == C11)) return T12;
                 return is_spec_signal ? (State)(current + 4): (State)(is_norm_signal ? U : current);
             }
             if (std::any_of(std::begin(transport_special_active), std::end(transport_special_active), [current](auto el){return el == current;})){
+                if (current == T13A && (up == C01    ||   up == C11)) return T13A;
+                if (current == T11A && (down == C01  || down == C11)) return T11A;
+                if (current == T10A && (left == C01  || left == C11)) return T10A;
+                if (current == T12A && (right == C01 || right == C11)) return T12A;
                 return is_spec_signal ? (State)(current): (State)(is_norm_signal ? U : current-4);
+            } else if (std::any_of(std::begin(confluent), std::end(confluent), [current](auto el){return el == current;})){
+                switch(current){
+                    case C00: {
+                        if (!is_norm_signal || is_inactive_norm_signal) return C00;
+                        return C01;
+                    }
+                    case C01: {
+                        if (!is_norm_signal || is_inactive_norm_signal) return C10;
+                        return C11;
+                    }
+                    case C10: {
+                        if (!is_norm_signal || is_inactive_norm_signal) return C00;
+                        return C01;
+                    }
+                    case C11 :{
+                        if (!is_norm_signal || is_inactive_norm_signal) return C10;
+                        return C11;
+                    }
+                }
             }
+
+            
+
             return current;
        }
     };
@@ -160,9 +221,32 @@ void draw_figure_by_state(State s, Rectangle rec, float offset){
         case T01A: c = GREEN;  d = UP;    break;
     }
     
-    auto [a3,a2,a1] = figure_by_state(d, rec.width, rec.height);
+    auto [a3,a2,a1] = triangle_by_state(d, rec.width, rec.height);
     DrawTriangle({a3.x + rec.x + offset, a3.y + rec.y + offset}, {a2.x + rec.x + offset, a2.y + rec.y + offset}, {a1.x + rec.x + offset, a1.y + rec.y + offset}, c);
+    } else if (std::any_of(std::begin(confluent), std::end(confluent), [s](auto el){return el == s;})){
+        Color c;
+        switch(s){
+            case C00: c = BLUE;   break;
+            case C01: c = RED;    break;
+            case C10: c = GREEN;  break;
+            case C11: c = PINK;   break;
+        }
+        DrawRectangle(rec.x + offset/2, rec.y + offset/2, rec.width/1.5f, rec.height/1.5f, c);
+    } else if (std::any_of(std::begin(transit), std::end(transit), [s](auto el){return el == s;})){
+        Color c;
+        switch(s){
+            case S:    c = BLACK;   break;
+            case S0:   c = BLUE;    break;
+            case S00:  c = GRAY;    break;
+            case S01:  c = GREEN;   break;
+            case S000: c = PINK;    break;
+            case S1:   c = BROWN;   break;
+            case S10:  c = RED;     break;
+            case S11:  c = PURPLE;  break;
+        }
+        DrawCircle(rec.x + rec.width/2, rec.y + rec.height/2, rec.width/3.f, c);
     }
+
 }
 
 struct SelectMenu {
