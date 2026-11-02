@@ -453,7 +453,9 @@ void M68K::ea_fill(unsigned char val){
         default: {
             ea_address_calc(val);
             fill_prefetch_req();
-            fill_bus_read_req(ea_address, BRDOperandA1, opsz);
+            fill_bus_read_req(ea_address, BRDOperandA1, WORD);
+            if (opsz != LONG) break;
+            fill_bus_read_req(ea_address+2, BRDOperandA2, WORD);
             break;
         }
     }
@@ -1064,7 +1066,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
             break;
         }
         case LEA: {
-            aregs[di.r_dst] = aregs[di.d1_b & 0x7];
+            aregs[di.r_dst] = operand_a_l; // TODO: check
             fill_prefetch_req();
             break;
         }
@@ -2379,7 +2381,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         return {
             .i = LEA,
             .r_dst = reg,
-            .d1_b = (unsigned char)(val & 0x3f), // EA
+            .ea_src = (unsigned char)(val & 0x3f),
+            .read_ea = true,
             .opsz = LONG,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, LONG))),
             .src_type = OT_EA,
@@ -3051,7 +3054,7 @@ std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& 
     if (ot == OT_IMM) {
         auto imm_s = di.read_displacement ?
                     // TODO: check
-                    (step += (di.opsz == LONG) ? 4 : 2, SmallString<128>(be_to_le(read_mem(di.opsz == LONG ? LONG : WORD, mem), di.opsz))) :
+                    (step += (di.opsz == LONG) ? 4 : 2, SmallString<128>(read_mem(di.opsz == LONG ? LONG : WORD, mem))) :
                     SmallString<128>(di.d_l);
         res += imm_s;
     } else if (ot == OT_EA) {

@@ -104,6 +104,7 @@ T be_to_le(T value, size_t sz){
 
 template <size_t sz>
 auto ztoarr(size_t val){
+    // TODO: check - unsigned char
     std::pair<std::array<char, sz>, size_t> r;
     size_t n = 0;
     auto ptr = r.first.begin();
@@ -167,6 +168,18 @@ SmallString<sz> str_num_template(std::string_view t, size_t n){
                 std::reverse(arr.begin(), arr.begin() + count);
                 for (size_t i = 0; i < count; ++i) res.push(arr[i]);
             }
+        } else res.push(c);
+    }
+    return res;
+}
+
+template <size_t sz, char sym = '&'>
+SmallString<sz> str_char_template(std::string_view t, const std::initializer_list<char>& il){
+    SmallString<sz> res{};
+    auto ptr = il.begin();
+    for (char c: t){
+        if (c == sym){
+            res.push(*ptr++);
         } else res.push(c);
     }
     return res;
