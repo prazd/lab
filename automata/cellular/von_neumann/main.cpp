@@ -78,36 +78,16 @@ auto triangle_by_state(Direction d, float x_w, float y_w){
 
 struct Automata {
     struct Cell {
-       // Counter - TODO: finish
-       // 0 0 0 | 0 0 0 0 0  
-       //            State (29)
-       unsigned char cell_state{};
-       unsigned char get_counter(){
-            return ((cell_state >> 5) & 0x7);
-       }
-       void set_counter(unsigned char val){
-            reset_counter();
-            cell_state |= ((val & 0x7) << 5);
-       }
-       void reset_counter(){
-            cell_state &= 0x1f;
-       }
-       void inc_counter(){
-            set_counter(get_counter() + 1);
-       }
-       State get_state(){
-            return (State)(cell_state & 0x1f);
-       }
-       void set_state(State s){
-            cell_state &= 0xe0;
-            cell_state |= s;
-       }
+       State state{};
+       State get_state(){return state;}
+       void set_state(State s){state = s;}
        State next_state = U;
 
        // TODO: debug
        static State next(State current, State up, State down, State left, State right){
             bool is_signal = (down == T01A || down == T11A || up == T03A || up == T13A || 
-                        left == T00A || left == T10A || right == T02A || right == T12A);
+                        left == T00A || left == T10A || right == T02A || right == T12A
+                    );
             bool is_spec_signal = (down == T11A || up == T13A || left == T10A || right == T12A);  
             bool is_norm_signal = (down == T01A || up == T03A || left == T00A || right == T02A);
             bool is_inactive_norm_signal = (down == T01 || up == T03 || left == T00 || right == T02);
@@ -115,7 +95,7 @@ struct Automata {
             switch (current) {
                 case U:    return is_signal ? S : U;
                 case S:    return is_signal ? S1  : S0;
-                case S0:   return is_signal ? S00 : S01;
+                case S0:   return is_signal ? S01 : S00;
                 case S00:  return is_signal ? T02 : S000;
                 case S000: return is_signal ? T01 : T00;
                 case S01:  return is_signal ? T10 : T03;
@@ -138,10 +118,10 @@ struct Automata {
                 return is_norm_signal ? (State)(current): (State)(is_spec_signal ? U : current-4);
             }
             if (std::any_of(std::begin(transport_special), std::end(transport_special), [current](auto el){return el == current;})){
-                if (current == T13 && (up == C01    ||   up == C11)) return T13;
-                if (current == T11 && (down == C01  || down == C11)) return T11;
-                if (current == T10 && (left == C01  || left == C11)) return T10;
-                if (current == T12 && (right == C01 || right == C11)) return T12;
+                if (current == T13 && (up == C01    ||   up == C11)) return  T13A;
+                if (current == T11 && (down == C01  || down == C11)) return  T11A;
+                if (current == T10 && (left == C01  || left == C11)) return  T10A;
+                if (current == T12 && (right == C01 || right == C11)) return T12A;
                 return is_spec_signal ? (State)(current + 4): (State)(is_norm_signal ? U : current);
             }
             if (std::any_of(std::begin(transport_special_active), std::end(transport_special_active), [current](auto el){return el == current;})){
@@ -295,7 +275,7 @@ struct SelectMenu {
                     if (IsMouseButtonPressed(0)) state = arr[i][j];
                     else DrawRectangleLinesEx(rec, 1.f, BLUE);
                 } 
-                if (state == arr[i][j]) DrawRectangleLinesEx(rec, 1.f, GREEN);
+                if ((state == arr[i][j] && state == U && i == 0 && j == 0) || (state == arr[i][j] && state != U)) DrawRectangleLinesEx(rec, 1.f, GREEN);
                 draw_figure_by_state(arr[i][j],{x, y, x_w, y_w}, offset);
                 DrawText(arr_str[i][j], x, y, 10.f, BLACK);
                 x += x_w;
@@ -322,7 +302,10 @@ int main(){
         EndTextureMode();
         return result;
     }();
+    bool pressed = false;
+    SetTargetFPS(60);
     while(!WindowShouldClose()){
+        if (IsKeyPressed(KEY_P)) pressed = !pressed;
         BeginDrawing();
             ClearBackground(WHITE);
             DrawTextureRec(grid.texture, {0, 0, (float)grid.texture.width, -(float)grid.texture.height}, {0, 0}, WHITE);
@@ -330,13 +313,14 @@ int main(){
                 for (size_t j = 0; j < WIDTH_N; ++j){
                     auto pos = (i * WIDTH_N) + j;
                     auto rec = Rectangle{float(j * FIELD_WIDTH), float(i * FIELD_HEIGHT), FIELD_WIDTH, FIELD_HEIGHT};
-                    if (!sm.active && CheckCollisionPointRec(GetMousePosition(), rec) && IsMouseButtonPressed(0))
+                    if (!sm.active && CheckCollisionPointRec(GetMousePosition(), rec) && (pressed ? IsMouseButtonPressed(0) : IsMouseButtonDown(0)))
                         a.field[pos].set_state(sm.state);
                     draw_figure_by_state(a.field[pos].get_state(), rec, 20);
                 }
             }
             if (IsKeyPressed(KEY_N)) a.next();
             sm.draw();
+            DrawFPS(0,0);
         EndDrawing();
     }
     CloseWindow();
