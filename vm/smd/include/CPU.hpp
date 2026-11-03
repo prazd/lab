@@ -148,7 +148,7 @@ struct M68K {
 
             "RESET",
             "RTE",
-              "STOP"
+              "STOP",
     };
 
     static constexpr std::string_view bcc_cond_to_str[] = {
@@ -288,6 +288,7 @@ struct M68K {
         unsigned char i_sz{};
         OperandType src_type{};
         OperandType dst_type{};
+        bool unknown = false;
     } di;
 
     inline void read_displacement() {
@@ -448,35 +449,35 @@ struct M68K {
         // TODO: check
         unsigned char reg_n = mr ?  ea_val & 0x7 : ((ea_val >> 3) & 0x7);
         switch (am) {
-            case DataRegisterDirectMode:      return {str_num_template<128>("D&", reg_n),0};
-            case AddressRegisterDirectMode:   return {str_num_template<128>("A&", reg_n),0};
-            case AddressRegisterIndirectMode: return {str_num_template<128>("(A&)", reg_n), 0};
-            case AddressRegisterIndirectPostIncMode: return {str_num_template<128>("(A&)+", reg_n),0};
-            case AddressRegisterIndirectPreDecMode:  return {str_num_template<128>("-(A&)", reg_n), 0};
+            case DataRegisterDirectMode:      return {str_num_template<128>("d&", reg_n),0};
+            case AddressRegisterDirectMode:   return {str_num_template<128>("a&", reg_n),0};
+            case AddressRegisterIndirectMode: return {str_num_template<128>("(a&)", reg_n), 0};
+            case AddressRegisterIndirectPostIncMode: return {str_num_template<128>("(a&)+", reg_n),0};
+            case AddressRegisterIndirectPreDecMode:  return {str_num_template<128>("-(a&)", reg_n), 0};
             case AddressRegisterIndirectDisplacementMode:
                 return {
-                        str_num_template<128>("(&,",   sign_extend_to_l((unsigned short)read_mem(WORD, mem))) +
-                        str_num_template<128>("A&)", reg_n),opsz == LONG ? LONG : WORD
+                        str_num_template<128,false>("(&,",   sign_extend_to_l((unsigned short)read_mem(WORD, mem)), true) +
+                        str_num_template<128>("a&)", reg_n),opsz == LONG ? LONG : WORD
                 };
             case AddressRegisterIndirectIndexMode:{
                 auto val = (unsigned short)read_mem(WORD, mem);
                 OperandSize sz = (val & 0x800) ? LONG : WORD;
-                return {str_num_template<128>("(&,", sign_extend_to_l((unsigned char)(val & 0xff))) + str_num_template<128>("A&,", reg_n) +
-                        ((val & 0x8000) ? str_num_template<128>("A&)", ((*mem) >> 12) & 0x7) :
-                         str_num_template<128>("D&.", ((*mem) >> 12) & 0x7)) + str_char_template<128>("&)", {opsz_c[sz]}), 2};
+                return {str_num_template<128,false>("(&,", sign_extend_to_l((unsigned char)(val & 0xff)), true) + str_num_template<128>("a&,", reg_n) +
+                        ((val & 0x8000) ? str_num_template<128>("a&)", ((*mem) >> 12) & 0x7) :
+                         str_num_template<128>("d&.", ((*mem) >> 12) & 0x7)) + str_char_template<128>("&)", {opsz_c[sz]}), 2};
             }
             case ProgramCounterIndirectDisplacementMode: {
                 return {
-                        str_num_template<128>("(&,",   sign_extend_to_l((unsigned short)read_mem(WORD, mem))) +
+                        str_num_template<128,false>("(&,",   sign_extend_to_l((unsigned short)read_mem(WORD, mem)), true) +
                         str_num_template<128>("pc)", reg_n),opsz == LONG ? LONG : WORD
                 };
             }
             case ProgramCounterIndirectIndexMode: {
                 auto val = (unsigned short)read_mem(WORD, mem);
                 OperandSize sz = (val & 0x800) ? LONG : WORD;
-                return {str_num_template<128>("(&,", sign_extend_to_l((unsigned char)(val & 0xff))) + str_num_template<128>("pc,", 0) +
-                        ((val & 0x8000) ? str_num_template<128>("A&.", ((*mem) >> 12) & 0x7) :
-                         str_num_template<128>("D&.", ((*mem) >> 12) & 0x7)) + str_char_template<128>("&)", {opsz_c[sz]}), 2};
+                return {str_num_template<128,false>("(&,", sign_extend_to_l((unsigned char)(val & 0xff)), true) + str_num_template<128>("pc,", 0) +
+                        ((val & 0x8000) ? str_num_template<128>("a&.", ((*mem) >> 12) & 0x7) :
+                         str_num_template<128>("d&.", ((*mem) >> 12) & 0x7)) + str_char_template<128>("&)", {opsz_c[sz]}), 2};
             }
             case AbsoluteShort:  return {str_num_template<128>("#&.W", read_mem(WORD, mem)), 2};
             case AbsoluteLong:  return {str_num_template<128>("#&.L", read_mem(LONG, mem)), 4};

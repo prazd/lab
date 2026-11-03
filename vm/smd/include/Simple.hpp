@@ -104,7 +104,6 @@ T be_to_le(T value, size_t sz){
 
 template <size_t sz>
 auto ztoarr(size_t val){
-    // TODO: check - unsigned char
     std::pair<std::array<char, sz>, size_t> r;
     size_t n = 0;
     auto ptr = r.first.begin();
@@ -123,7 +122,10 @@ struct SmallString {
     size_t sz = 0;
     constexpr SmallString() = default;
     constexpr explicit SmallString(std::string_view sv){for (auto c: sv) push(c);}
-    constexpr explicit SmallString(unsigned n): sz(0) {push_hex(n);}
+    constexpr explicit SmallString(unsigned n, bool h = true, bool s = false) {
+        if (h) push_hex(n);
+        else push_dec(n, s);
+    }
     constexpr void reset(){sz = 0;}
     constexpr void push(char c){buf[sz++] = c;}
     constexpr void push_lowercase(char c){buf[sz++] = c + 0x20;}
@@ -133,8 +135,34 @@ struct SmallString {
         n = reverse_nibbles(n);
         for (size_t i = 0; i != ncount; ++i){
             auto val = n & 0xf;
-            push(val < 10 ? '0' + val : 'a' + (val - 10));
+            push(val < 10 ? '0' + val : 'A' + (val - 10));
             n >>= 4;
+        }
+    }
+    constexpr void insert(size_t index, char c){
+        push(c);
+        for (size_t i = sz-1; i > index+1; --i)
+            std::swap(buf[i], buf[i-1]);
+    }
+    constexpr void push_dec(unsigned n, bool s){
+        if (!n) { push('0'); return;}
+        if (s){
+            auto v = (int)n;
+            if (v < 0) push('-');
+            size_t cur = sz-1;
+            int m = (v < 0 ? -1 : 1);
+            while(v){
+                auto x = (unsigned char)((v % 10) * m);
+                insert(cur, x + 0x30);
+                v /= 10;
+            }
+        } else {
+            size_t cur = sz-1;
+            while(n){
+                auto x = (unsigned char)((n % 10) );
+                insert(cur, x + 0x30);
+                n /= 10;
+            }
         }
     }
     constexpr auto begin(){return buf;}
@@ -157,16 +185,14 @@ struct SmallString {
 };
 
 template <size_t sz, bool hex = true, size_t num_c_max = 10, char sym = '&'>
-SmallString<sz> str_num_template(std::string_view t, size_t n){
+SmallString<sz> str_num_template(std::string_view t, unsigned n, bool s = false){
     SmallString<sz> res{};
     for (char c: t){
         if (c == sym){
             if constexpr (hex){
                 res.push_hex(n);
             } else {
-                auto [arr, count] = ztoarr<num_c_max>(n);
-                std::reverse(arr.begin(), arr.begin() + count);
-                for (size_t i = 0; i < count; ++i) res.push(arr[i]);
+                res.push_dec(n, s);
             }
         } else res.push(c);
     }
@@ -174,7 +200,7 @@ SmallString<sz> str_num_template(std::string_view t, size_t n){
 }
 
 template <size_t sz, char sym = '&'>
-SmallString<sz> str_char_template(std::string_view t, const std::initializer_list<char>& il){
+SmallString<sz> str_char_template(std::string_view t, const std::initializer_list<char>& il){ // TODO: check
     SmallString<sz> res{};
     auto ptr = il.begin();
     for (char c: t){

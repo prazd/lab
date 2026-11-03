@@ -453,6 +453,7 @@ void M68K::ea_fill(unsigned char val){
         default: {
             ea_address_calc(val);
             fill_prefetch_req();
+            // TODO: check
             fill_bus_read_req(ea_address, BRDOperandA1, WORD);
             if (opsz != LONG) break;
             fill_bus_read_req(ea_address+2, BRDOperandA2, WORD);
@@ -2336,7 +2337,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if ((val >> 9) == 0x24 && !((val >> 3) & 0x7)) {
+    if ((val >> 9) == 0x24 && !((val >> 3) & 0x7) &&
+            (((val >> 6) & 0x7) == 0x2 || ((val >> 6) & 0x7) == 0x3 || ((val >> 6) & 0x7) == 0x7)) {
         unsigned char reg = (val & 0x7);
         unsigned char opmode = (val >> 3) & 0x1f;
         return {
@@ -2454,7 +2456,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if (!(val >> 14) && ((val >> 6) & 0x7) == 0x1) {
+    if (!(val >> 14) && (((val >> 12) & 0x3) == 0x3 || ((val >> 12) & 0x3) == 0x2) &&  ((val >> 6) & 0x7) == 0x1) {
         unsigned char sz = (val >> 12) & 0x3;
         unsigned char dst = (val >> 9) & 0x7;
         OperandSize opsz{};
@@ -2690,7 +2692,12 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     }
 
 
-    if ((val >> 6) == 0x121) {
+    if ((val >> 6) == 0x121 &&
+            // supported ea modes
+            // TODO: check
+            ((val >> 3) & 0x7) == 0x7 || ((val >> 3) & 0x7) == 0x2 || ((val >> 3) & 0x7) == 0x5
+            || ((val >> 3) & 0x7) == 0x6
+    ) {
         return {
             .i = PEA,
             .ea_dst = (unsigned char)(val & 0x3f),
@@ -3031,13 +3038,13 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         .i_sz = 4,
         .dst_type = OT_IMM,
     };
-    return {.i_sz = 2};
+    return {.i_sz = 2,.unknown = true};
 }
 
 
 unsigned M68K::read_mem(M68K::OperandSize sz, const unsigned char* mem) {
     switch (sz) {
-        case BYTE: return (*mem) & 0xff;
+        case BYTE: return (*mem + 1) & 0xff;
         case WORD: return (((*(mem + 1))) | (((unsigned)(*mem)) << 8));
         default:
             return ((unsigned)(*mem) << 24) |
@@ -3052,11 +3059,18 @@ std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& 
     SmallString<128> res{};
     size_t step = 0;
     if (ot == OT_IMM) {
-        auto imm_s = di.read_displacement ?
-                    // TODO: check
-                    (step += (di.opsz == LONG) ? 4 : 2, SmallString<128>(read_mem(di.opsz == LONG ? LONG : WORD, mem))) :
-                    SmallString<128>(di.d_l);
-        res += imm_s;
+        if (di.read_displacement){
+            auto imm = read_mem(di.opsz == LONG ? LONG : WORD, mem);
+            if (di.opsz == BYTE) imm &= 0xff;
+            if (imm < 128)
+                res += str_num_template<128,false>("#&", imm, true);
+            else
+                res += str_num_template<128>("#$&", imm);
+            step += (di.opsz == LONG) ? 4 : 2;
+
+        } else {
+            res += SmallString<128>(di.d_l);
+        }
     } else if (ot == OT_EA) {
         // TODO: MOVE
         if (di.i == MOVE && !src) {
@@ -3069,7 +3083,7 @@ std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& 
             step = s;
         }
     } else if (ot == OT_DREG || ot == OT_AREG){
-        res.push(ot == OT_DREG ? 'D' : 'A');
+        res.push(ot == OT_DREG ? 'd' : 'a');
         res.push('0' + (src ? (char)di.r_src : (char)di.r_dst));
     } else if (ot == OT_CCR){
         res.push("CCR");
@@ -3079,11 +3093,11 @@ std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& 
         // TODO: check
         if (di.i == BSR || di.i == BRA || di.i == Bcc) {
             res += (di.opsz == WORD) ? (step += 2, SmallString<128>(
-                    sign_extend_to_l((unsigned short) read_mem(di.opsz, mem)))) :
-                   SmallString<128>(sign_extend_to_l((unsigned char) di.d_l));
+                    sign_extend_to_l((unsigned short) read_mem(di.opsz, mem)), false, true)) :
+                   SmallString<128>(sign_extend_to_l((unsigned char) di.d_l), false, true);
         } else if (di.i == DBcc) {
             // TODO: dec
-            res += (step += 2, SmallString<128>(sign_extend_to_l((unsigned short) read_mem(di.opsz, mem))));
+            res += (step += 2, SmallString<128>(sign_extend_to_l((unsigned short) read_mem(di.opsz, mem)), false, true));
         }
     } else if (ot == OT_USP){
         res.push("USP");
@@ -3098,18 +3112,18 @@ std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& 
         for (size_t i = 0; i < 8; ++i){
             auto v = mask & (1 << i);
             if (v && !count){
-                res.push('D');
+                res.push('d');
                 res.push('0' + i);
             } else if (v && count == 1) {
                 res.push('-');
             } else if (!v && count){
                 if (count == 1) res.push('/');
-                else {res.push('D'); res.push('0' + i-1);}
+                else {res.push('d'); res.push('0' + i-1);}
                 count = 0;
             }
             if (v) ++count;
         }
-        if (count) {res.push("D7");}
+        if (count) {res.push("d7");}
         count = 0;
 
         res.push(',');
@@ -3117,18 +3131,18 @@ std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& 
         for (size_t i = 8; i < 16; ++i){
             auto v = mask & (1 << i);
             if (v && !count){
-                res.push('A');
+                res.push('a');
                 res.push('0' + (i-8));
             } else if (v && count == 1) {
                 res.push('-');
             } else if (!v && count){
                 if (count == 1) res.push('/');
-                else {res.push('A'); res.push('0' + (i-8)-1);}
+                else {res.push('a'); res.push('0' + (i-8)-1);}
                 count = 0;
             }
             if (v) ++count;
         }
-        if (count) {res.push("A7");}
+        if (count) {res.push("a7");}
     }
     return {res,step};
 }
