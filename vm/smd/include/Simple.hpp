@@ -144,6 +144,7 @@ struct SmallString {
         for (size_t i = sz-1; i > index+1; --i)
             std::swap(buf[i], buf[i-1]);
     }
+    // TODO: check
     constexpr void push_dec(unsigned n, bool s){
         if (!n) { push('0'); return;}
         if (s){

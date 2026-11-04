@@ -1785,6 +1785,9 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 }
 
 M68K::DecodedInfo M68K::decode(unsigned short val) {
+    auto ea_mod = (val >> 3) & 0x7;
+    auto ea_reg= val & 0x7;
+
     if ((((val >> 12) & 0xf) == 0b1100) && (((val >> 4) & 0x1f) == 0b10000)) {
         auto r =  (unsigned char)((val >> 3) & 0x1);
         return {
@@ -1799,8 +1802,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .dst_type = (r ? OT_EA : OT_DREG)
         };
     }
-    if ((((val >> 12) & 0xf) == 0b1101)) {
-        unsigned char opmode = (val >> 6) & 0x7;
+
+
+    if (unsigned char opmode = (val >> 6) & 0x7; (((val >> 12) & 0xf) == 0b1101)
+        &&  (opmode == 0b011 || opmode == 0b111)
+    ) {
         unsigned char rx = (val >> 9) & 0x7;
         OperandSize sz;
         switch(opmode){
@@ -1813,7 +1819,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         }
         bool mode = (opmode == 0b000 || opmode == 0b001 || opmode == 0b010);
         return {
-            .i = (opmode == 0b011 || opmode == 0b111) ? ADDA : ADD,
+            .i =  ADDA,
             .r_dst = rx,
             .opsz = sz,
             .ea_src = (unsigned char)(val & 0x3f),
@@ -1825,7 +1831,39 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if (((val >> 8) & 0xff) == 0b0000'0110) {
+    if (unsigned char opmode = (val >> 6) & 0x7; (((val >> 12) & 0xf) == 0b1101)
+             &&  (((opmode == 0x0 || opmode == 0x1 || opmode == 0x2))
+             || ((opmode == 0x4 || opmode == 0x5 || opmode == 0x6) &&
+                (ea_mod != 0x0 && ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3))
+                )
+            ))) {
+        unsigned char rx = (val >> 9) & 0x7;
+        OperandSize sz;
+        switch(opmode){
+            case 0b000:
+            case 0b100: {sz = BYTE ;break;}
+            case 0b001:
+            case 0b011:
+            case 0b101: {sz = WORD; break;}
+            default:    {sz = LONG; break;}
+        }
+        bool mode = (opmode == 0b000 || opmode == 0b001 || opmode == 0b010);
+        return {
+                .i = ADD,
+                .r_dst = rx,
+                .opsz = sz,
+                .ea_src = (unsigned char)(val & 0x3f),
+                .read_ea = true,
+                .opmode = mode,
+                .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f, sz)),
+                .src_type = (mode ? OT_EA : OT_DREG),
+                .dst_type = (mode ? OT_DREG : OT_EA),
+        };
+    }
+
+
+    if (((val >> 8) & 0xff) == 0b0000'0110 &&
+    ea_mod != 0x1 && (ea_mod != 0x7 && ea_reg != 0x4 && !(ea_mod == 0x7 &&  (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))) {
         unsigned char sz = (val >> 6) & 0x3;
         auto opsz = (OperandSize)(1 << sz);
         return {
@@ -1841,7 +1879,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-     if ((val >> 12) == 0b0101 && !(val & 0x100)) {
+     if ((val >> 12) == 0b0101 && !(val & 0x100) &&
+             !(ea_mod == 0x7 &&  (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3))) {
         unsigned char data = (val >> 9) & 0x3;
         unsigned char sz = (val >> 6) & 0x3;
         auto opsz = (OperandSize)(1 << sz);
@@ -1875,8 +1914,12 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-     if ((val >> 12) == 0b1100 && (val & 0x100) && !(val & 0x30)){
-        unsigned char opmode = (val >> 6) & 0x3;
+     if (unsigned char opmode = (val >> 6) & 0x7;  (val >> 12) == 0xc && (
+             (((opmode == 0x0 || opmode == 0x1 || opmode == 0x2) && (ea_mod != 0x1) ||
+             ((opmode == 0x4 || opmode == 0x5 || opmode == 0x6) && (ea_mod != 0x1 && ea_mod != 0x0 &&
+             !(ea_mod == 0x7 &&  (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)) )
+        ))))
+     ){
         unsigned char rx = (val >> 9) & 0x3;
         OperandSize opsz{};
         if (opmode == 0x0 || opmode == 0x4)
@@ -1901,7 +1944,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-     if ((val >> 8) == 0x2){
+     if ((val >> 8) == 0x2 && (ea_mod != 0x1 && !(ea_mod == 0x7 &&  (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))){
         unsigned char sz = (val >> 6) & 0x3;
         auto opsz = (OperandSize)(1 << sz);
         return {
@@ -1944,7 +1987,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if ((val >> 9) == 0x70 && ((val >> 6) & 0x3) == 0x3){
+    if ((val >> 9) == 0x70 && ((val >> 6) & 0x3) == 0x3 &&
+    (ea_mod != 0x0 && ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))){
         return {
             .i = (val & 0x100) ? ASL : ASR,
             .opsz = WORD,
@@ -1971,7 +2015,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if ((val >> 6) == 0x21){
+    if ((val >> 6) == 0x21  &&
+    (ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))){
         return {
             .i = BCHG,
             .ea_dst = (unsigned char)(val & 0x3f),
@@ -1985,10 +2030,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if (!(val >> 12) && ((val >> 6) & 0x7) == 0x5) {
+    if (!(val >> 12) && ((val >> 6) & 0x7) == 0x5 &&
+    (ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))){
         unsigned char reg = (val >> 9) & 0x7;
         return {
-            .i =  BCHG,
+            .i = BCHG,
             .r_src = reg,
             .ea_dst = (unsigned char)(val & 0x3f),
             .read_ea = true,
@@ -2001,7 +2047,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     }
 
     // TODO: check EA and imm pos
-    if (!(val >> 12) && ((val >> 6) & 0x7) == 0x6) {
+    if (!(val >> 12) && ((val >> 6) & 0x7) == 0x6 &&
+    (ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))){
+
         unsigned char reg = (val >> 9) & 0x7;
         return {
             .i = BCLR,
@@ -2016,7 +2064,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if (val == 0x22){
+    if (val == 0x22 &&
+    (ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))){
         return {
             .i = BCLR,
             .ea_dst = (unsigned char)(val & 0x3f),
@@ -2050,7 +2099,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     }
 
     // TODO: check instruction
-    if (!(val >> 12) && ((val >> 6) & 0x7) == 0x7) {
+    if (!(val >> 12) && ((val >> 6) & 0x7) == 0x7 &&
+    (ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))){
         unsigned char reg = (val >> 9) & 0x7;
         return {
             .i = BSET,
@@ -2066,7 +2116,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     }
 
     // TODO: check
-    if ((val >> 6) == 0x23) {
+    if ((val >> 6) == 0x23 &&
+            (ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))){
         return {
             .i = BSET,
             .ea_dst = (unsigned char)(val & 0x3f),
@@ -2099,7 +2150,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if (!(val >> 12) && ((val >> 6) & 0x7) == 0x4) {
+    if (!(val >> 12) && ((val >> 6) & 0x7) == 0x4 &&
+            (ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))){
         unsigned char reg = (val >> 9) & 0x7;
         return {
             .i = BTST,
@@ -2114,7 +2166,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if ((val >> 6) == 0x20) {
+    if ((val >> 6) == 0x20 &&
+            (ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))){
         return {
             .i = BTST,
             .ea_dst = (unsigned char)(val & 0x3f),
@@ -2128,7 +2181,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-        if ((val >> 12) == 0x4 && !(val & 0x40) && (((val >> 7) & 0x3) == 0x3)) { // sz:WORD
+        if ((val >> 12) == 0x4 && !(val & 0x40) && (((val >> 7) & 0x3) == 0x3) && ea_mod != 0x1) { // sz:WORD
         unsigned char reg = (val >> 9) & 0x7;
         return {
             .i = CHK,
@@ -2143,7 +2196,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     }
 
 
-      if ((val >> 8) == 0x42) {
+      if ((val >> 8) == 0x42 &&
+              (ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3)))){
         unsigned char sz = (val >> 6) & 0x3;
         auto opsz = (OperandSize)(1 << sz);
         return {
@@ -2181,7 +2235,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if ((val >> 8) == 0xc) {
+    if ((val >> 8) == 0xc &&
+            (ea_mod != 0x1 && !(ea_mod == 0x7 && (ea_reg == 0x4)))){
         unsigned char sz = (val >> 6) & 0x3;
         auto opsz = (OperandSize)(1 << sz);
         return {
@@ -2215,6 +2270,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
+    // TODO: finish
     if ((val >> 12) == 0x5 && ((val >> 3) & 0x1f) == 0x19) {
         unsigned char cond = (val >> 8) & 0xf;
         unsigned char reg = (val & 0x7);
@@ -2231,7 +2287,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     }
 
 
-    if ((val >> 12) == 0x8 && ((val >> 6) & 0x7) == 0x7) {
+    if ((val >> 12) == 0x8 && ((val >> 6) & 0x7) == 0x7 && ea_mod != 0x1) {
         unsigned char reg = ((val >> 9) & 0x7);
         return {
             .i = DIVS,
@@ -2308,11 +2364,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if ((val >> 12) == 0xc && (val & 0x100)) {
+    if (unsigned char opmode = (val >> 3) & 0x1f;  (val >> 12) == 0xc && (val & 0x100) &&
+            ((opmode == 0x8 || opmode == 0x9 || opmode == 0x11))
+    ) {
         unsigned char rx = (val >> 9) & 0x7;
         unsigned char ry = (val & 0x7);
-        unsigned char opmode = (val >> 3) & 0x1f;
-
         OperandType src{};
         OperandType dst{};
         if (opmode == 0x8){
@@ -2337,10 +2393,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if ((val >> 9) == 0x24 && !((val >> 3) & 0x7) &&
-            (((val >> 6) & 0x7) == 0x2 || ((val >> 6) & 0x7) == 0x3 || ((val >> 6) & 0x7) == 0x7)) {
+    if (unsigned char opmode = (val >> 6) & 0x7; (val >> 9) == 0x24 && !((val >> 3) & 0x7) &&
+            ((opmode == 0x2 || opmode == 0x3 || opmode == 0x7))) {
         unsigned char reg = (val & 0x7);
-        unsigned char opmode = (val >> 3) & 0x1f;
         return {
             .i = EXT,
             .r_dst = reg,
@@ -2377,7 +2432,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
     
-    if ((val >> 12) == 0x4 && ((val >> 6) & 0x7) == 0x7) {
+    if ((val >> 12) == 0x4 && ((val >> 6) & 0x7) == 0x7
+        && (ea_mod == 0x2 || ea_mod == 0x5 || ea_mod == 0x6 || ea_mod == 0x7)
+    ) {
         unsigned char reg = (val >> 9) & 0x7;
         // TODO: check
         return {
@@ -2456,8 +2513,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if (!(val >> 14) && (((val >> 12) & 0x3) == 0x3 || ((val >> 12) & 0x3) == 0x2) &&  ((val >> 6) & 0x7) == 0x1) {
-        unsigned char sz = (val >> 12) & 0x3;
+    if (unsigned char sz = (val >> 12) & 0x3;
+        !(val >> 14) && (sz == 0x3 || sz == 0x2) &&  ((val >> 6) & 0x7) == 0x1) {
         unsigned char dst = (val >> 9) & 0x7;
         OperandSize opsz{};
         if (sz == 0x3){
@@ -2692,12 +2749,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     }
 
 
-    if ((val >> 6) == 0x121 &&
-            // supported ea modes
-            // TODO: check
-            ((val >> 3) & 0x7) == 0x7 || ((val >> 3) & 0x7) == 0x2 || ((val >> 3) & 0x7) == 0x5
-            || ((val >> 3) & 0x7) == 0x6
-    ) {
+    if ((val >> 6) == 0x121 && (ea_mod == 0x7 || ea_mod == 0x2 || ea_mod == 0x5 || ea_mod == 0x6)) {
         return {
             .i = PEA,
             .ea_dst = (unsigned char)(val & 0x3f),
@@ -2810,9 +2862,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if ((val >> 12) == 0x9 &&  !(((val >> 6) & 0x7) == 0b11 || ((val >> 6) & 0x7) == 0b111)) {
+    if (unsigned char opmode = (val >> 6) & 0x7;
+        (val >> 12) == 0x9 &&  !(opmode == 0b11 || opmode == 0b111)) {
         unsigned char reg = (val >> 9) & 0x7;
-        unsigned char opmode = (val >> 6) & 0x7;
         OperandSize opsz{};
         if (opmode == 0x0 || opmode == 0x4){
             opsz = BYTE;
@@ -2837,9 +2889,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if ((val >> 12) == 0x9 && (((val >> 6) & 0x7) == 0b11 || ((val >> 6) & 0x7) == 0b111)) {
+    if (unsigned char opmode = (val >> 6) & 0x7;
+        (val >> 12) == 0x9 && (opmode == 0b11 || opmode == 0b111)) {
         unsigned char reg = (val >> 9) & 0x7;
-        unsigned char opmode = (val >> 6) & 0x7;
         OperandSize opsz{};
         if (opmode == 0b11){
             opsz = WORD;
@@ -2861,8 +2913,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     }
 
 
-    if ((val >> 8) == 0x4 && ((val >> 6) & 0x3) != 0x3) {
-        unsigned char sz = (val >> 6) & 0x3;
+    if (unsigned char sz = (val >> 6) & 0x3; (val >> 8) == 0x4 && sz != 0x3 && ea_mod != 0x1) {
         auto opsz = (OperandSize)(1 << sz);
         return {
             .i = SUBI,
