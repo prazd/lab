@@ -12,14 +12,17 @@ struct SMD {
     M68K m68k{};
     size_t offset{};
     //  1D92:
-    // 0x462 - debug
-    SMD(std::string_view sv): cartridge(sv), offset(0x00){} // TODO: debug
+//    debug
+//     0x462
+//     0x3ec
+//     0x210
+    SMD(std::string_view sv): cartridge(sv), offset(0x490){} // TODO: debug
     void print_instruction(){
         // TODO: debug
         auto instruction = M68K::read_mem(M68K::WORD, (unsigned char*)(cartridge.buffer.data() + offset));
         auto di = M68K::decode(instruction);
-//        std::cout << std::hex << std::setfill('0') << std::setw(4) <<  instruction << '\n';
-//        std::cout << std::bitset<16>(instruction).to_string() << '\n';
+        std::cout << std::hex << std::setfill('0') << std::setw(4) <<  instruction << '\n';
+        std::cout << std::bitset<16>(instruction).to_string() << '\n';
 //        std::cout <<std::dec<< (int)di.i_sz<< std::hex << '\n';
         if (instruction && di.unknown){
             offset += 2;
@@ -51,6 +54,6 @@ int main(){
     SMD smd("/Users/prazd/Desktop/dev/m68k_inst_speed/test_inst_speed.bin");
 //    size_t x = 0;
 //    while (std::cin >> x)
-for (size_t i = 0; i < 400; ++i)
+for (size_t i = 0; i < 1; ++i)
         smd.print_instruction();
 }
