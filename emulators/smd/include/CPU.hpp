@@ -130,7 +130,8 @@ struct M68K {
             "ILLEGAL",
             "JMP", "JSR",
             "LEA", "LINK", "LSL", "LSR",
-            "MOVE", "MOVEA","MOVE", "MOVE","MOVEM","MOVEP","MOVEQ","MULS","MULU",
+            //               (MOVEA) for test
+            "MOVE", "MOVE","MOVE", "MOVE","MOVEM","MOVEP","MOVEQ","MULS","MULU",
             "NBCD","NEG","NEGX","NOP","NOT",
             "OR","ORI","ORI",
             "PEA",
@@ -481,12 +482,15 @@ struct M68K {
             }
             case AbsoluteShort:  return {str_num_template<128>("#&.W", read_mem(WORD, mem)), 2};
             case AbsoluteLong:  return {str_num_template<128>("#&.L", read_mem(LONG, mem)), 4};
-            default:
+            default:{
+
                 return {str_num_template<128>("#&", read_mem(opsz, mem)), opsz == LONG ? 4 : 2};
+            }
+
         }
     }
 
-    static std::pair<SmallString<128>,size_t> read_operand(const M68K::DecodedInfo &di, bool src, const unsigned char* mem);
+    static std::pair<SmallString<128>,size_t> read_operand(const M68K::DecodedInfo &di, unsigned pc, bool src, const unsigned char* mem);
     static unsigned read_mem(OperandSize sz, const unsigned char*);
 
     static constexpr auto get_opcode_str(const M68K::DecodedInfo& di){
@@ -499,7 +503,7 @@ struct M68K {
     }
 
     template <bool lowercase = true>
-    static SmallString<128> disassemble(const M68K::DecodedInfo& di, const unsigned char* mem) {
+    static SmallString<128> disassemble(const M68K::DecodedInfo& di, unsigned pc, const unsigned char* mem) {
         SmallString<128> res{};
         std::string_view i_str = get_opcode_str(di);
         if constexpr (lowercase)
@@ -523,11 +527,11 @@ struct M68K {
         if (di.src_type != OT_EMPTY || di.dst_type != OT_EMPTY){
             mem += 2;
             res.push(' ');
-            auto [str, step] = read_operand(di, true, mem);
+            auto [str, step] = read_operand(di, pc, true, mem);
             res += str;
             mem += step;
             if (di.src_type != OT_EMPTY && di.dst_type != OT_EMPTY) res.push(',');
-            res += read_operand(di, false, mem).first;
+            res += read_operand(di, pc, false, mem).first;
         }
         return res;
     }
