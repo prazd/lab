@@ -15,6 +15,7 @@ void __attribute__((constructor)) init(){
                                  LANDLOCK_ACCESS_FS_REMOVE_FILE|
                                  LANDLOCK_ACCESS_FS_MAKE_REG,
     };
+    
     int ruleset_fd = syscall(__NR_landlock_create_ruleset, &ruleset, sizeof(ruleset), 0);
     if (ruleset_fd < 0) abort();
 
@@ -25,7 +26,8 @@ void __attribute__((constructor)) init(){
         .allowed_access = LANDLOCK_ACCESS_FS_READ_FILE,
         .parent_fd = fd,
     };
-    syscall(__NR_landlock_add_rule, ruleset_fd,LANDLOCK_RULE_PATH_BENEATH, &f_attr, 0);
+
+    syscall(__NR_landlock_add_rule, ruleset_fd, LANDLOCK_RULE_PATH_BENEATH, &f_attr, 0);
     close(fd);
 
     if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)){
@@ -33,21 +35,19 @@ void __attribute__((constructor)) init(){
         abort();
     }
 
-    if (syscall(__NR_landlock_restrict_self,ruleset_fd,0)){
+    if (syscall(__NR_landlock_restrict_self,ruleset_fd, LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON) < 0){
         close(ruleset_fd);
         abort();
     }
     close(ruleset_fd);
 }
 
-
 int main(){
     int fd = open("f.txt", O_RDONLY);
     if (fd < 0) return -1;
-    char res[4];
+    char res[4] = {[0 ... 3] = '\0'};
     read(fd, res, 3);
     printf("%s\n", res);
     close(fd);
-
     assert(open("f.txt", O_RDWR) < 0);
 }
