@@ -122,7 +122,8 @@ struct M68K {
     };
 
     static constexpr std::string_view instructions_str[] = {
-            "ABCD","ADD","ADDA","ADDI","ADDQ","ADDX","AND","ANDI","ASL","ASR","ANDI",
+            //                        (ADDA) for test
+            "ABCD","ADD","ADD","ADDI","ADDQ","ADDX","AND","ANDI","ASL","ASR","ANDI",
             "Bcc","BCHG","BCLR","BRA","BSET","BSR","BTST",
             "CHK","CLR","CMP","CMPA","CMPI","CMPM",
             "DBcc", "DIVS", "DIVU",
@@ -490,7 +491,7 @@ struct M68K {
         }
     }
 
-    static std::pair<SmallString<128>,size_t> read_operand(const M68K::DecodedInfo &di, unsigned pc, bool src, const unsigned char* mem);
+    static std::pair<SmallString<128>,size_t> read_operand(const M68K::DecodedInfo &di, unsigned pc, bool src, const unsigned char* mem, unsigned char* base);
     static unsigned read_mem(OperandSize sz, const unsigned char*);
 
     static constexpr auto get_opcode_str(const M68K::DecodedInfo& di){
@@ -503,7 +504,7 @@ struct M68K {
     }
 
     template <bool lowercase = true>
-    static SmallString<128> disassemble(const M68K::DecodedInfo& di, unsigned pc, const unsigned char* mem) {
+    static SmallString<128> disassemble(const M68K::DecodedInfo& di, unsigned pc, unsigned char* base) {
         SmallString<128> res{};
         std::string_view i_str = get_opcode_str(di);
         if constexpr (lowercase)
@@ -525,13 +526,11 @@ struct M68K {
         }
 
         if (di.src_type != OT_EMPTY || di.dst_type != OT_EMPTY){
-            mem += 2;
             res.push(' ');
-            auto [str, step] = read_operand(di, pc, true, mem);
+            auto [str, step] = read_operand(di, pc, true, base + pc + 2, base);
             res += str;
-            mem += step;
             if (di.src_type != OT_EMPTY && di.dst_type != OT_EMPTY) res.push(',');
-            res += read_operand(di, pc, false, mem).first;
+            res += read_operand(di, pc, false, base + (pc + 2 + step), base).first;
         }
         return res;
     }

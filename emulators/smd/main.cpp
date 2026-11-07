@@ -12,10 +12,9 @@ struct SMD {
     M68K m68k{};
     size_t pc{};
 //    1D92:
+// 0x10312
 //    debug
-//    0x462
-//    0x37e
-    SMD(std::string_view sv): cartridge(sv), pc(0x00){} // TODO: debug
+    SMD(std::string_view sv): cartridge(sv), pc(0x10000){} // TODO: debug
     void print_instruction(){
         // TODO: debug
         auto instruction = M68K::read_mem(M68K::WORD, (unsigned char*)(cartridge.buffer.data() + pc));
@@ -29,7 +28,7 @@ struct SMD {
                 pc += 2;
             return;
         }
-        auto res = M68K::disassemble(di, pc + 2, (unsigned char*)(cartridge.buffer.data() + pc));
+        auto res = M68K::disassemble(di, pc, (unsigned char*)(cartridge.buffer.data()));
         std::cout << std::hex << std::uppercase << pc << ':' << std::uppercase << res.to_sv() << '\n';
         pc += di.i_sz;
     }

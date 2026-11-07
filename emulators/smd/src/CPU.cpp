@@ -1804,39 +1804,30 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
     }
 
 
-    if (unsigned char opmode = (val >> 6) & 0x7; (((val >> 12) & 0xf) == 0b1101)
-        &&  (opmode == 0b011 || opmode == 0b111)
+    if (unsigned char opmode = (val >> 6) & 0x7; (((val >> 12) & 0xf) == 0xd)
+        &&  (opmode == 0x3 || opmode == 0x7)
     ) {
         unsigned char rx = (val >> 9) & 0x7;
-        OperandSize sz;
-        switch(opmode){
-            case 0b000:
-            case 0b100: {sz = BYTE ;break;}
-            case 0b001:
-            case 0b011:
-            case 0b101: {sz = WORD; break;}
-            default:    {sz = LONG; break;}
-        }
-        bool mode = (opmode == 0b000 || opmode == 0b001 || opmode == 0b010);
+        OperandSize sz = (opmode == 0x3) ? WORD : LONG;
         return {
             .i =  ADDA,
             .r_dst = rx,
             .opsz = sz,
             .ea_src = (unsigned char)(val & 0x3f),
             .read_ea = true,
-            .opmode = mode,
+            .opmode = opmode,
             .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f, sz)),
-            .src_type = (mode ? OT_EA : OT_DREG),
-            .dst_type = (mode ? OT_DREG : OT_EA),
+            .src_type = OT_EA,
+            .dst_type = OT_AREG,
         };
     }
 
-    if (unsigned char opmode = (val >> 6) & 0x7; (((val >> 12) & 0xf) == 0b1101)
-             &&  (((opmode == 0x0 || opmode == 0x1 || opmode == 0x2))
+    if (unsigned char opmode = (val >> 6) & 0x7; (((val >> 12) & 0xf) == 0xd)
+             &&
+             ((opmode == 0x0 || opmode == 0x1 || opmode == 0x2)
              || ((opmode == 0x4 || opmode == 0x5 || opmode == 0x6) &&
-                (ea_mode != 0x0 && ea_mode != 0x1 && !(ea_mode == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3))
-                )
-            ))) {
+                (ea_mode != 0x0 && ea_mode != 0x1 && !(ea_mode == 0x7 && (ea_reg == 0x4 || ea_reg == 0x2 || ea_reg == 0x3))))
+            )) {
         unsigned char rx = (val >> 9) & 0x7;
         OperandSize sz;
         switch(opmode){
@@ -2496,7 +2487,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         };
     }
 
-    if (unsigned char ea_dst_mod = (val >> 6) & 0x7 , ea_dst_reg = (val >> 9) & 0x7, sz = (val >> 12) & 0x3 ;
+    if (unsigned char ea_dst_mod = (val >> 6) & 0x7 , ea_dst_reg = (val >> 9) & 0x7, sz = (val >> 12) & 0x3;
         !(val >> 14) && sz != 0x0 &&
         ea_dst_mod != 0x1 && !(ea_dst_mod == 0x7 && (ea_dst_reg == 0x4 || ea_dst_reg == 0x3 || ea_dst_reg == 0x2))) {
         OperandSize opsz{};
@@ -3134,7 +3125,7 @@ unsigned M68K::read_mem(M68K::OperandSize sz, const unsigned char* mem) {
     }
 }
 
-std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& di, unsigned pc, bool src, const unsigned char* mem) {
+std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& di, unsigned pc, bool src, const unsigned char* mem, unsigned char* base) {
     OperandType ot = src ? di.src_type : di.dst_type;
     SmallString<128> res{};
     size_t step = 0;
@@ -3158,6 +3149,10 @@ std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& 
             auto [ea_str, s] = ea_to_str<false>(src ? di.ea_src : di.ea_dst, di.opsz, mem);
             res += ea_str;
             step = s;
+        } else if (di.i == MOVEM) {
+            auto [ea_str, s] = ea_to_str(src ? di.ea_src : di.ea_dst, di.opsz, mem + (src ? 2 : 0));
+            res += ea_str;
+            step = s;
         } else {
             auto [ea_str, s] = ea_to_str(src ? di.ea_src : di.ea_dst, di.opsz, mem);
             res += ea_str;
@@ -3171,25 +3166,17 @@ std::pair<SmallString<128>, size_t> M68K::read_operand(const M68K::DecodedInfo& 
     } else if (ot == OT_SR) { // TODO: check
         res.push("SR");
     } else if (ot == OT_LABEL) {
-        // TODO: check
-        if (di.i == BSR || di.i == BRA || di.i == Bcc) {
-            auto offset = (di.opsz == WORD) ?  sign_extend_to_l((unsigned short)read_mem(di.opsz, mem)) :
+            auto offset = (di.opsz == WORD || di.i == DBcc) ?  sign_extend_to_l((unsigned short)read_mem(di.opsz, mem)) :
                           sign_extend_to_l((unsigned char)di.d_l);
             res += SmallString<128>(offset, false, true);
-            res += str_num_template<128>(" <&>", ((int)(pc) + (int)(offset))); // TODO: check
+            res += str_num_template<128>(" <&>", ((int)(pc + 2) + (int)(offset))); // TODO: check
             step += di.opsz;
-        } else if (di.i == DBcc) {
-            auto offset = sign_extend_to_l((unsigned short)read_mem(di.opsz, mem));
-            // TODO: dec
-            res += str_num_template<128>(" <&>", ((int)(pc) + (int)(offset))); // TODO: check
-            step += di.opsz;
-        }
-
     } else if (ot == OT_USP){
         res.push("USP");
     } else if (ot == OT_LIST){
         auto am = to_address_mode(src ? di.ea_dst : di.ea_src, true);
-        unsigned short mask = read_mem(WORD, mem);
+        // 0 0 0 0 0 0
+        unsigned short mask = read_mem(WORD, base + pc + 2);
         step += 2;
         if (am == AddressRegisterIndirectPreDecMode)
             mask = reverse_bits(mask);
