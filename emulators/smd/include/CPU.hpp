@@ -200,7 +200,16 @@ struct M68K {
     };
 
     enum InternalOp: unsigned char {
-        ReadEA,
+        CalcEA_AREG_IndirectSrc,
+        CalcEA_AREG_PostIncSrc,
+        CalcEA_AREG_PreDecSrc,
+        CalcEA_AREG_IndirectDispModeSrc,
+        CalcEA_AREG_IndirectIndexModeSrc,
+        CalcEA_AbsoluteShortSrc,
+        CalcEA_AbsoluteLongSrc,
+        CalcEA_ImmediateSrc,
+        // TODO: finish dst
+        InstNextPrefetch,
         BusReadReq,
         BusReadWait,
         BusWriteReq,
@@ -229,10 +238,15 @@ struct M68K {
     RegType ea_reg_type;
     unsigned char ea_reg_n{};
 
-    unsigned ea_address_calc(unsigned char);
     void ea_fill(unsigned char);
     void ea_write(unsigned char, unsigned val);
     unsigned to_ea_address(unsigned char);
+    void inst_next_prefetch(BUS&);
+
+    void fill_ea_src(AddressMode am);
+
+    void instant_bus_read_req(unsigned, BusReadDest, OperandSize, BUS&, unsigned char = 0);
+    void instant_bus_write_req(unsigned, unsigned, OperandSize, BUS& bus);
 
     void fill_bus_read_req(unsigned, BusReadDest, OperandSize,unsigned char = 0);
     void fill_bus_read_req_front(unsigned, BusReadDest, OperandSize,unsigned char = 0);
@@ -295,6 +309,9 @@ struct M68K {
         OperandType dst_type{};
         bool unknown = false;
     } di;
+
+    unsigned ea_address_calc(unsigned char);
+    void ea_address_calc_fill(const DecodedInfo&, bool);
 
     inline void read_displacement() {
         // TODO: check
@@ -389,7 +406,6 @@ struct M68K {
     unsigned dst_addr{};
     unsigned dst_value{};
     unsigned char dst_reg_n{};
-    void write_dst();
 
     unsigned short operand_a_w1{};
     unsigned short operand_a_w2{};
@@ -444,10 +460,6 @@ struct M68K {
     }
 
     unsigned char calc_exec_cycles(const DecodedInfo& di);
-    unsigned char ea_fetch_cycles(AddressMode am, OperandSize sz);
-
-    void fill_exec(Instruction);
-    void set_ea_dst();
     
     template <bool mr = true>
     static std::pair<SmallString<128>,size_t> ea_to_str(unsigned char ea_val, OperandSize opsz, const unsigned char* mem) {
