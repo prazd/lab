@@ -14,7 +14,7 @@ struct SMD {
 //    1D92:
 // 0x10312
 //    debug
-    SMD(std::string_view sv): cartridge(sv), pc(0x10000){} // TODO: debug
+    SMD(std::string_view sv): cartridge(sv), pc(0x6d8){} // TODO: debug
     void print_instruction(){
         // TODO: debug
         auto instruction = M68K::read_mem(M68K::WORD, (unsigned char*)(cartridge.buffer.data() + pc));
@@ -52,6 +52,6 @@ int main(){
     SMD smd("/Users/prazd/Desktop/dev/m68k_inst_speed/test_inst_speed.bin");
 //    size_t x = 0;
 //    while (std::cin >> x)
-for (size_t i = 0; i < 400; ++i)
+for (size_t i = 0; i < 2; ++i)
         smd.print_instruction();
 }

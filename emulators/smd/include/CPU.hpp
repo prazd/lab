@@ -205,6 +205,7 @@ struct M68K {
         BusReadWait,
         BusWriteReq,
         BusWriteWait,
+        BusWriteBackReq,
         INOP,
         Execute,
     };
@@ -222,12 +223,13 @@ struct M68K {
         OT_LIST, // TODO: check
     };
 
-    unsigned ea_address{};
+    unsigned ea_src_addr{};
+    unsigned ea_dst_addr{};
     AddressMode ea_mode;
     RegType ea_reg_type;
     unsigned char ea_reg_n{};
 
-    void ea_address_calc(unsigned char);
+    unsigned ea_address_calc(unsigned char);
     void ea_fill(unsigned char);
     void ea_write(unsigned char, unsigned val);
     unsigned to_ea_address(unsigned char);
@@ -235,6 +237,7 @@ struct M68K {
     void fill_bus_read_req(unsigned, BusReadDest, OperandSize,unsigned char = 0);
     void fill_bus_read_req_front(unsigned, BusReadDest, OperandSize,unsigned char = 0);
     void fill_bus_write_req(unsigned, unsigned, OperandSize);
+    void fill_write_back_req(OperandSize);
 
     template <std::integral T>
     requires(std::is_same_v<T, unsigned char> || 
@@ -305,11 +308,12 @@ struct M68K {
     }
 
     inline void fill_predec_args(){
+        // TODO: check
         switch (opsz) {
             case BYTE:
             case WORD: {
                 fill_bus_read_req(aregs[di.r_dst]-=opsz, BRDOperandA1, opsz);
-                fill_bus_read_req(aregs[di.r_src]-=opsz, BRDOperandB1, opsz);
+                fill_bus_read_req(aregs[di.r_src]-=opsz, BRDOperandA2, opsz); // TODO: check
                 break;
             }
             case LONG: {
