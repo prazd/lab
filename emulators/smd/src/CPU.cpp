@@ -338,21 +338,21 @@ void M68K::ea_write(unsigned char ea_val, unsigned val) {
             break;
         }
         case AddressRegisterIndirectPostIncMode: {
-            fill_bus_write_req(aregs[ea_reg_n], val, opsz);
-            aregs[ea_reg_n] += opsz;
+            fill_bus_write_req(aregs[ea_reg_src], val, opsz);
+            aregs[ea_reg_src] += opsz;
             break;
         }
         case AddressRegisterIndirectPreDecMode: {
-            aregs[ea_reg_n] -= opsz;
+            aregs[ea_reg_src] -= opsz;
             // TODO: check
             iops_q.push_back({.iop = INOP});
             iops_q.push_back({.iop = INOP});
-            fill_bus_write_req(aregs[ea_reg_n], val, opsz);
+            fill_bus_write_req(aregs[ea_reg_src], val, opsz);
             break;
         }
         case AddressRegisterIndirectDisplacementMode: {
             auto pv = read_prefetch_q();
-            fill_bus_write_req(aregs[ea_reg_n] + sign_extend_to_l(pv), val, opsz);
+            fill_bus_write_req(aregs[ea_reg_src] + sign_extend_to_l(pv), val, opsz);
             break;
         }
         case AddressRegisterIndirectIndexMode: {
@@ -360,7 +360,7 @@ void M68K::ea_write(unsigned char ea_val, unsigned val) {
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
             xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
-            auto addr = aregs[ea_reg_n] +
+            auto addr = aregs[ea_reg_src] +
                          sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
 
             iops_q.push_back({.iop = INOP});
@@ -398,22 +398,22 @@ unsigned M68K::to_ea_address(unsigned char ea_val) {
             return aregs[reg_n];
         }
         case AddressRegisterIndirectPostIncMode: {
-            return std::exchange(aregs[ea_reg_n],aregs[ea_reg_n] + opsz);
+            return std::exchange(aregs[ea_reg_src],aregs[ea_reg_src] + opsz);
         }
         case AddressRegisterIndirectPreDecMode: {
-            aregs[ea_reg_n] -= opsz;
-            return aregs[ea_reg_n];
+            aregs[ea_reg_src] -= opsz;
+            return aregs[ea_reg_src];
         }
         case AddressRegisterIndirectDisplacementMode: {
             auto pv = read_prefetch_q();
-            return aregs[ea_reg_n] + sign_extend_to_l(pv);
+            return aregs[ea_reg_src] + sign_extend_to_l(pv);
         }
         case AddressRegisterIndirectIndexMode: {
             auto pv = read_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
             xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
-            auto addr = aregs[ea_reg_n] +
+            auto addr = aregs[ea_reg_src] +
                         sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
             return addr;
         }
@@ -437,28 +437,30 @@ unsigned M68K::to_ea_address(unsigned char ea_val) {
 
 unsigned M68K::ea_address_calc(unsigned char val){
     ea_mode = to_address_mode(val, true);
-    ea_reg_n = val & 0x7;
+    ea_reg_src = val & 0x7;
     switch(ea_mode) {
         case AddressRegisterIndirectMode: {
-            return aregs[ea_reg_n];
+            return aregs[ea_reg_src];
         }
         case AddressRegisterIndirectPostIncMode: {
-            auto res = aregs[ea_reg_n];
-            aregs[ea_reg_n] += opsz;
+            auto res = aregs[ea_reg_src];
+            aregs[ea_reg_src] += opsz;
             return res;
         }
         case AddressRegisterIndirectPreDecMode: {
-            aregs[ea_reg_n] -= opsz;
+            aregs[ea_reg_src] -= opsz;
             // TODO: check
             iops_q.push_back({.iop = INOP});
             iops_q.push_back({.iop = INOP});
-            return aregs[ea_reg_n];
+            return aregs[ea_reg_src];
         }
         case AddressRegisterIndirectDisplacementMode: {
+            // TODO: check
             auto pv = read_n_fill_prefetch_q();
-            return aregs[ea_reg_n] + sign_extend_to_l(pv);
+            return aregs[ea_reg_src] + sign_extend_to_l(pv);
         }
         case AddressRegisterIndirectIndexMode: {
+            // TODO: check
             auto pv= read_n_fill_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
             auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
@@ -466,7 +468,7 @@ unsigned M68K::ea_address_calc(unsigned char val){
             // n np nr
             iops_q.push_back({.iop = INOP});
             iops_q.push_back({.iop = INOP}); // calc time
-            return aregs[ea_reg_n] +
+            return aregs[ea_reg_src] +
                    sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
         }
         case ProgramCounterIndirectDisplacementMode: {
@@ -496,10 +498,10 @@ unsigned M68K::ea_address_calc(unsigned char val){
 
 void M68K::ea_fill(unsigned char val){
     ea_mode = to_address_mode(val, true);
-    ea_reg_n = val & 0x7;
+    ea_reg_src = val & 0x7;
     switch(ea_mode) {
-        case DataRegisterDirectMode:    ea_reg_type = Dn; operand_a_l = dregs[ea_reg_n]; break;
-        case AddressRegisterDirectMode: ea_reg_type = An; operand_a_l = aregs[ea_reg_n]; break;
+        case DataRegisterDirectMode:    ea_reg_type = Dn; operand_a_l = dregs[ea_reg_src]; break;
+        case AddressRegisterDirectMode: ea_reg_type = An; operand_a_l = aregs[ea_reg_src]; break;
         case Immediate: {
             operand_a_w1 = read_prefetch_q();
             fill_prefetch_req();
@@ -520,43 +522,44 @@ void M68K::ea_fill(unsigned char val){
     }
 }
 
-void M68K::fill_ea_src(AddressMode am){
+void M68K::fill_ea(AddressMode am, bool is_src){
     switch (am) {
         case AddressRegisterIndirectMode:{
-            iops_q.push_back({.iop = CalcEA_AREG_IndirectSrc});
+            iops_q.push_back({.iop = (is_src ? CalcEA_AREG_IndirectSrc : CalcEA_AREG_IndirectDst)});
             break;
         }
         case AddressRegisterIndirectPostIncMode:{
-            iops_q.push_back({.iop = CalcEA_AREG_PostIncSrc});
+            iops_q.push_back({.iop = (is_src ? CalcEA_AREG_PostIncSrc : CalcEA_AREG_PostIncDst)});
             break;
         }
         case AddressRegisterIndirectPreDecMode:{
-            iops_q.push_back({.iop = CalcEA_AREG_PreDecSrc});
+            iops_q.push_back({.iop = (is_src ? CalcEA_AREG_PreDecSrc : CalcEA_AREG_PreDecDst)});
             break;
         }
         case AddressRegisterIndirectDisplacementMode: {
             iops_q.push_back({.iop = InstNextPrefetch});
-            iops_q.push_back({.iop = CalcEA_AREG_IndirectDispModeSrc});
+            iops_q.push_back({.iop = (is_src ? CalcEA_AREG_IndirectDispModeSrc : CalcEA_AREG_IndirectDispModeDst)});
             break;
         }
         case AddressRegisterIndirectIndexMode: {
             iops_q.push_back({.iop = InstNextPrefetch});
-            iops_q.push_back({.iop = CalcEA_AREG_IndirectIndexModeSrc});
+            iops_q.push_back({.iop = (is_src ? CalcEA_AREG_IndirectIndexModeSrc : CalcEA_AREG_IndirectIndexModeDst)});
             break;
         }
         case AbsoluteShort: {
             iops_q.push_back({.iop = InstNextPrefetch});
-            iops_q.push_back({.iop = CalcEA_AbsoluteShortSrc});
+            iops_q.push_back({.iop = (is_src ? CalcEA_AbsoluteShortSrc : CalcEA_AbsoluteShortDst)});
             break;
         }
         case AbsoluteLong: {
             iops_q.push_back({.iop = InstNextPrefetch});
-            iops_q.push_back({.iop = CalcEA_AbsoluteLongSrc});
+            iops_q.push_back({.iop = (is_src ? CalcEA_AbsoluteLongSrc : CalcEA_AbsoluteLongDst)});
             break;
         }
         case Immediate: {
             iops_q.push_back({.iop = InstNextPrefetch});
-            iops_q.push_back({.iop = CalcEA_ImmediateSrc});
+            iops_q.push_back({.iop = (is_src ? CalcEA_ImmediateSrc : CalcEA_ImmediateDst)});
+            break;
         }
     }
 }
@@ -578,16 +581,11 @@ void M68K::tick(BUS& bus){
 
         // SRC
         if (di.src_type == OT_EA && di.ea_src) {
-            auto am = to_address_mode(di.ea_src, true);
-            ea_reg_n = di.ea_src & 0x7;
-            if (am == AbsoluteLong || (am == Immediate && di.opsz == LONG)) {
-                fill_prefetch_req();
-                iop_push_nops(3); // TODO: check
-            } else if (am == DataRegisterDirectMode) {
-                ea_reg_type = Dn; operand_a_l = dregs[ea_reg_n];
+             if (am == DataRegisterDirectMode) {
+                ea_reg_type = Dn; operand_a_l = dregs[ea_reg_src];
             } else if (am == AddressRegisterDirectMode) {
-                ea_reg_type = An; operand_a_l = aregs[ea_reg_n];
-            } else fill_ea_src(am);
+                ea_reg_type = An; operand_a_l = aregs[ea_reg_src];
+            } else fill_ea(am,true);
         } else if (di.src_type == OT_IMM) {
             if (di.read_displacement) read_displacement();
             if (di.read_displacement_by_value) read_displacement_by_value();
@@ -598,9 +596,10 @@ void M68K::tick(BUS& bus){
 
         // DST
         if (di.dst_type == OT_EA && di.ea_src) {
-            ea_dst_addr = ea_address_calc(di.ea_dst); // TODO: check
+            ea_mode_dst = (di.ea_dst >> 3) & 0x7; // TODO: check
+            ea_reg_dst = di.ea_dst & 0x7;
+            fill_ea(am, false);
         }
-
         // EXEC
         iop_push_nops(exec_cycles = calc_exec_cycles(di));
         iops_q.push_back({.iop = Execute});
@@ -618,29 +617,60 @@ void M68K::tick(BUS& bus){
             break;
         }
         case CalcEA_AREG_IndirectSrc: {
-            instant_bus_read_req( aregs[ea_reg_n], BRDOperandA1, di.opsz, bus);
+            instant_bus_read_req(aregs[di.ea_reg_src], BRDOperandA1, di.opsz, bus);
             iops_q.pop_front();
             break;
         }
+        case CalcEA_AREG_IndirectDst: {
+            instant_bus_read_req( dst_addr = aregs[di.ea_reg_dst], BRDOperandB1, di.opsz, bus);
+            break;
+        }
+
         case CalcEA_AREG_PostIncSrc: {
-            instant_bus_read_req(ea_dst_addr, BRDOperandA1, di.opsz, bus);
-            aregs[ea_reg_n] += di.opsz;
+            instant_bus_read_req(aregs[di.ea_reg_src], BRDOperandA1, di.opsz, bus);
+            aregs[di.ea_reg_src] += di.opsz;
             iops_q.pop_front();
             break;
         }
+
+        case CalcEA_AREG_PostIncDst: {
+            instant_bus_read_req(dst_addr = aregs[di.ea_reg_dst], BRDOperandA1, di.opsz, bus);
+            aregs[di.ea_reg_dst] += di.opsz;
+            iops_q.pop_front();
+            break;
+        }
+
         case CalcEA_AREG_PreDecSrc: {
             // TODO: check
-            aregs[ea_reg_n] -= opsz;
+            aregs[di.ea_reg_src] -= opsz;
             // iops_q.push_back({.iop = INOP}); // this tick
             iops_q.push_back({.iop = INOP});
-            fill_bus_read_req(ea_dst_addr, BRDOperandA1, di.opsz);
+            fill_bus_read_req(  aregs[di.ea_reg_src], BRDOperandA1, di.opsz);
             iops_q.pop_front();
             break;
         }
-        case CalcEA_AREG_IndirectDispModeSrc: {
-            instant_bus_read_req(aregs[ea_reg_n] + sign_extend_to_l(read_prefetch_q()), BRDOperandA1, opsz, bus);
+
+        case CalcEA_AREG_PreDecDst: {
+            // TODO: check
+            dst_addr = aregs[di.ea_reg_dst] -= opsz;
+            // iops_q.push_back({.iop = INOP}); // this tick
+            iops_q.push_back({.iop = INOP});
+            fill_bus_read_req(dst_addr, BRDOperandA1, di.opsz);
+            iops_q.pop_front();
             break;
         }
+
+        case CalcEA_AREG_IndirectDispModeSrc: {
+            instant_bus_read_req(aregs[di.ea_reg_src] + sign_extend_to_l(read_prefetch_q()), BRDOperandA1, opsz, bus);
+            break;
+        }
+
+        case CalcEA_AREG_IndirectDispModeDst: {
+            dst_addr = aregs[di.ea_reg_dst] + sign_extend_to_l(read_prefetch_q());
+            instant_bus_read_req(dst_addr, BRDOperandA1, opsz, bus);
+            break;
+        }
+
         case CalcEA_AREG_IndirectIndexModeSrc: {
             auto pv= read_prefetch_q();
             auto regn = (pv >> 12) & 0x7;
@@ -649,18 +679,45 @@ void M68K::tick(BUS& bus){
             // n np nr
 //            iops_q.push_back({.iop = INOP}); // this tick
             iops_q.push_back({.iop = INOP}); // calc time
-            instant_bus_read_req( aregs[ea_reg_n] +
+            instant_bus_read_req( aregs[di.ea_reg_src] +
                                   sign_extend_to_l((unsigned char)(pv & 0xff)) + xn, BRDOperandA1, opsz, bus);
         }
+
+        case CalcEA_AREG_IndirectIndexModeDst: {
+            auto pv= read_prefetch_q();
+            auto regn = (pv >> 12) & 0x7;
+            auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
+            xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
+            // n np nr
+//            iops_q.push_back({.iop = INOP}); // this tick
+            iops_q.push_back({.iop = INOP}); // calc time
+            dst_addr = aregs[di.ea_reg_dst] +
+                       sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
+            instant_bus_read_req( dst_addr, BRDOperandA1, opsz, bus);
+        }
+
         case CalcEA_AbsoluteShortSrc: {
             instant_bus_read_req(read_prefetch_q(), BRDOperandA1, opsz, bus);
             break;
         }
+
+        case CalcEA_AbsoluteShortDst: {
+            instant_bus_read_req(dst_addr = read_prefetch_q(), BRDOperandA1, opsz, bus);
+            break;
+        }
+
         case CalcEA_AbsoluteLongSrc: {
             instant_bus_read_req((read_prefetch_q() << 16) | read_prefetch_q(), BRDOperandA1, opsz, bus);
             inst_next_prefetch(bus);
             break;
         }
+
+        case CalcEA_AbsoluteLongDst: {
+            instant_bus_read_req( dst_addr = ((read_prefetch_q() << 16) | read_prefetch_q()), BRDOperandA1, opsz, bus);
+            inst_next_prefetch(bus);
+            break;
+        }
+
         case CalcEA_ImmediateSrc: {
             operand_a_l = read_prefetch_q();
             if (di.opsz == LONG){
@@ -671,7 +728,7 @@ void M68K::tick(BUS& bus){
         }
 
         case BusWriteBackReq: {
-            instant_bus_read_req( aregs[ea_reg_n], BRDOperandA1, di.opsz, bus);
+            instant_bus_write_req( dst_addr, dst_value, di.opsz, bus);
             iops_q.pop_front();
             break;
         }
@@ -1869,6 +1926,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 M68K::DecodedInfo M68K::decode(unsigned short val) {
     unsigned char ea_mode = (val >> 3) & 0x7;
     unsigned char ea_reg = val & 0x7;
+    auto am = to_address_mode((unsigned char)(val & 0x3f), true);
 
     if ((((val >> 12) & 0xf) == 0b1100) && (((val >> 4) & 0x1f) == 0b10000)) {
         auto r =  (unsigned char)((val >> 3) & 0x1);
@@ -1881,7 +1939,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .read_predec_args = (bool)r,
             .i_sz = 2,
             .src_type = (r ? OT_EA : OT_DREG),
-            .dst_type = (r ? OT_EA : OT_DREG)
+            .dst_type = (r ? OT_EA : OT_DREG),
+            .ea_reg_src = (unsigned char)(r ? (val & 0x7) : 0),
+            .ea_mode_src = (r ? AddressRegisterIndirectPreDecMode : Unknown),
+            .ea_reg_dst = (unsigned char)(r ? ((val >> 9) & 0x7) : 0),
+            .ea_mode_dst = (r ? AddressRegisterIndirectPreDecMode : Unknown),
         };
     }
 
@@ -1898,9 +1960,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .ea_src = (unsigned char)(val & 0x3f),
             .read_ea = true,
             .opmode = opmode,
-            .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f, sz)),
+            .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, sz)),
             .src_type = OT_EA,
             .dst_type = OT_AREG,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -1922,15 +1986,19 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         }
         bool mode = (opmode == 0b000 || opmode == 0b001 || opmode == 0b010);
         return {
-                .i = ADD,
-                .r_dst = rx,
-                .opsz = sz,
-                .ea_src = (unsigned char)(val & 0x3f),
-                .read_ea = true,
-                .opmode = mode,
-                .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f, sz)),
-                .src_type = (mode ? OT_EA : OT_DREG),
-                .dst_type = (mode ? OT_DREG : OT_EA),
+            .i = ADD,
+            .r_dst = rx,
+            .opsz = sz,
+            .ea_src = (unsigned char)(val & 0x3f),
+            .read_ea = true,
+            .opmode = mode,
+            .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f, sz)),
+            .src_type = (mode ? OT_EA : OT_DREG),
+            .dst_type = (mode ? OT_DREG : OT_EA),
+            .ea_reg_src = (unsigned char)(mode ? ea_reg : 0),
+            .ea_mode_src = (mode ? am : Unknown),
+            .ea_reg_dst = (unsigned char)(mode ?  0 : ea_reg),
+            .ea_mode_dst = (mode ?  Unknown : am),
         };
     }
 
@@ -1949,6 +2017,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f, opsz) + (1 << sz)),
             .src_type = OT_IMM,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -1966,6 +2036,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f, opsz)),
             .src_type = OT_IMM,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -1984,6 +2056,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = 2,
             .src_type = (mode ? OT_EA : OT_DREG),
             .dst_type = (mode ? OT_EA : OT_DREG),
+            .ea_reg_src = (unsigned char)(mode ?  ea_reg : 0),
+            .ea_mode_src = (mode ? am : Unknown),
+            .ea_reg_dst = (unsigned char)(mode ?  ea_reg : 0),
+            .ea_mode_dst = (mode ? am : Unknown),
         };
     }
 
@@ -2014,6 +2090,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f, opsz)),
             .src_type = (mode ? OT_EA : OT_DREG),
             .dst_type = (mode ? OT_DREG : OT_EA),
+            .ea_reg_src = (unsigned char)(mode ?  ea_reg : 0),
+            .ea_mode_src = (mode ? am : Unknown),
+            .ea_reg_dst = (unsigned char)(mode ?  0 : ea_reg),
+            .ea_mode_dst = (mode ? Unknown : am),
         };
     }
 
@@ -2029,7 +2109,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .read_displacement = true,
             .i_sz = (unsigned char)(2 + ea_i_sz( val & 0x3f, opsz) + ((opsz == LONG) ? opsz : 2)),
             .src_type = OT_IMM,
-            .dst_type = OT_EA
+            .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2069,6 +2151,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .read_ea = true,
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, WORD)),
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2100,6 +2184,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, BYTE) + 2),
             .src_type = OT_IMM,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2116,6 +2202,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, LONG)),
             .src_type = OT_DREG,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2134,6 +2222,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, LONG)),
             .src_type = OT_DREG,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2149,6 +2239,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, BYTE) + 2),
             .src_type = OT_IMM,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2184,7 +2276,9 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = LONG,
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, LONG)),
             .src_type = OT_DREG,
-            .dst_type= OT_EA,
+            .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2201,6 +2295,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, BYTE) + 2),
             .src_type = OT_IMM,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2236,6 +2332,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, LONG)),
             .src_type = OT_DREG,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2251,6 +2349,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, BYTE) + 2),
             .src_type = OT_IMM,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2265,6 +2365,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, WORD)),
             .src_type = OT_EA,
             .dst_type = OT_DREG,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -2281,6 +2383,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = opsz,
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, opsz)),
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2305,6 +2409,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, opsz)),
             .src_type = OT_EA,
             .dst_type = OT_AREG,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -2322,6 +2428,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, opsz) + (opsz == LONG ? 4 : 2)),
             .src_type = OT_IMM,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2340,6 +2448,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             // TODO: check
             .src_type = OT_EA,
             .dst_type = OT_EA,
+            .ea_reg_src = ry,
+            .ea_mode_src = AddressRegisterIndirectPostIncMode,
+            .ea_reg_dst = rx,
+            .ea_mode_dst = AddressRegisterIndirectPostIncMode,
         };
     }
 
@@ -2370,6 +2482,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = 2, // TODO: check
             .src_type = OT_EA,
             .dst_type = OT_DREG, // TODO: check
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -2383,6 +2497,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = 2, // TODO: check
             .src_type = OT_EA,
             .dst_type = OT_DREG,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -2405,7 +2521,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
             .src_type = OT_DREG,
             .dst_type = OT_EA,
-
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2424,6 +2541,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz) + (opsz == LONG ? 4 : 2))),
             .src_type = OT_IMM,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2495,6 +2614,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .calc_ea = true,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, Unsized))),
             .src_type = OT_EA,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -2506,6 +2627,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .calc_ea = true,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, Unsized))),
             .src_type = OT_EA,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
     
@@ -2522,6 +2645,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, LONG))),
             .src_type = OT_EA,
             .dst_type = OT_AREG,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -2566,6 +2691,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .read_ea = true,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, WORD))),
             .src_type = OT_EA,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -2589,6 +2716,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz) + ea_i_sz(((val >> 6) & 0x3f), opsz, false))),
             .src_type = OT_EA,
             .dst_type = OT_EA,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
+            .ea_reg_dst = (unsigned char)((val >> 9) & 0x7),
+            .ea_mode_dst = to_address_mode((unsigned char)((val >> 6) & 0x3f), false),
         };
     }
 
@@ -2610,6 +2741,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
             .src_type = OT_EA,
             .dst_type = OT_AREG,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -2623,6 +2756,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = 2,
             .src_type = OT_EA,
             .dst_type = OT_CCR,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -2635,6 +2770,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, WORD))),
             .src_type = OT_CCR,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2656,7 +2793,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz) + 2)),
             // TODO: check
             .src_type = (dr ? OT_EA : OT_LIST),
-            .dst_type = (dr ? OT_LIST : OT_EA)
+            .dst_type = (dr ? OT_LIST : OT_EA),
+            .ea_reg_src = (unsigned char)(dr ? ea_reg : 0),
+            .ea_mode_src = (dr ? am : Unknown),
+            .ea_reg_dst = (unsigned char)(dr ? 0 : ea_reg),
+            .ea_mode_dst = (dr ? Unknown : am),
         };
     }
 
@@ -2664,6 +2805,7 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
         unsigned char data_reg = (val >> 9) & 0x7;
         unsigned char opmode = (val >> 6) & 0x7;
         unsigned char address_reg = val & 0x7;
+        bool is_op1 = (opmode == 0x4 || opmode == 0x5);
         return {
             .i = MOVEP,
             .r_src = address_reg,
@@ -2671,8 +2813,12 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opmode = opmode,
             .i_sz = 4,
             // TODO: check
-            .src_type = ((opmode == 0x4 || opmode == 0x5) ? OT_EA : OT_DREG),
-            .dst_type = ((opmode == 0x4 || opmode == 0x5) ? OT_DREG : OT_EA),
+            .src_type = (is_op1 ? OT_EA : OT_DREG),
+            .dst_type = (is_op1 ? OT_DREG : OT_EA),
+            .ea_reg_src = (unsigned char)(is_op1 ? ea_reg : 0),
+            .ea_mode_src = (is_op1 ? am : Unknown),
+            .ea_reg_dst = (unsigned char)(is_op1 ? 0 : ea_reg),
+            .ea_mode_dst = (is_op1 ? Unknown : am),
         };
     }
 
@@ -2701,6 +2847,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, WORD))),
             .src_type = OT_EA,
             .dst_type = OT_DREG,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -2715,6 +2863,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, WORD))),
             .src_type = OT_EA,
             .dst_type = OT_DREG,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -2729,6 +2879,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = BYTE,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, BYTE))),
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2743,6 +2895,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = opsz,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f,opsz))),
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2757,6 +2911,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = opsz,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2778,6 +2934,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = opsz,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
     
@@ -2808,6 +2966,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
             .src_type = (mode ? OT_EA : OT_DREG),
             .dst_type = (mode ? OT_DREG : OT_EA),
+            .ea_reg_src = (unsigned char)(mode ? ea_reg : 0),
+            .ea_mode_src = (mode ? am : Unknown),
+            .ea_reg_dst = (unsigned char)(mode ? 0 : ea_reg),
+            .ea_mode_dst = (mode ? Unknown : am),
         };
     }
 
@@ -2824,6 +2986,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz) + (opsz == LONG ? 4 : 2))),
             .src_type = OT_IMM,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2849,6 +3013,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = LONG,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, LONG))),
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2878,6 +3044,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = WORD,
             .i_sz = 2,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2908,6 +3076,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = WORD,
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, WORD)),
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2939,7 +3109,11 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = 2,
             // TODO: check
             .src_type = (rm ? OT_EA : OT_DREG),
-            .dst_type = (rm ? OT_EA :OT_DREG),
+            .dst_type = (rm ? OT_EA : OT_DREG),
+            .ea_reg_src = (unsigned char)(rm ? rx : 0),
+            .ea_mode_src = (rm ? AddressRegisterIndirectPreDecMode : Unknown),
+            .ea_reg_dst = (unsigned char)(rm ? ry : 0),
+            .ea_mode_dst = (rm ? AddressRegisterIndirectPreDecMode : Unknown),
         };
     }
 
@@ -2954,6 +3128,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .read_ea = true,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, BYTE))),
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -2985,6 +3161,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
             .src_type = (mode ? OT_DREG : OT_EA),
             .dst_type = (mode ? OT_EA : OT_DREG),
+            .ea_reg_src = (unsigned char)(mode ? 0 : ea_reg),
+            .ea_mode_src = (mode ? Unknown : am),
+            .ea_reg_dst = (unsigned char)(mode ? ea_reg : 0),
+            .ea_mode_dst = (mode ? am : Unknown),
         };
     }
 
@@ -3008,6 +3188,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             // TODO: check
             .src_type = OT_EA,
             .dst_type = OT_AREG,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 
@@ -3024,6 +3206,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz) + (opsz == LONG ? 4 : 2))),
             .src_type = OT_IMM,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -3040,6 +3224,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
             .src_type = OT_IMM,
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -3060,6 +3246,10 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             // TODO: check
             .src_type = (rm ? OT_EA : OT_DREG),
             .dst_type = (rm ? OT_EA : OT_DREG),
+            .ea_reg_src = (unsigned char)(rm ? ea_reg : 0),
+            .ea_mode_src = (rm ? am : Unknown),
+            .ea_reg_dst = (unsigned char)(rm ? ea_reg : 0),
+            .ea_mode_dst = (rm ? am : Unknown),
         };
     }
 
@@ -3084,6 +3274,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = BYTE,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, BYTE))),
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -3115,6 +3307,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .opsz = opsz,
             .i_sz = ((unsigned char)(2 + ea_i_sz(val & 0x3f, opsz))),
             .dst_type = OT_EA,
+            .ea_reg_dst = ea_reg,
+            .ea_mode_dst = am,
         };
     }
 
@@ -3159,6 +3353,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i_sz = (unsigned char)(2 + ea_i_sz(val & 0x3f, WORD)),
             .src_type = OT_EA,
             .dst_type = OT_SR,
+            .ea_reg_src = ea_reg,
+            .ea_mode_src = am,
         };
     }
 

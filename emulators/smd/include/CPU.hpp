@@ -71,6 +71,7 @@ struct M68K {
     size_t exec_cycles = 0;
 
     enum AddressMode: unsigned char{
+        Unknown,
         DataRegisterDirectMode,
         AddressRegisterDirectMode,
         AddressRegisterIndirectMode,
@@ -83,7 +84,6 @@ struct M68K {
         AbsoluteShort,
         AbsoluteLong,
         Immediate,
-        Unknown,
     };
 
     static AddressMode to_address_mode(unsigned char, bool);
@@ -200,14 +200,14 @@ struct M68K {
     };
 
     enum InternalOp: unsigned char {
-        CalcEA_AREG_IndirectSrc,
-        CalcEA_AREG_PostIncSrc,
-        CalcEA_AREG_PreDecSrc,
-        CalcEA_AREG_IndirectDispModeSrc,
-        CalcEA_AREG_IndirectIndexModeSrc,
-        CalcEA_AbsoluteShortSrc,
-        CalcEA_AbsoluteLongSrc,
-        CalcEA_ImmediateSrc,
+        CalcEA_AREG_IndirectSrc,          CalcEA_AREG_IndirectDst,
+        CalcEA_AREG_PostIncSrc,           CalcEA_AREG_PostIncDst,
+        CalcEA_AREG_PreDecSrc,            CalcEA_AREG_PreDecDst,
+        CalcEA_AREG_IndirectDispModeSrc,  CalcEA_AREG_IndirectDispModeDst,
+        CalcEA_AREG_IndirectIndexModeSrc, CalcEA_AREG_IndirectIndexModeDst,
+        CalcEA_AbsoluteShortSrc,          CalcEA_AbsoluteShortDst,
+        CalcEA_AbsoluteLongSrc,           CalcEA_AbsoluteLongDst,
+        CalcEA_ImmediateSrc,              CalcEA_ImmediateDst,
         // TODO: finish dst
         InstNextPrefetch,
         BusReadReq,
@@ -236,14 +236,17 @@ struct M68K {
     unsigned ea_dst_addr{};
     AddressMode ea_mode;
     RegType ea_reg_type;
-    unsigned char ea_reg_n{};
+    unsigned char ea_reg_src{};
+    unsigned char ea_mode_src{};
+    unsigned char ea_reg_dst{};
+    unsigned char ea_mode_dst{};
 
     void ea_fill(unsigned char);
     void ea_write(unsigned char, unsigned val);
     unsigned to_ea_address(unsigned char);
     void inst_next_prefetch(BUS&);
 
-    void fill_ea_src(AddressMode am);
+    void fill_ea(AddressMode am, bool);
 
     void instant_bus_read_req(unsigned, BusReadDest, OperandSize, BUS&, unsigned char = 0);
     void instant_bus_write_req(unsigned, unsigned, OperandSize, BUS& bus);
@@ -307,6 +310,10 @@ struct M68K {
         unsigned char i_sz{};
         OperandType src_type{};
         OperandType dst_type{};
+        unsigned char ea_reg_src{};
+        AddressMode ea_mode_src{};
+        unsigned char ea_reg_dst{};
+        AddressMode ea_mode_dst{};
         bool unknown = false;
     } di;
 
