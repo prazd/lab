@@ -214,7 +214,6 @@ struct M68K {
         BusReadWait,
         BusWriteReq,
         BusWriteWait,
-        BusWriteBackReq,
         INOP,
         Execute,
     };
@@ -234,15 +233,11 @@ struct M68K {
 
     unsigned ea_src_addr{};
     unsigned ea_dst_addr{};
-    AddressMode ea_mode;
-    RegType ea_reg_type;
     unsigned char ea_reg_src{};
     unsigned char ea_mode_src{};
     unsigned char ea_reg_dst{};
     unsigned char ea_mode_dst{};
 
-    void ea_fill(unsigned char);
-    void ea_write(unsigned char, unsigned val);
     unsigned to_ea_address(unsigned char);
     void inst_next_prefetch(BUS&);
 
@@ -317,9 +312,6 @@ struct M68K {
         bool unknown = false;
     } di;
 
-    unsigned ea_address_calc(unsigned char);
-    void ea_address_calc_fill(const DecodedInfo&, bool);
-
     inline void read_displacement() {
         // TODO: check
         di.d_l = read_prefetch_q();
@@ -328,6 +320,22 @@ struct M68K {
         } else if (di.opsz == LONG){
             di.d_l <<= 16;
             di.d_l |= read_prefetch_q();
+        }
+    }
+
+    inline void try_data_and_address_regs_update(const DecodedInfo& di){
+        if (di.dst_type == OT_DREG) {
+            dregs[di.r_dst] &= ~di.mask;
+            dregs[di.r_dst] |= dst_value;
+        } else if (di.dst_type == OT_AREG) {
+            aregs[di.r_dst] &= ~di.mask;
+            aregs[di.r_dst] |= dst_value;
+        } else if (di.dst_type == OT_EA && di.ea_mode_dst == DataRegisterDirectMode){
+            dregs[di.ea_reg_dst] &= ~di.mask;
+            dregs[di.ea_reg_dst] |= dst_value;
+        } else if (di.dst_type == OT_EA && di.ea_mode_dst == AddressRegisterDirectMode) {
+            aregs[di.ea_reg_dst] &= ~di.mask;
+            aregs[di.ea_reg_dst] |= dst_value;
         }
     }
 
