@@ -310,7 +310,14 @@ struct M68K {
         unsigned char ea_reg_dst{};
         AddressMode ea_mode_dst{};
         bool unknown = false;
+
+        bool ready_src = false;
+        bool ready_dst = false;
     } di;
+
+
+    void fill_prefetch_before_exec(const DecodedInfo&);
+    void fill_prefetch_after_exec(const DecodedInfo&);
 
     inline void read_displacement() {
         // TODO: check
