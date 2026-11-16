@@ -210,12 +210,17 @@ struct M68K {
         CalcEA_AREG_IndirectDispModeSrc_Addr,   CalcEA_AREG_IndirectDispModeDst_Addr,
         CalcEA_AREG_IndirectIndexModeSrc,       CalcEA_AREG_IndirectIndexModeDst,
         CalcEA_AREG_IndirectIndexModeSrc_Addr,  CalcEA_AREG_IndirectIndexModeDst_Addr,
+
+        CalcEA_PC_IndirectDispModeSrc,          CalcEA_PC_IndirectDispModeDst,
+        CalcEA_PC_IndirectDispModeSrc_Addr,     CalcEA_PC_IndirectDispModeDst_Addr,
+        CalcEA_PC_IndirectIndexModeSrc,         CalcEA_PC_IndirectIndexModeDst,
+        CalcEA_PC_IndirectIndexModeSrc_Addr,    CalcEA_PC_IndirectIndexModeDst_Addr,
         CalcEA_AbsoluteShortSrc,                CalcEA_AbsoluteShortDst,
         CalcEA_AbsoluteShortSrc_Addr,           CalcEA_AbsoluteShortDst_Addr,
         CalcEA_AbsoluteLongSrc,                 CalcEA_AbsoluteLongDst,
         CalcEA_AbsoluteLongSrc_Addr,            CalcEA_AbsoluteLongDst_Addr,
         CalcEA_ImmediateSrc,                    CalcEA_ImmediateDst,
-        CalcEA_ImmediateSrc_Addr,               CalcEA_ImmediateDst_Addr,
+        CalcEA_ImmediateSrc_Addr,               CalcEA_ImmediateDst_Addr, // TODO: check
         // TODO: finish dst
         InstNextPrefetch,
         BusReadReq,
@@ -330,6 +335,14 @@ struct M68K {
     void fill_ea(const DecodedInfo& di, bool);
     void fill_prefetch_before_exec(const DecodedInfo&);
     void fill_prefetch_after_exec(const DecodedInfo&);
+
+    inline unsigned calc_xn(){
+        auto pv= read_prefetch_q();
+        auto regn = (pv >> 12) & 0x7;
+        auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
+        xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
+        return sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
+    };
 
     inline void read_displacement() {
         // TODO: check
@@ -454,6 +467,8 @@ struct M68K {
     inline void operands_b_to_long(){operand_b_l = (operand_b_w2 << 16) | operand_b_w1;}
 
     AddressMode am{};
+
+    void handle_ea(InternalOp, DecodedInfo&, BUS&);
 
     static DecodedInfo decode(unsigned short);
 

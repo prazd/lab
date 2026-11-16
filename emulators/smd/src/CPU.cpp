@@ -69,20 +69,20 @@ void M68K::instant_bus_read_req(unsigned addr, BusReadDest brd, OperandSize sz, 
     auto even_addr = addr & 0xfffffffe;
     switch (sz) {
         case BYTE: {
-            bus.m68k_r_req(ea_dst_addr,  ((addr & 1) ? BUS::LDS : BUS::UDS));
-            iops_q.push_back({.iop = BusReadWait, .brd = brd, .n = n});
+            bus.m68k_r_req(even_addr,  ((addr & 1) ? BUS::LDS : BUS::UDS));
+            iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
             break;
         }
         case WORD: {
             bus.m68k_r_req(even_addr,  BUS::UDS_LDS);
-            iops_q.push_back({.iop = BusReadWait, .brd = brd, .n = n});
+            iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
             break;
         }
         case LONG: {
-            bus.m68k_r_req(ea_dst_addr,   BUS::UDS_LDS);
-            iops_q.push_back({.iop = BusReadWait, .brd = brd, .n = n});
-            iops_q.push_back({.address = even_addr + 2, .iop = BusReadReq, .brd = BusReadDest((int)brd + 1), .bus_mode = BUS::UDS_LDS});
-            iops_q.push_back({.iop = BusReadWait, .brd = brd, .n = n});
+            bus.m68k_r_req(even_addr,   BUS::UDS_LDS);
+            iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
+            iops_q.push_front({.address = even_addr + 2, .iop = BusReadReq, .brd = BusReadDest((int)brd + 1), .bus_mode = BUS::UDS_LDS});
+            iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
             break;
         }
     }
@@ -277,10 +277,19 @@ unsigned char M68K::calc_exec_cycles(const DecodedInfo& di) {
             // TODO: finish
         }
 
-        case MULS:
-            break;
-        case MULU:
-            break;
+        case MULU: {
+            return 38 + (2 * popcount(operand_a_l));
+        }
+        case MULS: {
+            auto x = operand_a_l << 1;
+            size_t m = 0;
+            for (int i = 0; i < 16; ++i){
+                bool c =  x & (1 << i);
+                bool nc = x & (1 << (i + 1));
+                m += (c ^ nc);
+            }
+            return 38 + (2 * m);
+        }
 
         case STOP: return 2;
         case MOVEUSP: return 0;
@@ -389,7 +398,7 @@ void M68K::fill_ea(const DecodedInfo& di, bool is_src){
         }
         case AddressRegisterIndirectPreDecMode:{
             iops_q.push_back({.iop = (is_src ?
-                                      (di.ea_mode_src ? CalcEA_AREG_PreDecSrc_Addr : CalcEA_AREG_PreDecSrc) :
+                                      (di.ea_addr_src ? CalcEA_AREG_PreDecSrc_Addr : CalcEA_AREG_PreDecSrc) :
                                       (di.ea_addr_dst ? CalcEA_AREG_PreDecDst_Addr : CalcEA_AREG_PreDecDst))});
             break;
         }
@@ -407,6 +416,22 @@ void M68K::fill_ea(const DecodedInfo& di, bool is_src){
                                       (di.ea_addr_dst ? CalcEA_AREG_IndirectIndexModeDst_Addr : CalcEA_AREG_IndirectIndexModeDst))});
             break;
         }
+        case ProgramCounterIndirectDisplacementMode: {
+            iops_q.push_back({.iop = InstNextPrefetch});
+            iops_q.push_back({.iop = (is_src ?
+                                      (di.ea_addr_src ? CalcEA_PC_IndirectDispModeSrc_Addr : CalcEA_PC_IndirectDispModeSrc) :
+                                      (di.ea_addr_dst ? CalcEA_PC_IndirectDispModeDst_Addr : CalcEA_PC_IndirectDispModeDst))});
+            break;
+        }
+
+        case ProgramCounterIndirectIndexMode: {
+            iops_q.push_back({.iop = InstNextPrefetch});
+            iops_q.push_back({.iop = (is_src ?
+                                      (di.ea_addr_src ? CalcEA_PC_IndirectIndexModeSrc_Addr : CalcEA_PC_IndirectIndexModeSrc) :
+                                      (di.ea_addr_dst ? CalcEA_PC_IndirectIndexModeDst_Addr : CalcEA_PC_IndirectIndexModeDst))});
+            break;
+        }
+
         case AbsoluteShort: {
             iops_q.push_back({.iop = InstNextPrefetch});
             iops_q.push_back({.iop = (is_src ?
@@ -428,6 +453,7 @@ void M68K::fill_ea(const DecodedInfo& di, bool is_src){
                                       (di.ea_addr_dst ? CalcEA_ImmediateDst_Addr : CalcEA_ImmediateDst))});
             break;
         }
+
     }
 }
 
@@ -446,6 +472,87 @@ void M68K::inst_exec_check(BUS& bus) {
         fill_prefetch_after_exec(di);
         iops_q.pop_front();
     }
+}
+
+void M68K::handle_ea(InternalOp iop, M68K::DecodedInfo& di, BUS& bus) {
+    bool is_src = (iop == CalcEA_AREG_IndirectSrc || iop == CalcEA_AREG_IndirectSrc_Addr ||
+                   iop == CalcEA_AREG_PostIncSrc  || iop == CalcEA_AREG_PostIncSrc_Addr  ||
+                   iop == CalcEA_AREG_PreDecSrc   || iop == CalcEA_AREG_PreDecSrc_Addr   ||
+                   iop == CalcEA_AREG_IndirectDispModeSrc    || iop == CalcEA_AREG_IndirectDispModeSrc_Addr ||
+                   iop == CalcEA_AREG_IndirectIndexModeSrc   || iop == CalcEA_AREG_IndirectIndexModeSrc_Addr ||
+                   iop == CalcEA_PC_IndirectDispModeSrc      || iop == CalcEA_PC_IndirectDispModeSrc_Addr ||
+                   iop == CalcEA_PC_IndirectIndexModeSrc   || iop == CalcEA_PC_IndirectIndexModeSrc_Addr ||
+                   iop == CalcEA_AbsoluteShortSrc   || iop == CalcEA_AbsoluteShortSrc_Addr ||
+                   iop == CalcEA_AbsoluteLongSrc   || iop == CalcEA_AbsoluteLongSrc_Addr ||
+                   iop == CalcEA_ImmediateSrc   || iop == CalcEA_ImmediateSrc_Addr
+                );
+    bool is_addr = (is_src ? di.ea_addr_src : di.ea_addr_dst);
+    auto& addr =  (is_src ? src_addr : dst_addr);
+    auto& ready = (is_src ? di.ready_src : di.ready_dst);
+    auto& op    = (is_src ? operand_a_l : operand_b_l);
+    auto reg    = (is_src ? di.ea_reg_src : di.ea_reg_dst);
+    auto brd_op =  (is_src ? BRDOperandA1 : BRDOperandB1);
+
+    if (iop <= CalcEA_AREG_IndirectDst_Addr) {
+        addr = aregs[reg];
+        if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
+        iops_q.pop_front();
+        ready = true;
+    } else if (iop >= CalcEA_AREG_PostIncSrc && iop <= CalcEA_AREG_PostIncDst_Addr){
+        addr = aregs[reg];
+        aregs[reg] += di.opsz;
+        if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
+        ready = true;
+        iops_q.pop_front();
+    } else if (iop >= CalcEA_AREG_PreDecSrc && iop <= CalcEA_AREG_PreDecDst_Addr) {
+        addr = aregs[reg] -= opsz;
+        iops_q.push_back({.iop = INOP});
+        if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
+        iops_q.pop_front();
+        ready = true;
+    } else if (iop >= CalcEA_AREG_IndirectDispModeSrc && iop <= CalcEA_AREG_IndirectDispModeDst_Addr) {
+        addr =  aregs[reg] + sign_extend_to_l(read_prefetch_q());
+        if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
+        iops_q.pop_front();
+        di.ready_src = true;
+    } else if (iop >= CalcEA_AREG_IndirectIndexModeSrc && iop <= CalcEA_AREG_IndirectIndexModeDst_Addr) {
+        addr = aregs[reg] + calc_xn();
+        iops_q.push_back({.iop = INOP}); // calc time
+        if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
+        iops_q.pop_front();
+        di.ready_src = true;
+    } else if (iop >= CalcEA_PC_IndirectDispModeSrc && iop <= CalcEA_PC_IndirectDispModeDst_Addr) {
+        addr = pc + sign_extend_to_l(read_prefetch_q());
+        if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
+        iops_q.pop_front();
+        di.ready_src = true;
+    } else if (iop >= CalcEA_PC_IndirectIndexModeSrc && iop <= CalcEA_PC_IndirectIndexModeSrc) {
+        addr = pc + calc_xn();
+        iops_q.push_back({.iop = INOP}); // calc time
+        if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
+        iops_q.pop_front();
+        di.ready_src = true;
+    } else if (iop >= CalcEA_AbsoluteShortSrc && iop <= CalcEA_AbsoluteShortDst_Addr){
+        addr = read_prefetch_q();
+        if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
+        di.ready_dst = true;
+        iops_q.pop_front();
+    } else if (iop >= CalcEA_AbsoluteLongSrc && iop <= CalcEA_AbsoluteLongDst_Addr) {
+        addr = (((unsigned)read_prefetch_q()) << 16) | read_prefetch_q();
+        if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
+        di.ready_dst = true;
+        iops_q.pop_front();
+    } else if (iop >= CalcEA_ImmediateSrc && iop <= CalcEA_ImmediateDst_Addr) {
+        op = read_prefetch_q();
+        if (di.opsz == LONG){
+            op = (op << 16) | read_prefetch_q();
+            inst_next_prefetch(bus);
+        }
+        ready = true;
+        iops_q.pop_front();
+    }
+
+    if (di.i == JSR) prefetch_addr = (is_src ? src_addr : dst_addr); // TODO: check
 }
 
 void M68K::tick(BUS& bus){
@@ -501,267 +608,6 @@ void M68K::tick(BUS& bus){
             inst_next_prefetch(bus);
             break;
         }
-
-        case CalcEA_AREG_IndirectSrc: {
-            instant_bus_read_req(src_addr = aregs[di.ea_reg_src], BRDOperandA1, di.opsz, bus);
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_IndirectSrc_Addr: {
-            src_addr =aregs[di.ea_reg_src];
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_IndirectDst: {
-            instant_bus_read_req( dst_addr = aregs[di.ea_reg_dst], BRDOperandB1, di.opsz, bus);
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_IndirectDst_Addr: {
-            dst_addr = aregs[di.ea_reg_dst];
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_PostIncSrc: {
-            instant_bus_read_req(src_addr = aregs[di.ea_reg_src], BRDOperandA1, di.opsz, bus);
-            aregs[di.ea_reg_src] += di.opsz;
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_PostIncSrc_Addr: {
-            src_addr = aregs[di.ea_reg_src];
-            aregs[di.ea_reg_src] += di.opsz;
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-
-        case CalcEA_AREG_PostIncDst: {
-            instant_bus_read_req(dst_addr = aregs[di.ea_reg_dst], BRDOperandA1, di.opsz, bus);
-            aregs[di.ea_reg_dst] += di.opsz;
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_PostIncDst_Addr: {
-            dst_addr = aregs[di.ea_reg_dst]++;
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_PreDecSrc: {
-            // TODO: check
-            src_addr = aregs[di.ea_reg_src] -= opsz;
-            // iops_q.push_back({.iop = INOP}); // this tick
-            iops_q.push_back({.iop = INOP});
-            fill_bus_read_req(  aregs[di.ea_reg_src], BRDOperandA1, di.opsz);
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_PreDecSrc_Addr: {
-            src_addr = aregs[di.ea_reg_src] -= opsz;
-            // iops_q.push_back({.iop = INOP}); // this tick
-            iops_q.push_back({.iop = INOP});
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_PreDecDst: {
-            // TODO: check
-            dst_addr = aregs[di.ea_reg_dst] -= opsz;
-            // iops_q.push_back({.iop = INOP}); // this tick
-            iops_q.push_back({.iop = INOP});
-            fill_bus_read_req(dst_addr, BRDOperandA1, di.opsz);
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_PreDecDst_Addr: {
-            dst_addr = aregs[di.ea_reg_dst] -= opsz;
-            iops_q.pop_front();
-            iops_q.push_front({.iop = INOP});
-            di.ready_dst = true;
-            break;
-        }
-
-        case CalcEA_AREG_IndirectDispModeSrc: {
-            instant_bus_read_req(src_addr = aregs[di.ea_reg_src] + sign_extend_to_l(read_prefetch_q()), BRDOperandA1, opsz, bus);
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_IndirectDispModeSrc_Addr: {
-            src_addr = aregs[di.ea_reg_src] + sign_extend_to_l(read_prefetch_q());
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-
-        case CalcEA_AREG_IndirectDispModeDst: {
-            dst_addr = aregs[di.ea_reg_dst] + sign_extend_to_l(read_prefetch_q());
-            instant_bus_read_req(dst_addr, BRDOperandA1, opsz, bus);
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_IndirectDispModeDst_Addr: {
-            dst_addr = aregs[di.ea_reg_dst] + sign_extend_to_l(read_prefetch_q());
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_IndirectIndexModeSrc: {
-            auto pv= read_prefetch_q();
-            auto regn = (pv >> 12) & 0x7;
-            auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
-            xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
-            // n np nr
-//            iops_q.push_back({.iop = INOP}); // this tick
-            iops_q.push_back({.iop = INOP}); // calc time
-            instant_bus_read_req( src_addr = aregs[di.ea_reg_src] +
-                                  sign_extend_to_l((unsigned char)(pv & 0xff)) + xn, BRDOperandA1, opsz, bus);
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_IndirectIndexModeSrc_Addr: {
-            auto pv= read_prefetch_q();
-            auto regn = (pv >> 12) & 0x7;
-            auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
-            xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
-            iops_q.pop_front();
-            // n np nr
-//            iops_q.push_back({.iop = INOP}); // this tick
-            iops_q.push_front({.iop = INOP}); // calc time
-            src_addr =  aregs[di.ea_reg_src] +
-                                  sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
-            di.ready_src = true;
-            break;
-        }
-
-        case CalcEA_AREG_IndirectIndexModeDst: {
-            auto pv= read_prefetch_q();
-            auto regn = (pv >> 12) & 0x7;
-            auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
-            xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
-            // n np nr
-//            iops_q.push_back({.iop = INOP}); // this tick
-            iops_q.push_back({.iop = INOP}); // calc time
-            dst_addr = aregs[di.ea_reg_dst] +
-                       sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
-            instant_bus_read_req( dst_addr, BRDOperandA1, opsz, bus);
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AREG_IndirectIndexModeDst_Addr: {
-            auto pv= read_prefetch_q();
-            auto regn = (pv >> 12) & 0x7;
-            auto xn = pv & 0x8000 ? aregs[regn] : dregs[regn];
-            xn = pv & 0x800 ? xn : sign_extend_to_l((unsigned short)(xn & 0xffff));
-            // n np nr
-            iops_q.pop_front();
-            iops_q.push_front({.iop = INOP}); // calc time
-            dst_addr = aregs[di.ea_reg_dst] +
-                       sign_extend_to_l((unsigned char)(pv & 0xff)) + xn;
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AbsoluteShortSrc: {
-            instant_bus_read_req(src_addr = read_prefetch_q(), BRDOperandA1, opsz, bus);
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AbsoluteShortSrc_Addr: {
-            src_addr = read_prefetch_q();
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AbsoluteShortDst: {
-            instant_bus_read_req(dst_addr = read_prefetch_q(), BRDOperandA1, opsz, bus);
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AbsoluteShortDst_Addr: {
-            dst_addr = read_prefetch_q();
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AbsoluteLongSrc: {
-            instant_bus_read_req(src_addr = (read_prefetch_q() << 16) | read_prefetch_q(), BRDOperandA1, opsz, bus);
-            inst_next_prefetch(bus);
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AbsoluteLongSrc_Addr: {
-            src_addr = (read_prefetch_q() << 16) | read_prefetch_q();
-            inst_next_prefetch(bus);
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AbsoluteLongDst: {
-            instant_bus_read_req( dst_addr = ((read_prefetch_q() << 16) | read_prefetch_q()), BRDOperandA1, opsz, bus);
-            inst_next_prefetch(bus);
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_AbsoluteLongDst_Addr: {
-            dst_addr = ((read_prefetch_q() << 16) | read_prefetch_q());
-            di.ready_dst = true;
-            iops_q.pop_front();
-            break;
-        }
-
-        case CalcEA_ImmediateSrc: {
-            operand_a_l = read_prefetch_q();
-            if (di.opsz == LONG){
-                operand_a_l = (operand_a_l << 16) | read_prefetch_q();
-                inst_next_prefetch(bus);
-            }
-            di.ready_src = true;
-            iops_q.pop_front();
-            break;
-        }
-
         case BusReadReq: {
             // TODO: check bus_mode
             bus.m68k_r_req(iopv.address, iopv.bus_mode);
@@ -797,7 +643,7 @@ void M68K::tick(BUS& bus){
                         break;
                     }
                     case BRDAddressRegisterH: {
-                        aregs[iopv.n] &= 0xffff; aregs[iopv.n] |= (bus.m68k_get() << 16);
+                        aregs[iopv.n] &= 0xffff; aregs[iopv.n] |= (((unsigned)bus.m68k_get()) << 16);
                         break;
                     }
                     case BRDDataRegisterByteL: {
@@ -860,6 +706,9 @@ void M68K::tick(BUS& bus){
             iops_q.pop_front();
             break;
         }
+        default: {
+            if (!di.ready_src || !di.ready_dst) handle_ea(iopv.iop, di, bus);
+        }
     }
     inst_exec_check(bus);
 }
@@ -868,7 +717,6 @@ void M68K::tick(BUS& bus){
 // read dst src
 // prefetch if need
 //
-
 
 M68K::AddressMode M68K::to_address_mode(unsigned char val, bool mr){
     unsigned char mode_field = mr ? (val >> 3) & 0x7 : val & 0x7;
@@ -1336,13 +1184,13 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
             break;
         }
         case JMP: {
-            jump(ea_src_addr);
+            prefetch_addr = pc = src_addr;
             break;
         }
         case JSR: {
             SP-=4;
             fill_bus_write_req(SP, pc, LONG);
-            jump(ea_src_addr);
+            pc = src_addr;
             break;
         }
         case LEA: {
