@@ -200,14 +200,22 @@ struct M68K {
     };
 
     enum InternalOp: unsigned char {
-        CalcEA_AREG_IndirectSrc,          CalcEA_AREG_IndirectDst,
-        CalcEA_AREG_PostIncSrc,           CalcEA_AREG_PostIncDst,
-        CalcEA_AREG_PreDecSrc,            CalcEA_AREG_PreDecDst,
-        CalcEA_AREG_IndirectDispModeSrc,  CalcEA_AREG_IndirectDispModeDst,
-        CalcEA_AREG_IndirectIndexModeSrc, CalcEA_AREG_IndirectIndexModeDst,
-        CalcEA_AbsoluteShortSrc,          CalcEA_AbsoluteShortDst,
-        CalcEA_AbsoluteLongSrc,           CalcEA_AbsoluteLongDst,
-        CalcEA_ImmediateSrc,              CalcEA_ImmediateDst,
+        CalcEA_AREG_IndirectSrc,                CalcEA_AREG_IndirectDst,
+        CalcEA_AREG_IndirectSrc_Addr,           CalcEA_AREG_IndirectDst_Addr,
+        CalcEA_AREG_PostIncSrc,                 CalcEA_AREG_PostIncDst,
+        CalcEA_AREG_PostIncSrc_Addr,            CalcEA_AREG_PostIncDst_Addr,
+        CalcEA_AREG_PreDecSrc,                  CalcEA_AREG_PreDecDst,
+        CalcEA_AREG_PreDecSrc_Addr,             CalcEA_AREG_PreDecDst_Addr,
+        CalcEA_AREG_IndirectDispModeSrc,        CalcEA_AREG_IndirectDispModeDst,
+        CalcEA_AREG_IndirectDispModeSrc_Addr,   CalcEA_AREG_IndirectDispModeDst_Addr,
+        CalcEA_AREG_IndirectIndexModeSrc,       CalcEA_AREG_IndirectIndexModeDst,
+        CalcEA_AREG_IndirectIndexModeSrc_Addr,  CalcEA_AREG_IndirectIndexModeDst_Addr,
+        CalcEA_AbsoluteShortSrc,                CalcEA_AbsoluteShortDst,
+        CalcEA_AbsoluteShortSrc_Addr,           CalcEA_AbsoluteShortDst_Addr,
+        CalcEA_AbsoluteLongSrc,                 CalcEA_AbsoluteLongDst,
+        CalcEA_AbsoluteLongSrc_Addr,            CalcEA_AbsoluteLongDst_Addr,
+        CalcEA_ImmediateSrc,                    CalcEA_ImmediateDst,
+        CalcEA_ImmediateSrc_Addr,               CalcEA_ImmediateDst_Addr,
         // TODO: finish dst
         InstNextPrefetch,
         BusReadReq,
@@ -239,9 +247,10 @@ struct M68K {
     unsigned char ea_mode_dst{};
 
     unsigned to_ea_address(unsigned char);
+    void inst_exec_check(BUS&);
     void inst_next_prefetch(BUS&);
 
-    void fill_ea(AddressMode am, bool);
+
 
     void instant_bus_read_req(unsigned, BusReadDest, OperandSize, BUS&, unsigned char = 0);
     void instant_bus_write_req(unsigned, unsigned, OperandSize, BUS& bus);
@@ -313,9 +322,12 @@ struct M68K {
 
         bool ready_src = false;
         bool ready_dst = false;
+        bool ea_addr_src = false;
+        bool ea_addr_dst = false;
     } di;
 
 
+    void fill_ea(const DecodedInfo& di, bool);
     void fill_prefetch_before_exec(const DecodedInfo&);
     void fill_prefetch_after_exec(const DecodedInfo&);
 
@@ -426,6 +438,7 @@ struct M68K {
         DSTAn,DSTDn,DSTMem,
     } dst;
     unsigned dst_addr{};
+    unsigned src_addr{};
     unsigned dst_value{};
     unsigned char dst_reg_n{};
 
