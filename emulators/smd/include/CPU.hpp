@@ -334,6 +334,7 @@ struct M68K {
 
     void fill_ea(const DecodedInfo& di, bool);
     void fill_prefetch_before_exec(const DecodedInfo&);
+    void fill_prefetch_before_ea_calc(AddressMode, OperandSize);
     void fill_prefetch_after_exec(const DecodedInfo&);
 
     inline unsigned calc_xn(){
@@ -480,7 +481,7 @@ struct M68K {
     inline unsigned short read_n_fill_prefetch_q(){
         auto v = prefetch_q.front();
         prefetch_q.pop_front();
-        fill_prefetch_req();
+        fill_prefetch_req_back();
         return v;
     }
     inline unsigned short read_prefetch_q(){
@@ -489,7 +490,7 @@ struct M68K {
         return v;
     }
 
-    inline void fill_prefetch_req(){
+    inline void fill_prefetch_req_back(){
         fill_bus_read_req(prefetch_addr, BRDPrefetchQ, WORD);
         prefetch_addr += 2;
     }
@@ -497,11 +498,16 @@ struct M68K {
         fill_bus_read_req_front(prefetch_addr, BRDPrefetchQ, WORD);
         prefetch_addr += 2;
     }
+    inline void inst_fill_prefetch_req_front(BUS& bus){
+        instant_bus_read_req(prefetch_addr, BRDPrefetchQ, WORD, bus);
+        prefetch_addr += 2;
+    }
+
     inline void reset_prefetch_q(){
         prefetch_q.clear();
         prefetch_addr = pc;
-        fill_prefetch_req();
-        fill_prefetch_req();
+        fill_prefetch_req_back();
+        fill_prefetch_req_back();
     }
 
     inline void jump(unsigned addr){
