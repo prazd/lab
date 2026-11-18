@@ -335,7 +335,71 @@ struct M68K {
     void fill_ea(const DecodedInfo& di, bool);
     void fill_prefetch_before_exec(const DecodedInfo&);
     void fill_prefetch_before_ea_calc(AddressMode, OperandSize);
-    void fill_prefetch_after_exec(const DecodedInfo&);
+
+    template <bool is_back>
+    void fill_prefetch_after_exec(const DecodedInfo& di){
+        #define FILL_PREFETCH(c) if constexpr (c) fill_prefetch_req_back(); else fill_prefetch_req_front();
+        // todo: finish (TRAP, ILLEGAL)
+        switch (di.i) {
+            case SWAP:
+            case EXT:
+            case TAS:
+            case LEA:
+            case MOVEQ:
+            case MOVEUSP:
+            case MOVEA:
+            case NOP:
+            case LINK:
+            case UNLK:
+            case DIVU:
+            case DIVS:
+            case TST:
+            case JMP:
+            case RESET:
+            case MOVEM:
+            case JSR: {
+                FILL_PREFETCH(is_back)
+                break;
+            }
+            case MOVE: {
+                if (di.ea_mode_dst != AddressRegisterIndirectPreDecMode){
+                    FILL_PREFETCH(is_back)
+                }
+                break;
+            }
+
+            case PEA: {
+                if (di.ea_mode_src == AbsoluteShort || di.ea_mode_src == AbsoluteLong){
+                    FILL_PREFETCH(is_back)
+                }
+                break;
+            }
+            case BRA:
+            case BSR:
+            case MOVEtoCCR: // TODO: check
+            case RTE:
+            case RTS:
+            case RTR: {
+                FILL_PREFETCH(is_back)
+                FILL_PREFETCH(is_back)
+                break;
+            }
+            case Bcc: {
+                FILL_PREFETCH(is_back)
+                if (!(!is_cond((ConditionCode) di.d1_b) && di.opsz == BYTE)){
+                    FILL_PREFETCH(is_back)
+                }
+                break;
+            }
+            case DBcc: { // TODO: check <label>
+                if (!is_cond((ConditionCode) di.d1_b) && sign_extend_to_l((unsigned short) di.d_l) == -1)
+                    iop_push_nops(3); // 4 this tick - false prefetch
+                FILL_PREFETCH(is_back)
+                FILL_PREFETCH(is_back) // TODO: update prefetch q (reset)
+                break;
+            }
+        }
+    }
 
     inline unsigned calc_xn(){
         auto pv= read_prefetch_q();
@@ -456,6 +520,7 @@ struct M68K {
     unsigned dst_value{};
     unsigned char dst_reg_n{};
 
+    unsigned short prefetched{};
     unsigned short operand_a_w1{};
     unsigned short operand_a_w2{};
     unsigned short operand_b_w1{};

@@ -304,6 +304,7 @@ unsigned char M68K::calc_exec_cycles(const DecodedInfo& di) {
         case UNLK:
         case TST:
         case SWAP:
+        case MOVE: // TODO: check
             return 0;
 
         case LEA: return (ea == AddressRegisterIndirectIndexMode ? 4 : 0); // TODO: check
@@ -322,10 +323,9 @@ unsigned char M68K::calc_exec_cycles(const DecodedInfo& di) {
 
 
 // TODO: finish
-        case TRAPV:
-            break;
-        case RESET:
-            break;
+        case TRAPV: return 2;
+        //https://github.com/larsbrinkhoff/m68k-microcode/blob/master/doc/Yacht.txt#L893C10-L895C20
+        case RESET: return 128; // 124 + 4
         case DIVS: {
             unsigned a = dregs[di.r_dst];
             unsigned b = operand_a_l & 0xffff;
@@ -360,8 +360,7 @@ unsigned char M68K::calc_exec_cycles(const DecodedInfo& di) {
             }
             return t + 76;
         }
-        case MOVE:
-            break;
+
     }
 }
 
@@ -498,8 +497,9 @@ void M68K::inst_exec_check(BUS& bus) {
         if (di.dst_type == OT_EA &&
             (di.ea_mode_dst != AddressRegisterDirectMode || di.ea_mode_dst != DataRegisterDirectMode)){
             instant_bus_write_req( dst_addr, dst_value, di.opsz, bus);
+            fill_prefetch_after_exec<true>(di);
         }
-        fill_prefetch_after_exec(di);
+        fill_prefetch_after_exec<false>(di);
         iops_q.pop_front();
     }
 }
@@ -537,19 +537,19 @@ void M68K::handle_ea(InternalOp iop, M68K::DecodedInfo& di, BUS& bus) {
         iops_q.pop_front();
     } else if (iop >= CalcEA_AREG_PreDecSrc && iop <= CalcEA_AREG_PreDecDst_Addr) {
         addr = aregs[reg] -= opsz;
-        iops_q.push_back({.iop = INOP});
+        iops_q.push_front({.iop = INOP});
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
         iops_q.pop_front();
         ready = true;
     } else if (iop >= CalcEA_AREG_IndirectDispModeSrc && iop <= CalcEA_AREG_IndirectDispModeDst_Addr) {
-        addr =  aregs[reg] + sign_extend_to_l(read_prefetch_q());
+        addr = aregs[reg] + sign_extend_to_l(read_prefetch_q());
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
         prefetch_after_ea = true;
         iops_q.pop_front();
         di.ready_src = true;
     } else if (iop >= CalcEA_AREG_IndirectIndexModeSrc && iop <= CalcEA_AREG_IndirectIndexModeDst_Addr) {
         addr = aregs[reg] + calc_xn();
-        iops_q.push_back({.iop = INOP}); // calc time
+        iops_q.push_front({.iop = INOP}); // calc time
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
         prefetch_after_ea = true;
         iops_q.pop_front();
@@ -562,7 +562,7 @@ void M68K::handle_ea(InternalOp iop, M68K::DecodedInfo& di, BUS& bus) {
         di.ready_src = true;
     } else if (iop >= CalcEA_PC_IndirectIndexModeSrc && iop <= CalcEA_PC_IndirectIndexModeSrc) {
         addr = pc + calc_xn();
-        iops_q.push_back({.iop = INOP}); // calc time
+        iops_q.push_front({.iop = INOP}); // calc time
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
         prefetch_after_ea = true;
         iops_q.pop_front();
@@ -746,8 +746,10 @@ void M68K::tick(BUS& bus){
             if (di.dst_type == OT_EA &&
                (di.ea_mode_dst != AddressRegisterDirectMode || di.ea_mode_dst != DataRegisterDirectMode)){
                 instant_bus_write_req( dst_addr, dst_value, di.opsz, bus);
+                fill_prefetch_after_exec<true>(di);
+            } else {
+                fill_prefetch_after_exec<false>(di);
             }
-            fill_prefetch_after_exec(di);
             iops_q.pop_front();
             break;
         }
@@ -848,44 +850,25 @@ void M68K::fill_prefetch_before_exec(const DecodedInfo& di) {
         case ROXL: case ROXR:{
             fill_prefetch_req_back(); break;
         }
+        case MOVE: {
+            if (di.ea_mode_dst == AddressRegisterIndirectPreDecMode)
+                fill_prefetch_req_back();
+            break;
+        }
+        case MOVEM: {
+            prefetched = read_prefetch_q();
+            fill_prefetch_req_back();
+            break;
+        }
+        case PEA: { // TODO: check
+            if (di.ea_mode_src != AbsoluteShort && di.ea_mode_src != AbsoluteLong)
+                fill_prefetch_req_back();
+            break;
+        }
+
     }
 }
 
-void M68K::fill_prefetch_after_exec(const DecodedInfo& di) {
-    // todo: finish (MOVE, PEA, MOVEM, TRAP, ILLEGAL, Bcc)
-    switch (di.i) {
-        case SWAP:
-        case EXT:
-        case TAS:
-        case LEA:
-        case MOVE:
-        case MOVEQ:
-        case MOVEUSP:
-        case MOVEA:
-        case NOP:
-        case LINK:
-        case UNLK:
-        case DIVU:
-        case DIVS:
-        case TST:
-        case JMP:
-        case RESET:
-        case JSR:{
-            fill_prefetch_req_back(); break;
-        }
-        case BRA:
-        case BSR:
-        case Bcc: //TODO: finish
-        case MOVEtoCCR: // TODO: check
-        case RTE:
-        case RTS:
-        case RTR:{
-            fill_prefetch_req_back();
-            fill_prefetch_req_back(); break;
-        }
-    }
-    // TODO:  di.i == DBcc (taken/not taken)
-}
 
 void M68K::exec(const DecodedInfo& di, BUS& bus) {
     // TODO: finish
@@ -1342,7 +1325,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
         }
 
         case MOVEM: {
-            unsigned short r_mask = di.prefetched & 0xffff;
+            unsigned short r_mask = prefetched;
             // TODO: maybe refactoring
             if (di.ea_mode_src != AddressRegisterIndirectPreDecMode){
                 if (di.opmode){
