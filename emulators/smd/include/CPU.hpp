@@ -171,9 +171,6 @@ struct M68K {
            '\0','B','W','\0','L',
     };
 
-    enum RegType {
-        Dn,An
-    };
 
     enum BusReadDest: unsigned char {
         BRDOperandA1,
@@ -244,18 +241,8 @@ struct M68K {
         OT_LIST, // TODO: check
     };
 
-    unsigned ea_src_addr{};
-    unsigned ea_dst_addr{};
-    unsigned char ea_reg_src{};
-    unsigned char ea_mode_src{};
-    unsigned char ea_reg_dst{};
-    unsigned char ea_mode_dst{};
-
-    unsigned to_ea_address(unsigned char);
     void inst_exec_check(BUS&);
     void inst_next_prefetch(BUS&);
-
-
 
     void instant_bus_read_req(unsigned, BusReadDest, OperandSize, BUS&, unsigned char = 0);
     void instant_bus_write_req(unsigned, unsigned, OperandSize, BUS& bus);
@@ -263,7 +250,6 @@ struct M68K {
     void fill_bus_read_req(unsigned, BusReadDest, OperandSize,unsigned char = 0);
     void fill_bus_read_req_front(unsigned, BusReadDest, OperandSize,unsigned char = 0);
     void fill_bus_write_req(unsigned, unsigned, OperandSize);
-    void fill_write_back_req(OperandSize);
 
     template <std::integral T>
     requires(std::is_same_v<T, unsigned char> || 
@@ -329,6 +315,10 @@ struct M68K {
         bool ready_dst = false;
         bool ea_addr_src = false;
         bool ea_addr_dst = false;
+
+
+        bool ea_src_calc_skip = false; // TODO: (check ADDX/SUBX case)
+        bool ea_dst_calc_skip = false;
     } di;
 
 
@@ -379,6 +369,7 @@ struct M68K {
             case MOVEtoCCR: // TODO: check
             case RTE:
             case RTS:
+            case ILLEGAL:
             case RTR: {
                 FILL_PREFETCH(is_back)
                 FILL_PREFETCH(is_back)
@@ -510,11 +501,6 @@ struct M68K {
         }
     }
 
-    unsigned short absolute_l_w1{};
-
-    enum Dest{
-        DSTAn,DSTDn,DSTMem,
-    } dst;
     unsigned dst_addr{};
     unsigned src_addr{};
     unsigned dst_value{};
@@ -575,6 +561,7 @@ struct M68K {
         fill_prefetch_req_back();
     }
 
+    // TODO: finish
     inline void jump(unsigned addr){
         pc = addr;
         reset_prefetch_q();
