@@ -9,6 +9,8 @@
 #include <vector>
 #include <charconv>
 #include <algorithm>
+#include <fstream>
+#include <string>
 
 enum Command {
     Unknown,
@@ -17,13 +19,15 @@ enum Command {
     Search,
     SetPid,
     SetRange,
+    PMRead,
+    PMPrint,
     Print,
     Write,
     Close,
     CmdCount,
 };
 constexpr std::string_view cmd_sv_arr[CmdCount] = {
-    "unknown", "info", "clear_vec", "search", "set_pid", "set_range", "print", "write", "close"
+    "unknown", "info", "clear_vec", "search", "set_pid", "set_range", "pm_read", "pm_print", "print", "write",  "close"
 };
 
 Command parse_cmd(const std::string_view sv) {
@@ -54,11 +58,34 @@ auto split_to_sv(const std::string& s){
 }
 
 struct CLI {
+    std::vector<std::string> proc_maps;
     std::string s;
     std::vector<void*> addresses;
     unsigned long begin{};
     unsigned long end{};
     int p_pid{};
+
+    void parse_maps(){
+        std::ifstream f(std::string("/proc/") + std::to_string(p_pid) + std::string("/maps"));
+        if (!f.is_open()) {perror("/proc/<pid>/maps read error"); return;}
+        proc_maps.clear();
+        std::string s;
+        while(std::getline(f, s))
+            proc_maps.emplace_back(std::move(s));
+    }
+
+    void write(void* addr, unsigned long v){
+        iovec local;
+        local.iov_base = &v;
+        local.iov_len = sizeof(v); 
+
+        iovec remote;
+        remote.iov_base = addr;
+        remote.iov_len = sizeof(v);
+        ssize_t nw = process_vm_writev(p_pid, &local, 1, &remote, 1, 0);
+        if (nw == -1)
+            perror("process_vm_writev error");
+    }
 
     void search(unsigned long value){
         unsigned long v = 0;
@@ -128,10 +155,17 @@ struct CLI {
                     break;
                 }
                 case SetRange: { 
-                    std::cout << "Begin:" << svs[1] << '\n';
-                    std::cout << "End:" << svs[2] << '\n';
-                    std::from_chars(svs[1].data(), svs[1].data() + svs[1].size(), begin, 16);
-                    std::from_chars(svs[2].data(), svs[2].data() + svs[2].size(), end, 16);
+                    size_t proc_maps_index = 0;
+                    std::from_chars(svs[1].data(), svs[1].data() + svs[1].size(), proc_maps_index);
+                    const auto& el = proc_maps[proc_maps_index];
+                    size_t i = 0;
+                    auto ptr = el.begin();
+                    while((++i, *ptr++) != '-');
+                    std::from_chars(el.data(), el.data() + i, begin, 16);
+                    
+                    size_t j = 0;
+                    while((++j, *ptr++) != ' ');
+                    std::from_chars(el.data() + i, el.data() + i + j, end, 16);
                     break;
                 }
                 case Search: {
@@ -140,11 +174,27 @@ struct CLI {
                     search(value);
                     break;
                 }
-                // TODO: finish
-                case Write: std::cout << "Write\n"; break;
-                case Close: std::cout << "Close\n"; break;
+                case Write: {
+                    unsigned long addr{};
+                    std::from_chars(svs[1].data(), svs[1].data() + svs[1].size(), addr, 16);
+                    unsigned long value{};
+                    std::from_chars(svs[2].data(), svs[2].data() + svs[2].size(), value, 16);
+                    write((void*)addr, value);
+                    break;
+                };
+                case Close: {return;}
+                case PMRead: {
+                    parse_maps();
+                    break;
+                }
+                case PMPrint: {
+                    for (size_t i = 0, e = proc_maps.size(); i != e; ++i)
+                        std::cout << '[' << i << "]:" << proc_maps[i] << '\n';
+                    break;
+                }
                 default:{
                     std::cout << "Unknown\n";
+                    break;
                 }
             }
         }   
