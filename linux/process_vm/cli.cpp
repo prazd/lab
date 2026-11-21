@@ -8,27 +8,35 @@
 #include <cstring>
 #include <vector>
 #include <charconv>
+#include <unistd.h>
 #include <algorithm>
 #include <fstream>
+#include <termios.h>
 #include <string>
 
-enum Command {
+enum Command: unsigned char {
     Unknown,
     Info,
-    ClearVec,
+    AddrClear,
     Search,
     SetPid,
     SetRange,
     PMRead,
-    PMPrint,
-    Print,
+    PMHead,
+    PMTail,
     Write,
     Close,
+    Clear,
+    Print,
     CmdCount,
 };
 constexpr std::string_view cmd_sv_arr[CmdCount] = {
-    "unknown", "info", "clear_vec", "search", "set_pid", "set_range", "pm_read", "pm_print", "print", "write",  "close"
+    "unknown", "info", "addrclear", "search", "setpid", "setrange", "pmread", 
+    "pmhead","pmtail", "write", "close", "clear", "print",
 };
+
+constexpr std::string_view PM_SV = "pm";
+constexpr std::string_view ADDR_SV = "addr";
 
 Command parse_cmd(const std::string_view sv) {
     for (size_t i = 0; i != CmdCount; ++i) {
@@ -58,12 +66,27 @@ auto split_to_sv(const std::string& s){
 }
 
 struct CLI {
+    enum TermC: char {
+        CTRL_L = 0xc,
+        ENTER = 0xa,
+        BACKSPACE = 0x7f,
+    };
+    termios default_mode;
+    termios sym_mode;
     std::vector<std::string> proc_maps;
     std::string s;
     std::vector<void*> addresses;
+    bool should_close{};
     unsigned long begin{};
     unsigned long end{};
     int p_pid{};
+
+    CLI(){
+        tcgetattr(STDIN_FILENO, &default_mode);
+        sym_mode = default_mode;
+        sym_mode.c_lflag &= ~(ICANON | ECHO);
+        tcsetattr(STDIN_FILENO, TCSANOW, &sym_mode);
+    }
 
     void parse_maps(){
         std::ifstream f(std::string("/proc/") + std::to_string(p_pid) + std::string("/maps"));
@@ -123,11 +146,7 @@ struct CLI {
             addresses.erase(std::remove(addresses.begin(), addresses.end(), (void*)0), addresses.end());
         }
     }
-
-    void run(){
-        for(;;){
-            std::cout << ">> ";
-            std::getline(std::cin, s);
+    void exec_cmd(){
             auto svs = split_to_sv<4>(s);
             switch(parse_cmd(svs[0])){
                 case Info: {
@@ -137,19 +156,12 @@ struct CLI {
                               << "Addresses sz:" << addresses.size() << '\n';
                     break;
                 }
-                case ClearVec: {
+                case AddrClear: {
                     addresses.clear(); 
                     std::cout << "addresses sz:" << addresses.size() << '\n';
                     break;
                 }
-                case Print: {
-                    size_t arg_sz = 0;
-                    std::from_chars(svs[1].data(), svs[1].data() + svs[1].size(), arg_sz);
-                    auto e = std::min(addresses.size(), arg_sz);
-                    for (size_t i = 0; i != e; ++i)
-                        std::cout << '[' << i << "]:" << std::hex << addresses[i] << std::dec << '\n';
-                    break;
-                }
+
                 case SetPid: {
                     std::from_chars(svs[1].data(), svs[1].data() + svs[1].size(), p_pid);
                     break;
@@ -175,21 +187,53 @@ struct CLI {
                     break;
                 }
                 case Write: {
-                    unsigned long addr{};
-                    std::from_chars(svs[1].data(), svs[1].data() + svs[1].size(), addr, 16);
+                    unsigned long index{};
+                    std::from_chars(svs[1].data(), svs[1].data() + svs[1].size(), index, 16);
                     unsigned long value{};
                     std::from_chars(svs[2].data(), svs[2].data() + svs[2].size(), value, 16);
-                    write((void*)addr, value);
+                    if (index < addresses.size())
+                        write(addresses[index], value);
+                    else
+                        std::cerr << "write error: index out of range\n";
                     break;
                 };
-                case Close: {return;}
+                case Close: {should_close = true; break;}
                 case PMRead: {
                     parse_maps();
                     break;
                 }
-                case PMPrint: {
-                    for (size_t i = 0, e = proc_maps.size(); i != e; ++i)
+                case Print: {
+                    if (svs[1] == PM_SV){
+                        for (size_t i = 0, e = proc_maps.size(); i != e; ++i)
+                            std::cout << '[' << i << "]:" << proc_maps[i] << '\n';
+                        break;
+                    } else if (svs[1] == ADDR_SV) {
+                        size_t arg_sz = 0;
+                        std::from_chars(svs[2].data(), svs[2].data() + svs[2].size(), arg_sz);
+                        auto e = std::min(addresses.size(), arg_sz);
+                        for (size_t i = 0; i != e; ++i)
+                            std::cout << '[' << i << "]:" << std::hex << addresses[i] << std::dec << '\n';
+                        break;
+                    }
+                    std::cerr << "print error: invalid args\n";
+                    break;
+                }
+                case PMHead: {
+                    unsigned long sz{};
+                    std::from_chars(svs[1].data(), svs[1].data() + svs[1].size(), sz);
+                    for (size_t i = 0, e = std::min(proc_maps.size(), sz); i != e; ++i)
                         std::cout << '[' << i << "]:" << proc_maps[i] << '\n';
+                    break;
+                }
+                case PMTail: {
+                    unsigned long sz{};
+                    std::from_chars(svs[1].data(), svs[1].data() + svs[1].size(), sz);
+                    for (size_t i = std::max((ssize_t)0, (ssize_t)proc_maps.size()-(ssize_t)sz), e = proc_maps.size(); i != e; ++i)
+                        std::cout << '[' << i << "]:" << proc_maps[i] << '\n';
+                    break;
+                }
+                case Clear: {
+                    std::cout << "\033[2J\033[H";
                     break;
                 }
                 default:{
@@ -197,8 +241,51 @@ struct CLI {
                     break;
                 }
             }
+    }
+
+    void push_c(char c){
+        s.push_back(c);
+        std::cout.put(c);
+    }
+    void pop_c(){
+        s.pop_back(); 
+        std::cout << "\b \b";
+    }
+
+    void clear(){
+        std::cout << "\033[2J\033[H>> " << s;
+    }
+
+    void run(){
+        char c;
+        std::cout << ">> ";
+        for(;;){
+            std::cin.get(c);
+            switch(c){
+                case CTRL_L: {
+                    clear();
+                    break;
+                }
+                case BACKSPACE: {
+                    if (!s.empty()) pop_c();
+                    break;
+                }
+                case ENTER: {
+                    std::cout.put(c);
+                    exec_cmd();
+                    if (should_close) return;
+                    s.clear();
+                    std::cout << ">> ";
+                    break;
+                }
+                default: {
+                    push_c(c);
+                    break;
+                }
+            }            
         }   
     }
+    ~CLI(){tcsetattr(STDIN_FILENO, TCSANOW, &default_mode);}
 
 };
 
