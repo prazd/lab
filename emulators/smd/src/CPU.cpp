@@ -440,8 +440,8 @@ void M68K::fill_ea(const DecodedInfo& di, bool is_src){
 }
 
 void M68K::inst_next_prefetch(BUS& bus) {
-    instant_bus_read_req(prefetch_addr, BRDPrefetchQ, WORD, bus);
-    prefetch_addr += 2;
+    instant_bus_read_req(pc, BRDPrefetchQ, WORD, bus);
+    pc += 2;
 }
 
 void M68K::inst_exec_check(BUS& bus) {
@@ -543,7 +543,7 @@ void M68K::handle_ea(InternalOp iop, M68K::DecodedInfo& di, BUS& bus) {
         ready = true;
         iops_q.pop_front();
     }
-    if (di.i == JSR) prefetch_addr = (is_src ? src_addr : dst_addr); // TODO: check
+    if (di.i == JSR) pc = src_addr; // TODO: check
     if (prefetch_after_ea) inst_fill_prefetch_req_front(bus);
 }
 
@@ -764,7 +764,6 @@ void M68K::fill_prefetch_before_ea_calc(AddressMode am, OperandSize opsz) {
 void M68K::fill_prefetch_before_exec(const DecodedInfo& di) {
     // todo: finish
     switch (di.i) {
-        case CHK: // todo: handle trap
         case EORI:
         case ORI:
         case ANDI:
@@ -798,6 +797,7 @@ void M68K::fill_prefetch_before_exec(const DecodedInfo& di) {
         case CMP:
         case CMPA:
         case EOR:
+        case CHK:
         case ASL: case ASR:
         case LSL: case LSR:
         case ROL: case ROR:
@@ -1039,10 +1039,15 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
             break;
         }
         case CHK: {
+            // TODO: TRAP https://github.com/larsbrinkhoff/m68k-microcode/blob/master/doc/Yacht.txt#L819C50-L838C75
             auto val = sign_extend_to_l((unsigned short)(dregs[di.r_src] & 0xffff));
             // TODO: check - https://github.com/larsbrinkhoff/m68k-microcode/blob/master/doc/Yacht.txt#L816
-            if (val < 0 || val > operand_a_l)
-                jump(EV_CheckInstruction);
+            bool is_neg = val & 0x80'00'00'00;
+            if (is_neg || val > operand_a_l){
+//   https://github.com/larsbrinkhoff/m68k-microcode/blob/master/doc/Yacht.txt#L830
+                if (is_neg) iop_push_nops(1);
+                fill_exception(EV_CheckInstruction);
+            }
             break;
         }
         case CLR: {
@@ -1100,7 +1105,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 
         case DIVS: {
             if (!operand_a_l){
-                jump(EV_ZeroDivide);
+                fill_exception(EV_ZeroDivide);
                 break;
             }
             auto res1 = ((int)dregs[di.r_dst] / (short)operand_a_l);
@@ -1115,7 +1120,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 
         case DIVU: {
             if (!operand_a_l){
-                jump(EV_ZeroDivide);
+                fill_exception(EV_ZeroDivide);
                 break;
             }
             auto res1 = (dregs[di.r_dst] / (unsigned short)operand_a_l);
@@ -1180,24 +1185,17 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
         }
 
         case ILLEGAL: {
-            // TODO: check
-            auto prev_sreg = sreg;
-            set_sreg(SupervisorMode, true);
-            SP-=4;
-            fill_bus_write_req(SP, pc, LONG);
-            SP-=2;
-            fill_bus_write_req(SP, prev_sreg, WORD);
-            pc = EV_IllegalInstruction;
+            fill_exception(EV_IllegalInstruction);
             break;
         }
         case JMP: {
-            prefetch_addr = pc = src_addr;
+            jump(src_addr);
             break;
         }
         case JSR: {
             SP-=4;
             fill_bus_write_req(SP, pc, LONG);
-            pc = src_addr;
+            jump(src_addr);
             break;
         }
         case LEA: {
@@ -1708,15 +1706,11 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
             break;
         }
         case TRAP:{
-            set_sreg(SupervisorMode, 1);
-            ssp-=4;
-            fill_bus_write_req(ssp, pc, LONG);
-            ssp-=2;
-            fill_bus_write_req(ssp, sreg, WORD);
+            fill_exception((ExceptionVector)(0x20 + di.d1_b)); // TODO: check
             break;
         }
         case TRAPV:{
-            if (get_sreg(Overflow)) jump(EV_TRAPV);
+            if (get_sreg(Overflow)) fill_exception(EV_TRAPV);
             break;
         }
 
@@ -1738,7 +1732,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 
         case ANDItoSR: {
             if (!get_sreg(SupervisorMode)){
-                jump(EV_PrivilegeViolation);
+                fill_exception(EV_PrivilegeViolation);
                 break;
             }
             sreg &= read_prefetch_q();
@@ -1747,7 +1741,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 
         case EORItoSR: {
             if (!get_sreg(SupervisorMode)){
-                jump(EV_PrivilegeViolation);
+                fill_exception(EV_PrivilegeViolation);
                 break;
             }
             sreg ^= read_prefetch_q();
@@ -1756,7 +1750,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 
         case MOVEtoSR: {
             if (!get_sreg(SupervisorMode)) {
-                jump(EV_PrivilegeViolation);
+                fill_exception(EV_PrivilegeViolation);
                 break;
             }
             sreg = operand_a_l & di.mask;
@@ -1765,7 +1759,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 
         case MOVEUSP: {
             if (!get_sreg(SupervisorMode)){
-                jump(EV_PrivilegeViolation);
+                fill_exception(EV_PrivilegeViolation);
                 break;
             }
             if (di.opmode)
@@ -1777,7 +1771,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 
         case ORItoSR: {
             if (!get_sreg(SupervisorMode)){
-                jump(EV_PrivilegeViolation);
+                fill_exception(EV_PrivilegeViolation);
                 break;
             }
             sreg |= read_prefetch_q();
@@ -1786,7 +1780,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 
         case RESET: {
             if (!get_sreg(SupervisorMode)){
-                jump(EV_PrivilegeViolation);
+                fill_exception(EV_PrivilegeViolation);
                 break;
             }
             fill_bus_read_req(EV_ResetInitialSSP, BRD_SSP_H, WORD);
@@ -1798,7 +1792,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 
         case RTE: {
             if (!get_sreg(SupervisorMode)){
-                jump(EV_PrivilegeViolation);
+                fill_exception(EV_PrivilegeViolation);
                 break;
             }
             fill_bus_read_req(ssp, BRD_SREG, WORD);
@@ -1810,7 +1804,7 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
 
         case STOP:{
             if (!get_sreg(SupervisorMode)){
-                jump(EV_PrivilegeViolation);
+                fill_exception(EV_PrivilegeViolation);
                 break;
             }
             // TODO: check

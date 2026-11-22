@@ -70,6 +70,20 @@ struct M68K {
     OperandSize opsz = BYTE;
     size_t exec_cycles = 0;
 
+    bool exception = false;
+
+    // TODO: groups - https://github.com/larsbrinkhoff/m68k-microcode/blob/master/doc/Yacht.txt#L1543C1-L1556C81
+    inline void fill_exception(ExceptionVector ev){
+        auto prev_sreg = sreg;
+        set_sreg(SupervisorMode, true);
+        SP-=4;
+        fill_bus_write_req(SP, pc, LONG);
+        SP-=2;
+        fill_bus_write_req(SP, prev_sreg, WORD);
+        exception = true;
+        jump(ev);
+    }
+
     enum AddressMode: unsigned char{
         Unknown,
         DataRegisterDirectMode,
@@ -336,7 +350,6 @@ struct M68K {
             case TAS:
             case LEA:
             case MOVEQ:
-            case MOVEUSP:
             case MOVEA:
             case NOP:
             case LINK:
@@ -388,6 +401,17 @@ struct M68K {
                 FILL_PREFETCH(is_back)
                 FILL_PREFETCH(is_back) // TODO: update prefetch q (reset)
                 break;
+            }
+
+            case ANDItoSR:
+            case EORItoSR:
+            case MOVEtoSR:
+            case MOVEUSP:
+            case ORItoSR:{
+                FILL_PREFETCH(is_back)
+                if (!get_sreg(SupervisorMode)){
+                    FILL_PREFETCH(is_back) // exception
+                }
             }
         }
     }
@@ -527,14 +551,8 @@ struct M68K {
     void exec(const DecodedInfo& di, BUS& bus);
     void tick(BUS& bus);
 
-    unsigned prefetch_addr{};
     SimpleDequeT<unsigned short, 2> prefetch_q{};
-    inline unsigned short read_n_fill_prefetch_q(){
-        auto v = prefetch_q.front();
-        prefetch_q.pop_front();
-        fill_prefetch_req_back();
-        return v;
-    }
+
     inline unsigned short read_prefetch_q(){
         auto v = prefetch_q.front();
         prefetch_q.pop_front();
@@ -542,29 +560,22 @@ struct M68K {
     }
 
     inline void fill_prefetch_req_back(){
-        fill_bus_read_req(prefetch_addr, BRDPrefetchQ, WORD);
-        prefetch_addr += 2;
+        fill_bus_read_req(pc, BRDPrefetchQ, WORD);
+        pc += 2;
     }
     inline void fill_prefetch_req_front(){
-        fill_bus_read_req_front(prefetch_addr, BRDPrefetchQ, WORD);
-        prefetch_addr += 2;
+        fill_bus_read_req_front(pc, BRDPrefetchQ, WORD);
+        pc += 2;
     }
     inline void inst_fill_prefetch_req_front(BUS& bus){
-        instant_bus_read_req(prefetch_addr, BRDPrefetchQ, WORD, bus);
-        prefetch_addr += 2;
+        instant_bus_read_req(pc, BRDPrefetchQ, WORD, bus);
+        pc += 2;
     }
 
-    inline void reset_prefetch_q(){
-        prefetch_q.clear();
-        prefetch_addr = pc;
-        fill_prefetch_req_back();
-        fill_prefetch_req_back();
-    }
 
-    // TODO: finish
     inline void jump(unsigned addr){
         pc = addr;
-        reset_prefetch_q();
+        prefetch_q.clear();
     }
 
     unsigned char calc_exec_cycles(const DecodedInfo& di);
@@ -608,7 +619,6 @@ struct M68K {
             case AbsoluteShort:  return {str_num_template<128>("#&.W", read_mem(WORD, mem)), 2};
             case AbsoluteLong:  return {str_num_template<128>("#&.L", read_mem(LONG, mem)), 4};
             default:{
-
                 return {str_num_template<128>("#&", read_mem(opsz, mem)), opsz == LONG ? 4 : 2};
             }
 

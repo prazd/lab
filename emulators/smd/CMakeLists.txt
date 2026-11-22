@@ -17,13 +17,24 @@ set(RAYLIB_DIR "/usr/local/Cellar/raylib/")
 include_directories(include)
 
 find_package(raylib REQUIRED HINTS ${RAYLIB_DIR})
+find_package(nlohmann_json REQUIRED)
 
 set(SOURCES    
     src/CPU.cpp
     main.cpp
 )
 
+set(TESTS
+        src/CPU.cpp
+        tests/m68k_tests.cpp
+)
+
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE
         raylib
+)
+
+add_executable(tests ${TESTS})
+target_link_libraries(tests PRIVATE
+        nlohmann_json::nlohmann_json
 )
