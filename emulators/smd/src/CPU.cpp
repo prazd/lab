@@ -551,6 +551,7 @@ void M68K::tick(BUS& bus){
 //    TODO:
 //    calc src EA addr only (src/dst) + https://pasti.fxatari.com/68kdocs/68kPrefetch.html (prefetch tables)
     if (iops_q.empty()) {
+        instruction_finish = false;
 #if DEBUG_MODE
         assert(prefetch_q.size() == 2);
 #endif
@@ -696,6 +697,7 @@ void M68K::tick(BUS& bus){
         }
         case INOP: {iops_q.pop_front(); break;}
         case Execute:{
+            iops_q.pop_front();
             exec(di, bus);
             if (di.dst_type == OT_EA &&
                (di.ea_mode_dst != AddressRegisterDirectMode || di.ea_mode_dst != DataRegisterDirectMode)){
@@ -704,7 +706,6 @@ void M68K::tick(BUS& bus){
             } else {
                 fill_prefetch_after_exec<false>(di);
             }
-            iops_q.pop_front();
             break;
         }
         default: {
@@ -712,6 +713,7 @@ void M68K::tick(BUS& bus){
         }
     }
     inst_exec_check(bus);
+    if (iops_q.empty()) instruction_finish = true;
 }
 
 // read opcode (prefetch queue)

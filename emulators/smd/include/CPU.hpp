@@ -71,6 +71,7 @@ struct M68K {
     size_t exec_cycles = 0;
 
     bool exception = false;
+    bool instruction_finish = false;
 
     // TODO: groups - https://github.com/larsbrinkhoff/m68k-microcode/blob/master/doc/Yacht.txt#L1543C1-L1556C81
     inline void fill_exception(ExceptionVector ev){
@@ -414,6 +415,12 @@ struct M68K {
                 }
             }
         }
+    }
+
+    inline void step(BUS& bus){
+        tick(bus);
+        bus.tick();
+        while(!instruction_finish) {tick(bus); bus.tick();}
     }
 
     inline unsigned calc_xn(){
