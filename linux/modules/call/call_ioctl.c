@@ -6,6 +6,11 @@
 #include <linux/mm.h>
 #include <asm/io.h>
 
+static unsigned long rdgsbase_f(void){
+    unsigned long res = 0;
+    asm volatile ("rdgsbase %0" : "=r"(res));
+    return res;
+}
 
 static unsigned long rdmsr_f(unsigned long rcx){
     unsigned long rax = 0;
@@ -51,6 +56,9 @@ static DRState read_dr(void){
 #define IOCTL_READ_DR_HANDLE \
     _IOWR(IOCTL_CALL, 2, DRState)  \
 
+#define IOCTL_READ_RDGSBASE_HANDLE \
+    _IOWR(IOCTL_CALL, 3, unsigned long)  \    
+
 static long handle(struct file* file, unsigned cmd, unsigned long arg){
     switch(cmd){
         case IOCTL_RDMSR_HANDLE: {
@@ -71,6 +79,10 @@ static long handle(struct file* file, unsigned cmd, unsigned long arg){
         }
         case IOCTL_READ_DR_HANDLE: {
             DRState res = read_dr();
+            return copy_to_user((void __user*)arg, &res, sizeof(res)) ? -EFAULT : 0;
+        }
+        case IOCTL_READ_RDGSBASE_HANDLE: {
+            unsigned long res = rdgsbase_f();
             return copy_to_user((void __user*)arg, &res, sizeof(res)) ? -EFAULT : 0;
         }
     }
