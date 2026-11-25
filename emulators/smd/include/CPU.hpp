@@ -76,22 +76,70 @@ struct M68K {
 
     enum OperandSize: unsigned char {Unsized=0x0,BYTE=0x1,WORD=0x2,LONG=0x4};
 
+    unsigned short opcode{};
     OperandSize opsz = BYTE;
     size_t exec_cycles = 0;
 
     bool exception = false;
+    ExceptionVector exception_vector{};
+    unsigned exception_address{};
+    bool exception_read_op = false;
+    bool exception_prefetch = false;
     bool instruction_finish = false;
 
+    inline bool is_bad_address(unsigned address,  bool read, bool prefetch){
+        if (address & 1) {
+            exception = true;
+            exception_vector = EV_AddressErr;
+            exception_address = address;
+            exception_prefetch = prefetch;
+            exception_read_op = read;
+            fc = to_fc(prefetch);
+            return true;
+        }
+        return false;
+    }
+
+
+    enum FunctionCode {
+        FC_USER_DATA=1,
+        FC_USER_PROGRAM=2,
+        FC_SUPERVISOR_DATA=5,
+        FC_SUPERVISOR_PROGRAM=6,
+        FC_CPU_SPACE=7
+    } fc;
+
+
+
+
+    inline unsigned short gen_ssw(){
+        auto op = opcode & 0xffe0;
+        op |= (exception_read_op << 4);
+        op |= ((fc == FC_USER_PROGRAM || fc == FC_SUPERVISOR_PROGRAM) << 3); // TODO: check
+        op |= fc;
+        return op;
+    }
     // TODO: groups - https://github.com/larsbrinkhoff/m68k-microcode/blob/master/doc/Yacht.txt#L1543C1-L1556C81
     inline void fill_exception(ExceptionVector ev){
         auto prev_sreg = sreg;
+        auto ssw = gen_ssw();
         set_sreg(SupervisorMode, true);
         SP-=4;
-        fill_bus_write_req(SP, pc, LONG);
+        fill_bus_write_req(SP, pc-2, LONG); // TODO: debug pc-2
         SP-=2;
         fill_bus_write_req(SP, prev_sreg, WORD);
-        exception = true;
-        jump(ev);
+        if (ev == EV_AddressErr) { // + bus error / reset
+            set_sreg(TraceMode1, 0);
+            SP-=2;
+            fill_bus_write_req(SP, opcode, WORD);
+            SP-=4;
+            fill_bus_write_req(SP, exception_address, LONG);
+            SP-=2;
+            fill_bus_write_req(SP, ssw, WORD); // TODO: SSW
+        }
+        fill_bus_read_req(ev, BRD_PC_H, LONG);
+        iops_q.push_back({.iop = InstNextPrefetch});
+        iops_q.push_back({.iop = InstNextPrefetch});
     }
 
     enum AddressMode: unsigned char{
@@ -212,13 +260,21 @@ struct M68K {
         BRDDataRegisterByteL,
         BRDDataRegisterByteH,
 
-        BRD_PC_L,
         BRD_PC_H,
+        BRD_PC_L,
+
         BRD_SSP_L,
         BRD_SSP_H,
         BRD_SREG,
 
     };
+
+    inline FunctionCode to_fc(bool is_prefetched){
+        if (is_prefetched)
+            return get_sreg(SupervisorMode) ? FC_SUPERVISOR_PROGRAM : FC_USER_PROGRAM;
+        else
+            return get_sreg(SupervisorMode) ? FC_SUPERVISOR_DATA : FC_USER_DATA;
+    }
 
     enum InternalOp: unsigned char {
         CalcEA_AREG_IndirectSrc,                CalcEA_AREG_IndirectDst,

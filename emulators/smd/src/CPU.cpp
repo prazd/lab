@@ -6,16 +6,18 @@
 #endif
 
 void M68K::fill_bus_write_req(unsigned address, unsigned value, OperandSize sz) {
-    auto even_addr = address & 0xfffffffe;
+    auto even_addr = address & 0x00fffffe;
     if (sz == BYTE){
         auto val = (unsigned short)(value & 0xff);
         val = (val << 8) | val; // duplicate
         iops_q.push_back({.address = even_addr, .iop = BusWriteReq, .bus_data = val,.bus_mode = (address & 1) ? BUS::LDS : BUS::UDS});
         iops_q.push_back({.iop = BusWriteWait});
     } else if (sz == WORD) {
+        if (is_bad_address(address, false, false)) return;
         iops_q.push_back({.address = even_addr, .iop = BusWriteReq, .bus_data = (unsigned short)(value & 0xffff), .bus_mode = BUS::UDS_LDS});
         iops_q.push_back({.iop = BusWriteWait});
     } else if (sz == LONG){
+        if (is_bad_address(address, false, false)) return;
         iops_q.push_back({.address = even_addr, .iop = BusWriteReq, .bus_data = (unsigned short)((value >> 16) & 0xffff), .bus_mode = BUS::UDS_LDS});
         iops_q.push_back({.iop = BusWriteWait});
         iops_q.push_back({.address = even_addr + 2, .iop = BusWriteReq, .bus_data = (unsigned short)(value & 0xffff), .bus_mode = BUS::UDS_LDS});
@@ -31,9 +33,11 @@ void M68K::instant_bus_write_req(unsigned address, unsigned value, OperandSize s
         bus.m68k_w_req(even_addr, val, (address & 1) ? BUS::LDS : BUS::UDS);
         iops_q.push_back({.iop = BusWriteWait});
     } else if (di.opsz == WORD) {
+        if (is_bad_address(address, false, false)) return;
         bus.m68k_w_req(even_addr, (unsigned short)(dst_value & 0xffff),  BUS::UDS_LDS);
         iops_q.push_back({.iop = BusWriteWait});
     } else {
+        if (is_bad_address(address, false, false)) return;
         bus.m68k_w_req(even_addr, (unsigned short) ((dst_value >> 16) & 0xffff), BUS::UDS_LDS);
         iops_q.push_back({.iop = BusWriteWait});
         iops_q.push_back(
@@ -42,43 +46,47 @@ void M68K::instant_bus_write_req(unsigned address, unsigned value, OperandSize s
     }
 }
 
-void M68K::fill_bus_read_req(unsigned addr, BusReadDest brd, OperandSize sz, unsigned char n) {
-    auto even_addr = addr & 0xfffffffe;
+void M68K::fill_bus_read_req(unsigned address, BusReadDest brd, OperandSize sz, unsigned char n) {
+    auto even_addr = address & 0xfffffffe;
     switch (sz) {
         case BYTE: {
-            iops_q.push_back({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = ((addr & 1) ? BUS::LDS : BUS::UDS)});
+            iops_q.push_back({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = ((address & 1) ? BUS::LDS : BUS::UDS)});
             iops_q.push_back({.iop = BusReadWait, .brd = brd, .n = n});
             break;
         }
         case WORD: {
-            iops_q.push_back({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = BUS::UDS_LDS});
+            if (is_bad_address(address, true, brd == BRDPrefetchQ)) return;
+            iops_q.push_back({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = BUS::UDS_LDS,});
             iops_q.push_back({.iop = BusReadWait, .brd = brd, .n = n});
             break;
         }
         case LONG: {
+            if (is_bad_address(address, true, brd == BRDPrefetchQ)) return;
             iops_q.push_back({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = BUS::UDS_LDS});
             iops_q.push_back({.iop = BusReadWait, .brd = brd, .n = n});
             iops_q.push_back({.address = even_addr + 2, .iop = BusReadReq, .brd = BusReadDest((int)brd + 1), .bus_mode = BUS::UDS_LDS});
-            iops_q.push_back({.iop = BusReadWait, .brd = brd, .n = n});
+            iops_q.push_back({.iop = BusReadWait, .brd = BusReadDest((int)brd + 1), .n = n});
             break;
         }
     }
 }
 
-void M68K::instant_bus_read_req(unsigned addr, BusReadDest brd, OperandSize sz, BUS& bus, unsigned char n) {
-    auto even_addr = addr & 0xfffffffe;
+void M68K::instant_bus_read_req(unsigned address, BusReadDest brd, OperandSize sz, BUS& bus, unsigned char n) {
+    auto even_addr = address & 0xfffffffe;
     switch (sz) {
         case BYTE: {
-            bus.m68k_r_req(even_addr,  ((addr & 1) ? BUS::LDS : BUS::UDS));
+            bus.m68k_r_req(even_addr,  ((address & 1) ? BUS::LDS : BUS::UDS));
             iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
             break;
         }
         case WORD: {
+            if (is_bad_address(address, true, brd == BRDPrefetchQ)) return;
             bus.m68k_r_req(even_addr,  BUS::UDS_LDS);
             iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
             break;
         }
         case LONG: {
+            if (is_bad_address(address, true, brd == BRDPrefetchQ)) return;
             bus.m68k_r_req(even_addr,   BUS::UDS_LDS);
             iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
             iops_q.push_front({.address = even_addr + 2, .iop = BusReadReq, .brd = BusReadDest((int)brd + 1), .bus_mode = BUS::UDS_LDS});
@@ -89,20 +97,22 @@ void M68K::instant_bus_read_req(unsigned addr, BusReadDest brd, OperandSize sz, 
 }
 
 
-void M68K::fill_bus_read_req_front(unsigned addr, BusReadDest brd, OperandSize sz, unsigned char n) {
-    auto even_addr = addr & 0xfffffffe;
+void M68K::fill_bus_read_req_front(unsigned address, BusReadDest brd, OperandSize sz, unsigned char n) {
+    auto even_addr = address & 0xfffffffe;
     switch (sz) {
         case BYTE: {
             iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
-            iops_q.push_front({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = ((addr & 1) ? BUS::LDS : BUS::UDS)});
+            iops_q.push_front({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = ((address & 1) ? BUS::LDS : BUS::UDS)});
             break;
         }
         case WORD: {
+            if (is_bad_address(address, true, brd == BRDPrefetchQ)) return;
             iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
             iops_q.push_front({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = BUS::UDS_LDS});
             break;
         }
         case LONG: {
+            if (is_bad_address(address, true, brd == BRDPrefetchQ)) return;
             iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
             iops_q.push_front({.address = even_addr + 2, .iop = BusReadReq, .brd = BusReadDest((int)brd + 1), .bus_mode = BUS::UDS_LDS});
             iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
@@ -540,7 +550,7 @@ void M68K::tick(BUS& bus){
 #if DEBUG_MODE
         assert(prefetch_q.size() == 2);
 #endif
-        auto opcode = read_prefetch_q();
+        opcode = read_prefetch_q();
         di = decode(opcode);
         opsz = di.opsz;
         update_mask_n_sign_bit();
@@ -583,6 +593,13 @@ void M68K::tick(BUS& bus){
         if (exec_cycles = calc_exec_cycles(di); exec_cycles)
             iop_push_nops(exec_cycles-1);
         iops_q.push_back({.iop = Execute});
+    }
+
+    if (exception){
+        exception = false;
+        iops_q.clear();
+        prefetch_q.clear();
+        fill_exception(exception_vector);
     }
 
     auto iopv = iops_q.front();
@@ -697,8 +714,10 @@ void M68K::tick(BUS& bus){
                  handle_ea(iops_q.pop_front().iop, di, bus);
         }
     }
+
     inst_exec_check(bus);
-    if (iops_q.empty()) instruction_finish = true;
+    if (iops_q.empty())
+        instruction_finish = true;
 }
 
 // read opcode (prefetch queue)
@@ -1453,12 +1472,12 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
         case NOP: break;
 
         case NOT: {
-            auto res = ~operand_b_l;
+            auto res = (~operand_b_l) & di.mask;
             set_sreg(Carry,  0);
             set_sreg(Overflow,  0);
             set_sreg(Negative, res & di.sign_bit);
             set_sreg(Zero,      res == 0);
-            dst_value = res & di.mask;
+            dst_value = res;
             break;
         }
         case OR: {

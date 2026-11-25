@@ -59,7 +59,7 @@ bool cmp_final(const nj& json, M68K& cpu){
 
     for (size_t i = 0, e = json["final"]["ram"].size(); i != e; ++i){
         if (BUS::m68kmem[json["final"]["ram"][i][0]] != json["final"]["ram"][i][1]) {
-            std::cout << "mem error:" << i << " current:" <<  BUS::m68kmem[json["final"]["ram"][i][0]] <<
+            std::cout << "mem error:" << i << " current:" <<  (int)BUS::m68kmem[json["final"]["ram"][i][0]] <<
             " expected:" <<   json["final"]["ram"][i][1] << '\n';
             return false;
         }
@@ -72,7 +72,7 @@ bool test_m68k_instruction(std::string_view path, M68K& cpu, BUS& bus){
     if (!f.is_open()) {std::cout << "read file error"; return false;}
     std::string raw_json_s;
     nj json = nj::parse(f);
-    for (size_t i = 0, e = json.size(); i != e; ++i){ // TODO: 1369
+    for (size_t i = 0, e = json.size(); i != e; ++i){
         set_initial(json[i], cpu);
         cpu.step(bus);
         if (auto is_ok = cmp_final(json[i], cpu); !is_ok){
@@ -84,11 +84,11 @@ bool test_m68k_instruction(std::string_view path, M68K& cpu, BUS& bus){
     return true;
 }
 
-// NOP
-// ADD.b -
+// NOP +
+// NOT.b +
 int main(){
     M68K cpu;
     BUS bus;
-    test_m68k_instruction("/Users/prazd/Desktop/dev/m68000/v1/NOT.b.json",cpu, bus);
+    test_m68k_instruction("/Users/prazd/Desktop/dev/m68000/v1/NOT.w.json",cpu, bus);
 
 }

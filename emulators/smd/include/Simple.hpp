@@ -204,22 +204,6 @@ SmallString<sz> str_num_template(std::string_view t, unsigned n, bool s = false)
     return res;
 }
 
-template <size_t sz, bool hex = true, size_t num_c_max = 10, char sym = '&'>
-SmallString<sz> str_num_template_nt(std::string_view t, unsigned n, bool s = false){
-    SmallString<sz> res{};
-    res.buf[sz-1] = '\0';
-    for (char c: t){
-        if (c == sym){
-            if constexpr (hex){
-                res.push_hex(n);
-            } else {
-                res.push_dec(n, s);
-            }
-        } else res.push(c);
-    }
-    return res;
-}
-
 template <size_t sz, char sym = '&'>
 SmallString<sz> str_char_template(std::string_view t, const std::initializer_list<char>& il){ // TODO: check
     SmallString<sz> res{};
