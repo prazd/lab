@@ -365,10 +365,10 @@ unsigned char M68K::calc_exec_cycles(const DecodedInfo& di) {
 
 
 void M68K::fill_ea(const DecodedInfo& di, bool is_src){
-    switch (am) {
+    switch ((is_src ? di.ea_mode_src : di.ea_mode_dst)) {
         case AddressRegisterIndirectMode:{
             iops_q.push_back({.iop = (is_src ?
-                                      (di.ea_addr_src?  CalcEA_AREG_IndirectSrc_Addr : CalcEA_AREG_IndirectSrc) :
+                                      (di.ea_addr_src ? CalcEA_AREG_IndirectSrc_Addr : CalcEA_AREG_IndirectSrc) :
                                       (di.ea_addr_dst ? CalcEA_AREG_IndirectDst_Addr : CalcEA_AREG_IndirectDst))});
             break;
         }
@@ -481,58 +481,44 @@ void M68K::handle_ea(InternalOp iop, M68K::DecodedInfo& di, BUS& bus) {
     if (iop <= CalcEA_AREG_IndirectDst_Addr) {
         addr = aregs[reg];
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
-        iops_q.pop_front();
         ready = true;
     } else if (iop >= CalcEA_AREG_PostIncSrc && iop <= CalcEA_AREG_PostIncDst_Addr){
         addr = aregs[reg];
-        aregs[reg] += di.opsz;
+        aregs[reg] += (reg == 7 ? di.opsz != LONG ? 2 : 4 : di.opsz);
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
         ready = true;
-        iops_q.pop_front();
     } else if (iop >= CalcEA_AREG_PreDecSrc && iop <= CalcEA_AREG_PreDecDst_Addr) {
-        addr = aregs[reg] -= opsz;
+        addr = aregs[reg] -= (reg == 7 ? di.opsz != LONG ? 2 : 4 : di.opsz);
         if (!calc_skip) iops_q.push_front({.iop = INOP});
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
-        iops_q.pop_front();
         ready = true;
     } else if (iop >= CalcEA_AREG_IndirectDispModeSrc && iop <= CalcEA_AREG_IndirectDispModeDst_Addr) {
         addr = aregs[reg] + sign_extend_to_l(read_prefetch_q());
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
-        prefetch_after_ea = true;
-        iops_q.pop_front();
         di.ready_src = true;
     } else if (iop >= CalcEA_AREG_IndirectIndexModeSrc && iop <= CalcEA_AREG_IndirectIndexModeDst_Addr) {
         addr = aregs[reg] + calc_xn();
         if (!calc_skip) iops_q.push_front({.iop = INOP}); // calc time
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
-        prefetch_after_ea = true;
-        iops_q.pop_front();
         di.ready_src = true;
     } else if (iop >= CalcEA_PC_IndirectDispModeSrc && iop <= CalcEA_PC_IndirectDispModeDst_Addr) {
         addr = pc + sign_extend_to_l(read_prefetch_q());
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
-        prefetch_after_ea = true;
-        iops_q.pop_front();
         di.ready_src = true;
     } else if (iop >= CalcEA_PC_IndirectIndexModeSrc && iop <= CalcEA_PC_IndirectIndexModeSrc) {
         addr = pc + calc_xn();
         if (!calc_skip) iops_q.push_front({.iop = INOP}); // calc time
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
-        prefetch_after_ea = true;
-        iops_q.pop_front();
         di.ready_src = true;
     } else if (iop >= CalcEA_AbsoluteShortSrc && iop <= CalcEA_AbsoluteShortDst_Addr){
-        addr = read_prefetch_q();
+        addr = sign_extend_to_l(read_prefetch_q());
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
-        prefetch_after_ea = true;
         di.ready_dst = true;
-        iops_q.pop_front();
     } else if (iop >= CalcEA_AbsoluteLongSrc && iop <= CalcEA_AbsoluteLongDst_Addr) {
         addr = (((unsigned)read_prefetch_q()) << 16) | read_prefetch_q();
+        fill_prefetch_req_front(); // TODO: check
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
-        prefetch_after_ea = true;
         di.ready_dst = true;
-        iops_q.pop_front();
     } else if (iop >= CalcEA_ImmediateSrc && iop <= CalcEA_ImmediateDst_Addr) {
         op = read_prefetch_q();
         if (di.opsz == LONG){
@@ -541,10 +527,9 @@ void M68K::handle_ea(InternalOp iop, M68K::DecodedInfo& di, BUS& bus) {
             prefetch_after_ea = true;
         }
         ready = true;
-        iops_q.pop_front();
     }
     if (di.i == JSR) pc = src_addr; // TODO: check
-    if (prefetch_after_ea) inst_fill_prefetch_req_front(bus);
+    if (prefetch_after_ea && !(iop >= CalcEA_AbsoluteLongSrc && iop <= CalcEA_AbsoluteLongDst_Addr)) inst_fill_prefetch_req_front(bus);
 }
 
 void M68K::tick(BUS& bus){
@@ -580,7 +565,7 @@ void M68K::tick(BUS& bus){
         else if (di.read_postinc_args) fill_post_inc_args();
 
         // DST
-        if (di.dst_type == OT_EA && di.ea_dst) {
+        if (di.dst_type == OT_EA) {
             if (di.ea_mode_dst == DataRegisterDirectMode) {
                 operand_b_l = dregs[di.ea_reg_dst];
                 di.ready_dst = true;
@@ -589,11 +574,10 @@ void M68K::tick(BUS& bus){
                 di.ready_dst = true;
             }
             else {
-                fill_prefetch_before_ea_calc(di.ea_mode_dst, di.opsz);
+//                fill_prefetch_before_ea_calc(di.ea_mode_dst, di.opsz);
                 fill_ea(di,false);
             }
         }
-
         fill_prefetch_before_exec(di);
         // EXEC
         if (exec_cycles = calc_exec_cycles(di); exec_cycles)
@@ -601,10 +585,10 @@ void M68K::tick(BUS& bus){
         iops_q.push_back({.iop = Execute});
     }
 
-
     auto iopv = iops_q.front();
     switch(iopv.iop){
         case InstNextPrefetch: {
+            iops_q.pop_front();
             inst_next_prefetch(bus);
             break;
         }
@@ -617,9 +601,9 @@ void M68K::tick(BUS& bus){
         case BusReadWait: {
             if (!bus.r_in_progress) {
                 switch(iopv.brd) {
-                    case BRDOperandA1: operand_a_w1 = bus.m68k_get(); break;
+                    case BRDOperandA1: operand_a_w1 = bus.m68k_get(); if (di.opsz != LONG) operands_a_to_long(); break;
                     case BRDOperandA2: operand_a_w2 = bus.m68k_get(); operands_a_to_long(); break;
-                    case BRDOperandB1: operand_b_w1 = bus.m68k_get(); break;
+                    case BRDOperandB1: operand_b_w1 = bus.m68k_get(); if (di.opsz != LONG) operands_b_to_long(); break;
                     case BRDOperandB2: operand_b_w2 = bus.m68k_get(); operands_b_to_long(); break;
                     case BRDPrefetchQ: {prefetch_q.push_back(bus.m68k_data); break;}
                     case BRDDataRegisterL: {
@@ -709,7 +693,8 @@ void M68K::tick(BUS& bus){
             break;
         }
         default: {
-            if (!di.ready_src || !di.ready_dst) handle_ea(iopv.iop, di, bus);
+            if (!di.ready_src || !di.ready_dst)
+                 handle_ea(iops_q.pop_front().iop, di, bus);
         }
     }
     inst_exec_check(bus);
@@ -804,21 +789,21 @@ void M68K::fill_prefetch_before_exec(const DecodedInfo& di) {
         case LSL: case LSR:
         case ROL: case ROR:
         case ROXL: case ROXR:{
-            fill_prefetch_req_back(); break;
+            iops_q.push_back({.iop = InstNextPrefetch}); break;
         }
         case MOVE: {
             if (di.ea_mode_dst == AddressRegisterIndirectPreDecMode)
-                fill_prefetch_req_back();
+                iops_q.push_back({.iop = InstNextPrefetch});
             break;
         }
         case MOVEM: {
             prefetched = read_prefetch_q();
-            fill_prefetch_req_back();
+            iops_q.push_back({.iop = InstNextPrefetch});
             break;
         }
         case PEA: { // TODO: check
             if (di.ea_mode_src != AbsoluteShort && di.ea_mode_src != AbsoluteLong)
-                fill_prefetch_req_back();
+                iops_q.push_back({.iop = InstNextPrefetch});
             break;
         }
 
@@ -1468,13 +1453,12 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
         case NOP: break;
 
         case NOT: {
-            // TODO: check
-            auto res = ~operand_a_l;
+            auto res = ~operand_b_l;
             set_sreg(Carry,  0);
             set_sreg(Overflow,  0);
             set_sreg(Negative, res & di.sign_bit);
             set_sreg(Zero,      res == 0);
-            dst_value = res;
+            dst_value = res & di.mask;
             break;
         }
         case OR: {

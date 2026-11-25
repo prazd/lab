@@ -169,6 +169,10 @@ struct SmallString {
     constexpr auto begin(){return buf;}
     constexpr auto end(){return buf + sz;}
 
+    constexpr auto data(){
+        return buf;
+    }
+
     constexpr std::string_view to_sv() const{
         return std::string_view(buf, sz);
     }
@@ -188,6 +192,22 @@ struct SmallString {
 template <size_t sz, bool hex = true, size_t num_c_max = 10, char sym = '&'>
 SmallString<sz> str_num_template(std::string_view t, unsigned n, bool s = false){
     SmallString<sz> res{};
+    for (char c: t){
+        if (c == sym){
+            if constexpr (hex){
+                res.push_hex(n);
+            } else {
+                res.push_dec(n, s);
+            }
+        } else res.push(c);
+    }
+    return res;
+}
+
+template <size_t sz, bool hex = true, size_t num_c_max = 10, char sym = '&'>
+SmallString<sz> str_num_template_nt(std::string_view t, unsigned n, bool s = false){
+    SmallString<sz> res{};
+    res.buf[sz-1] = '\0';
     for (char c: t){
         if (c == sym){
             if constexpr (hex){
@@ -281,10 +301,12 @@ struct SimpleDequeT{
             std::swap(arr[i], arr[i-1]);
     }
 
-    void pop_front(){
+    T pop_front(){
+        auto res = arr[0];
         for (size_t i = 0; i != cap-1; ++i)
             std::swap(arr[i], arr[i+1]);
         pop_back();
+        return res;
     }
 
     void pop_back(){

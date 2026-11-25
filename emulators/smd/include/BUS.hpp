@@ -15,19 +15,19 @@ struct BUS {
     bool r_in_progress = false;
     bool w_in_progress = false;
 
-    inline void m68k_r_req(unsigned address, Mode m){
-        address = address;
+    inline void m68k_r_req(unsigned addr, Mode m){
+        address = addr & 0x00ffffff;
         tick_count = 4;
         r_in_progress = true;
         memsrc = M68Km;
         mode = m;
     }
-    inline void m68k_w_req(unsigned address, unsigned short data, Mode m){
+    inline void m68k_w_req(unsigned addr, unsigned short data, Mode m){
 #if DEBUG_MODE
         assert(!(address & 1));
 #endif
-        address = address;
-        data = data;
+        address = addr & 0x00ffffff;
+        m68k_data = data;
         memsrc = M68Km;
         tick_count = 4;
         w_in_progress = true;

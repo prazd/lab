@@ -43,27 +43,36 @@ struct M68K {
     // Status register
     unsigned short sreg{};
     enum SREG: unsigned short {
-        Carry=0x0,Overflow=0x2,Zero=0x4,Negative=0x8,Extend=0x10,
+        Carry=0x1,Overflow=0x2,Zero=0x4,Negative=0x8,Extend=0x10,
         Interrupt0=0x100,Interrupt1=0x200,Interrupt2=0x400,
         SupervisorMode=0x2000,TraceMode0=0x4000,TraceMode1=0x8000
     };
     inline void set_sreg(SREG s, bool val){
-        sreg &= ~(1 << s);
-        sreg |= (val << s);
+        sreg &= ~s;
+        sreg |= (val ? s : 0);
     }
-    inline bool get_sreg(SREG s){
+    inline bool get_sreg(SREG s) const{
         return sreg & s;
     }
     #define SP (!get_sreg(SupervisorMode) ? usp : ssp)
 
     // GPR
     // Data registers
-    enum DREG: unsigned char {D0,D1,D2,D3,D4,D5,D6,D7};
     unsigned dregs[8]{};
     
     // Address registers
-    enum AREG: unsigned char {A0,A1,A2,A3,A4,A5,A6,A7};
-    unsigned aregs[8]{};
+    struct Aregs {
+        M68K* cpu;
+        unsigned regs[7]{};
+        inline unsigned& operator[](size_t i){
+            return i == 7 ? (!cpu->get_sreg(SupervisorMode) ? cpu->usp : cpu->ssp) : regs[i];
+        }
+        inline size_t size() const {
+            return std::size(regs);
+        }
+    } aregs;
+
+    M68K(){aregs.cpu = this;}
 
     enum OperandSize: unsigned char {Unsized=0x0,BYTE=0x1,WORD=0x2,LONG=0x4};
 
@@ -548,8 +557,6 @@ struct M68K {
 
     inline void operands_a_to_long(){operand_a_l = (operand_a_w2 << 16) | operand_a_w1;}
     inline void operands_b_to_long(){operand_b_l = (operand_b_w2 << 16) | operand_b_w1;}
-
-    AddressMode am{};
 
     void handle_ea(InternalOp, DecodedInfo&, BUS&);
 
