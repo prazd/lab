@@ -56,7 +56,7 @@ void M68K::fill_bus_read_req(unsigned address, BusReadDest brd, OperandSize sz, 
         }
         case WORD: {
             if (is_bad_address(address, true, brd == BRDPrefetchQ)) return;
-            iops_q.push_back({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = BUS::UDS_LDS,});
+            iops_q.push_back({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = BUS::UDS_LDS});
             iops_q.push_back({.iop = BusReadWait, .brd = brd, .n = n});
             break;
         }
@@ -90,7 +90,7 @@ void M68K::instant_bus_read_req(unsigned address, BusReadDest brd, OperandSize s
             bus.m68k_r_req(even_addr,   BUS::UDS_LDS);
             iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
             iops_q.push_front({.address = even_addr + 2, .iop = BusReadReq, .brd = BusReadDest((int)brd + 1), .bus_mode = BUS::UDS_LDS});
-            iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
+            iops_q.push_front({.iop = BusReadWait, .brd = BusReadDest((int)brd + 1), .n = n});
             break;
         }
     }
@@ -116,7 +116,7 @@ void M68K::fill_bus_read_req_front(unsigned address, BusReadDest brd, OperandSiz
             iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
             iops_q.push_front({.address = even_addr + 2, .iop = BusReadReq, .brd = BusReadDest((int)brd + 1), .bus_mode = BUS::UDS_LDS});
             iops_q.push_front({.iop = BusReadWait, .brd = brd, .n = n});
-            iops_q.push_front({.address = even_addr, .iop = BusReadReq, .brd = brd, .bus_mode = BUS::UDS_LDS});
+            iops_q.push_front({.iop = BusReadWait, .brd = BusReadDest((int)brd + 1), .n = n});
             break;
         }
     }
@@ -451,7 +451,6 @@ void M68K::fill_ea(const DecodedInfo& di, bool is_src){
 
 void M68K::inst_next_prefetch(BUS& bus) {
     instant_bus_read_req(pc, BRDPrefetchQ, WORD, bus);
-    pc += 2;
 }
 
 void M68K::inst_exec_check(BUS& bus) {
@@ -494,8 +493,9 @@ void M68K::handle_ea(InternalOp iop, M68K::DecodedInfo& di, BUS& bus) {
         ready = true;
     } else if (iop >= CalcEA_AREG_PostIncSrc && iop <= CalcEA_AREG_PostIncDst_Addr){
         addr = aregs[reg];
-        aregs[reg] += (reg == 7 ? di.opsz != LONG ? 2 : 4 : di.opsz);
         if (!is_addr) instant_bus_read_req(addr, brd_op, di.opsz, bus);
+        // TODO: check
+        if(!(di.opsz == LONG && exception)) aregs[reg] += (reg == 7 ? di.opsz != LONG ? 2 : 4 : di.opsz);
         ready = true;
     } else if (iop >= CalcEA_AREG_PreDecSrc && iop <= CalcEA_AREG_PreDecDst_Addr) {
         addr = aregs[reg] -= (reg == 7 ? di.opsz != LONG ? 2 : 4 : di.opsz);
@@ -597,6 +597,7 @@ void M68K::tick(BUS& bus){
 
     if (exception){
         exception = false;
+        was_exception = true;
         iops_q.clear();
         prefetch_q.clear();
         fill_exception(exception_vector);
@@ -618,11 +619,11 @@ void M68K::tick(BUS& bus){
         case BusReadWait: {
             if (!bus.r_in_progress) {
                 switch(iopv.brd) {
-                    case BRDOperandA1: operand_a_w1 = bus.m68k_get(); if (di.opsz != LONG) operands_a_to_long(); break;
+                    case BRDOperandA1: operand_a_w1 = bus.m68k_get(); operands_a_to_long(); break;
                     case BRDOperandA2: operand_a_w2 = bus.m68k_get(); operands_a_to_long(); break;
-                    case BRDOperandB1: operand_b_w1 = bus.m68k_get(); if (di.opsz != LONG) operands_b_to_long(); break;
+                    case BRDOperandB1: operand_b_w1 = bus.m68k_get(); operands_b_to_long(); break;
                     case BRDOperandB2: operand_b_w2 = bus.m68k_get(); operands_b_to_long(); break;
-                    case BRDPrefetchQ: {prefetch_q.push_back(bus.m68k_data); break;}
+                    case BRDPrefetchQ: {prefetch_q.push_back(bus.m68k_data); pc+=2; break;}
                     case BRDDataRegisterL: {
                         switch (iopv.opsz) {
                             case BYTE: dregs[iopv.n] = sign_extend_to_l((unsigned char)(bus.m68k_get() & 0xff)); break;
@@ -701,7 +702,7 @@ void M68K::tick(BUS& bus){
             iops_q.pop_front();
             exec(di, bus);
             if (di.dst_type == OT_EA &&
-               (di.ea_mode_dst != AddressRegisterDirectMode || di.ea_mode_dst != DataRegisterDirectMode)){
+               (di.ea_mode_dst != AddressRegisterDirectMode && di.ea_mode_dst != DataRegisterDirectMode)){
                 instant_bus_write_req( dst_addr, dst_value, di.opsz, bus);
                 fill_prefetch_after_exec<true>(di);
             } else {
@@ -716,14 +717,14 @@ void M68K::tick(BUS& bus){
     }
 
     inst_exec_check(bus);
-    if (iops_q.empty())
+    if (iops_q.empty()){
         instruction_finish = true;
+    }
 }
 
 // read opcode (prefetch queue)
 // read dst src
 // prefetch if need
-//
 
 M68K::AddressMode M68K::to_address_mode(unsigned char val, bool mr){
     unsigned char mode_field = mr ? (val >> 3) & 0x7 : val & 0x7;

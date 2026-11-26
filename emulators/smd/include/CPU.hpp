@@ -81,6 +81,7 @@ struct M68K {
     size_t exec_cycles = 0;
 
     bool exception = false;
+    bool was_exception = false; // for tests
     ExceptionVector exception_vector{};
     unsigned exception_address{};
     bool exception_read_op = false;
@@ -109,9 +110,6 @@ struct M68K {
         FC_CPU_SPACE=7
     } fc;
 
-
-
-
     inline unsigned short gen_ssw(){
         auto op = opcode & 0xffe0;
         op |= (exception_read_op << 4);
@@ -125,7 +123,12 @@ struct M68K {
         auto ssw = gen_ssw();
         set_sreg(SupervisorMode, true);
         SP-=4;
-        fill_bus_write_req(SP, pc-2, LONG); // TODO: debug pc-2
+        unsigned saved_pc = pc;
+        if (!((!di.ready_src && di.ea_mode_src == AddressRegisterIndirectPreDecMode) ||
+        (di.ea_mode_dst == AddressRegisterIndirectPreDecMode)))
+            saved_pc -= 2;
+
+        fill_bus_write_req(SP, saved_pc, LONG);
         SP-=2;
         fill_bus_write_req(SP, prev_sreg, WORD);
         if (ev == EV_AddressErr) { // + bus error / reset
@@ -135,7 +138,7 @@ struct M68K {
             SP-=4;
             fill_bus_write_req(SP, exception_address, LONG);
             SP-=2;
-            fill_bus_write_req(SP, ssw, WORD); // TODO: SSW
+            fill_bus_write_req(SP, ssw, WORD);
         }
         fill_bus_read_req(ev, BRD_PC_H, LONG);
         iops_q.push_back({.iop = InstNextPrefetch});
@@ -611,8 +614,8 @@ struct M68K {
     unsigned operand_a_l{};
     unsigned operand_b_l{};
 
-    inline void operands_a_to_long(){operand_a_l = (operand_a_w2 << 16) | operand_a_w1;}
-    inline void operands_b_to_long(){operand_b_l = (operand_b_w2 << 16) | operand_b_w1;}
+    inline void operands_a_to_long(){operand_a_l = (((unsigned)operand_a_w2) << 16) | operand_a_w1;}
+    inline void operands_b_to_long(){operand_b_l = (((unsigned)operand_b_w2) << 16) | operand_b_w1;}
 
     void handle_ea(InternalOp, DecodedInfo&, BUS&);
 
@@ -631,15 +634,12 @@ struct M68K {
 
     inline void fill_prefetch_req_back(){
         fill_bus_read_req(pc, BRDPrefetchQ, WORD);
-        pc += 2;
     }
     inline void fill_prefetch_req_front(){
         fill_bus_read_req_front(pc, BRDPrefetchQ, WORD);
-        pc += 2;
     }
     inline void inst_fill_prefetch_req_front(BUS& bus){
         instant_bus_read_req(pc, BRDPrefetchQ, WORD, bus);
-        pc += 2;
     }
 
 
