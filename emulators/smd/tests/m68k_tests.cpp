@@ -94,12 +94,17 @@ bool test_m68k_instruction(std::string_view path, M68K& cpu, BUS& bus){
     return true;
 }
 
-// NOP +
-// NOT.b +
-// NOT.w +- (pc)
-// NOT.l +- (pc)
+// Address error pc ignore
+// NOP
+// NOT.b/w/l
+// NEG.b/w/l
+// NEGX.b/w/l
+// CLR.b/w/l
+// NBCD
+// ABCD
+// SBCD - next
 int main(){
     M68K cpu;
     BUS bus;
-    test_m68k_instruction("/Users/prazd/Desktop/dev/m68000/v1/NOT.l.json",cpu, bus);
+    test_m68k_instruction("/Users/prazd/Desktop/dev/m68000/v1/SBCD.json",cpu, bus);
 }

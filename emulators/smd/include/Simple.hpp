@@ -228,7 +228,7 @@ T mod(T t, size_t m){
     return ((t % m) + m) % m;
 }
 
-inline unsigned to_bcd(unsigned val){
+inline unsigned from_bcd(unsigned val){
     unsigned res{};
     unsigned m = 1;
     while(val){
@@ -239,7 +239,7 @@ inline unsigned to_bcd(unsigned val){
     return res;
 }
 
-inline unsigned from_bcd(unsigned val){
+inline unsigned to_bcd(unsigned val){
     unsigned res{};
     unsigned nibble_i = 0;
     while(val){

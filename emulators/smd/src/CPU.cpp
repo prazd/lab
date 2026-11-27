@@ -571,16 +571,16 @@ void M68K::tick(BUS& bus){
             if (di.read_displacement_by_value) read_displacement_by_value();
 //            if (di.read_prefetch) di.prefetched = read_prefetch_q(); // TODO: check
         }
-        else if (di.read_predec_args)  fill_predec_args();
-        else if (di.read_postinc_args) fill_post_inc_args();
+//        else if (di.read_predec_args)  fill_predec_args();
+//        else if (di.read_postinc_args) fill_post_inc_args();
 
         // DST
         if (di.dst_type == OT_EA) {
             if (di.ea_mode_dst == DataRegisterDirectMode) {
-                operand_b_l = dregs[di.ea_reg_dst];
+                operand_b_l = dregs[di.ea_reg_dst] & di.mask;
                 di.ready_dst = true;
             } else if (di.ea_mode_dst == AddressRegisterDirectMode) {
-                operand_b_l = aregs[di.ea_reg_dst];
+                operand_b_l = aregs[di.ea_reg_dst] & di.mask;
                 di.ready_dst = true;
             }
             else {
@@ -619,10 +619,10 @@ void M68K::tick(BUS& bus){
         case BusReadWait: {
             if (!bus.r_in_progress) {
                 switch(iopv.brd) {
-                    case BRDOperandA1: operand_a_w1 = bus.m68k_get(); operands_a_to_long(); break;
-                    case BRDOperandA2: operand_a_w2 = bus.m68k_get(); operands_a_to_long(); break;
-                    case BRDOperandB1: operand_b_w1 = bus.m68k_get(); operands_b_to_long(); break;
-                    case BRDOperandB2: operand_b_w2 = bus.m68k_get(); operands_b_to_long(); break;
+                    case BRDOperandA1: operand_a_w1 = bus.m68k_get() & di.mask; operands_a_to_long(); break;
+                    case BRDOperandA2: operand_a_w2 = bus.m68k_get() & di.mask; operands_a_to_long(); break;
+                    case BRDOperandB1: operand_b_w1 = bus.m68k_get() & di.mask; operands_b_to_long(); break;
+                    case BRDOperandB2: operand_b_w2 = bus.m68k_get() & di.mask; operands_b_to_long(); break;
                     case BRDPrefetchQ: {prefetch_q.push_back(bus.m68k_data); pc+=2; break;}
                     case BRDDataRegisterL: {
                         switch (iopv.opsz) {
@@ -771,6 +771,8 @@ void M68K::fill_prefetch_before_ea_calc(AddressMode am, OperandSize opsz) {
 void M68K::fill_prefetch_before_exec(const DecodedInfo& di) {
     // todo: finish
     switch (di.i) {
+        case SBCD:
+        case ABCD:
         case EORI:
         case ORI:
         case ANDI:
@@ -835,14 +837,24 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
     // TODO: finish
     switch(di.i){
         case ABCD: {
-            unsigned char a = di.opmode ? (operand_a_l & 0xff) : dregs[di.r_dst] & 0xff;
-            unsigned char b = di.opmode ? (operand_b_l & 0xff) : dregs[di.r_src] & 0xff;
+            unsigned char a = di.opmode ? (operand_a_l & 0xff) : dregs[di.r_src] & 0xff;
+            unsigned char b = di.opmode ? (operand_b_l & 0xff) : dregs[di.r_dst] & 0xff;
+            unsigned r1 = a + b + get_sreg(Extend);
+            unsigned low = (a & 0xf) + (b & 0xf) + get_sreg(Extend);
+            unsigned char correction = 0;
 
-            unsigned res = to_bcd(a) + to_bcd(b) + get_sreg(Extend);
-            set_sreg(Carry,  res >= 100);
-            set_sreg(Extend,  res >= 100);
-            set_sreg(Zero,      res != 0 ? 0 : get_sreg(Zero));
-            dst_value =  from_bcd(res % 100) & 0xff;
+            correction |= (low > 9) ? 0x6 : 0x0;
+            correction |=  (r1 > 0x99) ? 0x60 : 0x0;
+
+            unsigned res = (r1 + correction);
+
+            set_sreg(Carry,  res > 0xff);
+            set_sreg(Extend,  res > 0xff);
+            set_sreg(Zero,      (res & 0xff) != 0 ? 0 : get_sreg(Zero));
+
+            set_sreg(Overflow,    !(r1 & di.sign_bit) && (res & di.sign_bit));
+            set_sreg(Negative, res & di.sign_bit);
+            dst_value = res & di.mask;
             break;
         }
         case ADD:{
@@ -1058,7 +1070,10 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
             break;
         }
         case CLR: {
-            // TODO: check
+            set_sreg(Carry,  0);
+            set_sreg(Overflow,  0);
+            set_sreg(Zero,  1);
+            set_sreg(Negative,  0);
             dst_value = 0;
             break;
         }
@@ -1437,34 +1452,43 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
             break;
         }
         case NBCD: {
-            // TODO: check
-            int res = 100 - to_bcd(operand_a_l) - get_sreg(Extend);
-            bool c_e =  (to_bcd(operand_a_l) + get_sreg(Extend)) > 0;
-            set_sreg(Carry,  c_e);
-            set_sreg(Extend,  c_e);
+            long arg = operand_b_l + get_sreg(Extend);
+            long r1 = (0 - arg);
+            unsigned char correction = 0;
+            correction |= (((operand_b_l & 0xf) + get_sreg(Extend)) > 0) ? 0x06 : 0x0;
+            correction |= (arg > 0) ? 0x60 : 0x0;
+            long res = (r1 - correction) & 0xff;
+
+            set_sreg(Carry,  arg > 0);
+            set_sreg(Extend,  arg > 0);
             set_sreg(Zero,      res != 0 ? 0 : get_sreg(Zero));
-            dst_value = from_bcd(res);
+
+            // Undefined
+            set_sreg(Overflow,      ((r1 & di.sign_bit) != (correction & di.sign_bit)) &&
+                                            (r1 & di.sign_bit) != (res & di.sign_bit));
+            set_sreg(Negative, res & di.sign_bit);
+            dst_value = res & di.mask;
             break;
         }
 
         case NEG: {
-            int res = 0 - operand_a_l;
+            long res = 0l - (operand_b_l);
             set_sreg(Negative, res & di.sign_bit);
-            set_sreg(Carry,  operand_a_l != 0);
-            set_sreg(Extend,  operand_a_l != 0);
-            set_sreg(Zero,      operand_a_l == 0);
-            set_sreg(Overflow, operand_a_l == di.sign_bit);
+            set_sreg(Carry,  operand_b_l != 0);
+            set_sreg(Extend,  operand_b_l  != 0);
+            set_sreg(Zero,      res == 0);
+            set_sreg(Overflow, operand_b_l == di.sign_bit);
             dst_value = res & di.mask;
             break;
         }
 
         case NEGX: {
-            int res = (0 - operand_a_l - get_sreg(Extend));
-            bool c_e = operand_a_l + get_sreg(Extend) > 0;
-            set_sreg(Overflow, (operand_a_l + get_sreg(Extend)) == di.sign_bit);
+            long arg = operand_b_l + get_sreg(Extend);
+            long res = (0l - arg);
+            set_sreg(Overflow, arg == di.sign_bit);
             set_sreg(Negative, res & di.sign_bit);
-            set_sreg(Carry,  c_e);
-            set_sreg(Extend,  c_e);
+            set_sreg(Carry,  arg > 0);
+            set_sreg(Extend,  arg > 0);
             set_sreg(Zero,      res != 0 ? 0 : get_sreg(Zero));
             dst_value = res & di.mask;
             break;
@@ -1616,15 +1640,24 @@ void M68K::exec(const DecodedInfo& di, BUS& bus) {
         }
 
         case SBCD: {
-            // TODO: check
-            unsigned a = di.opmode ? to_bcd(operand_a_l & di.mask) : to_bcd(dregs[di.r_dst] & di.mask);
-            unsigned b = di.opmode ? to_bcd(operand_b_l & di.mask) : to_bcd(dregs[di.r_src] & di.mask);
-            bool carry = (b + get_sreg(Extend)) > (a & di.mask);
-            unsigned res = mod<unsigned>(a - b - get_sreg(Extend), 100);
-            set_sreg(Extend, carry);
-            set_sreg(Carry,  carry);
-            set_sreg(Zero,      res ? 0 : get_sreg(Zero));
-            dst_value =  from_bcd(res); // TODO: check
+            unsigned a = di.opmode ? (operand_a_l & 0xff) : dregs[di.r_src] & 0xff;
+            unsigned b = di.opmode ? (operand_b_l & 0xff) : dregs[di.r_dst] & 0xff;
+
+            unsigned arg = a + get_sreg(Extend);
+            unsigned res = (b - arg);
+            unsigned char correction = 0;
+            correction |= (((a & 0xf) + get_sreg(Extend)) > (b & 0xf)) ? 0x06 : 0x0;
+            correction |= (arg > b) ? 0x60 : 0x0;
+            res-=correction;
+
+            set_sreg(Carry,  arg > b);
+            set_sreg(Extend,  arg > b);
+            set_sreg(Zero,      res != 0 ? 0 : get_sreg(Zero));
+
+            // Undefined
+            set_sreg(Overflow,      res == di.sign_bit);
+            set_sreg(Negative, res & di.sign_bit);
+            dst_value = res & di.mask;
             break;
         }
 
@@ -1831,6 +1864,8 @@ M68K::DecodedInfo M68K::decode(unsigned short val) {
             .i = ABCD,
             .r_src = (unsigned char)(val & 0x7),
             .r_dst = (unsigned char)((val >> 9) & 0x7),
+            .ea_src = r,
+            .ea_dst = r,
             .opmode = r, // r/m
             .opsz = BYTE,
             .read_predec_args = (bool)r,
